@@ -7,3 +7,4 @@ npm-debug.log*
 UnrealMCPBridge/Binaries/
 UnrealMCPBridge/Intermediate/
 UnrealMCPBridge/Saved/
+**/Binaries/
