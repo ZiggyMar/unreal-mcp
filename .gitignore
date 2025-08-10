@@ -6,3 +6,4 @@ npm-debug.log*
 # Unreal Engine build artifacts (plugin source is committed, build output is not)
 UnrealMCPBridge/Binaries/
 UnrealMCPBridge/Intermediate/
+UnrealMCPBridge/Saved/
