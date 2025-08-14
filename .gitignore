@@ -12,3 +12,4 @@ UnrealMCPBridge/Saved/
 **/Saved/
 **/DerivedDataCache/
 *.sln
+*.suo
