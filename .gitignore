@@ -17,3 +17,4 @@ UnrealMCPBridge/Saved/
 
 # Editor / OS
 .vscode/
+.idea/
