@@ -18,3 +18,4 @@ UnrealMCPBridge/Saved/
 # Editor / OS
 .vscode/
 .idea/
+Thumbs.db
