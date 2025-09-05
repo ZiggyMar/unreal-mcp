@@ -5,3 +5,4 @@
 	"FriendlyName": "Unreal MCP Bridge",
 	"Description": "Editor-only TCP bridge exposing read-only Blueprint/project introspection commands for the Unreal MCP (Model Context Protocol) server.",
 	"Category": "Editor",
+	"CreatedBy": "Unreal MCP Project",
