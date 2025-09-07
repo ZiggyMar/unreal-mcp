@@ -8,3 +8,4 @@ This server lets Claude (or any MCP client) read and edit Unreal Engine 5.6/5.8 
 
 ![Architecture](docs/images/architecture.svg)
 
+## The problem this solves
