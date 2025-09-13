@@ -5,3 +5,4 @@ public class UnrealMCPBridge : ModuleRules
 	public UnrealMCPBridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
