@@ -11,3 +11,4 @@ This server lets Claude (or any MCP client) read and edit Unreal Engine 5.6/5.8 
 ## The problem this solves
 
 If you've tried pointing an AI assistant at a real Unreal project, you've hit this: Blueprints don't fit in a context window. A single graph dumped as raw engine data is enormous, so either the model never sees enough of the project to have real context, or you spend most of your budget re-explaining what already exists every time you open a new conversation.
+
