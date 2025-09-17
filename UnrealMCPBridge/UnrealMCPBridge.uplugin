@@ -13,3 +13,4 @@
 	"CanContainContent": false,
 	"IsBetaVersion": true,
 	"Installed": false,
+	"EnabledByDefault": true,
