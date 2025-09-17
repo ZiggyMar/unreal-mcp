@@ -9,3 +9,4 @@ public class UnrealMCPBridge : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",
+			"CoreUObject",
