@@ -14,3 +14,4 @@
 	"IsBetaVersion": true,
 	"Installed": false,
 	"EnabledByDefault": true,
+	"Modules": [
