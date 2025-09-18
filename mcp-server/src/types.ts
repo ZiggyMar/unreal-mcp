@@ -2,3 +2,4 @@
 // Kept intentionally minimal/compact to match the bridge's token-lean wire format.
 
 export interface PingResult {
+  status: string;

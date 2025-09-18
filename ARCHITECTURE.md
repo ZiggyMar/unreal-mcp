@@ -6,3 +6,4 @@ Let an AI assistant (Claude, via MCP) read and edit a live Unreal Engine 5.6/5.8
 stock Epic Games Launcher engine install on the end user's machine.
 
 ## Components
+
