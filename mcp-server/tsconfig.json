@@ -10,3 +10,4 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": false,
+    "sourceMap": true,
