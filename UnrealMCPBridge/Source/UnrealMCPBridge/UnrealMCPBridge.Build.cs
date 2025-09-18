@@ -11,3 +11,4 @@ public class UnrealMCPBridge : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"Sockets",
