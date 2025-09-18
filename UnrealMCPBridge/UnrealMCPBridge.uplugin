@@ -16,3 +16,4 @@
 	"EnabledByDefault": true,
 	"Modules": [
 		{
+			"Name": "UnrealMCPBridge",
