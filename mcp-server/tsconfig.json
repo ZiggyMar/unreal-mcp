@@ -11,3 +11,4 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": false,
     "sourceMap": true,
+    "resolveJsonModule": true
