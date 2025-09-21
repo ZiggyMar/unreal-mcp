@@ -20,3 +20,4 @@
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
 		}
+	]
