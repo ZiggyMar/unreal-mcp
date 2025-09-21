@@ -7,3 +7,4 @@ export interface PingResult {
   protocolVersion: number;
 }
 
+export interface BlueprintListEntry {
