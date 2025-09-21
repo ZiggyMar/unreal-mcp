@@ -17,3 +17,4 @@ public class UnrealMCPBridge : ModuleRules
 			"JsonUtilities"
 		});
 
+		PrivateDependencyModuleNames.AddRange(new string[]
