@@ -19,3 +19,4 @@
 			"Name": "UnrealMCPBridge",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
+		}
