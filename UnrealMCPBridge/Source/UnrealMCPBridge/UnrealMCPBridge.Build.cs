@@ -15,3 +15,4 @@ public class UnrealMCPBridge : ModuleRules
 			"Networking",
 			"Json",
 			"JsonUtilities"
+		});
