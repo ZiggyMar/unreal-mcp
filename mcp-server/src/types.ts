@@ -6,3 +6,4 @@ export interface PingResult {
   plugin: string;
   protocolVersion: number;
 }
+
