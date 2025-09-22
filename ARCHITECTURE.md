@@ -9,3 +9,4 @@ stock Epic Games Launcher engine install on the end user's machine.
 
 ```
 Claude (MCP client)
+      |  MCP protocol (stdio/socket)
