@@ -14,3 +14,4 @@ If you've tried pointing an AI assistant at a real Unreal project, you've hit th
 
 This project is built around one idea: **the model should never receive a raw engine dump.** Every hop between the Unreal Editor and Claude compacts the data: tiered reads, diff-based edits, and a persistent index that's built once and updated incrementally instead of re-scanned on every question.
 
+## How it works
