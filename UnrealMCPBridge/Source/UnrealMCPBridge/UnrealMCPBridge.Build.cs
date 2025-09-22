@@ -19,3 +19,4 @@ public class UnrealMCPBridge : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"Slate",
