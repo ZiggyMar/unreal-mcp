@@ -21,3 +21,4 @@ public class UnrealMCPBridge : ModuleRules
 		{
 			"Slate",
 			"SlateCore",
+			"UnrealEd",
