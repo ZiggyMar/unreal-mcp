@@ -10,3 +10,4 @@ export interface PingResult {
 export interface BlueprintListEntry {
   name: string;
   path: string;
+  parentClass: string;
