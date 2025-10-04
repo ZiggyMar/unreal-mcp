@@ -6,3 +6,4 @@ import { z } from "zod";
 import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import type {
+  AddNodeResult,
