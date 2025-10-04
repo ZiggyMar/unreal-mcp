@@ -4,3 +4,4 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { UnrealBridgeClient } from "./bridgeClient.js";
+import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
