@@ -8,3 +8,4 @@ import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import type {
   AddNodeResult,
   AddVariableResult,
+  CompileBlueprintResult,
