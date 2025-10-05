@@ -9,3 +9,4 @@ import type {
   AddNodeResult,
   AddVariableResult,
   CompileBlueprintResult,
+  ConnectPinsResult,
