@@ -12,3 +12,4 @@ export interface BlueprintListEntry {
   path: string;
   parentClass: string;
 }
+
