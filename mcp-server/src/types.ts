@@ -13,3 +13,4 @@ export interface BlueprintListEntry {
   parentClass: string;
 }
 
+export interface ListBlueprintsResult {
