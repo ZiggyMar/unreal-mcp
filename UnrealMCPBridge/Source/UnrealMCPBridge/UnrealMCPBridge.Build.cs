@@ -23,3 +23,4 @@ public class UnrealMCPBridge : ModuleRules
 			"SlateCore",
 			"UnrealEd",
 			"AssetRegistry",
+			"BlueprintGraph",
