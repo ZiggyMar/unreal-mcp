@@ -12,3 +12,4 @@ Claude (MCP client)
       |  MCP protocol (stdio/socket)
       v
 mcp-server/         Node/TypeScript process. Owns the MCP tool surface.
+      |  local TCP/HTTP, JSON

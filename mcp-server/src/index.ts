@@ -10,3 +10,4 @@ import type {
   AddVariableResult,
   CompileBlueprintResult,
   ConnectPinsResult,
+  CreateBlueprintResult,
