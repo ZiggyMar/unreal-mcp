@@ -25,3 +25,4 @@ public class UnrealMCPBridge : ModuleRules
 			"AssetRegistry",
 			"BlueprintGraph",
 			"Kismet",
+			"KismetCompiler",
