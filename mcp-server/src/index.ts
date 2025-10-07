@@ -11,3 +11,4 @@ import type {
   CompileBlueprintResult,
   ConnectPinsResult,
   CreateBlueprintResult,
+  FindReferencesResult,
