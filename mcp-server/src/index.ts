@@ -12,3 +12,4 @@ import type {
   ConnectPinsResult,
   CreateBlueprintResult,
   FindReferencesResult,
+  GetProjectOverviewResult,
