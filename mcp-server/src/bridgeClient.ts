@@ -5,3 +5,4 @@ export interface BridgeRequest {
   cmd: string;
   params?: Record<string, unknown>;
 }
+
