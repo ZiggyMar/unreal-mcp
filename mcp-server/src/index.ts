@@ -14,3 +14,4 @@ import type {
   FindReferencesResult,
   GetProjectOverviewResult,
   ListBlueprintGraphsResult,
+  ListBlueprintsResult,
