@@ -1,3 +1,4 @@
 {
   "name": "unreal-mcp-server",
   "version": "0.1.0",
+  "description": "An MCP server that allows AI agents (Claude, Cursor) to directly control and manipulate Unreal Engine.",
