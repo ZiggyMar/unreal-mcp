@@ -15,3 +15,4 @@ export interface BlueprintListEntry {
 
 export interface ListBlueprintsResult {
   blueprints: BlueprintListEntry[];
+  count: number;

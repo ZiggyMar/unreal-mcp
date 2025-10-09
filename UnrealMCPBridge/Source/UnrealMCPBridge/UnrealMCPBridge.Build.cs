@@ -27,3 +27,4 @@ public class UnrealMCPBridge : ModuleRules
 			"Kismet",
 			"KismetCompiler",
 			"EditorSubsystem",
+			"Projects",
