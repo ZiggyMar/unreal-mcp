@@ -19,3 +19,4 @@ import type {
   ReadBlueprintGraphSummaryResult,
   ReadBlueprintNodeDetailResult,
   RemoveNodeResult,
+  SaveBlueprintResult,
