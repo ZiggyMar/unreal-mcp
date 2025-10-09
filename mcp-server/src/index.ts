@@ -18,3 +18,4 @@ import type {
   PingResult,
   ReadBlueprintGraphSummaryResult,
   ReadBlueprintNodeDetailResult,
+  RemoveNodeResult,

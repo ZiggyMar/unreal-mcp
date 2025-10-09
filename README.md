@@ -18,3 +18,4 @@ This project is built around one idea: **the model should never receive a raw en
 
 Two pieces:
 
+- **`UnrealMCPBridge`** is a C++ editor plugin that runs inside `UnrealEditor.exe` and exposes a local TCP interface over the engine's own Kismet2/EdGraph/AssetRegistry APIs. Built against a stock launcher install: no engine source required to build or run it.
