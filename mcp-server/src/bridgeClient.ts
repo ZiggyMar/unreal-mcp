@@ -6,3 +6,4 @@ export interface BridgeRequest {
   params?: Record<string, unknown>;
 }
 
+export interface BridgeResponse<T = unknown> {
