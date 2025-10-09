@@ -16,3 +16,4 @@ import type {
   ListBlueprintGraphsResult,
   ListBlueprintsResult,
   PingResult,
+  ReadBlueprintGraphSummaryResult,
