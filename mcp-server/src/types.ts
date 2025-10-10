@@ -18,3 +18,4 @@ export interface ListBlueprintsResult {
   count: number;
 }
 
+export interface BlueprintGraphEntry {

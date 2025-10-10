@@ -24,3 +24,4 @@ import type {
   SetPinDefaultValueResult,
 } from "./types.js";
 
+const BRIDGE_HOST = process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1";
