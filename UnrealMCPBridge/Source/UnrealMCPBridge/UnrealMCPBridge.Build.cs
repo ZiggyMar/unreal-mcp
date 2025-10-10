@@ -31,3 +31,4 @@ public class UnrealMCPBridge : ModuleRules
 			"MessageLog"
 		});
 
+		bEnableExceptions = false;
