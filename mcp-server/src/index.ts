@@ -21,3 +21,4 @@ import type {
   RemoveNodeResult,
   SaveBlueprintResult,
   SearchProjectResult,
+  SetPinDefaultValueResult,
