@@ -20,3 +20,4 @@ import type {
   ReadBlueprintNodeDetailResult,
   RemoveNodeResult,
   SaveBlueprintResult,
+  SearchProjectResult,
