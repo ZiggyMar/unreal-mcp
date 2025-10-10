@@ -29,3 +29,4 @@ public class UnrealMCPBridge : ModuleRules
 			"EditorSubsystem",
 			"Projects",
 			"MessageLog"
+		});
