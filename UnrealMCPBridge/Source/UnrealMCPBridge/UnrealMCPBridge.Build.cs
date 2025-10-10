@@ -30,3 +30,4 @@ public class UnrealMCPBridge : ModuleRules
 			"Projects",
 			"MessageLog"
 		});
+
