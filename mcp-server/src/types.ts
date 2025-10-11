@@ -19,3 +19,4 @@ export interface ListBlueprintsResult {
 }
 
 export interface BlueprintGraphEntry {
+  name: string;
