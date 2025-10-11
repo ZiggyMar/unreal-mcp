@@ -15,3 +15,4 @@ mcp-server/         Node/TypeScript process. Owns the MCP tool surface.
       |  local TCP/HTTP, JSON
       v
 UnrealMCPBridge/     C++ editor-only plugin, loaded by UnrealEditor.
+      |  UE reflection / Blueprint APIs (Kismet, EdGraph, AssetRegistry)
