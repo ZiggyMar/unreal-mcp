@@ -30,3 +30,4 @@ const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
 const bridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT });
 
 const server = new McpServer({
+  name: "unreal-mcp-server",
