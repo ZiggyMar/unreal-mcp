@@ -8,3 +8,4 @@ export interface BridgeRequest {
 
 export interface BridgeResponse<T = unknown> {
   id?: string;
+  ok: boolean;
