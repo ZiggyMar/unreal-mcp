@@ -9,3 +9,4 @@
 #include "Interfaces/IPv4/IPv4Endpoint.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
