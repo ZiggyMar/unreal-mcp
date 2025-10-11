@@ -32,3 +32,4 @@ public class UnrealMCPBridge : ModuleRules
 		});
 
 		bEnableExceptions = false;
+	}
