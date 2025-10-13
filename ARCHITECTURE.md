@@ -17,3 +17,4 @@ mcp-server/         Node/TypeScript process. Owns the MCP tool surface.
 UnrealMCPBridge/     C++ editor-only plugin, loaded by UnrealEditor.
       |  UE reflection / Blueprint APIs (Kismet, EdGraph, AssetRegistry)
       v
+Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source needed to RUN it)

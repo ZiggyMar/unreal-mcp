@@ -8,3 +8,5 @@ Last updated: 2026-08-07
 
 ## TL;DR
 
+- **C++ plugin (`UnrealMCPBridge`) compiles successfully against a real, stock-launcher
+  UE 5.8 install** (`F:\UE_5.8`) — verified twice: once as a standalone `RunUAT BuildPlugin`
