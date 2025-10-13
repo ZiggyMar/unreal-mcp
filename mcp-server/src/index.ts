@@ -34,3 +34,4 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
+function jsonResult(value: unknown) {
