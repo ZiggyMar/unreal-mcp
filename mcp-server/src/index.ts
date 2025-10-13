@@ -38,3 +38,4 @@ function jsonResult(value: unknown) {
   return {
     content: [
       {
+        type: "text" as const,
