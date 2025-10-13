@@ -6,3 +6,4 @@ Last updated: 2026-08-07
 > live Unreal Editor with real project data — see [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md).
 > Everything below reflects the pre-live-test state.
 
+## TL;DR
