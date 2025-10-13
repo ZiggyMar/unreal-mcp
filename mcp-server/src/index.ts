@@ -36,3 +36,4 @@ const server = new McpServer({
 
 function jsonResult(value: unknown) {
   return {
+    content: [
