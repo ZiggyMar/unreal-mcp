@@ -10,3 +10,4 @@ export interface BridgeResponse<T = unknown> {
   id?: string;
   ok: boolean;
   result?: T;
+  error?: string;
