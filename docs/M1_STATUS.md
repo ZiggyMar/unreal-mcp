@@ -12,3 +12,4 @@ Last updated: 2026-08-07
   UE 5.8 install** (`F:\UE_5.8`) — verified twice: once as a standalone `RunUAT BuildPlugin`
   package, and once built directly into the target project (`AntiVirusSquadUE58`) via
   `UnrealBuildTool`. See "Verified" below for exact commands/output.
+- **MCP server (`mcp-server/`) builds, type-checks, and was verified end-to-end over the

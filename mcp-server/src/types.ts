@@ -23,3 +23,4 @@ export interface BlueprintGraphEntry {
   nodeCount: number;
 }
 
+export interface ListBlueprintGraphsResult {
