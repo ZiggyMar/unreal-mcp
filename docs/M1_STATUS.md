@@ -11,3 +11,4 @@ Last updated: 2026-08-07
 - **C++ plugin (`UnrealMCPBridge`) compiles successfully against a real, stock-launcher
   UE 5.8 install** (`F:\UE_5.8`) — verified twice: once as a standalone `RunUAT BuildPlugin`
   package, and once built directly into the target project (`AntiVirusSquadUE58`) via
+  `UnrealBuildTool`. See "Verified" below for exact commands/output.
