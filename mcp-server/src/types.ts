@@ -24,3 +24,4 @@ export interface BlueprintGraphEntry {
 }
 
 export interface ListBlueprintGraphsResult {
+  path: string;

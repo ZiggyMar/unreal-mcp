@@ -17,3 +17,4 @@ Last updated: 2026-08-07
   official SDK's `Client` against the compiled `dist/index.js`.
 - **Not verified: an actual live read from inside a running Unreal Editor session.**
   I cannot launch and drive the full graphical Editor from this environment. The TCP
+  wire protocol between the plugin and the server was verified against a hand-written
