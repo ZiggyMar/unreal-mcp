@@ -14,3 +14,4 @@ Last updated: 2026-08-07
   `UnrealBuildTool`. See "Verified" below for exact commands/output.
 - **MCP server (`mcp-server/`) builds, type-checks, and was verified end-to-end over the
   real MCP stdio protocol** (initialize handshake, `tools/list`, `tools/call`) using the
+  official SDK's `Client` against the compiled `dist/index.js`.
