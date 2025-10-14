@@ -13,3 +13,4 @@ Last updated: 2026-08-07
   package, and once built directly into the target project (`AntiVirusSquadUE58`) via
   `UnrealBuildTool`. See "Verified" below for exact commands/output.
 - **MCP server (`mcp-server/`) builds, type-checks, and was verified end-to-end over the
+  real MCP stdio protocol** (initialize handshake, `tools/list`, `tools/call`) using the
