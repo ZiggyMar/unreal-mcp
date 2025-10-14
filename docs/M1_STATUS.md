@@ -15,3 +15,4 @@ Last updated: 2026-08-07
 - **MCP server (`mcp-server/`) builds, type-checks, and was verified end-to-end over the
   real MCP stdio protocol** (initialize handshake, `tools/list`, `tools/call`) using the
   official SDK's `Client` against the compiled `dist/index.js`.
+- **Not verified: an actual live read from inside a running Unreal Editor session.**
