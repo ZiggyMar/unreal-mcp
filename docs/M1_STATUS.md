@@ -24,3 +24,4 @@ Last updated: 2026-08-07
 - Engine reference source clone (`A:\UnrealEngineSource\UnrealEngine-5.8`) is **broken**
   (partial/corrupt clone, not a valid git repo) and was not used for this milestone. All
   C++ was written from public UE API knowledge and corrected against real compiler errors
+  from the actual engine install, which is a stronger signal than source-reading anyway.
