@@ -22,3 +22,4 @@ Last updated: 2026-08-07
   never accepted a real connection or served a real Blueprint. **This is the one thing
   the user must confirm manually** — see "Manual step required" below.
 - Engine reference source clone (`A:\UnrealEngineSource\UnrealEngine-5.8`) is **broken**
+  (partial/corrupt clone, not a valid git repo) and was not used for this milestone. All
