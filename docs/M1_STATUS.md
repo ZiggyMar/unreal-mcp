@@ -21,3 +21,4 @@ Last updated: 2026-08-07
   fake server that mimics the bridge's exact framing, but the real `FMCPTcpServer` has
   never accepted a real connection or served a real Blueprint. **This is the one thing
   the user must confirm manually** — see "Manual step required" below.
+- Engine reference source clone (`A:\UnrealEngineSource\UnrealEngine-5.8`) is **broken**
