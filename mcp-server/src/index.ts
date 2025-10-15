@@ -45,3 +45,4 @@ function jsonResult(value: unknown) {
   };
 }
 
+function errorResult(err: unknown) {
