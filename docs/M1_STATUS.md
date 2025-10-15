@@ -19,3 +19,5 @@ Last updated: 2026-08-07
   I cannot launch and drive the full graphical Editor from this environment. The TCP
   wire protocol between the plugin and the server was verified against a hand-written
   fake server that mimics the bridge's exact framing, but the real `FMCPTcpServer` has
+  never accepted a real connection or served a real Blueprint. **This is the one thing
+  the user must confirm manually** — see "Manual step required" below.
