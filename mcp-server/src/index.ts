@@ -42,3 +42,4 @@ function jsonResult(value: unknown) {
         text: JSON.stringify(value, null, 2),
       },
     ],
+  };

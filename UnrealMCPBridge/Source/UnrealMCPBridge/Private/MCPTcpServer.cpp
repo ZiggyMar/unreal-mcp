@@ -14,3 +14,4 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPBridge, Log, All);
 
+/** Per-connection state: raw socket + a line-buffering receive buffer. */
