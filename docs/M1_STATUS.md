@@ -18,3 +18,4 @@ Last updated: 2026-08-07
 - **Not verified: an actual live read from inside a running Unreal Editor session.**
   I cannot launch and drive the full graphical Editor from this environment. The TCP
   wire protocol between the plugin and the server was verified against a hand-written
+  fake server that mimics the bridge's exact framing, but the real `FMCPTcpServer` has
