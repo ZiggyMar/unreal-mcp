@@ -12,3 +12,4 @@ export interface BridgeResponse<T = unknown> {
   result?: T;
   error?: string;
 }
+

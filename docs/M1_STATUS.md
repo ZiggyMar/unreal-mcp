@@ -26,3 +26,4 @@ Last updated: 2026-08-07
   C++ was written from public UE API knowledge and corrected against real compiler errors
   from the actual engine install, which is a stronger signal than source-reading anyway.
 
+## What compiles / runs (verified)
