@@ -27,3 +27,4 @@ Last updated: 2026-08-07
   from the actual engine install, which is a stronger signal than source-reading anyway.
 
 ## What compiles / runs (verified)
+

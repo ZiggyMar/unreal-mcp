@@ -47,3 +47,4 @@ function jsonResult(value: unknown) {
 
 function errorResult(err: unknown) {
   const message = err instanceof Error ? err.message : String(err);
+  return {
