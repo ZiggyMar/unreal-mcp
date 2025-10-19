@@ -33,3 +33,4 @@ Last updated: 2026-08-07
 Location: `F:\!Projects\UnrealMCP\UnrealMCPBridge\` (source of truth), copied to
 `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\` (build/runtime location).
 
+Engine install used: `F:\UE_5.8` (found via
