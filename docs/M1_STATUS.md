@@ -35,3 +35,4 @@ Location: `F:\!Projects\UnrealMCP\UnrealMCPBridge\` (source of truth), copied to
 
 Engine install used: `F:\UE_5.8` (found via
 `C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat` — a stock Epic Games
+Launcher install, `UE_5.8`, changelist `55116800`, `IsPromotedBuild: 1`). A UE 5.6 install

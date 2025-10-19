@@ -13,3 +13,4 @@ export interface BridgeResponse<T = unknown> {
   error?: string;
 }
 
+export interface BridgeClientOptions {
