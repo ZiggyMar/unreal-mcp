@@ -37,3 +37,4 @@ Engine install used: `F:\UE_5.8` (found via
 `C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat` — a stock Epic Games
 Launcher install, `UE_5.8`, changelist `55116800`, `IsPromotedBuild: 1`). A UE 5.6 install
 also exists at `M:\Unreal\UE_5.6` but was not used since the target project pins
+`"EngineAssociation": "5.8"`.

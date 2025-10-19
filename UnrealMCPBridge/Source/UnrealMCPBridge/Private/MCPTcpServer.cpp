@@ -18,3 +18,4 @@ DEFINE_LOG_CATEGORY_STATIC(LogMCPBridge, Log, All);
 class FMCPClientConnection
 {
 public:
+	explicit FMCPClientConnection(FSocket* InSocket)

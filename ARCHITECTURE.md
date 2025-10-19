@@ -20,3 +20,4 @@ UnrealMCPBridge/     C++ editor-only plugin, loaded by UnrealEditor.
 Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source needed to RUN it)
 ```
 
+- **UnrealMCPBridge** (C++ plugin): runs inside the editor, listens on a local TCP port,
