@@ -28,3 +28,4 @@ export interface ListBlueprintGraphsResult {
   graphs: BlueprintGraphEntry[];
 }
 
+export interface PinLink {
