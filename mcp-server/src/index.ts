@@ -50,3 +50,4 @@ function errorResult(err: unknown) {
   return {
     isError: true,
     content: [
+      {
