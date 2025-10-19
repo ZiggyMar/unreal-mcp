@@ -51,3 +51,4 @@ function errorResult(err: unknown) {
     isError: true,
     content: [
       {
+        type: "text" as const,
