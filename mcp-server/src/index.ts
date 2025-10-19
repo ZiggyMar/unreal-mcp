@@ -52,3 +52,4 @@ function errorResult(err: unknown) {
     content: [
       {
         type: "text" as const,
+        text: `UnrealMCPBridge error: ${message}`,
