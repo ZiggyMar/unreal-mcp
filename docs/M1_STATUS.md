@@ -34,3 +34,4 @@ Location: `F:\!Projects\UnrealMCP\UnrealMCPBridge\` (source of truth), copied to
 `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\` (build/runtime location).
 
 Engine install used: `F:\UE_5.8` (found via
+`C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat` — a stock Epic Games
