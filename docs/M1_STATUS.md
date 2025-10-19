@@ -29,3 +29,4 @@ Last updated: 2026-08-07
 ## What compiles / runs (verified)
 
 ### C++ plugin — `UnrealMCPBridge/`
+
