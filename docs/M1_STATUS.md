@@ -39,3 +39,4 @@ Launcher install, `UE_5.8`, changelist `55116800`, `IsPromotedBuild: 1`). A UE 5
 also exists at `M:\Unreal\UE_5.6` but was not used since the target project pins
 `"EngineAssociation": "5.8"`.
 
+Compiler toolchain: Visual Studio 2022 Community (MSVC 14.44.35207) at `D:\community`,
