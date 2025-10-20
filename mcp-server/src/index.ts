@@ -55,3 +55,4 @@ function errorResult(err: unknown) {
         text: `UnrealMCPBridge error: ${message}`,
       },
     ],
+  };
