@@ -29,3 +29,4 @@ export interface ListBlueprintGraphsResult {
 }
 
 export interface PinLink {
+  node: string;

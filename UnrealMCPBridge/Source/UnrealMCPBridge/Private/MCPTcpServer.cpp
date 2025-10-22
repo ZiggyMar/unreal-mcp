@@ -19,3 +19,4 @@ class FMCPClientConnection
 {
 public:
 	explicit FMCPClientConnection(FSocket* InSocket)
+		: Socket(InSocket)
