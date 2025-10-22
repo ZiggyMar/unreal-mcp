@@ -56,3 +56,4 @@ function errorResult(err: unknown) {
       },
     ],
   };
+}
