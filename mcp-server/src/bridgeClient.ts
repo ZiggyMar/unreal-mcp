@@ -14,3 +14,4 @@ export interface BridgeResponse<T = unknown> {
 }
 
 export interface BridgeClientOptions {
+  host?: string;
