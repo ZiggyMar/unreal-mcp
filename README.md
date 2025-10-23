@@ -25,3 +25,4 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
 ## What's different about this one
 
+There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic ships its own experimental first-party MCP plugin (5.8 only, opt-in, requires manually enabling an "Editor Toolset"). Worth being direct about where this project actually differs, rather than just claiming "better":

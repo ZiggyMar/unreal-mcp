@@ -58,3 +58,4 @@ function errorResult(err: unknown) {
   };
 }
 
+server.registerTool(
