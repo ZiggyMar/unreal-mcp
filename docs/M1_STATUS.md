@@ -52,3 +52,4 @@ F:\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat BuildPlugin ^
   -TargetPlatforms=Win64
 ```
 
+Result: `BUILD SUCCESSFUL`. Produced

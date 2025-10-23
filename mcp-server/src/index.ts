@@ -61,3 +61,4 @@ function errorResult(err: unknown) {
 server.registerTool(
   "unreal_ping",
   {
+    title: "Ping Unreal MCP Bridge",
