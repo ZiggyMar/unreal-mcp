@@ -50,3 +50,4 @@ F:\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat BuildPlugin ^
   -Plugin="A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\UnrealMCPBridge.uplugin" ^
   -Package="<scratch>\PluginBuild\UnrealMCPBridge" ^
   -TargetPlatforms=Win64
+```
