@@ -59,3 +59,4 @@ function errorResult(err: unknown) {
 }
 
 server.registerTool(
+  "unreal_ping",
