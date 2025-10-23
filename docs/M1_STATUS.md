@@ -45,3 +45,4 @@ found automatically by UBT.
 **Verification 1 — isolated plugin package build** (proves the plugin is self-contained
 and correct against public APIs only):
 
+```
