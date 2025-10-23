@@ -46,3 +46,4 @@ found automatically by UBT.
 and correct against public APIs only):
 
 ```
+F:\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat BuildPlugin ^
