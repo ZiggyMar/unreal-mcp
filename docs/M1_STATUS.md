@@ -56,3 +56,4 @@ Result: `BUILD SUCCESSFUL`. Produced
 `UnrealEditor-UnrealMCPBridge.dll` + `.pdb` for Win64 Development.
 
 **Verification 2 — built directly against the target project**, i.e. what actually
+happens when the project's editor target compiles with this plugin enabled:
