@@ -63,3 +63,4 @@ server.registerTool(
   {
     title: "Ping Unreal MCP Bridge",
     description:
+      "Checks whether the UnrealMCPBridge plugin is running inside the Unreal Editor and reachable over TCP. " +
