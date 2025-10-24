@@ -22,3 +22,4 @@ public:
 		: Socket(InSocket)
 	{
 	}
+

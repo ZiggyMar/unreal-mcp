@@ -57,3 +57,4 @@ Result: `BUILD SUCCESSFUL`. Produced
 
 **Verification 2 — built directly against the target project**, i.e. what actually
 happens when the project's editor target compiles with this plugin enabled:
+

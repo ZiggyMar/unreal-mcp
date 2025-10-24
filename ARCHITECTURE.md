@@ -22,3 +22,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
 
 - **UnrealMCPBridge** (C++ plugin): runs inside the editor, listens on a local TCP port,
   exposes commands (list assets, read blueprint, create blueprint, add node, connect pins,
+  compile, read actor/level state, search). Uses only public Editor Scripting / Kismet2 /
