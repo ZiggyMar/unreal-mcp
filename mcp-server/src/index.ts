@@ -65,3 +65,4 @@ server.registerTool(
     description:
       "Checks whether the UnrealMCPBridge plugin is running inside the Unreal Editor and reachable over TCP. " +
       "Use this first to confirm the editor bridge is up before calling other unreal_* tools.",
+    inputSchema: {},

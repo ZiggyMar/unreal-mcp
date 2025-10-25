@@ -16,3 +16,4 @@ export interface BridgeResponse<T = unknown> {
 export interface BridgeClientOptions {
   host?: string;
   port?: number;
+  /** Milliseconds to wait for a response before rejecting. */
