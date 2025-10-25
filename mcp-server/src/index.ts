@@ -67,3 +67,4 @@ server.registerTool(
       "Use this first to confirm the editor bridge is up before calling other unreal_* tools.",
     inputSchema: {},
   },
+  async () => {
