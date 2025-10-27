@@ -68,3 +68,4 @@ server.registerTool(
     inputSchema: {},
   },
   async () => {
+    try {
