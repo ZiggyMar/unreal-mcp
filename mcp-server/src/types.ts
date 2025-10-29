@@ -34,3 +34,4 @@ export interface PinLink {
 }
 
 export interface GraphSummaryPin {
+  pin: string;
