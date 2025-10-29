@@ -12,3 +12,5 @@
 #include "EdGraph/EdGraphSchema.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_Event.h"
+#include "K2Node_CustomEvent.h"
+#include "K2Node_CallFunction.h"
