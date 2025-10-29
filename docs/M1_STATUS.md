@@ -70,3 +70,4 @@ confirmed at `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\Binar
 scratch package — the user should not need to trigger a first-time compile prompt at all.
 As a side effect this build also compiled the project's other existing plugins that needed
 it (e.g. modules named `Kronos`/`KronosEditor` already present in the project), which
+happened cleanly alongside `UnrealMCPBridge` — good evidence our plugin doesn't conflict
