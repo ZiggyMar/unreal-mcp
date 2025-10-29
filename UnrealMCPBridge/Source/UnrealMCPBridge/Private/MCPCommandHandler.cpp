@@ -16,3 +16,5 @@
 #include "K2Node_CallFunction.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/BlueprintEditorUtils.h"

@@ -70,3 +70,4 @@ server.registerTool(
   async () => {
     try {
       const result = await bridge.send<PingResult>("ping");
+      return jsonResult(result);
