@@ -14,3 +14,5 @@
 #include "K2Node_Event.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_VariableGet.h"
+#include "K2Node_VariableSet.h"
