@@ -67,3 +67,4 @@ F:\UE_5.8\Engine\Build\BatchFiles\Build.bat UnrealEditor Win64 Development ^
 Result: **`Result: Succeeded`**, exit code 0, total execution time ~130s. Output binary
 confirmed at `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\Binaries\Win64\UnrealEditor-UnrealMCPBridge.dll`
 (+ `.pdb`), i.e. the binaries are already sitting in the actual target project, not just a
+scratch package — the user should not need to trigger a first-time compile prompt at all.
