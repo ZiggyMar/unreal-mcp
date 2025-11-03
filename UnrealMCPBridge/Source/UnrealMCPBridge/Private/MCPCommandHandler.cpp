@@ -22,3 +22,5 @@
 #include "Logging/TokenizedMessage.h"
 #include "Dom/JsonValue.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/UObjectGlobals.h"
+#include "UObject/Package.h"

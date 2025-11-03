@@ -72,3 +72,4 @@ server.registerTool(
       const result = await bridge.send<PingResult>("ping");
       return jsonResult(result);
     } catch (err) {
+      return errorResult(err);
