@@ -29,3 +29,5 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPCommandHandler, Log, All);
 
+namespace
+{
