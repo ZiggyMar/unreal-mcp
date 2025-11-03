@@ -74,3 +74,4 @@ happened cleanly alongside `UnrealMCPBridge` — good evidence our plugin doesn'
 with anything already in the project.
 
 Note: `AntiVirusSquadUE58` is a **Blueprint-only project** — it has no `Source/` directory
+of its own. Before this milestone it had no reason to ever compile anything. Adding
