@@ -25,3 +25,4 @@ public:
 
 	~FMCPClientConnection()
 	{
+		if (Socket)
