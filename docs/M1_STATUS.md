@@ -77,3 +77,5 @@ Note: `AntiVirusSquadUE58` is a **Blueprint-only project** — it has no `Source
 of its own. Before this milestone it had no reason to ever compile anything. Adding
 `UnrealMCPBridge` as a C++ plugin makes this the *first* thing in the project that
 requires a build step.
+
+Fix applied during this milestone: the first build attempt failed with C2440/C2679 errors
