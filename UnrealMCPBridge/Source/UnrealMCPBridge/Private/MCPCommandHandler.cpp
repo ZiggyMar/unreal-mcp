@@ -27,3 +27,5 @@
 #include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogMCPCommandHandler, Log, All);
+

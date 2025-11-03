@@ -24,3 +24,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
   exposes commands (list assets, read blueprint, create blueprint, add node, connect pins,
   compile, read actor/level state, search). Uses only public Editor Scripting / Kismet2 /
   AssetRegistry APIs, so it works against a standard launcher-installed engine. Must be built
+  once per engine version (5.6 and 5.8 builds), like any other UE plugin. This does NOT
