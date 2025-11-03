@@ -73,3 +73,4 @@ it (e.g. modules named `Kronos`/`KronosEditor` already present in the project), 
 happened cleanly alongside `UnrealMCPBridge` — good evidence our plugin doesn't conflict
 with anything already in the project.
 
+Note: `AntiVirusSquadUE58` is a **Blueprint-only project** — it has no `Source/` directory

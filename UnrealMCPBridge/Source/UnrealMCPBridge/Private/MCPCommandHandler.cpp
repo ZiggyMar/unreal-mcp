@@ -24,3 +24,5 @@
 #include "Modules/ModuleManager.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
+#include "Misc/PackageName.h"
