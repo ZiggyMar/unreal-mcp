@@ -20,3 +20,5 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Logging/TokenizedMessage.h"
+#include "Dom/JsonValue.h"
+#include "Modules/ModuleManager.h"
