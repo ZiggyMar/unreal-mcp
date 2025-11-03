@@ -31,3 +31,5 @@ DEFINE_LOG_CATEGORY_STATIC(LogMCPCommandHandler, Log, All);
 
 namespace
 {
+	TSharedRef<FJsonObject> MakeOkResponse(const TSharedPtr<FJsonObject>& Result)
+	{
