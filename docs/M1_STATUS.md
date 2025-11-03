@@ -75,3 +75,4 @@ with anything already in the project.
 
 Note: `AntiVirusSquadUE58` is a **Blueprint-only project** — it has no `Source/` directory
 of its own. Before this milestone it had no reason to ever compile anything. Adding
+`UnrealMCPBridge` as a C++ plugin makes this the *first* thing in the project that
