@@ -46,3 +46,5 @@ namespace
 		Response->SetStringField(TEXT("error"), Message);
 		return Response;
 	}
+
+	// Stable-ish node id: index within the graph's Nodes array, as a string.
