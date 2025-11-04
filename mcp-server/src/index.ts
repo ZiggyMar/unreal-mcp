@@ -77,3 +77,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(
