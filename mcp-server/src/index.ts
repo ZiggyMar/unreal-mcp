@@ -76,3 +76,4 @@ server.registerTool(
     }
   }
 );
+
