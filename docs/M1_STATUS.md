@@ -79,3 +79,4 @@ of its own. Before this milestone it had no reason to ever compile anything. Add
 requires a build step.
 
 Fix applied during this milestone: the first build attempt failed with C2440/C2679 errors
+because a local helper function named `MakeError(...)` collided with Unreal's own global

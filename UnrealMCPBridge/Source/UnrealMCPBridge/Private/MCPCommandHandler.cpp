@@ -33,3 +33,5 @@ namespace
 {
 	TSharedRef<FJsonObject> MakeOkResponse(const TSharedPtr<FJsonObject>& Result)
 	{
+		TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
+		Response->SetBoolField(TEXT("ok"), true);
