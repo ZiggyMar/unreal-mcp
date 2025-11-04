@@ -85,3 +85,4 @@ resolution silently preferred UE's version, which returns a `TValueOrError_Error
 not our `TSharedRef<FJsonObject>`. Renamed our helpers to `MakeOkResponse` /
 `MakeErrorResponse` throughout `MCPCommandHandler.cpp` and the isolated build then
 succeeded cleanly. Worth remembering for M2: avoid short generic names like `MakeError`,
+`MakeOk`, `Check`, `Verify`, etc. in files that transitively include Core headers.

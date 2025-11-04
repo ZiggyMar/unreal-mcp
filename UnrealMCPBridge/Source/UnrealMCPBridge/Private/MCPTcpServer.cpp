@@ -28,3 +28,4 @@ public:
 		if (Socket)
 		{
 			Socket->Close();
+			ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);
