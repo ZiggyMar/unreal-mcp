@@ -48,3 +48,5 @@ namespace
 	}
 
 	// Stable-ish node id: index within the graph's Nodes array, as a string.
+	// Sufficient for a single-session read/detail/edit round trip; not persisted.
+	FString MakeNodeId(int32 Index)

@@ -4,3 +4,4 @@
   "description": "An MCP server that allows AI agents (Claude, Cursor) to directly control and manipulate Unreal Engine.",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
