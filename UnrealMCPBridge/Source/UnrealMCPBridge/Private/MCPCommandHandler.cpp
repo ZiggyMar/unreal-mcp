@@ -39,3 +39,5 @@ namespace
 		return Response;
 	}
 
+	TSharedRef<FJsonObject> MakeErrorResponse(const FString& Message)
+	{
