@@ -84,3 +84,4 @@ because a local helper function named `MakeError(...)` collided with Unreal's ow
 resolution silently preferred UE's version, which returns a `TValueOrError_ErrorProxy<T>`,
 not our `TSharedRef<FJsonObject>`. Renamed our helpers to `MakeOkResponse` /
 `MakeErrorResponse` throughout `MCPCommandHandler.cpp` and the isolated build then
+succeeded cleanly. Worth remembering for M2: avoid short generic names like `MakeError`,
