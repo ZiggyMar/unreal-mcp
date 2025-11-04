@@ -44,3 +44,5 @@ namespace
 		TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
 		Response->SetBoolField(TEXT("ok"), false);
 		Response->SetStringField(TEXT("error"), Message);
+		return Response;
+	}

@@ -19,3 +19,4 @@ export interface BridgeClientOptions {
   /** Milliseconds to wait for a response before rejecting. */
   timeoutMs?: number;
 }
+
