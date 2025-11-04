@@ -78,3 +78,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_list_blueprints",

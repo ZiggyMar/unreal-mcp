@@ -83,3 +83,4 @@ because a local helper function named `MakeError(...)` collided with Unreal's ow
 `MakeError()` template from `Templates/ValueOrError.h` (pulled in transitively) — overload
 resolution silently preferred UE's version, which returns a `TValueOrError_ErrorProxy<T>`,
 not our `TSharedRef<FJsonObject>`. Renamed our helpers to `MakeOkResponse` /
+`MakeErrorResponse` throughout `MCPCommandHandler.cpp` and the isolated build then
