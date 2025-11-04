@@ -37,3 +37,5 @@ namespace
 		Response->SetBoolField(TEXT("ok"), true);
 		Response->SetObjectField(TEXT("result"), Result);
 		return Response;
+	}
+

@@ -27,3 +27,4 @@ public:
 	{
 		if (Socket)
 		{
+			Socket->Close();

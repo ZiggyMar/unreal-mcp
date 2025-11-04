@@ -81,3 +81,4 @@ requires a build step.
 Fix applied during this milestone: the first build attempt failed with C2440/C2679 errors
 because a local helper function named `MakeError(...)` collided with Unreal's own global
 `MakeError()` template from `Templates/ValueOrError.h` (pulled in transitively) — overload
+resolution silently preferred UE's version, which returns a `TValueOrError_ErrorProxy<T>`,
