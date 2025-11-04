@@ -87,3 +87,4 @@ not our `TSharedRef<FJsonObject>`. Renamed our helpers to `MakeOkResponse` /
 succeeded cleanly. Worth remembering for M2: avoid short generic names like `MakeError`,
 `MakeOk`, `Check`, `Verify`, etc. in files that transitively include Core headers.
 
+**Plugin registration**: `UnrealMCPBridge.uplugin` sets `"EnabledByDefault": true`, and
