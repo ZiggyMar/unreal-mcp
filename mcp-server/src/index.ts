@@ -82,3 +82,4 @@ server.registerTool(
   {
     title: "List Unreal Blueprints",
     description:
+      "Lists Blueprint assets in the open Unreal project via the AssetRegistry (project-wide, or scoped to a path prefix). " +
