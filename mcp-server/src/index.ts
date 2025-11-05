@@ -81,3 +81,4 @@ server.registerTool(
   "unreal_list_blueprints",
   {
     title: "List Unreal Blueprints",
+    description:
