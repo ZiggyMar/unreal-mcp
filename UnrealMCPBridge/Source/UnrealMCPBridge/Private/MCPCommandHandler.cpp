@@ -52,3 +52,5 @@ namespace
 	FString MakeNodeId(int32 Index)
 	{
 		return FString::Printf(TEXT("n%d"), Index);
+	}
+

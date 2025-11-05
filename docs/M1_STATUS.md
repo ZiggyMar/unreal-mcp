@@ -90,3 +90,4 @@ succeeded cleanly. Worth remembering for M2: avoid short generic names like `Mak
 **Plugin registration**: `UnrealMCPBridge.uplugin` sets `"EnabledByDefault": true`, and
 `AntiVirusSquadUE58.uproject`'s `Plugins` array was updated to explicitly list
 `{ "Name": "UnrealMCPBridge", "Enabled": true, "TargetAllowList": ["Editor"] }` so the
+plugin loads automatically — the user should not need to enable it manually via

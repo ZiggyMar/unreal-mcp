@@ -38,3 +38,4 @@ export interface GraphSummaryPin {
   direction: "in" | "out";
   linkedTo: PinLink[];
 }
+
