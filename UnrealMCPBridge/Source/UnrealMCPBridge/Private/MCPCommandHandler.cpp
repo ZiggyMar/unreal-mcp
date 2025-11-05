@@ -56,3 +56,4 @@ namespace
 
 	// Saves a Blueprint's package to disk in place. Used by create_blueprint (when
 	// save=true, the default) and save_blueprint.
+	bool SaveBlueprintPackage(UBlueprint* Blueprint, FString& OutError)
