@@ -30,3 +30,4 @@ public:
 			Socket->Close();
 			ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);
 			Socket = nullptr;
+		}
