@@ -96,3 +96,4 @@ Edit > Plugins.
 ### MCP server — `mcp-server/`
 
 Location: `F:\!Projects\UnrealMCP\mcp-server\`.
+
