@@ -65,3 +65,5 @@ namespace
 		}
 
 		UPackage* Package = Blueprint->GetOutermost();
+		Package->MarkPackageDirty();
+
