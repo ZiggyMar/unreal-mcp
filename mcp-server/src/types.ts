@@ -39,3 +39,4 @@ export interface GraphSummaryPin {
   linkedTo: PinLink[];
 }
 
+export interface GraphSummaryNode {

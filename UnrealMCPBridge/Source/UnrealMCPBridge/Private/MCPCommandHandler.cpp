@@ -61,3 +61,5 @@ namespace
 		if (!Blueprint)
 		{
 			OutError = TEXT("null_blueprint");
+			return false;
+		}

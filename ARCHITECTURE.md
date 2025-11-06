@@ -26,3 +26,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
   AssetRegistry APIs, so it works against a standard launcher-installed engine. Must be built
   once per engine version (5.6 and 5.8 builds), like any other UE plugin. This does NOT
   require engine source to build or run; source is only being pulled locally as a reference
+  for API behavior during development.
