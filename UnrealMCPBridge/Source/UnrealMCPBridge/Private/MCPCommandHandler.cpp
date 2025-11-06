@@ -63,3 +63,5 @@ namespace
 			OutError = TEXT("null_blueprint");
 			return false;
 		}
+
+		UPackage* Package = Blueprint->GetOutermost();
