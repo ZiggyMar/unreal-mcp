@@ -86,3 +86,4 @@ server.registerTool(
       "Returns name, asset path, and parent class for each, not graph contents. Use this to find a Blueprint before " +
       "drilling into it with unreal_list_blueprint_graphs.",
     inputSchema: {
+      pathPrefix: z
