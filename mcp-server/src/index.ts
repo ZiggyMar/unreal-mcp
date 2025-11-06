@@ -84,3 +84,4 @@ server.registerTool(
     description:
       "Lists Blueprint assets in the open Unreal project via the AssetRegistry (project-wide, or scoped to a path prefix). " +
       "Returns name, asset path, and parent class for each, not graph contents. Use this to find a Blueprint before " +
+      "drilling into it with unreal_list_blueprint_graphs.",

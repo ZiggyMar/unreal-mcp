@@ -59,3 +59,5 @@ namespace
 	bool SaveBlueprintPackage(UBlueprint* Blueprint, FString& OutError)
 	{
 		if (!Blueprint)
+		{
+			OutError = TEXT("null_blueprint");

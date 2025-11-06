@@ -94,3 +94,4 @@ plugin loads automatically — the user should not need to enable it manually vi
 Edit > Plugins.
 
 ### MCP server — `mcp-server/`
+
