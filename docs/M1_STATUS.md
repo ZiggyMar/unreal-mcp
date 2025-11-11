@@ -111,3 +111,5 @@ checked into the repo):
    intentionally-failing command using the exact line-delimited JSON framing
    `FMCPTcpServer` implements (`{id, cmd, params}\n` in, `{id, ok, result|error}\n` out).
    The real, compiled `UnrealBridgeClient` (`dist/bridgeClient.js`) was driven against it
+   directly: successful responses parsed correctly, the error-response path rejected with
+   the bridge's error message, and a connection-refused case (nothing listening) produced
