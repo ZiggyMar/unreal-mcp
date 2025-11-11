@@ -82,3 +82,5 @@ namespace
 	}
 }
 
+UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString& OutError)
+{
