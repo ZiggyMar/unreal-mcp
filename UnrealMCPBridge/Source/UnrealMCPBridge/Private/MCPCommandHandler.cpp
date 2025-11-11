@@ -67,3 +67,5 @@ namespace
 		UPackage* Package = Blueprint->GetOutermost();
 		Package->MarkPackageDirty();
 
+		const FString PackageFileName = FPackageName::LongPackageNameToFilename(
+			Package->GetName(), FPackageName::GetAssetPackageExtension());
