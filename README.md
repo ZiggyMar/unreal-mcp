@@ -31,3 +31,4 @@ There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic s
 - **A persistent, incrementally-updated project index.** The bridge indexes Blueprints, functions, variables, and cross-asset references once, caches it to disk, and updates it from `AssetRegistry` delegates as you edit, instead of rescanning the project on every query. `find_references` answers "what actually uses this Blueprint" without the model having to enumerate the project itself.
 - **An optional local-model hook for indexing.** If you point `UNREAL_MCP_LOCAL_LLM_URL` at a local model (Ollama or anything OpenAI-compatible), indexing summaries are generated there instead of spending Claude's tokens on mechanical scanning work. Fully optional. The index works without it.
 - **Targets both 5.6 and 5.8 from one codebase**, where several existing projects are pinned to a single engine version.
+

@@ -33,3 +33,4 @@ public:
 		}
 	}
 
+	bool IsConnected() const
