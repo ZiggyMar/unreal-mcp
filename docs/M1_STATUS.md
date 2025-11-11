@@ -99,3 +99,4 @@ Location: `F:\!Projects\UnrealMCP\mcp-server\`.
 
 - `npm install` — succeeded, 96 packages, 0 vulnerabilities.
 - `npm run build` (`tsc -p tsconfig.json`) — succeeded, produced `dist/*.js` + source maps.
+- `npx tsc --noEmit` — clean, zero errors.

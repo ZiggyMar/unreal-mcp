@@ -69,3 +69,5 @@ namespace
 
 		const FString PackageFileName = FPackageName::LongPackageNameToFilename(
 			Package->GetName(), FPackageName::GetAssetPackageExtension());
+
+		FSavePackageArgs SaveArgs;
