@@ -92,3 +92,4 @@ server.registerTool(
         .describe('Optional content-path prefix to scope the search, e.g. "/Game/Blueprints". Defaults to "/Game".'),
     },
   },
+  async ({ pathPrefix }) => {

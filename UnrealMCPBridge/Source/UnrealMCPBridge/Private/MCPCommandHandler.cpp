@@ -84,3 +84,5 @@ namespace
 
 UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString& OutError)
 {
+	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *Path);
+	UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
