@@ -76,3 +76,5 @@ namespace
 		const bool bSaved = UPackage::SavePackage(Package, Blueprint, *PackageFileName, SaveArgs);
 		if (!bSaved)
 		{
+			OutError = FString::Printf(TEXT("save_failed: %s"), *PackageFileName);
+		}
