@@ -104,3 +104,4 @@ Location: `F:\!Projects\UnrealMCP\mcp-server\`.
   `unreal-mcp-server: connected via stdio; bridge target 127.0.0.1:8765`, and stays
   running waiting for MCP client input (did not crash).
 
+**Protocol-level verification performed this session** (both using throwaway scripts, not
