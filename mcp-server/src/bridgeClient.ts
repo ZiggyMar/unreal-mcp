@@ -21,3 +21,4 @@ export interface BridgeClientOptions {
 }
 
 /**
+ * Thin client for the UnrealMCPBridge editor plugin's local TCP protocol:

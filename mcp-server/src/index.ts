@@ -88,3 +88,4 @@ server.registerTool(
     inputSchema: {
       pathPrefix: z
         .string()
+        .optional()
