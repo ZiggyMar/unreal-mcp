@@ -107,3 +107,4 @@ Location: `F:\!Projects\UnrealMCP\mcp-server\`.
 **Protocol-level verification performed this session** (both using throwaway scripts, not
 checked into the repo):
 
+1. A fake TCP server was written that replies to `ping` / `list_blueprints` / an
