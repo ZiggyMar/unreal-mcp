@@ -87,3 +87,4 @@ server.registerTool(
       "drilling into it with unreal_list_blueprint_graphs.",
     inputSchema: {
       pathPrefix: z
+        .string()
