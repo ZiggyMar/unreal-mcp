@@ -103,3 +103,4 @@ Location: `F:\!Projects\UnrealMCP\mcp-server\`.
 - `node dist/index.js` — starts, connects an MCP stdio transport, logs
   `unreal-mcp-server: connected via stdio; bridge target 127.0.0.1:8765`, and stays
   running waiting for MCP client input (did not crash).
+
