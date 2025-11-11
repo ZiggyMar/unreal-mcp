@@ -78,3 +78,5 @@ namespace
 		{
 			OutError = FString::Printf(TEXT("save_failed: %s"), *PackageFileName);
 		}
+		return bSaved;
+	}

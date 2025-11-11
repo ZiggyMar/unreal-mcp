@@ -105,3 +105,4 @@ Location: `F:\!Projects\UnrealMCP\mcp-server\`.
   running waiting for MCP client input (did not crash).
 
 **Protocol-level verification performed this session** (both using throwaway scripts, not
+checked into the repo):

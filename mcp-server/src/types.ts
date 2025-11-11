@@ -41,3 +41,4 @@ export interface GraphSummaryPin {
 
 export interface GraphSummaryNode {
   id: string;
+  type: string;
