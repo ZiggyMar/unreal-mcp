@@ -71,3 +71,4 @@ namespace
 			Package->GetName(), FPackageName::GetAssetPackageExtension());
 
 		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
