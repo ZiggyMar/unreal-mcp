@@ -5,3 +5,4 @@
 #include "Interfaces/IPv4/IPv4Endpoint.h"
 
 class FSocket;
+class FTcpListener;
