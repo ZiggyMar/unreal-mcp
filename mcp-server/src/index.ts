@@ -93,3 +93,4 @@ server.registerTool(
     },
   },
   async ({ pathPrefix }) => {
+    try {
