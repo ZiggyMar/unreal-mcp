@@ -80,3 +80,5 @@ namespace
 		}
 		return bSaved;
 	}
+}
+
