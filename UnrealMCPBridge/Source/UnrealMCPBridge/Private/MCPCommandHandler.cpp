@@ -87,3 +87,5 @@ UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString
 	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *Path);
 	UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
 	if (!Blueprint)
+	{
+		OutError = FString::Printf(TEXT("blueprint_not_found: %s"), *Path);

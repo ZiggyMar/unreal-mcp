@@ -110,3 +110,4 @@ checked into the repo):
 1. A fake TCP server was written that replies to `ping` / `list_blueprints` / an
    intentionally-failing command using the exact line-delimited JSON framing
    `FMCPTcpServer` implements (`{id, cmd, params}\n` in, `{id, ok, result|error}\n` out).
+   The real, compiled `UnrealBridgeClient` (`dist/bridgeClient.js`) was driven against it
