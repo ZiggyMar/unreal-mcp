@@ -117,3 +117,4 @@ checked into the repo):
 2. The real compiled server (`dist/index.js`) was spawned as a child process and driven
    with the official `@modelcontextprotocol/sdk` `Client` over a real stdio transport:
    `initialize` handshake succeeded, `tools/list` returned exactly the 5 expected tools
+   (`unreal_ping`, `unreal_list_blueprints`, `unreal_list_blueprint_graphs`,
