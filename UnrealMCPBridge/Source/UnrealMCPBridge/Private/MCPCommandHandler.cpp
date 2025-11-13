@@ -97,3 +97,5 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 {
 	TArray<UEdGraph*> AllGraphs;
 	Blueprint->GetAllGraphs(AllGraphs);
+	for (UEdGraph* Graph : AllGraphs)
+	{
