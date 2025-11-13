@@ -101,3 +101,4 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 	{
 		if (Graph && Graph->GetName() == GraphName)
 		{
+			return Graph;

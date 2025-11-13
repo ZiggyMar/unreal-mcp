@@ -118,3 +118,4 @@ checked into the repo):
    with the official `@modelcontextprotocol/sdk` `Client` over a real stdio transport:
    `initialize` handshake succeeded, `tools/list` returned exactly the 5 expected tools
    (`unreal_ping`, `unreal_list_blueprints`, `unreal_list_blueprint_graphs`,
+   `unreal_read_blueprint_summary`, `unreal_read_node_detail`), and calling `unreal_ping`
