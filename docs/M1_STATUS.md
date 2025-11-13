@@ -114,3 +114,4 @@ checked into the repo):
    directly: successful responses parsed correctly, the error-response path rejected with
    the bridge's error message, and a connection-refused case (nothing listening) produced
    the expected human-readable connection error. All 4 cases passed.
+2. The real compiled server (`dist/index.js`) was spawned as a child process and driven
