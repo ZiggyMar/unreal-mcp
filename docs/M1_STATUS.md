@@ -115,3 +115,4 @@ checked into the repo):
    the bridge's error message, and a connection-refused case (nothing listening) produced
    the expected human-readable connection error. All 4 cases passed.
 2. The real compiled server (`dist/index.js`) was spawned as a child process and driven
+   with the official `@modelcontextprotocol/sdk` `Client` over a real stdio transport:
