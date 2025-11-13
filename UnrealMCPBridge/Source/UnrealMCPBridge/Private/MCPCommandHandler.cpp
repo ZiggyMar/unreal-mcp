@@ -104,3 +104,5 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 			return Graph;
 		}
 	}
+	OutError = FString::Printf(TEXT("graph_not_found: %s"), *GraphName);
+	return nullptr;
