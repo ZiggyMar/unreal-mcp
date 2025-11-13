@@ -28,3 +28,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
   require engine source to build or run; source is only being pulled locally as a reference
   for API behavior during development.
 - **mcp-server**: implements the Model Context Protocol, translates MCP tool calls into
+  bridge requests, and (critically) is responsible for compacting bridge responses into
