@@ -91,3 +91,5 @@ UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString
 		OutError = FString::Printf(TEXT("blueprint_not_found: %s"), *Path);
 	}
 	return Blueprint;
+}
+

@@ -113,3 +113,4 @@ checked into the repo):
    The real, compiled `UnrealBridgeClient` (`dist/bridgeClient.js`) was driven against it
    directly: successful responses parsed correctly, the error-response path rejected with
    the bridge's error message, and a connection-refused case (nothing listening) produced
+   the expected human-readable connection error. All 4 cases passed.
