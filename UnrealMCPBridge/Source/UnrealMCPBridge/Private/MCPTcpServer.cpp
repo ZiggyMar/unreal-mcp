@@ -35,3 +35,4 @@ public:
 
 	bool IsConnected() const
 	{
+		return Socket != nullptr && Socket->GetConnectionState() == SCS_Connected;
