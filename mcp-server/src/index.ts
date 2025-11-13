@@ -96,3 +96,4 @@ server.registerTool(
     try {
       const result = await bridge.send<ListBlueprintsResult>("list_blueprints", { pathPrefix });
       return jsonResult(result);
+    } catch (err) {

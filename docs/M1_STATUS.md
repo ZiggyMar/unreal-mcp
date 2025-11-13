@@ -116,3 +116,4 @@ checked into the repo):
    the expected human-readable connection error. All 4 cases passed.
 2. The real compiled server (`dist/index.js`) was spawned as a child process and driven
    with the official `@modelcontextprotocol/sdk` `Client` over a real stdio transport:
+   `initialize` handshake succeeded, `tools/list` returned exactly the 5 expected tools
