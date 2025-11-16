@@ -108,3 +108,5 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 	return nullptr;
 }
 
+UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& NodeId, FString& OutError)
+{
