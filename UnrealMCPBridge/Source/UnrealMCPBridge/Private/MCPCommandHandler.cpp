@@ -121,3 +121,5 @@ UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& N
 		return nullptr;
 	}
 	return Graph->Nodes[NodeIndex];
+}
+

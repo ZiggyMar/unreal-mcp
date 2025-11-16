@@ -33,3 +33,4 @@ There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic s
 - **Targets both 5.6 and 5.8 from one codebase**, where several existing projects are pinned to a single engine version.
 
 Full survey of the existing ecosystem (licenses, architectures, what each one does well) is in [docs/COMPETITIVE_LANDSCAPE.md](docs/COMPETITIVE_LANDSCAPE.md).
+
