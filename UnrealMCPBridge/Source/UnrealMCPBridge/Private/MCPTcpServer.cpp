@@ -37,3 +37,4 @@ public:
 	{
 		return Socket != nullptr && Socket->GetConnectionState() == SCS_Connected;
 	}
+

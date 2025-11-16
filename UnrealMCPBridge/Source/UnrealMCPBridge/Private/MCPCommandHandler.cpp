@@ -117,3 +117,5 @@ UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& N
 	}
 	if (!Graph->Nodes.IsValidIndex(NodeIndex))
 	{
+		OutError = FString::Printf(TEXT("node_not_found: %s"), *NodeId);
+		return nullptr;
