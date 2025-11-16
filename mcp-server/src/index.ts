@@ -102,3 +102,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(

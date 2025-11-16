@@ -127,3 +127,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 
 ## What is stubbed / unverified
 
+- **Live end-to-end read from a running Editor.** Nobody has opened

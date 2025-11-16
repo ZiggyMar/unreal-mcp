@@ -24,3 +24,4 @@ export interface BridgeClientOptions {
  * Thin client for the UnrealMCPBridge editor plugin's local TCP protocol:
  * one line of JSON in, one line of JSON out, per request, on a fresh
  * connection. The bridge is single-threaded on the Unreal game thread, so
+ * we keep this dead simple rather than pooling/pipelining connections.
