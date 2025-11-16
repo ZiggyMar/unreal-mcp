@@ -45,3 +45,4 @@ export interface GraphSummaryNode {
   title: string;
   connectedPins: GraphSummaryPin[];
 }
+

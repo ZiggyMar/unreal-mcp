@@ -5,3 +5,4 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
+    "unreal-mcp-server": "dist/index.js"
