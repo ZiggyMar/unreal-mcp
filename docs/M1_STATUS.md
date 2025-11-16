@@ -123,3 +123,5 @@ checked into the repo):
    crash or protocol violation) with the expected connection-refused message.
 
 This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. It does
+**not** confirm the C++ side of that same protocol against a live editor — see below.
+
