@@ -116,3 +116,4 @@ UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& N
 		LexFromString(NodeIndex, *NodeId.Mid(1));
 	}
 	if (!Graph->Nodes.IsValidIndex(NodeIndex))
+	{
