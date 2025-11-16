@@ -125,3 +125,4 @@ checked into the repo):
 This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. It does
 **not** confirm the C++ side of that same protocol against a live editor — see below.
 
+## What is stubbed / unverified

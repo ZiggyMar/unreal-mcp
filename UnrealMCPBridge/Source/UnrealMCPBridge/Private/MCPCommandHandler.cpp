@@ -112,3 +112,5 @@ UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& N
 {
 	int32 NodeIndex = INDEX_NONE;
 	if (NodeId.StartsWith(TEXT("n")))
+	{
+		LexFromString(NodeIndex, *NodeId.Mid(1));
