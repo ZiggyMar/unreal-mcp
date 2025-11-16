@@ -121,3 +121,4 @@ checked into the repo):
    `unreal_read_blueprint_summary`, `unreal_read_node_detail`), and calling `unreal_ping`
    with no bridge listening returned a graceful `isError: true` MCP tool result (not a
    crash or protocol violation) with the expected connection-refused message.
+
