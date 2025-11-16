@@ -103,3 +103,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_list_blueprint_graphs",
