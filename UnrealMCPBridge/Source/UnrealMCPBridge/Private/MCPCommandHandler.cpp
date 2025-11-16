@@ -110,3 +110,5 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 
 UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& NodeId, FString& OutError)
 {
+	int32 NodeIndex = INDEX_NONE;
+	if (NodeId.StartsWith(TEXT("n")))
