@@ -144,3 +144,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 
 	// Short name form ("Actor", "Pawn", "ActorComponent"): try native prefixes, then bare name.
 	static const TCHAR* Prefixes[] = { TEXT("A"), TEXT("U"), TEXT("") };
+	for (const TCHAR* Prefix : Prefixes)
+	{
