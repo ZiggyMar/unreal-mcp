@@ -140,3 +140,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 			OutError = FString::Printf(TEXT("class_not_found: %s"), *ClassName);
 		}
 		return Found;
+	}
+
