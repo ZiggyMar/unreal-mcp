@@ -134,3 +134,5 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     and confirmed to compile).
   - No real `ping`, `list_blueprints`, `list_blueprint_graphs`,
     `read_blueprint_graph_summary`, or `read_blueprint_node_detail` call has been made
+    against a real loaded Blueprint asset. The AssetRegistry/`UBlueprint`/`UEdGraph`/
+    `UEdGraphPin` API usage in `MCPCommandHandler.cpp` is standard and compiles, but its
