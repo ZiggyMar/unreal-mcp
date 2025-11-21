@@ -46,3 +46,4 @@ export interface GraphSummaryNode {
   connectedPins: GraphSummaryPin[];
 }
 
+export interface ReadBlueprintGraphSummaryResult {
