@@ -136,3 +136,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	{
 		UClass* Found = LoadObject<UClass>(nullptr, *ClassName);
 		if (!Found)
+		{
+			OutError = FString::Printf(TEXT("class_not_found: %s"), *ClassName);
