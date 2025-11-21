@@ -47,3 +47,4 @@ export interface GraphSummaryNode {
 }
 
 export interface ReadBlueprintGraphSummaryResult {
+  path: string;
