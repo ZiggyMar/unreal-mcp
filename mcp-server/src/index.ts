@@ -109,3 +109,4 @@ server.registerTool(
     description:
       "Lists the graphs (event graphs, functions, macros) inside one Blueprint, with just names and node counts. " +
       "This is the first tier of the tiered-read strategy: call this before unreal_read_blueprint_summary to decide " +
+      "which graph is worth reading in full.",
