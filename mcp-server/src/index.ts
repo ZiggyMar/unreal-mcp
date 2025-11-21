@@ -107,3 +107,4 @@ server.registerTool(
   {
     title: "List a Blueprint's graphs",
     description:
+      "Lists the graphs (event graphs, functions, macros) inside one Blueprint, with just names and node counts. " +

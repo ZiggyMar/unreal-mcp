@@ -131,3 +131,4 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 		return nullptr;
 	}
 
+	// Full path form, e.g. "/Script/Engine.Actor" or "/Game/BP_Base.BP_Base_C".
