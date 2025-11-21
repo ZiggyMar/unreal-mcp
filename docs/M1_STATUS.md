@@ -140,3 +140,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     actually return what I expect on this engine version's asset registry tags; does
     `TargetGraph->Nodes.IndexOfByKey(...)` correctly resolve link targets on a real graph)
     is unverified.
+  - I do not have a way to launch and interact with the full graphical UnrealEditor from
