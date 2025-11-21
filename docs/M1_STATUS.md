@@ -132,3 +132,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   - `FMCPTcpServer::Start()` binding port 8765 inside a real running editor process has
     never actually been observed (only reasoned about from the UE Sockets/TcpListener API
     and confirmed to compile).
+  - No real `ping`, `list_blueprints`, `list_blueprint_graphs`,
