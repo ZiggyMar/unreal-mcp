@@ -143,3 +143,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   - I do not have a way to launch and interact with the full graphical UnrealEditor from
     this environment (no GUI automation available here), so this genuinely requires the
     user.
+- **Node id stability.** `read_blueprint_graph_summary` node ids are just `"n<index>"`

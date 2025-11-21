@@ -111,3 +111,4 @@ server.registerTool(
       "This is the first tier of the tiered-read strategy: call this before unreal_read_blueprint_summary to decide " +
       "which graph is worth reading in full.",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),

@@ -31,3 +31,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
   bridge requests, and (critically) is responsible for compacting bridge responses into
   token-cheap summaries before returning them to the model.
 
+## Token-efficiency strategy (the core hard problem)
