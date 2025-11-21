@@ -142,3 +142,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     is unverified.
   - I do not have a way to launch and interact with the full graphical UnrealEditor from
     this environment (no GUI automation available here), so this genuinely requires the
+    user.
