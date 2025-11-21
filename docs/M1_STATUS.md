@@ -138,3 +138,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     `UEdGraphPin` API usage in `MCPCommandHandler.cpp` is standard and compiles, but its
     *runtime behavior* against real project data (e.g. does `GetTagValue(FName("ParentClass"), ...)`
     actually return what I expect on this engine version's asset registry tags; does
+    `TargetGraph->Nodes.IndexOfByKey(...)` correctly resolve link targets on a real graph)

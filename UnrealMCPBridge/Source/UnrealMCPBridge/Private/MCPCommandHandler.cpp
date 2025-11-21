@@ -134,3 +134,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	// Full path form, e.g. "/Script/Engine.Actor" or "/Game/BP_Base.BP_Base_C".
 	if (ClassName.StartsWith(TEXT("/")))
 	{
+		UClass* Found = LoadObject<UClass>(nullptr, *ClassName);
+		if (!Found)
