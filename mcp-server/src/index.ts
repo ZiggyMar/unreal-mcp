@@ -106,3 +106,4 @@ server.registerTool(
   "unreal_list_blueprint_graphs",
   {
     title: "List a Blueprint's graphs",
+    description:
