@@ -125,3 +125,5 @@ UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& N
 
 UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString& OutError)
 {
+	if (ClassName.IsEmpty())
+	{
