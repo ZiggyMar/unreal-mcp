@@ -137,3 +137,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     against a real loaded Blueprint asset. The AssetRegistry/`UBlueprint`/`UEdGraph`/
     `UEdGraphPin` API usage in `MCPCommandHandler.cpp` is standard and compiles, but its
     *runtime behavior* against real project data (e.g. does `GetTagValue(FName("ParentClass"), ...)`
+    actually return what I expect on this engine version's asset registry tags; does
