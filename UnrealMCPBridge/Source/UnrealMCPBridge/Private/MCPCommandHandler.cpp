@@ -127,3 +127,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 {
 	if (ClassName.IsEmpty())
 	{
+		OutError = TEXT("empty_class_name");
+		return nullptr;

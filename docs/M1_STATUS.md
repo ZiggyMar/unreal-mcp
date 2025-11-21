@@ -133,3 +133,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     never actually been observed (only reasoned about from the UE Sockets/TcpListener API
     and confirmed to compile).
   - No real `ping`, `list_blueprints`, `list_blueprint_graphs`,
+    `read_blueprint_graph_summary`, or `read_blueprint_node_detail` call has been made
