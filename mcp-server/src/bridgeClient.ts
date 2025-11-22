@@ -26,3 +26,4 @@ export interface BridgeClientOptions {
  * connection. The bridge is single-threaded on the Unreal game thread, so
  * we keep this dead simple rather than pooling/pipelining connections.
  */
+export class UnrealBridgeClient {

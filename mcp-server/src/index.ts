@@ -112,3 +112,4 @@ server.registerTool(
       "which graph is worth reading in full.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+    },
