@@ -145,3 +145,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
     user.
 - **Node id stability.** `read_blueprint_graph_summary` node ids are just `"n<index>"`
   into `UEdGraph::Nodes` at read time. They are not persisted/stable across edits or
+  editor restarts. Fine for M1 (read-only, single-session), called out as a known
