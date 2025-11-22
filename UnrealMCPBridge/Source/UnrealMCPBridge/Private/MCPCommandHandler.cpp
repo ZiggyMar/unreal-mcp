@@ -146,3 +146,4 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	static const TCHAR* Prefixes[] = { TEXT("A"), TEXT("U"), TEXT("") };
 	for (const TCHAR* Prefix : Prefixes)
 	{
+		const FString Candidate = FString(Prefix) + ClassName;
