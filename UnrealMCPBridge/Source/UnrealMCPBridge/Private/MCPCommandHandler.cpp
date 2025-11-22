@@ -147,3 +147,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	for (const TCHAR* Prefix : Prefixes)
 	{
 		const FString Candidate = FString(Prefix) + ClassName;
+		if (UClass* Found = FindFirstObject<UClass>(*Candidate, EFindFirstObjectOptions::None, ELogVerbosity::NoLogging))
+		{
