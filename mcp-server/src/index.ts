@@ -114,3 +114,4 @@ server.registerTool(
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
     },
   },
+  async ({ path }) => {
