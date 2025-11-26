@@ -153,3 +153,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 		}
 	}
 
+	OutError = FString::Printf(
+		TEXT("class_not_found: %s (tried short name and A/U prefixes; try a full path like /Script/Engine.%s)"),
