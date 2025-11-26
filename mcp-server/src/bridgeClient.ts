@@ -27,3 +27,4 @@ export interface BridgeClientOptions {
  * we keep this dead simple rather than pooling/pipelining connections.
  */
 export class UnrealBridgeClient {
+  private readonly host: string;

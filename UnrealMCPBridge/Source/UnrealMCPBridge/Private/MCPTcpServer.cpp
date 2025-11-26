@@ -42,3 +42,4 @@ public:
 	FString RecvBuffer;
 };
 
+FMCPTcpServer::FMCPTcpServer() = default;
