@@ -150,3 +150,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 - **UE 5.6 build.** Only built/verified against 5.8 (`F:\UE_5.8`), matching the target
   project's `EngineAssociation`. A UE 5.6 install exists at `M:\Unreal\UE_5.6` but was not
   exercised — ARCHITECTURE.md notes the plugin must be built once per engine version;
+  that second build is not part of this milestone's target project.
