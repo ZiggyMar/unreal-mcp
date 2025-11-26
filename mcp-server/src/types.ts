@@ -49,3 +49,4 @@ export interface GraphSummaryNode {
 export interface ReadBlueprintGraphSummaryResult {
   path: string;
   graphName: string;
+  nodes: GraphSummaryNode[];
