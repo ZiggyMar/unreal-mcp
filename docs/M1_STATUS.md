@@ -151,3 +151,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   project's `EngineAssociation`. A UE 5.6 install exists at `M:\Unreal\UE_5.6` but was not
   exercised — ARCHITECTURE.md notes the plugin must be built once per engine version;
   that second build is not part of this milestone's target project.
+- **Engine reference source.** `A:\UnrealEngineSource\UnrealEngine-5.8` is present on disk
