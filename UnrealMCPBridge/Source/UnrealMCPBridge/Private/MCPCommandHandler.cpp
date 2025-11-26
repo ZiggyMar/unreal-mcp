@@ -159,3 +159,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	return nullptr;
 }
 
+bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType& OutType, FString& OutError)
+{

@@ -32,3 +32,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
   token-cheap summaries before returning them to the model.
 
 ## Token-efficiency strategy (the core hard problem)
+

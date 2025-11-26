@@ -152,3 +152,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   exercised — ARCHITECTURE.md notes the plugin must be built once per engine version;
   that second build is not part of this milestone's target project.
 - **Engine reference source.** `A:\UnrealEngineSource\UnrealEngine-5.8` is present on disk
+  but is **not a valid git repository** (`git status` fails with "not a git repository");
