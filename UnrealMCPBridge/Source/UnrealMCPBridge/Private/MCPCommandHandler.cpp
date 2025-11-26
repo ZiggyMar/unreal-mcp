@@ -151,3 +151,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 		{
 			return Found;
 		}
+	}
+

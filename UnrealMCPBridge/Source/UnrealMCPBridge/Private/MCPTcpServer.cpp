@@ -41,3 +41,4 @@ public:
 	FSocket* Socket = nullptr;
 	FString RecvBuffer;
 };
+
