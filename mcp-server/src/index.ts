@@ -115,3 +115,4 @@ server.registerTool(
     },
   },
   async ({ path }) => {
+    try {
