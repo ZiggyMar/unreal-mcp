@@ -154,3 +154,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 - **Engine reference source.** `A:\UnrealEngineSource\UnrealEngine-5.8` is present on disk
   but is **not a valid git repository** (`git status` fails with "not a git repository");
   it's a partial/broken clone per a long-path write failure during cloning. It was not
+  used for anything in this milestone. All engine API usage came from public UE

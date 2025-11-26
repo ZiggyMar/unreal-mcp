@@ -162,3 +162,5 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType& OutType, FString& OutError)
 {
 	OutType.PinSubCategory = NAME_None;
+	OutType.PinSubCategoryObject = nullptr;
+	OutType.ContainerType = EPinContainerType::None;
