@@ -166,3 +166,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	OutType.ContainerType = EPinContainerType::None;
 	OutType.bIsReference = false;
 
+	const FString Lower = TypeStr.ToLower();
+
