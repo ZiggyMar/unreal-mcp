@@ -157,3 +157,5 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   used for anything in this milestone. All engine API usage came from public UE
   documentation/knowledge and was validated the hard way — by fixing real compiler errors
   against the actual installed engine headers/libs. If/when the source clone is repaired,
+  it's still only useful as a reference for future milestones, not a blocker for this one.
+
