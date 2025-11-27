@@ -181,3 +181,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinCategory = UEdGraphSchema_K2::PC_Int;
 	}
 	else if (Lower == TEXT("int64"))
+	{
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Int64;

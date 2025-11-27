@@ -165,3 +165,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    Editor (UE 5.8).** The plugin has already been compiled directly into this project
    during this session (Verification 2 above put `UnrealEditor-UnrealMCPBridge.dll` into
    `Plugins\UnrealMCPBridge\Binaries\Win64\`), so the editor should open straight into
+   normal Blueprint editing with no "binaries need building" prompt. If you *do* get
