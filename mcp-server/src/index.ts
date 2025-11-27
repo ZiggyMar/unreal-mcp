@@ -118,3 +118,4 @@ server.registerTool(
     try {
       const result = await bridge.send<ListBlueprintGraphsResult>("list_blueprint_graphs", { path });
       return jsonResult(result);
+    } catch (err) {

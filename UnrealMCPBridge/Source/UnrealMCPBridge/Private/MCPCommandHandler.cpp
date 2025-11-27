@@ -164,3 +164,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	OutType.PinSubCategory = NAME_None;
 	OutType.PinSubCategoryObject = nullptr;
 	OutType.ContainerType = EPinContainerType::None;
+	OutType.bIsReference = false;
+
