@@ -168,3 +168,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 
 	const FString Lower = TypeStr.ToLower();
 
+	if (Lower == TEXT("bool") || Lower == TEXT("boolean"))
+	{

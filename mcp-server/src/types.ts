@@ -51,3 +51,4 @@ export interface ReadBlueprintGraphSummaryResult {
   graphName: string;
   nodes: GraphSummaryNode[];
 }
+
