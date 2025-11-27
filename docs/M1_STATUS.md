@@ -155,3 +155,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   but is **not a valid git repository** (`git status` fails with "not a git repository");
   it's a partial/broken clone per a long-path write failure during cloning. It was not
   used for anything in this milestone. All engine API usage came from public UE
+  documentation/knowledge and was validated the hard way — by fixing real compiler errors
