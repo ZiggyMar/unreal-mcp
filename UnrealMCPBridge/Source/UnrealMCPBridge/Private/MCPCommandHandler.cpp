@@ -170,3 +170,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 
 	if (Lower == TEXT("bool") || Lower == TEXT("boolean"))
 	{
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+	}

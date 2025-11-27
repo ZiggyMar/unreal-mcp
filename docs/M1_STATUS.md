@@ -159,3 +159,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   against the actual installed engine headers/libs. If/when the source clone is repaired,
   it's still only useful as a reference for future milestones, not a blocker for this one.
 
+## Manual step(s) required from the user
