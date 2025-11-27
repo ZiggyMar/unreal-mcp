@@ -161,3 +161,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 
 ## Manual step(s) required from the user
 
+1. **Open `A:\UnrealProjects\AntiVirusSquadUE58\AntiVirusSquadUE58.uproject` in the Unreal
