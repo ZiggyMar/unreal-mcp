@@ -33,3 +33,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
 
 ## Token-efficiency strategy (the core hard problem)
 
+Never send a Blueprint's raw engine representation. Instead:
