@@ -174,3 +174,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower == TEXT("byte"))
 	{
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+	}
