@@ -9,3 +9,4 @@ static const int32 GMCPBridgePort = 8765;
 void FUnrealMCPBridgeModule::StartupModule()
 {
 	// Registers AssetRegistry delegates immediately (cheap) but defers the potentially
+	// expensive full scan/load-every-blueprint work to the first search_project /
