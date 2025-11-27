@@ -52,3 +52,4 @@ export interface ReadBlueprintGraphSummaryResult {
   nodes: GraphSummaryNode[];
 }
 
+export interface NodeDetailPin {

@@ -163,3 +163,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 
 1. **Open `A:\UnrealProjects\AntiVirusSquadUE58\AntiVirusSquadUE58.uproject` in the Unreal
    Editor (UE 5.8).** The plugin has already been compiled directly into this project
+   during this session (Verification 2 above put `UnrealEditor-UnrealMCPBridge.dll` into
