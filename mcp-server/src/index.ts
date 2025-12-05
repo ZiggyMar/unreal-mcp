@@ -124,3 +124,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(
