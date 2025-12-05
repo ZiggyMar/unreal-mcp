@@ -167,3 +167,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    `Plugins\UnrealMCPBridge\Binaries\Win64\`), so the editor should open straight into
    normal Blueprint editing with no "binaries need building" prompt. If you *do* get
    prompted anyway (e.g. because engine version/module hash checks are picky about a build
+   done outside the editor), say **yes** — it should be a fast incremental rebuild, not a
