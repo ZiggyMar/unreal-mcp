@@ -187,3 +187,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	else if (Lower == TEXT("float"))
 	{
 		OutType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		OutType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+	}
