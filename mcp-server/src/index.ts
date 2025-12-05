@@ -126,3 +126,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_read_blueprint_summary",
+  {
