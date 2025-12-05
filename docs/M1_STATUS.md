@@ -169,3 +169,5 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    prompted anyway (e.g. because engine version/module hash checks are picky about a build
    done outside the editor), say **yes** — it should be a fast incremental rebuild, not a
    from-scratch one.
+2. **Confirm the bridge is listening**: with the editor open, check
+   `Window > Developer Tools > Output Log` for a line like
