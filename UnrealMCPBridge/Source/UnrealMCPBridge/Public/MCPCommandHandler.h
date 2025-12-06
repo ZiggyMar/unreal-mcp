@@ -9,3 +9,4 @@
  * Blueprint introspection or edit command and returns a JSON response object.
  *
  * Request shape:  { "id": <any>, "cmd": "<name>", "params": { ... } }
+ * Response shape: { "id": <any>, "ok": true, "result": { ... } }
