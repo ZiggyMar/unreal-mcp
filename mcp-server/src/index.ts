@@ -131,3 +131,4 @@ server.registerTool(
     description:
       "Reads a compact summary of one graph in a Blueprint: every node's id, type, and title, plus which pins are " +
       "connected to which other nodes. Deliberately omits node position/cosmetic metadata and unconnected pins to stay " +
+      "token-lean. Use unreal_read_node_detail afterward for full pin/property detail on a specific node id from this result.",
