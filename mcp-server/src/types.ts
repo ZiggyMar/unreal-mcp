@@ -54,3 +54,4 @@ export interface ReadBlueprintGraphSummaryResult {
 
 export interface NodeDetailPin {
   name: string;
+  direction: "in" | "out";
