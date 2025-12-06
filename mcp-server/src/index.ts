@@ -129,3 +129,4 @@ server.registerTool(
   {
     title: "Read a Blueprint graph summary",
     description:
+      "Reads a compact summary of one graph in a Blueprint: every node's id, type, and title, plus which pins are " +
