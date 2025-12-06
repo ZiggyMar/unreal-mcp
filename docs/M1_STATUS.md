@@ -178,3 +178,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 3. **Smoke-test from the mcp-server side** once the editor is open, from
    `F:\!Projects\UnrealMCP\mcp-server`:
    ```
+   npm run build

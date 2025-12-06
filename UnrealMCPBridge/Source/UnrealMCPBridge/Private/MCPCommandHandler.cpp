@@ -204,3 +204,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower == TEXT("text"))
 	{
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Text;
+	}
