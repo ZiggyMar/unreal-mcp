@@ -172,3 +172,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 2. **Confirm the bridge is listening**: with the editor open, check
    `Window > Developer Tools > Output Log` for a line like
    `LogMCPBridge: UnrealMCPBridge: listening on 127.0.0.1:8765`. If you instead see
+   `LogMCPBridgeModule: Error: UnrealMCPBridge failed to start TCP server on port 8765`,

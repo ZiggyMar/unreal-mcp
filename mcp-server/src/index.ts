@@ -127,3 +127,4 @@ server.registerTool(
 server.registerTool(
   "unreal_read_blueprint_summary",
   {
+    title: "Read a Blueprint graph summary",
