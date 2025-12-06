@@ -46,3 +46,4 @@ FMCPTcpServer::FMCPTcpServer() = default;
 
 FMCPTcpServer::~FMCPTcpServer()
 {
+	Stop();
