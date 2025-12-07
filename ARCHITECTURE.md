@@ -36,3 +36,4 @@ Unreal Engine 5.6/5.8 Editor process (stock launcher build, no engine source nee
 Never send a Blueprint's raw engine representation. Instead:
 
 1. **Tiered reads.** `list_blueprint_graphs` (names + node counts only) →
+   `read_blueprint_graph_summary` (node types, names, connections, no positions/metadata) →

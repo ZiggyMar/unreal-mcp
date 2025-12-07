@@ -137,3 +137,4 @@ server.registerTool(
       graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),
     },
   },
+  async ({ path, graphName }) => {
