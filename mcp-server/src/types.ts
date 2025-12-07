@@ -56,3 +56,4 @@ export interface NodeDetailPin {
   name: string;
   direction: "in" | "out";
   category: string;
+  subCategory?: string;
