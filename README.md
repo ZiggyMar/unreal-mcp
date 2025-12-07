@@ -38,3 +38,4 @@ Full survey of the existing ecosystem (licenses, architectures, what each one do
 
 This is being built and verified in public, milestone by milestone. Each milestone's status doc is written honestly, including what's compiled/tested versus what's still unverified:
 
+- [Milestone 1: read-only Blueprint introspection](docs/M1_STATUS.md): compiles and runs against a real UE 5.8 install; MCP protocol verified end-to-end.
