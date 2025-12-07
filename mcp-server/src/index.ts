@@ -133,3 +133,4 @@ server.registerTool(
       "connected to which other nodes. Deliberately omits node position/cosmetic metadata and unconnected pins to stay " +
       "token-lean. Use unreal_read_node_detail afterward for full pin/property detail on a specific node id from this result.",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),

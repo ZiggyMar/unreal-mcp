@@ -183,3 +183,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    ```
    then, from any MCP client (Claude Code: `claude mcp add unreal -- node "F:/!Projects/UnrealMCP/mcp-server/dist/index.js"`,
    then ask it to call `unreal_ping`) confirm you get back
+   `{"status":"ok","plugin":"UnrealMCPBridge","protocolVersion":1}` instead of a connection
