@@ -31,3 +31,4 @@ export class UnrealBridgeClient {
   private readonly port: number;
   private readonly timeoutMs: number;
 
+  constructor(options: BridgeClientOptions = {}) {
