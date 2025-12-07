@@ -222,3 +222,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinSubCategoryObject = FindObject<UScriptStruct>(nullptr, TEXT("/Script/CoreUObject.Transform"));
 	}
 	else if (Lower.StartsWith(TEXT("object:")))
+	{
+		const FString ClassName = TypeStr.Mid(7);

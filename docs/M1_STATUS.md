@@ -189,3 +189,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    query actually enumerates real Blueprints in `AntiVirusSquadUE58`'s Content folder, then
    pick one and try `unreal_list_blueprint_graphs` -> `unreal_read_blueprint_summary` on
    it. Report back anything that looks wrong (wrong parent class names, missing graphs,
+   empty pin lists on graphs you know have connections, etc.) — those are the most likely
