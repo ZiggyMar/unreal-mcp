@@ -10,3 +10,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 {
 	// Registers AssetRegistry delegates immediately (cheap) but defers the potentially
 	// expensive full scan/load-every-blueprint work to the first search_project /
+	// get_project_overview call (see FMCPProjectIndex::EnsureBuilt).
