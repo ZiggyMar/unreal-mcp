@@ -221,3 +221,4 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
 		OutType.PinSubCategoryObject = FindObject<UScriptStruct>(nullptr, TEXT("/Script/CoreUObject.Transform"));
 	}
+	else if (Lower.StartsWith(TEXT("object:")))
