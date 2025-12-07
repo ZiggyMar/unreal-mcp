@@ -217,3 +217,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinSubCategoryObject = FindObject<UScriptStruct>(nullptr, TEXT("/Script/CoreUObject.Rotator"));
 	}
 	else if (Lower == TEXT("transform"))
+	{
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
