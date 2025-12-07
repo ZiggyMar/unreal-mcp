@@ -209,3 +209,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	else if (Lower == TEXT("vector"))
 	{
 		OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutType.PinSubCategoryObject = FindObject<UScriptStruct>(nullptr, TEXT("/Script/CoreUObject.Vector"));
+	}
