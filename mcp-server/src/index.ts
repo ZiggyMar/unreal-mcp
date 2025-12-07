@@ -134,3 +134,4 @@ server.registerTool(
       "token-lean. Use unreal_read_node_detail afterward for full pin/property detail on a specific node id from this result.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),
