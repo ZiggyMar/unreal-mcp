@@ -187,3 +187,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    error. This is the one link in the chain nobody has exercised yet.
 4. Once `unreal_ping` works, try `unreal_list_blueprints` to confirm the AssetRegistry
    query actually enumerates real Blueprints in `AntiVirusSquadUE58`'s Content folder, then
+   pick one and try `unreal_list_blueprint_graphs` -> `unreal_read_blueprint_summary` on
