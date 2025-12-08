@@ -234,3 +234,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinCategory = UEdGraphSchema_K2::PC_Object;
 		OutType.PinSubCategoryObject = Class;
 	}
+	else if (Lower.StartsWith(TEXT("class:")))
+	{
