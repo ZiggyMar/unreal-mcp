@@ -9,3 +9,4 @@ class FTcpListener;
 class FInternetAddr;
 
 /**
+ * Minimal single-threaded, line-delimited JSON TCP server.
