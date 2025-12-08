@@ -226,3 +226,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		const FString ClassName = TypeStr.Mid(7);
 		FString ClassError;
 		UClass* Class = ResolveClassByName(ClassName, ClassError);
+		if (!Class)
+		{
