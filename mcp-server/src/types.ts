@@ -58,3 +58,4 @@ export interface NodeDetailPin {
   category: string;
   subCategory?: string;
   defaultValue: string;
+  isArray: boolean;
