@@ -11,3 +11,4 @@
  * Request shape:  { "id": <any>, "cmd": "<name>", "params": { ... } }
  * Response shape: { "id": <any>, "ok": true, "result": { ... } }
  *              or { "id": <any>, "ok": false, "error": "<message>" }
+ *
