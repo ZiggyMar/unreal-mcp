@@ -138,3 +138,4 @@ server.registerTool(
     },
   },
   async ({ path, graphName }) => {
+    try {
