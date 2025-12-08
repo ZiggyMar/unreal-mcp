@@ -195,3 +195,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 ## Blockers
 
 **None that stopped progress.** The one real risk factor — no engine install on the
+machine at all — did not materialize: a stock UE 5.8 launcher install was found at

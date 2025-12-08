@@ -32,3 +32,4 @@ export class UnrealBridgeClient {
   private readonly timeoutMs: number;
 
   constructor(options: BridgeClientOptions = {}) {
+    this.host = options.host ?? "127.0.0.1";
