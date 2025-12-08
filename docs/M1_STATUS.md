@@ -194,3 +194,4 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
 
 ## Blockers
 
+**None that stopped progress.** The one real risk factor — no engine install on the

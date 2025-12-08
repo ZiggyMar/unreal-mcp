@@ -230,3 +230,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		{
 			OutError = ClassError;
 			return false;
+		}
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Object;
