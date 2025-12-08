@@ -236,3 +236,4 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower.StartsWith(TEXT("class:")))
 	{
+		const FString ClassName = TypeStr.Mid(6);
