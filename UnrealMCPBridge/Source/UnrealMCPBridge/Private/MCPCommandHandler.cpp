@@ -254,3 +254,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 			TEXT("vector, rotator, transform, object:<Class>, class:<Class>)"),
 			*TypeStr);
 		return false;
+	}
+
