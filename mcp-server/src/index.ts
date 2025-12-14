@@ -144,3 +144,4 @@ server.registerTool(
         graphName,
       });
       return jsonResult(result);
+    } catch (err) {
