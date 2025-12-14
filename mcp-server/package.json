@@ -7,3 +7,4 @@
   "bin": {
     "unreal-mcp-server": "dist/index.js"
   },
+  "scripts": {
