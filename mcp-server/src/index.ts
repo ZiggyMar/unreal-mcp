@@ -146,3 +146,4 @@ server.registerTool(
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
+    }
