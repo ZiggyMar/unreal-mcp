@@ -201,3 +201,4 @@ engine source clone was a non-blocking gap (reference material only, per the arc
 doc) and is being handled outside this task.
 
 The single most important open item is the **unverified live-editor read** described
+above — everything that can be checked without a GUI session has been checked; the

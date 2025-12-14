@@ -143,3 +143,4 @@ server.registerTool(
         path,
         graphName,
       });
+      return jsonResult(result);
