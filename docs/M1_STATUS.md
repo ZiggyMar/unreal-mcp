@@ -203,3 +203,5 @@ doc) and is being handled outside this task.
 The single most important open item is the **unverified live-editor read** described
 above — everything that can be checked without a GUI session has been checked; the
 remaining risk is entirely in runtime behavior against real Editor/AssetRegistry state
+that only manifests once a human opens the project.
+
