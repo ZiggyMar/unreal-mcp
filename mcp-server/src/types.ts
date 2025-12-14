@@ -59,3 +59,4 @@ export interface NodeDetailPin {
   subCategory?: string;
   defaultValue: string;
   isArray: boolean;
+  linkedTo: PinLink[];

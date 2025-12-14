@@ -142,3 +142,4 @@ server.registerTool(
       const result = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
         path,
         graphName,
+      });
