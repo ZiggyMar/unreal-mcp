@@ -60,3 +60,4 @@ export interface NodeDetailPin {
   defaultValue: string;
   isArray: boolean;
   linkedTo: PinLink[];
+}

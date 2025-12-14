@@ -205,3 +205,4 @@ above — everything that can be checked without a GUI session has been checked;
 remaining risk is entirely in runtime behavior against real Editor/AssetRegistry state
 that only manifests once a human opens the project.
 
+## File map
