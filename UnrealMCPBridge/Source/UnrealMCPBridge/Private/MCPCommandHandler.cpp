@@ -252,3 +252,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutError = FString::Printf(
 			TEXT("unknown_type: %s (supported: bool, byte, int, int64, float, double, string, name, text, ")
 			TEXT("vector, rotator, transform, object:<Class>, class:<Class>)"),
+			*TypeStr);
+		return false;
