@@ -33,3 +33,4 @@ export class UnrealBridgeClient {
 
   constructor(options: BridgeClientOptions = {}) {
     this.host = options.host ?? "127.0.0.1";
+    this.port = options.port ?? 8765;
