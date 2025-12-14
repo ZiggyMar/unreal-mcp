@@ -200,3 +200,4 @@ machine at all — did not materialize: a stock UE 5.8 launcher install was foun
 engine source clone was a non-blocking gap (reference material only, per the architecture
 doc) and is being handled outside this task.
 
+The single most important open item is the **unverified live-editor read** described
