@@ -12,3 +12,4 @@
  * Response shape: { "id": <any>, "ok": true, "result": { ... } }
  *              or { "id": <any>, "ok": false, "error": "<message>" }
  *
+ * Milestone 1 commands (read-only): ping, list_blueprints, list_blueprint_graphs,
