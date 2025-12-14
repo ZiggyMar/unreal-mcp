@@ -53,3 +53,4 @@ bool FMCPTcpServer::Start(int32 Port)
 {
 	if (Listener.IsValid())
 	{
+		return true;
