@@ -206,3 +206,4 @@ remaining risk is entirely in runtime behavior against real Editor/AssetRegistry
 that only manifests once a human opens the project.
 
 ## File map
+
