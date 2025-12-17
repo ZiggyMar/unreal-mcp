@@ -211,3 +211,4 @@ that only manifests once a human opens the project.
 UnrealMCP/
   ARCHITECTURE.md
   docs/
+    M1_STATUS.md                 (this file)
