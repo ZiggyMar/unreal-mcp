@@ -62,3 +62,4 @@ export interface NodeDetailPin {
   linkedTo: PinLink[];
 }
 
+export interface ReadBlueprintNodeDetailResult {

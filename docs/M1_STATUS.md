@@ -214,3 +214,4 @@ UnrealMCP/
     M1_STATUS.md                 (this file)
   UnrealMCPBridge/                C++ plugin source (source of truth)
     UnrealMCPBridge.uplugin
+    Source/UnrealMCPBridge/
