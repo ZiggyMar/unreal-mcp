@@ -262,3 +262,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinCategory == UEdGraphSchema_K2::PC_Class;
 	if (bNeedsSubCategoryObject && !OutType.PinSubCategoryObject.IsValid())
 	{
+		OutError = FString::Printf(TEXT("type_resolution_failed: %s"), *TypeStr);
+		return false;
