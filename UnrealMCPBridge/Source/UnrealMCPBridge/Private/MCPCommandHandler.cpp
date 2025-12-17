@@ -264,3 +264,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	{
 		OutError = FString::Printf(TEXT("type_resolution_failed: %s"), *TypeStr);
 		return false;
+	}
+
