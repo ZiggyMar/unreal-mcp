@@ -148,3 +148,4 @@ server.registerTool(
       return errorResult(err);
     }
   }
+);

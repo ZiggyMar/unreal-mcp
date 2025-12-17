@@ -38,3 +38,4 @@ Never send a Blueprint's raw engine representation. Instead:
 1. **Tiered reads.** `list_blueprint_graphs` (names + node counts only) →
    `read_blueprint_graph_summary` (node types, names, connections, no positions/metadata) →
    `read_blueprint_node_detail` (full pin/property detail for ONE node) only when needed.
+2. **Diff-based edits.** Writes are expressed as small structured ops (`add_node`,
