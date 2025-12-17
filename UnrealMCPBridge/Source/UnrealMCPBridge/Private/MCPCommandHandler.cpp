@@ -266,3 +266,4 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		return false;
 	}
 
+	return true;
