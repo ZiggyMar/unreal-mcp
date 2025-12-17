@@ -212,3 +212,4 @@ UnrealMCP/
   ARCHITECTURE.md
   docs/
     M1_STATUS.md                 (this file)
+  UnrealMCPBridge/                C++ plugin source (source of truth)
