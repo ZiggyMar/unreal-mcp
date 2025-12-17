@@ -256,3 +256,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		return false;
 	}
 
+	const bool bNeedsSubCategoryObject =
+		OutType.PinCategory == UEdGraphSchema_K2::PC_Struct ||
