@@ -218,3 +218,4 @@ UnrealMCP/
       UnrealMCPBridge.Build.cs
       Public/
         UnrealMCPBridgeModule.h
+        MCPTcpServer.h

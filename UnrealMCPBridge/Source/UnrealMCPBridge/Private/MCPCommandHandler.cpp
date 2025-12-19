@@ -271,3 +271,5 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 
 TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObject>& Request)
 {
+	const FString Cmd = Request->GetStringField(TEXT("cmd"));
+	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
