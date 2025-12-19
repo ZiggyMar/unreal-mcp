@@ -35,3 +35,4 @@ export class UnrealBridgeClient {
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 8765;
     this.timeoutMs = options.timeoutMs ?? 5000;
+  }

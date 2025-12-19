@@ -56,3 +56,4 @@ bool FMCPTcpServer::Start(int32 Port)
 		return true;
 	}
 
+	ListenPort = Port;
