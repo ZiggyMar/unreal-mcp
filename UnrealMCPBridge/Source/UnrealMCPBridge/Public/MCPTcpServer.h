@@ -10,3 +10,4 @@ class FInternetAddr;
 
 /**
  * Minimal single-threaded, line-delimited JSON TCP server.
+ * Listens on localhost only. Accepts one request per line, writes one JSON
