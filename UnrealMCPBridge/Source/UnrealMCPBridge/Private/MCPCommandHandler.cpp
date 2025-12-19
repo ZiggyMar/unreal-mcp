@@ -273,3 +273,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 {
 	const FString Cmd = Request->GetStringField(TEXT("cmd"));
 	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
+	TSharedPtr<FJsonObject> Params;
+	if (Request->TryGetObjectField(TEXT("params"), ParamsPtr))
