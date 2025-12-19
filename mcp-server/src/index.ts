@@ -153,3 +153,4 @@ server.registerTool(
 server.registerTool(
   "unreal_read_node_detail",
   {
+    title: "Read full detail for one Blueprint node",

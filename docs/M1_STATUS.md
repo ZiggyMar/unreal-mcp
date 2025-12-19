@@ -219,3 +219,4 @@ UnrealMCP/
       Public/
         UnrealMCPBridgeModule.h
         MCPTcpServer.h
+        MCPCommandHandler.h
