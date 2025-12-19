@@ -217,3 +217,4 @@ UnrealMCP/
     Source/UnrealMCPBridge/
       UnrealMCPBridge.Build.cs
       Public/
+        UnrealMCPBridgeModule.h
