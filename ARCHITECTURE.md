@@ -39,3 +39,4 @@ Never send a Blueprint's raw engine representation. Instead:
    `read_blueprint_graph_summary` (node types, names, connections, no positions/metadata) →
    `read_blueprint_node_detail` (full pin/property detail for ONE node) only when needed.
 2. **Diff-based edits.** Writes are expressed as small structured ops (`add_node`,
+   `connect_pins`, `set_default_value`, `remove_node`), never "regenerate the whole graph."
