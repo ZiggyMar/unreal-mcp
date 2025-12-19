@@ -215,3 +215,5 @@ UnrealMCP/
   UnrealMCPBridge/                C++ plugin source (source of truth)
     UnrealMCPBridge.uplugin
     Source/UnrealMCPBridge/
+      UnrealMCPBridge.Build.cs
+      Public/
