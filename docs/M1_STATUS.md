@@ -221,3 +221,4 @@ UnrealMCP/
         MCPTcpServer.h
         MCPCommandHandler.h
       Private/
+        UnrealMCPBridgeModule.cpp   (StartupModule/ShutdownModule, owns the TCP server)
