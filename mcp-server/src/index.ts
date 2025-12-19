@@ -152,3 +152,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_read_node_detail",
+  {
