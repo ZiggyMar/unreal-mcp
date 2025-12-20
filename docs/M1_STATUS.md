@@ -222,3 +222,4 @@ UnrealMCP/
         MCPCommandHandler.h
       Private/
         UnrealMCPBridgeModule.cpp   (StartupModule/ShutdownModule, owns the TCP server)
+        MCPTcpServer.cpp            (loopback-only FTcpListener, line-delimited JSON framing)
