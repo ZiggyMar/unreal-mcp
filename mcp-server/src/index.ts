@@ -155,3 +155,4 @@ server.registerTool(
   {
     title: "Read full detail for one Blueprint node",
     description:
+      "Reads full pin and property detail (categories, default values, array-ness, links) for exactly one node, " +

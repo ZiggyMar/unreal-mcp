@@ -279,3 +279,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		Params = *ParamsPtr;
 	}
 
+	TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
