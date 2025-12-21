@@ -42,3 +42,4 @@ This is being built and verified in public, milestone by milestone. Each milesto
 - [Milestone 2: create/edit Blueprint graphs](docs/M2_STATUS.md): create Blueprints, add nodes, connect pins, add variables, compile with structured error reporting.
 - [Milestone 3: persistent project index, search, references](docs/M3_STATUS.md): incrementally-updated index (AssetRegistry-backed, disk-cached), `search_project`, `find_references`, `get_project_overview`, optional local-model enrichment for search results.
 
+All three milestones are build-verified, protocol-verified, **and now live-verified**: see

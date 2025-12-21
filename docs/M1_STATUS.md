@@ -224,3 +224,4 @@ UnrealMCP/
         UnrealMCPBridgeModule.cpp   (StartupModule/ShutdownModule, owns the TCP server)
         MCPTcpServer.cpp            (loopback-only FTcpListener, line-delimited JSON framing)
         MCPCommandHandler.cpp       (ping / list_blueprints / list_blueprint_graphs /
+                                      read_blueprint_graph_summary / read_blueprint_node_detail)

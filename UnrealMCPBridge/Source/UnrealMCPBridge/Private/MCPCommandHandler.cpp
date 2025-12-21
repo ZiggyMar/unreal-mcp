@@ -282,3 +282,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
 
 	if (Cmd == TEXT("ping"))
+	{
+		Response = HandlePing(Params);
