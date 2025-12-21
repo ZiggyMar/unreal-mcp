@@ -64,3 +64,4 @@ export interface NodeDetailPin {
 
 export interface ReadBlueprintNodeDetailResult {
   id: string;
+  type: string;
