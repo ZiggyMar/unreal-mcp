@@ -156,3 +156,4 @@ server.registerTool(
     title: "Read full detail for one Blueprint node",
     description:
       "Reads full pin and property detail (categories, default values, array-ness, links) for exactly one node, " +
+      "identified by the node id returned from unreal_read_blueprint_summary. Use sparingly: this is the most " +
