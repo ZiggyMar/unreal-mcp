@@ -286,3 +286,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		Response = HandlePing(Params);
 	}
 	else if (Cmd == TEXT("list_blueprints"))
+	{
+		Response = HandleListBlueprints(Params);

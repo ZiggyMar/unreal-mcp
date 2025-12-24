@@ -226,3 +226,5 @@ UnrealMCP/
         MCPCommandHandler.cpp       (ping / list_blueprints / list_blueprint_graphs /
                                       read_blueprint_graph_summary / read_blueprint_node_detail)
   mcp-server/                     Node/TypeScript MCP server
+    package.json / tsconfig.json
+    README.md                     (setup + Claude Code / Claude Desktop config)
