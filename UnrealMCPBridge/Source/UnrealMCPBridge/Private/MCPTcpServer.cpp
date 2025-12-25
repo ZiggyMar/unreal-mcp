@@ -58,3 +58,4 @@ bool FMCPTcpServer::Start(int32 Port)
 
 	ListenPort = Port;
 
+	// Bind to loopback only. This bridge must never be reachable off-machine.

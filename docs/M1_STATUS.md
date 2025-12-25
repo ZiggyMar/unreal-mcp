@@ -229,3 +229,4 @@ UnrealMCP/
     package.json / tsconfig.json
     README.md                     (setup + Claude Code / Claude Desktop config)
     src/
+      index.ts                    (McpServer, 5 registerTool() calls)
