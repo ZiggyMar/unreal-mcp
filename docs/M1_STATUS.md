@@ -230,3 +230,4 @@ UnrealMCP/
     README.md                     (setup + Claude Code / Claude Desktop config)
     src/
       index.ts                    (McpServer, 5 registerTool() calls)
+      bridgeClient.ts              (UnrealBridgeClient: one-shot TCP JSON request/response)

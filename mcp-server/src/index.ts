@@ -159,3 +159,4 @@ server.registerTool(
       "identified by the node id returned from unreal_read_blueprint_summary. Use sparingly: this is the most " +
       "verbose tier of the tiered-read strategy and should follow a summary read, not replace it.",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
