@@ -228,3 +228,4 @@ UnrealMCP/
   mcp-server/                     Node/TypeScript MCP server
     package.json / tsconfig.json
     README.md                     (setup + Claude Code / Claude Desktop config)
+    src/
