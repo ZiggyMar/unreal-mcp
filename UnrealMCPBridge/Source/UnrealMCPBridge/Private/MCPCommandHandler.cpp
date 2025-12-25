@@ -292,3 +292,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("list_blueprint_graphs"))
 	{
 		Response = HandleListBlueprintGraphs(Params);
+	}
+	else if (Cmd == TEXT("read_blueprint_graph_summary"))
