@@ -158,3 +158,4 @@ server.registerTool(
       "Reads full pin and property detail (categories, default values, array-ness, links) for exactly one node, " +
       "identified by the node id returned from unreal_read_blueprint_summary. Use sparingly: this is the most " +
       "verbose tier of the tiered-read strategy and should follow a summary read, not replace it.",
+    inputSchema: {

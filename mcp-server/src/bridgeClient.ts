@@ -36,3 +36,4 @@ export class UnrealBridgeClient {
     this.port = options.port ?? 8765;
     this.timeoutMs = options.timeoutMs ?? 5000;
   }
+
