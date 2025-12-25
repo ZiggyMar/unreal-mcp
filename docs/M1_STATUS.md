@@ -232,3 +232,4 @@ UnrealMCP/
       index.ts                    (McpServer, 5 registerTool() calls)
       bridgeClient.ts              (UnrealBridgeClient: one-shot TCP JSON request/response)
       types.ts                     (result shape types mirroring the C++ JSON)
+    dist/                          (build output, gitignore-worthy but present/verified)
