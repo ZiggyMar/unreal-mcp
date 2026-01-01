@@ -163,3 +163,4 @@ server.registerTool(
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe('Node id as returned by unreal_read_blueprint_summary, e.g. "n12".'),
     },
+  },

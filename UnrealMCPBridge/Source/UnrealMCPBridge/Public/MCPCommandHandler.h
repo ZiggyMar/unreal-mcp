@@ -15,3 +15,4 @@
  * Milestone 1 commands (read-only): ping, list_blueprints, list_blueprint_graphs,
  * read_blueprint_graph_summary, read_blueprint_node_detail.
  *
+ * Milestone 2 commands (write/edit): create_blueprint, add_node, connect_pins,

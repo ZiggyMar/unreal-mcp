@@ -6,3 +6,4 @@
 class FMCPTcpServer;
 
 /**
+ * Editor module for the Unreal MCP Bridge plugin.
