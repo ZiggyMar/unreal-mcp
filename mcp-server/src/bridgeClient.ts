@@ -37,3 +37,4 @@ export class UnrealBridgeClient {
     this.timeoutMs = options.timeoutMs ?? 5000;
   }
 
+  async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
