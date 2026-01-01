@@ -234,3 +234,4 @@ UnrealMCP/
       types.ts                     (result shape types mirroring the C++ JSON)
     dist/                          (build output, gitignore-worthy but present/verified)
 
+A:\UnrealProjects\AntiVirusSquadUE58\

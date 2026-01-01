@@ -59,3 +59,4 @@ bool FMCPTcpServer::Start(int32 Port)
 	ListenPort = Port;
 
 	// Bind to loopback only. This bridge must never be reachable off-machine.
+	FIPv4Endpoint Endpoint(FIPv4Address(127, 0, 0, 1), static_cast<uint16>(Port));
