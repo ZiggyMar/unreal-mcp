@@ -43,3 +43,4 @@ This is being built and verified in public, milestone by milestone. Each milesto
 - [Milestone 3: persistent project index, search, references](docs/M3_STATUS.md): incrementally-updated index (AssetRegistry-backed, disk-cached), `search_project`, `find_references`, `get_project_overview`, optional local-model enrichment for search results.
 
 All three milestones are build-verified, protocol-verified, **and now live-verified**: see
+[docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) for a real session against a real ~20-Blueprint
