@@ -164,3 +164,4 @@ server.registerTool(
       nodeId: z.string().describe('Node id as returned by unreal_read_blueprint_summary, e.g. "n12".'),
     },
   },
+  async ({ path, graphName, nodeId }) => {

@@ -41,3 +41,4 @@ Never send a Blueprint's raw engine representation. Instead:
 2. **Diff-based edits.** Writes are expressed as small structured ops (`add_node`,
    `connect_pins`, `set_default_value`, `remove_node`), never "regenerate the whole graph."
 3. **Stable IDs.** Every node/pin gets a short stable ID so the model can reference prior
+   reads without re-fetching full context.
