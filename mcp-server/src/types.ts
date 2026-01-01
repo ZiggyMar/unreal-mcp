@@ -66,3 +66,4 @@ export interface ReadBlueprintNodeDetailResult {
   id: string;
   type: string;
   title: string;
+  comment: string;

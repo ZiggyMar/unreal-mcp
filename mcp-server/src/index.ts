@@ -162,3 +162,4 @@ server.registerTool(
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe('Node id as returned by unreal_read_blueprint_summary, e.g. "n12".'),
+    },
