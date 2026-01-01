@@ -12,3 +12,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 	// expensive full scan/load-every-blueprint work to the first search_project /
 	// get_project_overview call (see FMCPProjectIndex::EnsureBuilt).
 	FMCPProjectIndex::Initialize();
+

@@ -237,3 +237,5 @@ UnrealMCP/
 A:\UnrealProjects\AntiVirusSquadUE58\
   AntiVirusSquadUE58.uproject     (updated: UnrealMCPBridge added to Plugins[])
   Plugins\UnrealMCPBridge\        (copy of the plugin above; this is what actually builds/runs)
+```
+

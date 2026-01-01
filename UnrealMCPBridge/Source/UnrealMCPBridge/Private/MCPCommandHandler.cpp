@@ -305,3 +305,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleCreateBlueprint(Params);
 	}
+	else if (Cmd == TEXT("add_node"))
+	{
