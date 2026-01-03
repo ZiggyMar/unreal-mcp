@@ -312,3 +312,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("connect_pins"))
 	{
 		Response = HandleConnectPins(Params);
+	}
+	else if (Cmd == TEXT("set_pin_default_value"))
