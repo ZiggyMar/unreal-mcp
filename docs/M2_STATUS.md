@@ -3,3 +3,4 @@
 Last updated: 2026-08-07
 
 > **Update 2026-08-08**: the write path in this document has now been exercised against a real,
+> live Unreal Editor — see [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md). A real bug was found and
