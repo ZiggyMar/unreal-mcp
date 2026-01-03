@@ -314,3 +314,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		Response = HandleConnectPins(Params);
 	}
 	else if (Cmd == TEXT("set_pin_default_value"))
+	{
+		Response = HandleSetPinDefaultValue(Params);
