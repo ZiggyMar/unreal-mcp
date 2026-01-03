@@ -67,3 +67,4 @@ export interface ReadBlueprintNodeDetailResult {
   type: string;
   title: string;
   comment: string;
+  enabled: boolean;
