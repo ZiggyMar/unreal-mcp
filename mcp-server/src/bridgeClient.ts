@@ -38,3 +38,4 @@ export class UnrealBridgeClient {
   }
 
   async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
+    const id = randomUUID();
