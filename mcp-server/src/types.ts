@@ -69,3 +69,4 @@ export interface ReadBlueprintNodeDetailResult {
   comment: string;
   enabled: boolean;
   pins: NodeDetailPin[];
+}
