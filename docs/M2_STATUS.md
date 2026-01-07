@@ -8,3 +8,4 @@ Last updated: 2026-08-07
 > the pre-live-test state; treat LIVE_VERIFICATION.md as the current source of truth on what
 > actually works against a running editor.
 
+## TL;DR
