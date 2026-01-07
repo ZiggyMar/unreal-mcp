@@ -170,3 +170,4 @@ server.registerTool(
         path,
         graphName,
         nodeId,
+      });
