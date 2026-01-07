@@ -70,3 +70,4 @@ export interface ReadBlueprintNodeDetailResult {
   enabled: boolean;
   pins: NodeDetailPin[];
 }
+
