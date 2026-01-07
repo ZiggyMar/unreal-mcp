@@ -43,3 +43,4 @@ Never send a Blueprint's raw engine representation. Instead:
 3. **Stable IDs.** Every node/pin gets a short stable ID so the model can reference prior
    reads without re-fetching full context.
 4. **Project-wide index, cached.** A background index (built once, updated incrementally)
+   of all blueprints/classes/functions/variables in the project, queryable by name/keyword,
