@@ -3,3 +3,4 @@
 Node/TypeScript MCP (Model Context Protocol) server that exposes Unreal Engine Blueprint
 introspection **and edit** tools to an MCP client (Claude Code, Claude Desktop, etc).
 It is a thin translator: every tool call opens a short-lived TCP connection to the
+`UnrealMCPBridge` C++ editor plugin on `127.0.0.1:8765`, sends one line of JSON, reads one

@@ -17,3 +17,4 @@ Last updated: 2026-08-07
   collision lesson was applied from the start — see "Ground rules" below).
 - **All 13 MCP tools (5 from M1 + 8 new) verified end-to-end over the real MCP stdio
   protocol** against a fake TCP bridge server that mimics every new command's exact
+  response shape. `initialize`, `tools/list`, and `tools/call` all confirmed for every
