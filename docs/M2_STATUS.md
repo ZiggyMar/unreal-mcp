@@ -12,3 +12,4 @@ Last updated: 2026-08-07
 
 - **All 8 new write/edit commands compile successfully against the real stock UE 5.8
   install**, verified the same two ways as M1: an isolated `RunUAT BuildPlugin` package
+  build, and a direct `UnrealBuildTool` build against the actual `AntiVirusSquadUE58`

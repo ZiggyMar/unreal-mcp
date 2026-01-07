@@ -172,3 +172,4 @@ server.registerTool(
         nodeId,
       });
       return jsonResult(result);
+    } catch (err) {
