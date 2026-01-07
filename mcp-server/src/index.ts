@@ -171,3 +171,4 @@ server.registerTool(
         graphName,
         nodeId,
       });
+      return jsonResult(result);
