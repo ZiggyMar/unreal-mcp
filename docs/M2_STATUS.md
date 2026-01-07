@@ -14,3 +14,4 @@ Last updated: 2026-08-07
   install**, verified the same two ways as M1: an isolated `RunUAT BuildPlugin` package
   build, and a direct `UnrealBuildTool` build against the actual `AntiVirusSquadUE58`
   project. Both succeeded on the **first attempt** this time (M1's `MakeError` naming
+  collision lesson was applied from the start — see "Ground rules" below).
