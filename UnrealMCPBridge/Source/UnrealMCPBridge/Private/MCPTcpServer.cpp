@@ -62,3 +62,4 @@ bool FMCPTcpServer::Start(int32 Port)
 	FIPv4Endpoint Endpoint(FIPv4Address(127, 0, 0, 1), static_cast<uint16>(Port));
 
 	Listener = MakeUnique<FTcpListener>(Endpoint);
+	Listener->OnConnectionAccepted().BindRaw(this, &FMCPTcpServer::HandleConnectionAccepted);

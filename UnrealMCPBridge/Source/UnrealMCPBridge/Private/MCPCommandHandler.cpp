@@ -324,3 +324,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("add_variable"))
 	{
 		Response = HandleAddVariable(Params);
+	}
