@@ -331,3 +331,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	}
 	else if (Cmd == TEXT("save_blueprint"))
 	{
+		Response = HandleSaveBlueprint(Params);
+	}
