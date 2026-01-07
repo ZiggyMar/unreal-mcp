@@ -327,3 +327,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	}
 	else if (Cmd == TEXT("compile_blueprint"))
 	{
+		Response = HandleCompileBlueprint(Params);
+	}

@@ -10,3 +10,4 @@ Last updated: 2026-08-07
 
 ## TL;DR
 
+- **All 8 new write/edit commands compile successfully against the real stock UE 5.8
