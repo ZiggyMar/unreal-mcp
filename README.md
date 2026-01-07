@@ -45,3 +45,4 @@ This is being built and verified in public, milestone by milestone. Each milesto
 All three milestones are build-verified, protocol-verified, **and now live-verified**: see
 [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) for a real session against a real ~20-Blueprint
 project: reads returning correct real data, a full create/wire/compile/save write round-trip, and
+confirmation that the incremental project index actually stays fresh without restarting the editor
