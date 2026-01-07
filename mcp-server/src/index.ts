@@ -169,3 +169,4 @@ server.registerTool(
       const result = await bridge.send<ReadBlueprintNodeDetailResult>("read_blueprint_node_detail", {
         path,
         graphName,
+        nodeId,

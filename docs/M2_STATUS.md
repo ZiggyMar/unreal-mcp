@@ -6,3 +6,5 @@ Last updated: 2026-08-07
 > live Unreal Editor — see [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md). A real bug was found and
 > fixed (`add_node` duplicating an already-present override-event node). Everything below reflects
 > the pre-live-test state; treat LIVE_VERIFICATION.md as the current source of truth on what
+> actually works against a running editor.
+

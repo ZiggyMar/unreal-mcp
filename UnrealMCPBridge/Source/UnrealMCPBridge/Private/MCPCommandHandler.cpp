@@ -322,3 +322,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		Response = HandleRemoveNode(Params);
 	}
 	else if (Cmd == TEXT("add_variable"))
+	{
+		Response = HandleAddVariable(Params);
