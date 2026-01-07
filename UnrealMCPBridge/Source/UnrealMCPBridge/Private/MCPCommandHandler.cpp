@@ -320,3 +320,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("remove_node"))
 	{
 		Response = HandleRemoveNode(Params);
+	}
+	else if (Cmd == TEXT("add_variable"))
