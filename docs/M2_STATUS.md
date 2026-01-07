@@ -15,3 +15,5 @@ Last updated: 2026-08-07
   build, and a direct `UnrealBuildTool` build against the actual `AntiVirusSquadUE58`
   project. Both succeeded on the **first attempt** this time (M1's `MakeError` naming
   collision lesson was applied from the start — see "Ground rules" below).
+- **All 13 MCP tools (5 from M1 + 8 new) verified end-to-end over the real MCP stdio
+  protocol** against a fake TCP bridge server that mimics every new command's exact

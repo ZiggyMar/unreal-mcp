@@ -337,3 +337,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleSearchProject(Params);
 	}
+	else if (Cmd == TEXT("find_references"))
+	{
