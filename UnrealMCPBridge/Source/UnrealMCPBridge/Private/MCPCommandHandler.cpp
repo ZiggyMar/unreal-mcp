@@ -346,3 +346,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		Response = HandleGetProjectOverview(Params);
 	}
 	else
+	{
+		Response = MakeErrorResponse(FString::Printf(TEXT("unknown_cmd: %s"), *Cmd));
