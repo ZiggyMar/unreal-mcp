@@ -22,3 +22,4 @@ Last updated: 2026-08-07
 - **Not verified: any of this has ever run against a live Unreal Editor or touched a
   real Blueprint asset.** Same gap as M1, now with much higher stakes — M1's read
   commands could only return wrong data; M2's write commands can corrupt a Blueprint.
+  `unreal_compile_blueprint` exists specifically to catch that, but **it too has never
