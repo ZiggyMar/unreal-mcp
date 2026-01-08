@@ -7,3 +7,4 @@ It is a thin translator: every tool call opens a short-lived TCP connection to t
 line of JSON back, and reshapes it into a compact result for the model.
 
 This process does **not** talk to Unreal directly via any engine SDK. It only speaks the
+bridge's tiny line-delimited JSON protocol over a loopback TCP socket. The Unreal Editor
