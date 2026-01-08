@@ -179,3 +179,4 @@ server.registerTool(
 );
 
 // =============================== Milestone 2: write/edit tools ===============================
+// Same thin-translator pattern as the M1 read tools above: each tool is just a param reshape

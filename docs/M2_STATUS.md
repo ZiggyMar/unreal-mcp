@@ -26,3 +26,4 @@ Last updated: 2026-08-07
   actually run**. This is the single most important thing for the user to smoke-test
   first, in the exact order suggested at the bottom of this doc.
 
+## What's new
