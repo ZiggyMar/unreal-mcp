@@ -19,3 +19,4 @@ Last updated: 2026-08-07
   protocol** against a fake TCP bridge server that mimics every new command's exact
   response shape. `initialize`, `tools/list`, and `tools/call` all confirmed for every
   tool, including realistic argument passing (node ids, pin names, type strings).
+- **Not verified: any of this has ever run against a live Unreal Editor or touched a
