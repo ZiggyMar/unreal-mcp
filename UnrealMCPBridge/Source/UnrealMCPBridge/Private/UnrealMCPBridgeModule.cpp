@@ -13,3 +13,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 	// get_project_overview call (see FMCPProjectIndex::EnsureBuilt).
 	FMCPProjectIndex::Initialize();
 
+	TcpServer = MakeShared<FMCPTcpServer>();
