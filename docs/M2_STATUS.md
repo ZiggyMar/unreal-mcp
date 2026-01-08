@@ -23,3 +23,4 @@ Last updated: 2026-08-07
   real Blueprint asset.** Same gap as M1, now with much higher stakes — M1's read
   commands could only return wrong data; M2's write commands can corrupt a Blueprint.
   `unreal_compile_blueprint` exists specifically to catch that, but **it too has never
+  actually run**. This is the single most important thing for the user to smoke-test

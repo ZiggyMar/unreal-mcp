@@ -178,3 +178,4 @@ server.registerTool(
   }
 );
 
+// =============================== Milestone 2: write/edit tools ===============================
