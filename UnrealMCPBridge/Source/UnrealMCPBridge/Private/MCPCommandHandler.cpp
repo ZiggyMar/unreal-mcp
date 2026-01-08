@@ -352,3 +352,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 
 	// Echo the request id back so the client can correlate async-ish pipelines.
 	TSharedPtr<FJsonValue> IdValue = Request->TryGetField(TEXT("id"));
+	if (IdValue.IsValid())
+	{
