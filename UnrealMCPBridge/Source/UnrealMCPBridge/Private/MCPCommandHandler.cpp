@@ -355,3 +355,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	if (IdValue.IsValid())
 	{
 		Response->SetField(TEXT("id"), IdValue);
+	}
+
