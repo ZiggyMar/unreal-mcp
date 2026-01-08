@@ -71,3 +71,4 @@ export interface ReadBlueprintNodeDetailResult {
   pins: NodeDetailPin[];
 }
 
+// --- Milestone 2: write/edit result shapes ---
