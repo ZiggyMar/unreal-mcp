@@ -30,3 +30,4 @@ Last updated: 2026-08-07
 
 ### C++ plugin — 8 new commands in `MCPCommandHandler.cpp`
 
+Location (source of truth): `F:\!Projects\UnrealMCP\UnrealMCPBridge\Source\UnrealMCPBridge\`
