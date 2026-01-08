@@ -44,3 +44,4 @@ Never send a Blueprint's raw engine representation. Instead:
    reads without re-fetching full context.
 4. **Project-wide index, cached.** A background index (built once, updated incrementally)
    of all blueprints/classes/functions/variables in the project, queryable by name/keyword,
+   so the model doesn't need to enumerate the whole project to find one thing.
