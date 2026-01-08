@@ -350,3 +350,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		Response = MakeErrorResponse(FString::Printf(TEXT("unknown_cmd: %s"), *Cmd));
 	}
 
+	// Echo the request id back so the client can correlate async-ish pipelines.
+	TSharedPtr<FJsonValue> IdValue = Request->TryGetField(TEXT("id"));

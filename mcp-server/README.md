@@ -5,3 +5,4 @@ introspection **and edit** tools to an MCP client (Claude Code, Claude Desktop, 
 It is a thin translator: every tool call opens a short-lived TCP connection to the
 `UnrealMCPBridge` C++ editor plugin on `127.0.0.1:8765`, sends one line of JSON, reads one
 line of JSON back, and reshapes it into a compact result for the model.
+
