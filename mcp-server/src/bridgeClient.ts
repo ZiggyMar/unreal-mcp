@@ -41,3 +41,4 @@ export class UnrealBridgeClient {
     const id = randomUUID();
     const requestLine = JSON.stringify({ id, cmd, params: params ?? {} }) + "\n";
 
+    return await new Promise<T>((resolve, reject) => {
