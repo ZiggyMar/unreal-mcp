@@ -29,3 +29,4 @@ Last updated: 2026-08-07
 ## What's new
 
 ### C++ plugin — 8 new commands in `MCPCommandHandler.cpp`
+
