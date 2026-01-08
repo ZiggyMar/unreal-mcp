@@ -344,3 +344,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("get_project_overview"))
 	{
 		Response = HandleGetProjectOverview(Params);
+	}
+	else

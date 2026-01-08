@@ -20,3 +20,4 @@ Last updated: 2026-08-07
   response shape. `initialize`, `tools/list`, and `tools/call` all confirmed for every
   tool, including realistic argument passing (node ids, pin names, type strings).
 - **Not verified: any of this has ever run against a live Unreal Editor or touched a
+  real Blueprint asset.** Same gap as M1, now with much higher stakes — M1's read
