@@ -184,3 +184,4 @@ server.registerTool(
 // (MCPCommandHandler.cpp). This file never touches engine state directly.
 
 server.registerTool(
+  "unreal_create_blueprint",
