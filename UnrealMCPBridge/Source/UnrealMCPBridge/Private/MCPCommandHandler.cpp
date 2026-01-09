@@ -367,3 +367,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandlePing(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("plugin"), TEXT("UnrealMCPBridge"));
 	Result->SetNumberField(TEXT("protocolVersion"), 1);
 	return MakeOkResponse(Result);
+}
+

@@ -33,3 +33,5 @@ Last updated: 2026-08-07
 Location (source of truth): `F:\!Projects\UnrealMCP\UnrealMCPBridge\Source\UnrealMCPBridge\`
 Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\`
 
+| Command | What it does | Key APIs |
+|---|---|---|

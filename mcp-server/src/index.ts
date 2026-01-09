@@ -183,3 +183,4 @@ server.registerTool(
 // plus a call to the bridge. All the actual Blueprint-editing logic lives in the C++ plugin
 // (MCPCommandHandler.cpp). This file never touches engine state directly.
 
+server.registerTool(
