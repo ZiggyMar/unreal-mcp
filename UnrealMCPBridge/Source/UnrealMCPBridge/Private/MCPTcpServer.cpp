@@ -68,3 +68,4 @@ bool FMCPTcpServer::Start(int32 Port)
 	{
 		UE_LOG(LogMCPBridge, Error, TEXT("UnrealMCPBridge: failed to bind TCP listener on 127.0.0.1:%d"), Port);
 		Listener.Reset();
+		return false;

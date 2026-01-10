@@ -185,3 +185,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_create_blueprint",
+  {
