@@ -187,3 +187,4 @@ server.registerTool(
   "unreal_create_blueprint",
   {
     title: "Create a new Blueprint asset",
+    description:
