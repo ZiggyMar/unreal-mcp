@@ -13,3 +13,4 @@ class FInternetAddr;
  * Listens on localhost only. Accepts one request per line, writes one JSON
  * response per line (newline-terminated) back on the same connection.
  *
+ * Runs entirely on the game thread via FTSTicker so command handlers can

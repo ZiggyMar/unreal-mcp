@@ -188,3 +188,4 @@ server.registerTool(
   {
     title: "Create a new Blueprint asset",
     description:
+      "Creates a new empty Blueprint asset at a given content path with a given parent class, and saves it to disk " +
