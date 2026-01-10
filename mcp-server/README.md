@@ -10,3 +10,4 @@ This process does **not** talk to Unreal directly via any engine SDK. It only sp
 bridge's tiny line-delimited JSON protocol over a loopback TCP socket. The Unreal Editor
 (with the `UnrealMCPBridge` plugin enabled) must already be running for any tool except
 `unreal_ping` to return useful data; `unreal_ping` itself will simply report the connection
+error if the editor/bridge isn't up.
