@@ -36,3 +36,4 @@ Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBrid
 | Command | What it does | Key APIs |
 |---|---|---|
 | `create_blueprint` | Creates a new Blueprint asset at a package path with a given parent class; saves to disk by default (`save: false` to skip). | `FKismetEditorUtilities::CreateBlueprint`, `CreatePackage`, `FAssetRegistryModule::AssetCreated`, `UPackage::SavePackage` via a shared `SaveBlueprintPackage()` helper |
+| `add_node` | Adds one node: `Event` (override a parent-class function like `ReceiveBeginPlay`/`ReceiveTick`), `CustomEvent`, `CallFunction` (by function name + optional owning class), `VariableGet`/`VariableSet` (this Blueprint's own variables only). Returns the new node's id immediately. | `UK2Node_Event`, `UK2Node_CustomEvent`, `UK2Node_CallFunction::SetFromFunction`, `UK2Node_VariableGet`/`Set` |
