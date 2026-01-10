@@ -384,3 +384,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 	Filter.bRecursiveClasses = true;
 	if (!PathFilter.IsEmpty())
 	{
+		Filter.PackagePaths.Add(FName(*PathFilter));
