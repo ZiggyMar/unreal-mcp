@@ -74,3 +74,4 @@ export interface ReadBlueprintNodeDetailResult {
 // --- Milestone 2: write/edit result shapes ---
 
 export interface CreateBlueprintResult {
+  path: string;
