@@ -7,3 +7,4 @@ class FMCPTcpServer;
 
 /**
  * Editor module for the Unreal MCP Bridge plugin.
+ * Owns the lifetime of the local TCP listener used to serve MCP bridge requests.

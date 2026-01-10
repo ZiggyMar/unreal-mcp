@@ -374,3 +374,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 	FString PathFilter;
 	if (Params.IsValid())
 	{
+		Params->TryGetStringField(TEXT("pathPrefix"), PathFilter);
+	}
