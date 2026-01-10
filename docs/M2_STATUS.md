@@ -45,3 +45,4 @@ Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBrid
 | `save_blueprint` | Saves the Blueprint's package to disk (same helper `create_blueprint` uses internally). | `UPackage::SavePackage` |
 
 Shared new helpers added to `FMCPCommandHandler`: `FindGraphByName`, `FindNodeById` (both
+factored out of the M1 read handlers too, behavior unchanged), `ResolveClassByName` (short
