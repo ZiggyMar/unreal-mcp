@@ -42,3 +42,5 @@ Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBrid
 | `remove_node` | Breaks all links on a node, then removes it. | `UEdGraphNode::BreakAllNodeLinks`, `FBlueprintEditorUtils::RemoveNode` |
 | `add_variable` | Adds a member variable with a compact type descriptor (`bool`, `byte`, `int`, `int64`, `float`, `double`, `string`, `name`, `text`, `vector`, `rotator`, `transform`, `object:<Class>`, `class:<Class>`), optional category + default value. Rejects duplicates. | `FBlueprintEditorUtils::AddMemberVariable`, `SetBlueprintVariableCategory` |
 | `compile_blueprint` | Compiles and returns structured `{severity, text}` messages plus `errorCount`/`warningCount`/`success`/`status`. **This is the safety net for everything above it.** | `FKismetEditorUtilities::CompileBlueprint` with an `FCompilerResultsLog` |
+| `save_blueprint` | Saves the Blueprint's package to disk (same helper `create_blueprint` uses internally). | `UPackage::SavePackage` |
+

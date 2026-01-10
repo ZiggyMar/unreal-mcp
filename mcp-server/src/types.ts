@@ -75,3 +75,4 @@ export interface ReadBlueprintNodeDetailResult {
 
 export interface CreateBlueprintResult {
   path: string;
+  name: string;
