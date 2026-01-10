@@ -42,3 +42,4 @@ export class UnrealBridgeClient {
     const requestLine = JSON.stringify({ id, cmd, params: params ?? {} }) + "\n";
 
     return await new Promise<T>((resolve, reject) => {
+      const socket = new Socket();

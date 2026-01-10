@@ -19,3 +19,4 @@
  * set_pin_default_value, remove_node, add_variable, compile_blueprint, save_blueprint.
  *
  * Milestone 3 commands (project-wide index): search_project, find_references,
+ * get_project_overview. Backed by FMCPProjectIndex (see MCPProjectIndex.h), not by
