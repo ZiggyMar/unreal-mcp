@@ -49,3 +49,4 @@ factored out of the M1 read handlers too, behavior unchanged), `ResolveClassByNa
 native name with A-/U- prefix guessing, or a full `/Script/...`/`/Game/...` path), and
 `ResolvePinType` (the compact type-descriptor parser used by `add_variable`).
 
+**Node id scheme is unchanged from M1** (`"n<index>"` into `UEdGraph::Nodes`, not
