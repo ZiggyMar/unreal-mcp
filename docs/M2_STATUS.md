@@ -48,3 +48,4 @@ Shared new helpers added to `FMCPCommandHandler`: `FindGraphByName`, `FindNodeBy
 factored out of the M1 read handlers too, behavior unchanged), `ResolveClassByName` (short
 native name with A-/U- prefix guessing, or a full `/Script/...`/`/Game/...` path), and
 `ResolvePinType` (the compact type-descriptor parser used by `add_variable`).
+

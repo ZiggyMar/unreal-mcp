@@ -20,3 +20,4 @@
  *
  * Milestone 3 commands (project-wide index): search_project, find_references,
  * get_project_overview. Backed by FMCPProjectIndex (see MCPProjectIndex.h), not by
+ * enumerating/loading assets ad hoc on every call.

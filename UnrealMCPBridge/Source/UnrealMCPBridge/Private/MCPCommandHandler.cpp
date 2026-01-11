@@ -391,3 +391,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 	{
 		Filter.PackagePaths.Add(FName(TEXT("/Game")));
 		Filter.bRecursivePaths = true;
+	}
+
