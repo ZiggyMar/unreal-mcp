@@ -46,3 +46,4 @@ Never send a Blueprint's raw engine representation. Instead:
    of all blueprints/classes/functions/variables in the project, queryable by name/keyword,
    so the model doesn't need to enumerate the whole project to find one thing.
 5. **Graph rendering on demand.** When useful, the bridge can also push a screenshot of the
+   Blueprint graph editor (opened + framed on the relevant nodes) so the user visually sees

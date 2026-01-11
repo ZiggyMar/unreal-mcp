@@ -48,3 +48,4 @@ project: reads returning correct real data, a full create/wire/compile/save writ
 confirmation that the incremental project index actually stays fresh without restarting the editor
 (M3's core claim). That session also caught and fixed a real bug (`add_node` duplicating an
 already-present override-event node) that no amount of compiling or protocol testing would have
+surfaced. Still outstanding: UE 5.6 hasn't been live-tested yet (5.8 only so far), and a handful of
