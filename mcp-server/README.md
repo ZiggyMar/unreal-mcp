@@ -12,3 +12,4 @@ bridge's tiny line-delimited JSON protocol over a loopback TCP socket. The Unrea
 `unreal_ping` to return useful data; `unreal_ping` itself will simply report the connection
 error if the editor/bridge isn't up.
 
+## Prerequisites

@@ -46,3 +46,4 @@ Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBrid
 
 Shared new helpers added to `FMCPCommandHandler`: `FindGraphByName`, `FindNodeById` (both
 factored out of the M1 read handlers too, behavior unchanged), `ResolveClassByName` (short
+native name with A-/U- prefix guessing, or a full `/Script/...`/`/Game/...` path), and
