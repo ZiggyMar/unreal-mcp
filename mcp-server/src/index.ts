@@ -192,3 +192,4 @@ server.registerTool(
       "by default. Use this before unreal_add_node/unreal_add_variable to start building a new Blueprint from scratch. " +
       "Fails if an asset already exists at packagePath.",
     inputSchema: {
+      packagePath: z

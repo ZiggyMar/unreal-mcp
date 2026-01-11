@@ -393,3 +393,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 		Filter.bRecursivePaths = true;
 	}
 
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssets(Filter, Assets);
