@@ -56,3 +56,4 @@ without re-reading the graph. Ids still do not survive an editor restart or a
 `remove_node` elsewhere in the same graph (removing a node shifts every later index) —
 **this is a real sharp edge**, called out again under "Known limitations" below.
 
+Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/

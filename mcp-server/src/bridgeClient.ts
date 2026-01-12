@@ -44,3 +44,4 @@ export class UnrealBridgeClient {
     return await new Promise<T>((resolve, reject) => {
       const socket = new Socket();
       let buffer = "";
+      let settled = false;
