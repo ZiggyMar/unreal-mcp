@@ -16,3 +16,4 @@ error if the editor/bridge isn't up.
 
 - Node.js >= 18
 - The `UnrealMCPBridge` plugin built and enabled in the target `.uproject`, with the
+  Unreal Editor open on that project (see `../docs/M1_STATUS.md` for the current build
