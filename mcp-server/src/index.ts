@@ -195,3 +195,4 @@ server.registerTool(
       packagePath: z
         .string()
         .describe('Full content path for the new asset, e.g. "/Game/_MCPTest/BP_MyActor" (no extension, no _C suffix).'),
+      parentClass: z
