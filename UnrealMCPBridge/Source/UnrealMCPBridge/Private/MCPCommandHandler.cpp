@@ -410,3 +410,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 			int32 DotIndex;
 			if (ParentClass.FindLastChar(TEXT('.'), DotIndex))
 			{
+				ParentClass = ParentClass.Mid(DotIndex + 1);
+			}
