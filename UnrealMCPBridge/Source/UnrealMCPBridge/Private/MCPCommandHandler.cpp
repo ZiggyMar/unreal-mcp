@@ -404,3 +404,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 		Entry->SetStringField(TEXT("path"), Asset.GetObjectPathString());
 
 		FString ParentClass;
+		if (Asset.GetTagValue(FName(TEXT("ParentClass")), ParentClass))
+		{
