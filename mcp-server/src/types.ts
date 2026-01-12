@@ -78,3 +78,4 @@ export interface CreateBlueprintResult {
   name: string;
   parentClass: string;
   saved: boolean;
+  saveError?: string;
