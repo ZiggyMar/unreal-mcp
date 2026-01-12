@@ -50,3 +50,4 @@ native name with A-/U- prefix guessing, or a full `/Script/...`/`/Game/...` path
 `ResolvePinType` (the compact type-descriptor parser used by `add_variable`).
 
 **Node id scheme is unchanged from M1** (`"n<index>"` into `UEdGraph::Nodes`, not
+persisted) — per the M2 brief, `add_node` returns the new id in its response so a model
