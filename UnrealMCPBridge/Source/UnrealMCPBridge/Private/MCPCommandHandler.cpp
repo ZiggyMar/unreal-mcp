@@ -406,3 +406,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 		FString ParentClass;
 		if (Asset.GetTagValue(FName(TEXT("ParentClass")), ParentClass))
 		{
+			// Tag value is usually a full object path like "/Script/Engine.Actor", so trim to short name.
+			int32 DotIndex;

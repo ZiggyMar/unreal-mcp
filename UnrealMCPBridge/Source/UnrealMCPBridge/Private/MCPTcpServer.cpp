@@ -72,3 +72,4 @@ bool FMCPTcpServer::Start(int32 Port)
 	}
 
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FMCPTcpServer::Tick));
+
