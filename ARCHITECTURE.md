@@ -47,3 +47,4 @@ Never send a Blueprint's raw engine representation. Instead:
    so the model doesn't need to enumerate the whole project to find one thing.
 5. **Graph rendering on demand.** When useful, the bridge can also push a screenshot of the
    Blueprint graph editor (opened + framed on the relevant nodes) so the user visually sees
+   the edit: this is for the human, not fed back to the model as tokens.
