@@ -14,3 +14,4 @@ error if the editor/bridge isn't up.
 
 ## Prerequisites
 
+- Node.js >= 18

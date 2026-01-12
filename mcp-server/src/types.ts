@@ -77,3 +77,4 @@ export interface CreateBlueprintResult {
   path: string;
   name: string;
   parentClass: string;
+  saved: boolean;

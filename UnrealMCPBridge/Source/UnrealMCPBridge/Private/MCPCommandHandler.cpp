@@ -399,3 +399,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 	TArray<TSharedPtr<FJsonValue>> BlueprintArray;
 	for (const FAssetData& Asset : Assets)
 	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
