@@ -193,3 +193,4 @@ server.registerTool(
       "Fails if an asset already exists at packagePath.",
     inputSchema: {
       packagePath: z
+        .string()

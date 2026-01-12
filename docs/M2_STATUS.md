@@ -51,3 +51,5 @@ native name with A-/U- prefix guessing, or a full `/Script/...`/`/Game/...` path
 
 **Node id scheme is unchanged from M1** (`"n<index>"` into `UEdGraph::Nodes`, not
 persisted) — per the M2 brief, `add_node` returns the new id in its response so a model
+can chain `add_node` -> `connect_pins` -> `set_pin_default_value` within one conversation
+without re-reading the graph. Ids still do not survive an editor restart or a
