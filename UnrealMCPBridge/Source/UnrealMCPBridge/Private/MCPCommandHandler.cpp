@@ -402,3 +402,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), Asset.AssetName.ToString());
 		Entry->SetStringField(TEXT("path"), Asset.GetObjectPathString());
+
+		FString ParentClass;
