@@ -408,3 +408,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 		{
 			// Tag value is usually a full object path like "/Script/Engine.Actor", so trim to short name.
 			int32 DotIndex;
+			if (ParentClass.FindLastChar(TEXT('.'), DotIndex))
+			{

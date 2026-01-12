@@ -58,3 +58,4 @@ without re-reading the graph. Ids still do not survive an editor restart or a
 
 Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
 `EMessageSeverity`, used by `compile_blueprint`'s structured error reporting).
+
