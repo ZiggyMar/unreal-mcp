@@ -198,3 +198,4 @@ server.registerTool(
       parentClass: z
         .string()
         .describe(
+          'Parent class: a short native name ("Actor", "Pawn", "ActorComponent"), or a full path ' +
