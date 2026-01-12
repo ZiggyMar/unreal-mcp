@@ -397,3 +397,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> BlueprintArray;
+	for (const FAssetData& Asset : Assets)
+	{
