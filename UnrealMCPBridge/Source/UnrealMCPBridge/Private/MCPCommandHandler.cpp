@@ -412,3 +412,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 			{
 				ParentClass = ParentClass.Mid(DotIndex + 1);
 			}
+			Entry->SetStringField(TEXT("parentClass"), ParentClass);
+		}
