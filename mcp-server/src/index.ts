@@ -199,3 +199,4 @@ server.registerTool(
         .string()
         .describe(
           'Parent class: a short native name ("Actor", "Pawn", "ActorComponent"), or a full path ' +
+            '("/Script/Engine.Actor", or another Blueprint\'s generated class "/Game/BP_Base.BP_Base_C").'
