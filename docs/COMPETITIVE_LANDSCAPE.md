@@ -13,3 +13,5 @@ figures (stars, forks, tool counts) are a point-in-time snapshot and, for tool/a
 self-reported by each project's own README unless noted otherwise — none of this was verified
 against actual source. Nothing in this document reproduces source code from any surveyed repo;
 architectural ideas are described in our own words for evaluation purposes.
+
+**Where we are for comparison.** Per `ARCHITECTURE.md` and `docs/M1_STATUS.md` /
