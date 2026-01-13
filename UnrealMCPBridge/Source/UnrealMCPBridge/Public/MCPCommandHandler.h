@@ -22,3 +22,4 @@
  * get_project_overview. Backed by FMCPProjectIndex (see MCPProjectIndex.h), not by
  * enumerating/loading assets ad hoc on every call.
  *
+ * All handlers run on the game thread (FMCPTcpServer ticks via FTSTicker), so they

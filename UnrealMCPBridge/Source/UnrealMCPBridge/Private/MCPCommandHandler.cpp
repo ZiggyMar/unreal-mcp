@@ -427,3 +427,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 	Result->SetNumberField(TEXT("count"), BlueprintArray.Num());
 	return MakeOkResponse(Result);
 }
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSharedPtr<FJsonObject>& Params)
