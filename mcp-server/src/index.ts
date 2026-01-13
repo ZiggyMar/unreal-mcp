@@ -202,3 +202,4 @@ server.registerTool(
             '("/Script/Engine.Actor", or another Blueprint\'s generated class "/Game/BP_Base.BP_Base_C").'
         ),
       save: z
+        .boolean()

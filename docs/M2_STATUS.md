@@ -68,3 +68,4 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
   handler above calls Kismet2/EdGraph/AssetRegistry APIs directly, no `AsyncTask`
   marshaling anywhere.
 - Same build-verification bar as M1: both an isolated `RunUAT BuildPlugin` package build
+  and a direct `UnrealBuildTool` build against the real `AntiVirusSquadUE58.uproject`.
