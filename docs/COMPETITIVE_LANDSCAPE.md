@@ -11,3 +11,5 @@ all three filenames, not just trusting the API's detector), and fetched `README.
 few repos, one supporting file (`CLAUDE.md`, etc.) the same way. No repository was cloned. All
 figures (stars, forks, tool counts) are a point-in-time snapshot and, for tool/action counts, are
 self-reported by each project's own README unless noted otherwise — none of this was verified
+against actual source. Nothing in this document reproduces source code from any surveyed repo;
+architectural ideas are described in our own words for evaluation purposes.
