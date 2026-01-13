@@ -45,3 +45,4 @@ export class UnrealBridgeClient {
       const socket = new Socket();
       let buffer = "";
       let settled = false;
+
