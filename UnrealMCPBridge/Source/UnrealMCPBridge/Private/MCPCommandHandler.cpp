@@ -421,3 +421,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 
 		BlueprintArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
