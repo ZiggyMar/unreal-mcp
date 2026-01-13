@@ -15,3 +15,5 @@ against actual source. Nothing in this document reproduces source code from any 
 architectural ideas are described in our own words for evaluation purposes.
 
 **Where we are for comparison.** Per `ARCHITECTURE.md` and `docs/M1_STATUS.md` /
+`docs/M2_STATUS.md`: a C++ editor plugin (`UnrealMCPBridge`) + Node/TypeScript MCP server,
+targeting stock-launcher UE 5.6/5.8 with no engine source dependency. M1 (tiered read-only
