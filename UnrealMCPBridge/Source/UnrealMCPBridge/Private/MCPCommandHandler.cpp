@@ -414,3 +414,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 			}
 			Entry->SetStringField(TEXT("parentClass"), ParentClass);
 		}
+		else

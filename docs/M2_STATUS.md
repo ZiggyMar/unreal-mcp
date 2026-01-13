@@ -61,3 +61,5 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
 
 ### Ground rules carried over from M1 (and honored)
 
+- No short generic helper names — `MakeOkResponse`/`MakeErrorResponse` reused as-is,
+  no new same-risk names introduced (checked: nothing named `Check`, `Verify`, `MakeError`,
