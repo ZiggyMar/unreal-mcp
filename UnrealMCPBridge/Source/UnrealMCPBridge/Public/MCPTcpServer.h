@@ -14,3 +14,4 @@ class FInternetAddr;
  * response per line (newline-terminated) back on the same connection.
  *
  * Runs entirely on the game thread via FTSTicker so command handlers can
+ * safely call into UE Editor / AssetRegistry / Kismet2 APIs without any

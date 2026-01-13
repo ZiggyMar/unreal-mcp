@@ -65,3 +65,4 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
   no new same-risk names introduced (checked: nothing named `Check`, `Verify`, `MakeError`,
   `MakeOk` was added this milestone).
 - `FMCPTcpServer` still ticks on the game thread (untouched this milestone) — every new
+  handler above calls Kismet2/EdGraph/AssetRegistry APIs directly, no `AsyncTask`

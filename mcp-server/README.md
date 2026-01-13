@@ -18,3 +18,4 @@ error if the editor/bridge isn't up.
 - The `UnrealMCPBridge` plugin built and enabled in the target `.uproject`, with the
   Unreal Editor open on that project (see `../docs/M1_STATUS.md` for the current build
   status and manual steps).
+
