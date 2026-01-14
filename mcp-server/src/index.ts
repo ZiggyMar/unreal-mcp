@@ -203,3 +203,4 @@ server.registerTool(
         ),
       save: z
         .boolean()
+        .optional()

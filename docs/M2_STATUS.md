@@ -70,3 +70,5 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
 - Same build-verification bar as M1: both an isolated `RunUAT BuildPlugin` package build
   and a direct `UnrealBuildTool` build against the real `AntiVirusSquadUE58.uproject`.
 
+### MCP server — 8 new tools in `mcp-server/src/index.ts`
+

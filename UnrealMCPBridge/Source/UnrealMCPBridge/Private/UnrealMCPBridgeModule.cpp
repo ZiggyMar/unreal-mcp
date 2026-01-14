@@ -15,3 +15,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 
 	TcpServer = MakeShared<FMCPTcpServer>();
 	if (!TcpServer->Start(GMCPBridgePort))
+	{
