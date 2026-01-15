@@ -75,3 +75,4 @@ bool FMCPTcpServer::Start(int32 Port)
 
 	UE_LOG(LogMCPBridge, Log, TEXT("UnrealMCPBridge: listening on 127.0.0.1:%d"), Port);
 	return true;
+}
