@@ -30,3 +30,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 ## Summary table
 
 | Project | License | Architecture | Tool count | UE versions | Token/context-efficiency focus? | Persistent project index? | Link |
+|---|---|---|---|---|---|---|---|
+| chongdashu/unreal-mcp | **Claimed MIT, no LICENSE file** (unverified) | C++ `UEditorSubsystem` TCP bridge (:55557) + Python FastMCP server | ~20, not enumerated | 5.5+ | No | No | [github.com/chongdashu/unreal-mcp](https://github.com/chongdashu/unreal-mcp) |

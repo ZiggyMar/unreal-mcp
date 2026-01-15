@@ -78,3 +78,4 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
 M1 tools (`mcp-server/src/bridgeClient.ts` is completely unchanged; only `index.ts` and
 `types.ts` grew). `npm run build` and `npx tsc --noEmit` both clean.
 
+`unreal_compile_blueprint`'s tool description explicitly instructs the model to run it
