@@ -28,3 +28,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 ---
 
 ## Summary table
+
+| Project | License | Architecture | Tool count | UE versions | Token/context-efficiency focus? | Persistent project index? | Link |
