@@ -209,3 +209,4 @@ server.registerTool(
   },
   async ({ packagePath, parentClass, save }) => {
     try {
+      const result = await bridge.send<CreateBlueprintResult>("create_blueprint", { packagePath, parentClass, save });
