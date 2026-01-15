@@ -74,3 +74,4 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
 
 `unreal_create_blueprint`, `unreal_add_node`, `unreal_connect_pins`,
 `unreal_set_pin_default_value`, `unreal_remove_node`, `unreal_add_variable`,
+`unreal_compile_blueprint`, `unreal_save_blueprint` — same thin-translator pattern as the

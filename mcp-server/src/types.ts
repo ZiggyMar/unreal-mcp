@@ -81,3 +81,4 @@ export interface CreateBlueprintResult {
   saveError?: string;
 }
 
+export interface AddNodeResult {

@@ -22,3 +22,5 @@ against a real UE 5.8 install. M3 — `MCPProjectIndex` (`UnrealMCPBridge/Source
 — is also built: an in-memory index of every Blueprint's functions/variables/graphs/node-type
 histograms, persisted to `Saved/UnrealMCPBridge/index.json`, kept fresh via `IAssetRegistry`'s
 `OnAssetAdded`/`Removed`/`Renamed`/`Updated` delegates (no polling), backing a substring `Search()`
+and a `find_references` command that calls the AssetRegistry's real `GetReferencers`/
+`GetDependencies` at the package level.
