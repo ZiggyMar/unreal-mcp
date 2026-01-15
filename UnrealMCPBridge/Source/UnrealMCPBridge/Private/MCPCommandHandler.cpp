@@ -442,3 +442,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	{
 		return MakeErrorResponse(LoadError);
 	}
+
+	TArray<UEdGraph*> AllGraphs;

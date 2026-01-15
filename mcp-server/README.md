@@ -22,3 +22,4 @@ error if the editor/bridge isn't up.
 ## Setup
 
 ```bash
+cd mcp-server
