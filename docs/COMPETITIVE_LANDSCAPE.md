@@ -26,3 +26,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 `GetDependencies` at the package level.
 
 ---
+
+## Summary table
