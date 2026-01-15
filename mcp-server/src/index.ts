@@ -208,3 +208,4 @@ server.registerTool(
     },
   },
   async ({ packagePath, parentClass, save }) => {
+    try {

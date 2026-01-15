@@ -82,3 +82,4 @@ export interface CreateBlueprintResult {
 }
 
 export interface AddNodeResult {
+  id: string;

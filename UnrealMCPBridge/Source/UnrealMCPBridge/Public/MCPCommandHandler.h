@@ -23,3 +23,4 @@
  * enumerating/loading assets ad hoc on every call.
  *
  * All handlers run on the game thread (FMCPTcpServer ticks via FTSTicker), so they
+ * may call directly into Editor/Kismet2/AssetRegistry/EdGraph APIs with no thread

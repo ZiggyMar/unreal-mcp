@@ -79,3 +79,5 @@ M1 tools (`mcp-server/src/bridgeClient.ts` is completely unchanged; only `index.
 `types.ts` grew). `npm run build` and `npx tsc --noEmit` both clean.
 
 `unreal_compile_blueprint`'s tool description explicitly instructs the model to run it
+after any batch of edits before telling the user something is done — this was a
+deliberate choice given the M2 brief's emphasis on it being the safety net.
