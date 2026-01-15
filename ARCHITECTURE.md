@@ -49,3 +49,4 @@ Never send a Blueprint's raw engine representation. Instead:
    Blueprint graph editor (opened + framed on the relevant nodes) so the user visually sees
    the edit: this is for the human, not fed back to the model as tokens.
 
+## Repo layout (this folder)
