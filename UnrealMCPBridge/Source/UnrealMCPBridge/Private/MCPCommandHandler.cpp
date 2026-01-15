@@ -434,3 +434,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
 	{
 		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
