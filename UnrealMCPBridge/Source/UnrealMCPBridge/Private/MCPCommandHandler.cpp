@@ -430,3 +430,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))

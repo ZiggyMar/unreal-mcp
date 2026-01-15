@@ -18,3 +18,5 @@ architectural ideas are described in our own words for evaluation purposes.
 `docs/M2_STATUS.md`: a C++ editor plugin (`UnrealMCPBridge`) + Node/TypeScript MCP server,
 targeting stock-launcher UE 5.6/5.8 with no engine source dependency. M1 (tiered read-only
 Blueprint introspection) and M2 (structured write/edit commands) are built and compile-verified
+against a real UE 5.8 install. M3 — `MCPProjectIndex` (`UnrealMCPBridge/Source/UnrealMCPBridge/`)
+— is also built: an in-memory index of every Blueprint's functions/variables/graphs/node-type

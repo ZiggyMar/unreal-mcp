@@ -204,3 +204,4 @@ server.registerTool(
       save: z
         .boolean()
         .optional()
+        .describe("Whether to save the new asset to disk immediately. Defaults to true."),
