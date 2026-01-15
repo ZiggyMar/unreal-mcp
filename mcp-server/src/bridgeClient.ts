@@ -46,3 +46,4 @@ export class UnrealBridgeClient {
       let buffer = "";
       let settled = false;
 
+      const fail = (err: Error) => {

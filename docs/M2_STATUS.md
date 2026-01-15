@@ -73,3 +73,4 @@ Build.cs change: added the `MessageLog` module (needed for `FTokenizedMessage`/
 ### MCP server — 8 new tools in `mcp-server/src/index.ts`
 
 `unreal_create_blueprint`, `unreal_add_node`, `unreal_connect_pins`,
+`unreal_set_pin_default_value`, `unreal_remove_node`, `unreal_add_variable`,

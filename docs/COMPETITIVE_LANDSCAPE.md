@@ -20,3 +20,5 @@ targeting stock-launcher UE 5.6/5.8 with no engine source dependency. M1 (tiered
 Blueprint introspection) and M2 (structured write/edit commands) are built and compile-verified
 against a real UE 5.8 install. M3 — `MCPProjectIndex` (`UnrealMCPBridge/Source/UnrealMCPBridge/`)
 — is also built: an in-memory index of every Blueprint's functions/variables/graphs/node-type
+histograms, persisted to `Saved/UnrealMCPBridge/index.json`, kept fresh via `IAssetRegistry`'s
+`OnAssetAdded`/`Removed`/`Renamed`/`Updated` delegates (no polling), backing a substring `Search()`
