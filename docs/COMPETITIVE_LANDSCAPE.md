@@ -24,3 +24,5 @@ histograms, persisted to `Saved/UnrealMCPBridge/index.json`, kept fresh via `IAs
 `OnAssetAdded`/`Removed`/`Renamed`/`Updated` delegates (no polling), backing a substring `Search()`
 and a `find_references` command that calls the AssetRegistry's real `GetReferencers`/
 `GetDependencies` at the package level.
+
+---

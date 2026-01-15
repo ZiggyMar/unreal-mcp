@@ -436,3 +436,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 		return MakeErrorResponse(TEXT("missing_param: path"));
 	}
 
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
