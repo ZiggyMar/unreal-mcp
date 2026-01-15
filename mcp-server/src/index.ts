@@ -207,3 +207,4 @@ server.registerTool(
         .describe("Whether to save the new asset to disk immediately. Defaults to true."),
     },
   },
+  async ({ packagePath, parentClass, save }) => {

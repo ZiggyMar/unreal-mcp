@@ -440,3 +440,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
 	if (!Blueprint)
 	{
+		return MakeErrorResponse(LoadError);
+	}
