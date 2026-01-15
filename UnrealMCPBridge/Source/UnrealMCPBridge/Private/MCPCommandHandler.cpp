@@ -447,3 +447,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	Blueprint->GetAllGraphs(AllGraphs);
 
 	TArray<TSharedPtr<FJsonValue>> GraphArray;
+	for (UEdGraph* Graph : AllGraphs)
+	{

@@ -47,3 +47,4 @@ export class UnrealBridgeClient {
       let settled = false;
 
       const fail = (err: Error) => {
+        if (settled) return;
