@@ -83,3 +83,4 @@ after any batch of edits before telling the user something is done — this was 
 deliberate choice given the M2 brief's emphasis on it being the safety net.
 
 ## Verification performed this session
+
