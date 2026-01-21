@@ -451,3 +451,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	{
 		if (!Graph)
 		{
+			continue;
+		}
