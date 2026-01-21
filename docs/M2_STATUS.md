@@ -88,3 +88,5 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    M1's Verification 1): `Result: Succeeded`, `BUILD SUCCESSFUL`, first attempt — no
    compile errors at all despite ~10 previously-unverified UE APIs in this milestone
    (`FindFirstObject`, `FSavePackageArgs`, `EPinContainerType`,
+   `FBlueprintEditorUtils::FindUniqueKismetName`/`SetBlueprintVariableCategory`,
+   `FKismetEditorUtilities::CanCreateBlueprintOfClass`, `FCompilerResultsLog`,
