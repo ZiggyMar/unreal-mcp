@@ -43,3 +43,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 
 **Popularity vs. currency** (supplementary — not requested but directly relevant to positioning):
 
+| Project | Stars | Forks | Last push (as of 2026-08-07) |
+|---|---|---|---|
