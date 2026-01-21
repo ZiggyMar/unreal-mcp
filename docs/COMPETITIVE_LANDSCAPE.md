@@ -45,3 +45,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 
 | Project | Stars | Forks | Last push (as of 2026-08-07) |
 |---|---|---|---|
+| chongdashu/unreal-mcp | 2,057 | 340 | 2025-04-22 — **~16 months stale** |
+| ChiR24/Unreal_mcp | 821 | 152 | 2026-08-07 — same day as this survey |

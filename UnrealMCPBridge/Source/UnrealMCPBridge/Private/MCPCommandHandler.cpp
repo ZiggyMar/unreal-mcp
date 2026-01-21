@@ -457,3 +457,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 		Entry->SetStringField(TEXT("name"), Graph->GetName());
 		Entry->SetNumberField(TEXT("nodeCount"), Graph->Nodes.Num());
 		GraphArray.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
