@@ -90,3 +90,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    (`FindFirstObject`, `FSavePackageArgs`, `EPinContainerType`,
    `FBlueprintEditorUtils::FindUniqueKismetName`/`SetBlueprintVariableCategory`,
    `FKismetEditorUtilities::CanCreateBlueprintOfClass`, `FCompilerResultsLog`,
+   `EBlueprintStatus` enumerators, the `UK2Node_*` construction pattern, and the

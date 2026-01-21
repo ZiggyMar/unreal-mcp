@@ -49,3 +49,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 | ChiR24/Unreal_mcp | 821 | 152 | 2026-08-07 — same day as this survey |
 | kvick-games/UnrealMCP | 604 | 80 | 2025-06-22 — **~14 months stale** |
 | GenOrca/unreal-mcp | 133 | 18 | 2026-07-07 — active |
+| mirno-ehf/ue5-mcp | 68 | 18 | 2026-05-27 — active |
+| remiphilippe/mcp-unreal | 63 | 12 | 2026-02-20 — moderately active |

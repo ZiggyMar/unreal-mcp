@@ -52,3 +52,4 @@ surfaced. Still outstanding: UE 5.6 hasn't been live-tested yet (5.8 only so far
 less-common commands (`add_variable`, `remove_node`, `CustomEvent`/`VariableGet`/`VariableSet` nodes)
 haven't been exercised live.
 
+## Quickstart (3-Step Installation)
