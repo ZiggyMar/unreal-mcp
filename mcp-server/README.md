@@ -24,3 +24,4 @@ error if the editor/bridge isn't up.
 ```bash
 cd mcp-server
 npm install
+npm run build        # compiles src/ -> dist/
