@@ -41,3 +41,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 | lilklon/UEBlueprintMCP | **Claimed MIT, no LICENSE file, no grant text** (weakest of the "claimed" group — bare word only) | C++ plugin (`FEditorAction` subclasses, persistent TCP :55558) + Python server | 60+ | 5.7+ | No | No | [github.com/lilklon/UEBlueprintMCP](https://github.com/lilklon/UEBlueprintMCP) |
 | mirno-ehf/ue5-mcp | **MIT** (confirmed) | C++ editor-subsystem plugin (HTTP :9847, zero overhead in-editor) + TS wrapper; optional headless commandlet fallback when editor is closed | 38 | 5.4+ | No | No evidence found | [github.com/mirno-ehf/ue5-mcp](https://github.com/mirno-ehf/ue5-mcp) |
 
+**Popularity vs. currency** (supplementary — not requested but directly relevant to positioning):
+

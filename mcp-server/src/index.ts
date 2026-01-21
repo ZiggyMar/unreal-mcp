@@ -211,3 +211,4 @@ server.registerTool(
     try {
       const result = await bridge.send<CreateBlueprintResult>("create_blueprint", { packagePath, parentClass, save });
       return jsonResult(result);
+    } catch (err) {
