@@ -459,3 +459,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 		GraphArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();

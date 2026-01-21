@@ -25,3 +25,4 @@ error if the editor/bridge isn't up.
 cd mcp-server
 npm install
 npm run build        # compiles src/ -> dist/
+npm run typecheck    # tsc --noEmit, no build artifacts
