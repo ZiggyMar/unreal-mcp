@@ -51,3 +51,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 | GenOrca/unreal-mcp | 133 | 18 | 2026-07-07 — active |
 | mirno-ehf/ue5-mcp | 68 | 18 | 2026-05-27 — active |
 | remiphilippe/mcp-unreal | 63 | 12 | 2026-02-20 — moderately active |
+| lilklon/UEBlueprintMCP | 36 | 7 | 2026-02-18 — moderately active |
+| sam-david/unreal-mcp | 4 | 2 | 2026-03-28 — active, but tiny adoption |

@@ -462,3 +462,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("path"), Path);
 	Result->SetArrayField(TEXT("graphs"), GraphArray);
+	return MakeOkResponse(Result);
+}
