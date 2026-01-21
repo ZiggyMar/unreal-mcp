@@ -86,3 +86,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
 
 1. **Isolated plugin package build** (`RunUAT BuildPlugin`, fresh `HostProject`, same as
    M1's Verification 1): `Result: Succeeded`, `BUILD SUCCESSFUL`, first attempt — no
+   compile errors at all despite ~10 previously-unverified UE APIs in this milestone
