@@ -84,3 +84,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
 
 ## Verification performed this session
 
+1. **Isolated plugin package build** (`RunUAT BuildPlugin`, fresh `HostProject`, same as
