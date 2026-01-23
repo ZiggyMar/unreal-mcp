@@ -466,3 +466,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, GraphName;

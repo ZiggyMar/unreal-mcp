@@ -55,3 +55,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 | sam-david/unreal-mcp | 4 | 2 | 2026-03-28 — active, but tiny adoption |
 | avdo403/UnrealMCP | 4 | 0 | 2026-03-04 — active, but tiny adoption |
 
+The two highest-starred repos in the survey have both gone quiet for over a year. The
+most-recently-active and most professionally engineered repo (ChiR24) is mid-tier by star count.
