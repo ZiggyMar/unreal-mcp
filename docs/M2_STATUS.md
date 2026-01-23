@@ -96,3 +96,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    `AntiVirusSquadUE58.uproject`, same as M1's Verification 2): `Result: Succeeded`, exit
    code 0, ~94s (incremental — only the 4 changed files recompiled:
    `Module.UnrealMCPBridge.cpp`, `MCPCommandHandler.cpp`, `MCPTcpServer.cpp`, plus
+   relink). Updated `UnrealEditor-UnrealMCPBridge.dll` is live in
