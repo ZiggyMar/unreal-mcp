@@ -94,3 +94,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    `UEdGraphSchema_K2::PC_*` type constants).
 2. **Direct build against the real project** (`UnrealBuildTool` against
    `AntiVirusSquadUE58.uproject`, same as M1's Verification 2): `Result: Succeeded`, exit
+   code 0, ~94s (incremental — only the 4 changed files recompiled:
