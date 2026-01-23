@@ -58,3 +58,5 @@ and a `find_references` command that calls the AssetRegistry's real `GetReferenc
 The two highest-starred repos in the survey have both gone quiet for over a year. The
 most-recently-active and most professionally engineered repo (ChiR24) is mid-tier by star count.
 Star count in this space currently lags actual maintenance activity — worth remembering when
+sizing up "the competition."
+

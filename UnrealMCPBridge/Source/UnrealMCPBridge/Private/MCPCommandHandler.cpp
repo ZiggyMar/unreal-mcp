@@ -470,3 +470,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 	FString Path, GraphName;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
 		!Params->TryGetStringField(TEXT("graphName"), GraphName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and graphName are required"));

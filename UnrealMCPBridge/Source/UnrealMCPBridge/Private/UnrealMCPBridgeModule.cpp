@@ -16,3 +16,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 	TcpServer = MakeShared<FMCPTcpServer>();
 	if (!TcpServer->Start(GMCPBridgePort))
 	{
+		UE_LOG(LogMCPBridgeModule, Error, TEXT("UnrealMCPBridge failed to start TCP server on port %d"), GMCPBridgePort);
