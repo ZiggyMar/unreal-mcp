@@ -32,3 +32,4 @@ Run it standalone (mostly useful for manually checking it starts without error â
 MCP client normally launches this itself over stdio):
 
 ```bash
+npm start

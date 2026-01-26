@@ -496,3 +496,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		{
 			continue;
 		}
+
+		TSharedRef<FJsonObject> NodeEntry = MakeShared<FJsonObject>();
