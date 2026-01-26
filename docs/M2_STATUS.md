@@ -104,3 +104,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
 4. **Full MCP protocol test against a fake bridge**, extending the same technique from
    M1: a hand-written TCP server replays exact response shapes for all 8 new commands
    (`create_blueprint`, `add_node`, `connect_pins`, `set_pin_default_value`,
+   `remove_node`, `add_variable`, `compile_blueprint`, `save_blueprint`). The real
