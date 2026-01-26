@@ -100,3 +100,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\Binaries\Win64\` —
    again, the user should not see a first-compile prompt.
 3. **TypeScript**: `npm run build` and `npx tsc --noEmit` both clean, zero errors, for
+   all 13 tools combined.
