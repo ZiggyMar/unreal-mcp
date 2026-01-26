@@ -30,3 +30,4 @@ npm run typecheck    # tsc --noEmit, no build artifacts
 
 Run it standalone (mostly useful for manually checking it starts without error — a real
 MCP client normally launches this itself over stdio):
+
