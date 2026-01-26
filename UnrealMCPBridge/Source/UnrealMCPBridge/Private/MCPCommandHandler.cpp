@@ -474,3 +474,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		return MakeErrorResponse(TEXT("missing_param: path and graphName are required"));
 	}
 
+	FString LoadError;

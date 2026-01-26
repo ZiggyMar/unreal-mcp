@@ -28,3 +28,4 @@ npm run build        # compiles src/ -> dist/
 npm run typecheck    # tsc --noEmit, no build artifacts
 ```
 
+Run it standalone (mostly useful for manually checking it starts without error — a real

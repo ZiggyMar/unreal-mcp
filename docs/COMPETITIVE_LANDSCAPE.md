@@ -62,3 +62,5 @@ sizing up "the competition."
 
 ---
 
+## Per-project notes
+
