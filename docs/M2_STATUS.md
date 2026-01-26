@@ -103,3 +103,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    all 13 tools combined.
 4. **Full MCP protocol test against a fake bridge**, extending the same technique from
    M1: a hand-written TCP server replays exact response shapes for all 8 new commands
+   (`create_blueprint`, `add_node`, `connect_pins`, `set_pin_default_value`,

@@ -221,3 +221,4 @@ server.registerTool(
   "unreal_add_node",
   {
     title: "Add a node to a Blueprint graph",
+    description:

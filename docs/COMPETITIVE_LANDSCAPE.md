@@ -72,3 +72,5 @@ entirely about **creating and configuring** Blueprints/components/nodes — ever
 README's "Blueprint Node Graph" section is an add/create/connect verb; there is no read-existing-
 structure-back-out tool at all, consistent with the task brief's note that it doesn't parse
 existing Blueprint structure. No mention of token/context efficiency anywhere. README claims MIT
+(badge + text) but there is no LICENSE file anywhere in the repo (checked LICENSE, LICENSE.md,
+LICENSE.txt, and a full root-directory listing) — GitHub's own detector agrees, reporting no
