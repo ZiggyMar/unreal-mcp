@@ -64,3 +64,5 @@ sizing up "the competition."
 
 ## Per-project notes
 
+### chongdashu/unreal-mcp
+The project most people mean when they say "Unreal MCP" right now by star count, but stale for

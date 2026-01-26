@@ -49,3 +49,4 @@ export class UnrealBridgeClient {
       const fail = (err: Error) => {
         if (settled) return;
         settled = true;
+        socket.destroy();
