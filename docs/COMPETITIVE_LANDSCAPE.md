@@ -85,3 +85,5 @@ independently converged on too.
 ### sam-david/unreal-mcp
 Tiny adoption (4 stars) despite a sophisticated pitch. Its core idea is the most interesting thing
 about it: **no mandatory C++ plugin at all.** It drives the engine through two things every stock
+UE install already ships — the Python Editor Script Plugin's Remote Execution (UDP multicast +
+inverted TCP) and the Remote Control API (HTTP REST) — and only reaches for an optional C++

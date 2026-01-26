@@ -54,3 +54,4 @@ haven't been exercised live.
 
 ## Quickstart (3-Step Installation)
 
+Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
