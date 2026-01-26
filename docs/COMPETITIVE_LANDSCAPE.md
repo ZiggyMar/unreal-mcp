@@ -81,3 +81,5 @@ pre-installed) lowers time-to-first-success — a new user can see it work befor
 own project. Its per-MCP-client config table (client name → exact config file path per OS) is a
 small, high-value documentation pattern that several later, more sophisticated projects
 independently converged on too.
+
+### sam-david/unreal-mcp
