@@ -490,3 +490,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 
 	TArray<TSharedPtr<FJsonValue>> NodeArray;
 	for (int32 i = 0; i < TargetGraph->Nodes.Num(); ++i)
+	{
+		UEdGraphNode* Node = TargetGraph->Nodes[i];

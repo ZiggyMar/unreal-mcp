@@ -223,3 +223,4 @@ server.registerTool(
     title: "Add a node to a Blueprint graph",
     description:
       "Adds one node to a graph and returns its new node id immediately (e.g. \"n12\") so you can reference it in the " +
+      "same conversation (via unreal_connect_pins, unreal_set_pin_default_value, etc) without re-reading the whole " +

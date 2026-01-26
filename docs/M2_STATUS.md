@@ -108,3 +108,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    compiled `dist/index.js` was spawned as a child process and driven with the SDK's
    `Client` over real stdio: `tools/list` confirmed exactly 13 tools registered (5 M1 +
    8 M2, no more, no less), and every one of the 8 new tools was called with realistic
+   arguments and its parsed JSON result checked against the expected shape (e.g.

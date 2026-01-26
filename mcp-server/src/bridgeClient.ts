@@ -50,3 +50,4 @@ export class UnrealBridgeClient {
         if (settled) return;
         settled = true;
         socket.destroy();
+        reject(err);
