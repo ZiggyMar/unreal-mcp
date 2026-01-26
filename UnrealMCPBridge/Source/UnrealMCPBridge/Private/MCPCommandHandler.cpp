@@ -487,3 +487,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 	{
 		return MakeErrorResponse(GraphError);
 	}
+
+	TArray<TSharedPtr<FJsonValue>> NodeArray;

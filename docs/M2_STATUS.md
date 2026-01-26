@@ -105,3 +105,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    M1: a hand-written TCP server replays exact response shapes for all 8 new commands
    (`create_blueprint`, `add_node`, `connect_pins`, `set_pin_default_value`,
    `remove_node`, `add_variable`, `compile_blueprint`, `save_blueprint`). The real
+   compiled `dist/index.js` was spawned as a child process and driven with the SDK's

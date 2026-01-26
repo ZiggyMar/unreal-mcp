@@ -82,3 +82,4 @@ void FMCPTcpServer::Stop()
 	if (TickHandle.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+		TickHandle.Reset();
