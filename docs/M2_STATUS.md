@@ -106,3 +106,5 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    (`create_blueprint`, `add_node`, `connect_pins`, `set_pin_default_value`,
    `remove_node`, `add_variable`, `compile_blueprint`, `save_blueprint`). The real
    compiled `dist/index.js` was spawned as a child process and driven with the SDK's
+   `Client` over real stdio: `tools/list` confirmed exactly 13 tools registered (5 M1 +
+   8 M2, no more, no less), and every one of the 8 new tools was called with realistic

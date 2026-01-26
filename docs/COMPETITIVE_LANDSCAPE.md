@@ -77,3 +77,5 @@ LICENSE.txt, and a full root-directory listing) — GitHub's own detector agrees
 license.
 
 What's genuinely good: the bundled ready-to-open `MCPGameProject` sample project (plugin
+pre-installed) lowers time-to-first-success — a new user can see it work before touching their
+own project. Its per-MCP-client config table (client name → exact config file path per OS) is a
