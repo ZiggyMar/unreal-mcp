@@ -76,3 +76,4 @@ existing Blueprint structure. No mention of token/context efficiency anywhere. R
 LICENSE.txt, and a full root-directory listing) — GitHub's own detector agrees, reporting no
 license.
 
+What's genuinely good: the bundled ready-to-open `MCPGameProject` sample project (plugin
