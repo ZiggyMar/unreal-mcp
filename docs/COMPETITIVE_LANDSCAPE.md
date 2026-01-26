@@ -66,3 +66,5 @@ sizing up "the competition."
 
 ### chongdashu/unreal-mcp
 The project most people mean when they say "Unreal MCP" right now by star count, but stale for
+over a year. C++ `UEditorSubsystem` running a TCP server on port 55557, paired with a Python
+FastMCP server that loads tool modules from a `tools/` directory. Its Blueprint feature set is
