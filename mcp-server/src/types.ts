@@ -86,3 +86,4 @@ export interface AddNodeResult {
   type: string;
   title: string;
   /** True if this was an existing override-event node reused instead of creating a duplicate. */
+  alreadyExisted?: boolean;
