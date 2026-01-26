@@ -479,3 +479,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 	if (!Blueprint)
 	{
 		return MakeErrorResponse(LoadError);
+	}
+
