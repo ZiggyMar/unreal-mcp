@@ -481,3 +481,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		return MakeErrorResponse(LoadError);
 	}
 
+	FString GraphError;
+	UEdGraph* TargetGraph = FindGraphByName(Blueprint, GraphName, GraphError);

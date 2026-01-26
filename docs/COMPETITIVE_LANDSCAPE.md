@@ -70,3 +70,5 @@ over a year. C++ `UEditorSubsystem` running a TCP server on port 55557, paired w
 FastMCP server that loads tool modules from a `tools/` directory. Its Blueprint feature set is
 entirely about **creating and configuring** Blueprints/components/nodes — every bullet in its
 README's "Blueprint Node Graph" section is an add/create/connect verb; there is no read-existing-
+structure-back-out tool at all, consistent with the task brief's note that it doesn't parse
+existing Blueprint structure. No mention of token/context efficiency anywhere. README claims MIT
