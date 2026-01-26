@@ -83,3 +83,5 @@ small, high-value documentation pattern that several later, more sophisticated p
 independently converged on too.
 
 ### sam-david/unreal-mcp
+Tiny adoption (4 stars) despite a sophisticated pitch. Its core idea is the most interesting thing
+about it: **no mandatory C++ plugin at all.** It drives the engine through two things every stock

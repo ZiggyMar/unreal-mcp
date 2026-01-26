@@ -16,3 +16,4 @@ class FInternetAddr;
  * Runs entirely on the game thread via FTSTicker so command handlers can
  * safely call into UE Editor / AssetRegistry / Kismet2 APIs without any
  * cross-thread synchronization.
+ */
