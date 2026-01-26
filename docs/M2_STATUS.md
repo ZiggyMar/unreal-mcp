@@ -110,3 +110,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    8 M2, no more, no less), and every one of the 8 new tools was called with realistic
    arguments and its parsed JSON result checked against the expected shape (e.g.
    `unreal_add_node` returning `id: "n7"`, `unreal_compile_blueprint` returning a
+   `messages` array with the right `severity`/`text` fields). All passed.

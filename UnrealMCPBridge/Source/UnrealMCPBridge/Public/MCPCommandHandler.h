@@ -26,3 +26,4 @@
  * may call directly into Editor/Kismet2/AssetRegistry/EdGraph APIs with no thread
  * marshaling.
  */
+class FMCPCommandHandler
