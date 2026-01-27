@@ -226,3 +226,4 @@ server.registerTool(
       "same conversation (via unreal_connect_pins, unreal_set_pin_default_value, etc) without re-reading the whole " +
       "graph. Node ids are only valid for this editor session; they are graph-array indices, not persisted identifiers.\n\n" +
       "nodeType determines which other params are required:\n" +
+      '  - "Event": eventName = a function on the Blueprint\'s parent class to override (e.g. "ReceiveBeginPlay", "ReceiveTick").\n' +

@@ -89,3 +89,5 @@ UE install already ships — the Python Editor Script Plugin's Remote Execution 
 inverted TCP) and the Remote Control API (HTTP REST) — and only reaches for an optional C++
 plugin when it needs K2 graph-node manipulation specifically. The server "probes all transports on
 startup" and degrades gracefully if one isn't available. Its own README comparison table claims
+127 tools across 16 subsystems beat every other repo in this survey on tool count, and the
+per-module counts in that table do sum to exactly 127 — internally consistent, though unverified
