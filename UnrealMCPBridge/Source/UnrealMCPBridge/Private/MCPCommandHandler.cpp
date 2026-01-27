@@ -502,3 +502,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		NodeEntry->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 		NodeEntry->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
 
+		// Compact pin connection summary: for each pin, who it connects to (node index + pin name).
+		TArray<TSharedPtr<FJsonValue>> PinArray;

@@ -227,3 +227,4 @@ server.registerTool(
       "graph. Node ids are only valid for this editor session; they are graph-array indices, not persisted identifiers.\n\n" +
       "nodeType determines which other params are required:\n" +
       '  - "Event": eventName = a function on the Blueprint\'s parent class to override (e.g. "ReceiveBeginPlay", "ReceiveTick").\n' +
+      '  - "CustomEvent": eventName = name for the new custom event (auto-uniquified if it collides).\n' +
