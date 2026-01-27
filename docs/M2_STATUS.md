@@ -112,3 +112,4 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
    `unreal_add_node` returning `id: "n7"`, `unreal_compile_blueprint` returning a
    `messages` array with the right `severity`/`text` fields). All passed.
 
+This confirms the TS <-> TCP <-> JSON plumbing is correct for the new commands. It does
