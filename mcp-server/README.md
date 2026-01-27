@@ -33,3 +33,4 @@ MCP client normally launches this itself over stdio):
 
 ```bash
 npm start
+```
