@@ -87,3 +87,5 @@ Tiny adoption (4 stars) despite a sophisticated pitch. Its core idea is the most
 about it: **no mandatory C++ plugin at all.** It drives the engine through two things every stock
 UE install already ships — the Python Editor Script Plugin's Remote Execution (UDP multicast +
 inverted TCP) and the Remote Control API (HTTP REST) — and only reaches for an optional C++
+plugin when it needs K2 graph-node manipulation specifically. The server "probes all transports on
+startup" and degrades gracefully if one isn't available. Its own README comparison table claims

@@ -498,3 +498,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		}
 
 		TSharedRef<FJsonObject> NodeEntry = MakeShared<FJsonObject>();
+		NodeEntry->SetStringField(TEXT("id"), MakeNodeId(i));
+		NodeEntry->SetStringField(TEXT("type"), Node->GetClass()->GetName());
