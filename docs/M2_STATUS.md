@@ -115,3 +115,5 @@ deliberate choice given the M2 brief's emphasis on it being the safety net.
 This confirms the TS <-> TCP <-> JSON plumbing is correct for the new commands. It does
 **not** confirm the C++ side's actual runtime behavior against a live editor and a real
 Blueprint — see below.
+
+## What is stubbed / unverified
