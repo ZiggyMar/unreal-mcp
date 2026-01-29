@@ -93,3 +93,5 @@ startup" and degrades gracefully if one isn't available. Its own README comparis
 per-module counts in that table do sum to exactly 127 — internally consistent, though unverified
 against actual source. No mention of token/context efficiency; no read-existing-structure
 compaction described beyond generic Remote Control property gets. README claims MIT; no LICENSE
+file exists anywhere in the repo.
+
