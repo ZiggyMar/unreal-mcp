@@ -230,3 +230,4 @@ server.registerTool(
       '  - "CustomEvent": eventName = name for the new custom event (auto-uniquified if it collides).\n' +
       '  - "CallFunction": functionName required; className optional (short name or full path); defaults to searching ' +
       "the Blueprint's own generated class, then its parent class.\n" +
+      '  - "VariableGet" / "VariableSet": variableName = an existing member variable on this Blueprint (added via ' +
