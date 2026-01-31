@@ -520,3 +520,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 				if (!Linked || !Linked->GetOwningNode())
 				{
 					continue;
+				}
+				int32 LinkedIndex = TargetGraph->Nodes.IndexOfByKey(Linked->GetOwningNode());
