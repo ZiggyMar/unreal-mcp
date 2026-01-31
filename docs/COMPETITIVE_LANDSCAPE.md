@@ -95,3 +95,5 @@ against actual source. No mention of token/context efficiency; no read-existing-
 compaction described beyond generic Remote Control property gets. README claims MIT; no LICENSE
 file exists anywhere in the repo.
 
+What's genuinely good: "prefer the engine's own built-in scripting surface over a custom native
+plugin, and only add compiled code for the one thing the built-ins can't reach" is a legitimately

@@ -228,3 +228,4 @@ server.registerTool(
       "nodeType determines which other params are required:\n" +
       '  - "Event": eventName = a function on the Blueprint\'s parent class to override (e.g. "ReceiveBeginPlay", "ReceiveTick").\n' +
       '  - "CustomEvent": eventName = name for the new custom event (auto-uniquified if it collides).\n' +
+      '  - "CallFunction": functionName required; className optional (short name or full path); defaults to searching ' +

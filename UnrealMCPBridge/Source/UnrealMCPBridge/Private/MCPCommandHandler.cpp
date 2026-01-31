@@ -505,3 +505,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		// Compact pin connection summary: for each pin, who it connects to (node index + pin name).
 		TArray<TSharedPtr<FJsonValue>> PinArray;
 		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin || Pin->LinkedTo.Num() == 0)
