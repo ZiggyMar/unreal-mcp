@@ -106,3 +106,5 @@ copying the pattern.
 Single statically-linked Go binary, zero external runtime dependencies, prebuilt cross-platform
 releases (macOS/Linux/Windows × amd64/arm64) on GitHub Releases — the lowest-friction install of
 anything in this survey (no Python venv, no `npm install`). Apache-2.0, confirmed directly from the
+LICENSE file content. Hard-pinned to UE 5.7 (paths and docs reference `UE_5.7` specifically, not a
+"+" range). Genuinely does have a persistent, disk-backed search index (`docs/index.bleve`, built

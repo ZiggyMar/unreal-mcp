@@ -123,3 +123,4 @@ cannot drive (no GUI automation available here) — same constraint as M1, now c
 much riskier operations:
 
 - **No real Blueprint has ever actually been created, edited, or compiled by this
+  plugin.** Every command above compiles and, per the fake-bridge test, round-trips the
