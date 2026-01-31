@@ -102,3 +102,5 @@ good minimal-friction install strategy — zero build step for ~95% of functiona
 troubleshooting section documents this at length) is real and worth taking seriously before
 copying the pattern.
 
+### remiphilippe/mcp-unreal
+Single statically-linked Go binary, zero external runtime dependencies, prebuilt cross-platform

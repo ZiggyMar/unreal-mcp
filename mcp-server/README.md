@@ -35,3 +35,4 @@ MCP client normally launches this itself over stdio):
 npm start
 ```
 
+## Tools exposed
