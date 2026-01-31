@@ -85,3 +85,4 @@ void FMCPTcpServer::Stop()
 		TickHandle.Reset();
 	}
 
+	Clients.Empty();
