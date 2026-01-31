@@ -52,3 +52,4 @@ export class UnrealBridgeClient {
         socket.destroy();
         reject(err);
       };
+
