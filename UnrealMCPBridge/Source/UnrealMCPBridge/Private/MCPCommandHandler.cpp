@@ -513,3 +513,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			TSharedRef<FJsonObject> PinEntry = MakeShared<FJsonObject>();
 			PinEntry->SetStringField(TEXT("pin"), Pin->PinName.ToString());
 			PinEntry->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("in") : TEXT("out"));
+
+			TArray<TSharedPtr<FJsonValue>> Links;
