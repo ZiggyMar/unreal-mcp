@@ -104,3 +104,5 @@ copying the pattern.
 
 ### remiphilippe/mcp-unreal
 Single statically-linked Go binary, zero external runtime dependencies, prebuilt cross-platform
+releases (macOS/Linux/Windows × amd64/arm64) on GitHub Releases — the lowest-friction install of
+anything in this survey (no Python venv, no `npm install`). Apache-2.0, confirmed directly from the
