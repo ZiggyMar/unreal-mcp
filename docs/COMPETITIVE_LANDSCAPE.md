@@ -98,3 +98,5 @@ file exists anywhere in the repo.
 What's genuinely good: "prefer the engine's own built-in scripting surface over a custom native
 plugin, and only add compiled code for the one thing the built-ins can't reach" is a legitimately
 good minimal-friction install strategy — zero build step for ~95% of functionality. The tradeoff
+(UDP multicast Remote Execution is fragile behind VPNs/Tailscale/multiple NICs — the README's own
+troubleshooting section documents this at length) is real and worth taking seriously before
