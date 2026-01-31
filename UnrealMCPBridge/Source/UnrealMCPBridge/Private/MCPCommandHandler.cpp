@@ -519,3 +519,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			{
 				if (!Linked || !Linked->GetOwningNode())
 				{
+					continue;

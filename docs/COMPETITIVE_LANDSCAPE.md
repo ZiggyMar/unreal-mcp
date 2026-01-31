@@ -108,3 +108,5 @@ releases (macOS/Linux/Windows × amd64/arm64) on GitHub Releases — the lowest-
 anything in this survey (no Python venv, no `npm install`). Apache-2.0, confirmed directly from the
 LICENSE file content. Hard-pinned to UE 5.7 (paths and docs reference `UE_5.7` specifically, not a
 "+" range). Genuinely does have a persistent, disk-backed search index (`docs/index.bleve`, built
+by `mcp-unreal --build-index`) — but confirmed from the README to index **markdown files under
+`docs/ue5.7/` and `docs/realtimemesh/`, plus the calling project's `CLAUDE.md`** — i.e., API/engine

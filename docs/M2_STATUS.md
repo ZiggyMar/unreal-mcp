@@ -124,3 +124,4 @@ much riskier operations:
 
 - **No real Blueprint has ever actually been created, edited, or compiled by this
   plugin.** Every command above compiles and, per the fake-bridge test, round-trips the
+  right JSON shape — but the actual engine-side behavior (does `UK2Node_Event` with
