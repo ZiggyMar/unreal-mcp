@@ -231,3 +231,4 @@ server.registerTool(
       '  - "CallFunction": functionName required; className optional (short name or full path); defaults to searching ' +
       "the Blueprint's own generated class, then its parent class.\n" +
       '  - "VariableGet" / "VariableSet": variableName = an existing member variable on this Blueprint (added via ' +
+      "unreal_add_variable). Inherited variables from a parent class are not yet supported.\n\n" +

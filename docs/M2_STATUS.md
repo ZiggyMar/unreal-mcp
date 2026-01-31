@@ -122,3 +122,4 @@ Everything in this list requires a live Unreal Editor session, which this enviro
 cannot drive (no GUI automation available here) — same constraint as M1, now covering
 much riskier operations:
 
+- **No real Blueprint has ever actually been created, edited, or compiled by this

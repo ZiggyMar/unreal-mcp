@@ -515,3 +515,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			PinEntry->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("in") : TEXT("out"));
 
 			TArray<TSharedPtr<FJsonValue>> Links;
+			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			{
