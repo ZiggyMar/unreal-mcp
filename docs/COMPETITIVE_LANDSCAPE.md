@@ -110,3 +110,5 @@ LICENSE file content. Hard-pinned to UE 5.7 (paths and docs reference `UE_5.7` s
 "+" range). Genuinely does have a persistent, disk-backed search index (`docs/index.bleve`, built
 by `mcp-unreal --build-index`) — but confirmed from the README to index **markdown files under
 `docs/ue5.7/` and `docs/realtimemesh/`, plus the calling project's `CLAUDE.md`** — i.e., API/engine
+documentation text, not the project's own Blueprints or assets. Separately, `get_asset_info`
+returns "dependencies and referencers" for a given asset, which is a live, per-request

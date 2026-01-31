@@ -54,3 +54,4 @@ Never send a Blueprint's raw engine representation. Instead:
 ```
 UnrealMCP/
   ARCHITECTURE.md
+  mcp-server/              Node/TS MCP server
