@@ -118,3 +118,4 @@ Blueprint — see below.
 
 ## What is stubbed / unverified
 
+Everything in this list requires a live Unreal Editor session, which this environment

@@ -507,3 +507,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		for (UEdGraphPin* Pin : Node->Pins)
 		{
 			if (!Pin || Pin->LinkedTo.Num() == 0)
+			{
+				continue; // omit unconnected pins entirely to keep this compact
