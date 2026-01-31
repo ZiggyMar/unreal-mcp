@@ -119,3 +119,4 @@ Blueprint — see below.
 ## What is stubbed / unverified
 
 Everything in this list requires a live Unreal Editor session, which this environment
+cannot drive (no GUI automation available here) — same constraint as M1, now covering

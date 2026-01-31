@@ -509,3 +509,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			if (!Pin || Pin->LinkedTo.Num() == 0)
 			{
 				continue; // omit unconnected pins entirely to keep this compact
+			}
+			TSharedRef<FJsonObject> PinEntry = MakeShared<FJsonObject>();
