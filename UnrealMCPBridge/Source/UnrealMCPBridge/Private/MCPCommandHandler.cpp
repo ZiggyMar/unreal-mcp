@@ -517,3 +517,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			TArray<TSharedPtr<FJsonValue>> Links;
 			for (UEdGraphPin* Linked : Pin->LinkedTo)
 			{
+				if (!Linked || !Linked->GetOwningNode())
+				{
