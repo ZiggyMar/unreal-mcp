@@ -89,3 +89,4 @@ export interface AddNodeResult {
   alreadyExisted?: boolean;
 }
 
+export interface ConnectPinsResult {
