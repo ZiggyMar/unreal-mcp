@@ -87,3 +87,4 @@ void FMCPTcpServer::Stop()
 
 	Clients.Empty();
 	Listener.Reset();
+}

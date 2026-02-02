@@ -117,3 +117,5 @@ AssetRegistry-style lookup with no stated caching/persistence layer of its own.
 What's genuinely good: (1) the bundled "Recommended System Prompt" block — a ready-made paragraph
 telling the calling agent the right tool-call order (check status → look up docs before writing
 code → build → test → save) — is a cheap, effective reliability win, and the README's worked
+example transcripts (exact tool-call sequences for realistic requests) reinforce it well. (2) A
+genuine headless path — `build_project`/`run_tests`/`cook_project` invoke `UnrealEditor-Cmd`
