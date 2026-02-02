@@ -532,3 +532,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		}
 		NodeEntry->SetArrayField(TEXT("connectedPins"), PinArray);
 
+		NodeArray.Add(MakeShared<FJsonValueObject>(NodeEntry));
+	}
