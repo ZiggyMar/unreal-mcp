@@ -116,3 +116,4 @@ AssetRegistry-style lookup with no stated caching/persistence layer of its own.
 
 What's genuinely good: (1) the bundled "Recommended System Prompt" block — a ready-made paragraph
 telling the calling agent the right tool-call order (check status → look up docs before writing
+code → build → test → save) — is a cheap, effective reliability win, and the README's worked

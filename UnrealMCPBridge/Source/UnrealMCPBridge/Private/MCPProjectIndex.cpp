@@ -8,3 +8,4 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "Dom/JsonValue.h"
+#include "Modules/ModuleManager.h"
