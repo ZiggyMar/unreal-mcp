@@ -535,3 +535,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		NodeArray.Add(MakeShared<FJsonValueObject>(NodeEntry));
 	}
 
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);

@@ -125,3 +125,5 @@ project-structure index) is worth adopting in its own right: indexing Epic's own
 agent can look up a class/function reference without spending tokens re-deriving it from raw
 engine headers is a complementary idea to what we do, not a competing one.
 
+### ChiR24/Unreal_mcp
+The most actively and professionally engineered repo in the survey — pushed the same day as this
