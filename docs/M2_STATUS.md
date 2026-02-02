@@ -134,3 +134,5 @@ much riskier operations:
 - **`compile_blueprint`'s error/warning reporting is unverified** — the JSON shape is
   right (confirmed via the fake-bridge test), but whether `FCompilerResultsLog::Messages`
   actually populates the way I expect for a real broken graph, and whether the
+  `severity`/`text` mapping reads sensibly, has never been checked against a real
+  compiler run. Per the M2 brief, this is called out as the top thing to test first.
