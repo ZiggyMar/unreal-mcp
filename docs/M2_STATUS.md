@@ -127,3 +127,4 @@ much riskier operations:
   right JSON shape — but the actual engine-side behavior (does `UK2Node_Event` with
   `bOverrideFunction=true` really produce a working `BeginPlay` override node when
   `AllocateDefaultPins()` runs against a real graph; does `add_variable`'s `vector` type
+  resolution via `FindObject<UScriptStruct>(nullptr, "/Script/CoreUObject.Vector")`
