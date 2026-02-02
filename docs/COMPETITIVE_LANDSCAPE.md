@@ -123,3 +123,5 @@ directly via `exec.Command`, no live editor required — opens up CI/batch use c
 current architecture supports. (3) The documentation-index idea itself (distinct from a
 project-structure index) is worth adopting in its own right: indexing Epic's own API docs so an
 agent can look up a class/function reference without spending tokens re-deriving it from raw
+engine headers is a complementary idea to what we do, not a competing one.
+
