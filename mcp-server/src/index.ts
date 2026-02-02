@@ -235,3 +235,4 @@ server.registerTool(
       "x/y are optional graph-editor position hints (cosmetic only, for the human opening the graph later). The model " +
       "should not need to reason about them.",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
