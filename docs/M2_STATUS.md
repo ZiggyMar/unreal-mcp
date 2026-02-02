@@ -133,3 +133,4 @@ much riskier operations:
   whole project so far, precisely because these are write operations.
 - **`compile_blueprint`'s error/warning reporting is unverified** — the JSON shape is
   right (confirmed via the fake-bridge test), but whether `FCompilerResultsLog::Messages`
+  actually populates the way I expect for a real broken graph, and whether the
