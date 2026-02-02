@@ -114,3 +114,5 @@ documentation text, not the project's own Blueprints or assets. Separately, `get
 returns "dependencies and referencers" for a given asset, which is a live, per-request
 AssetRegistry-style lookup with no stated caching/persistence layer of its own.
 
+What's genuinely good: (1) the bundled "Recommended System Prompt" block — a ready-made paragraph
+telling the calling agent the right tool-call order (check status → look up docs before writing

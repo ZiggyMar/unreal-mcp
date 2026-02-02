@@ -91,3 +91,4 @@ export interface AddNodeResult {
 
 export interface ConnectPinsResult {
   connected: boolean;
+  note?: string;

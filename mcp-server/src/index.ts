@@ -234,3 +234,4 @@ server.registerTool(
       "unreal_add_variable). Inherited variables from a parent class are not yet supported.\n\n" +
       "x/y are optional graph-editor position hints (cosmetic only, for the human opening the graph later). The model " +
       "should not need to reason about them.",
+    inputSchema: {

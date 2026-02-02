@@ -128,3 +128,4 @@ much riskier operations:
   `bOverrideFunction=true` really produce a working `BeginPlay` override node when
   `AllocateDefaultPins()` runs against a real graph; does `add_variable`'s `vector` type
   resolution via `FindObject<UScriptStruct>(nullptr, "/Script/CoreUObject.Vector")`
+  actually resolve; does `connect_pins` correctly reject a bool-to-float connection with
