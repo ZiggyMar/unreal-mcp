@@ -236,3 +236,4 @@ server.registerTool(
       "should not need to reason about them.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),

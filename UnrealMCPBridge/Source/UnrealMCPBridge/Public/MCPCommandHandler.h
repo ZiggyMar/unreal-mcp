@@ -28,3 +28,4 @@
  */
 class FMCPCommandHandler
 {
+public:
