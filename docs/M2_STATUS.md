@@ -130,3 +130,4 @@ much riskier operations:
   resolution via `FindObject<UScriptStruct>(nullptr, "/Script/CoreUObject.Vector")`
   actually resolve; does `connect_pins` correctly reject a bool-to-float connection with
   a sensible message) is **completely unverified**. This is the biggest open risk in the
+  whole project so far, precisely because these are write operations.

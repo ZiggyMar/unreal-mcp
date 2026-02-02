@@ -9,3 +9,5 @@
 #include "EdGraph/EdGraphPin.h"
 #include "Dom/JsonValue.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/UObjectGlobals.h"
+#include "UObject/UnrealType.h"
