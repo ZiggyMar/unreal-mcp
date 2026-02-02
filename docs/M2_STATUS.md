@@ -132,3 +132,4 @@ much riskier operations:
   a sensible message) is **completely unverified**. This is the biggest open risk in the
   whole project so far, precisely because these are write operations.
 - **`compile_blueprint`'s error/warning reporting is unverified** — the JSON shape is
+  right (confirmed via the fake-bridge test), but whether `FCompilerResultsLog::Messages`

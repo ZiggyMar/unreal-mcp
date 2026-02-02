@@ -53,3 +53,4 @@ export class UnrealBridgeClient {
         reject(err);
       };
 
+      const succeed = (value: T) => {

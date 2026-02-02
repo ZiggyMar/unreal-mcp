@@ -56,3 +56,4 @@ haven't been exercised live.
 
 Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
 
+### 1. Install the Unreal Plugin

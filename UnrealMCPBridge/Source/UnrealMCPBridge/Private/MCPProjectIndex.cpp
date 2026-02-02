@@ -12,3 +12,5 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 #include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonReader.h"
