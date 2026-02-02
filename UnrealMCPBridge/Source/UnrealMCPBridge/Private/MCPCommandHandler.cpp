@@ -524,3 +524,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 				int32 LinkedIndex = TargetGraph->Nodes.IndexOfByKey(Linked->GetOwningNode());
 				TSharedRef<FJsonObject> LinkEntry = MakeShared<FJsonObject>();
 				LinkEntry->SetStringField(TEXT("node"), LinkedIndex != INDEX_NONE ? MakeNodeId(LinkedIndex) : TEXT("?"));
+				LinkEntry->SetStringField(TEXT("pin"), Linked->PinName.ToString());
+				Links.Add(MakeShared<FJsonValueObject>(LinkEntry));
