@@ -112,3 +112,5 @@ by `mcp-unreal --build-index`) — but confirmed from the README to index **mark
 `docs/ue5.7/` and `docs/realtimemesh/`, plus the calling project's `CLAUDE.md`** — i.e., API/engine
 documentation text, not the project's own Blueprints or assets. Separately, `get_asset_info`
 returns "dependencies and referencers" for a given asset, which is a live, per-request
+AssetRegistry-style lookup with no stated caching/persistence layer of its own.
+
