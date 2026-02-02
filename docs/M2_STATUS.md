@@ -131,3 +131,4 @@ much riskier operations:
   actually resolve; does `connect_pins` correctly reject a bool-to-float connection with
   a sensible message) is **completely unverified**. This is the biggest open risk in the
   whole project so far, precisely because these are write operations.
+- **`compile_blueprint`'s error/warning reporting is unverified** — the JSON shape is

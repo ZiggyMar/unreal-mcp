@@ -17,3 +17,4 @@ class FInternetAddr;
  * safely call into UE Editor / AssetRegistry / Kismet2 APIs without any
  * cross-thread synchronization.
  */
+class FMCPTcpServer : public TSharedFromThis<FMCPTcpServer>

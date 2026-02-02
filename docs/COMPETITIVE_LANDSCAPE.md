@@ -119,3 +119,5 @@ telling the calling agent the right tool-call order (check status → look up do
 code → build → test → save) — is a cheap, effective reliability win, and the README's worked
 example transcripts (exact tool-call sequences for realistic requests) reinforce it well. (2) A
 genuine headless path — `build_project`/`run_tests`/`cook_project` invoke `UnrealEditor-Cmd`
+directly via `exec.Command`, no live editor required — opens up CI/batch use cases none of our
+current architecture supports. (3) The documentation-index idea itself (distinct from a
