@@ -239,3 +239,4 @@ server.registerTool(
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
       nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
+      functionName: z.string().optional().describe("Required for nodeType CallFunction."),

@@ -539,3 +539,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 	Result->SetStringField(TEXT("path"), Path);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetArrayField(TEXT("nodes"), NodeArray);
+	return MakeOkResponse(Result);
+}
