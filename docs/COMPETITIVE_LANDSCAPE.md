@@ -129,3 +129,5 @@ engine headers is a complementary idea to what we do, not a competing one.
 The most actively and professionally engineered repo in the survey — pushed the same day as this
 survey, MIT-licensed (confirmed from the LICENSE file), supports the widest and most explicit UE
 version range (5.0–5.8, with the README stating all versions in that range are "supported and
+working"). Architecturally the standout feature is the **single gateway tool**: the MCP client
+sees exactly one tool, `unreal`, which is called with an `operation` of `search`, `describe`,

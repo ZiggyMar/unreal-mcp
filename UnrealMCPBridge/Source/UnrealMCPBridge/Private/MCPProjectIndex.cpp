@@ -18,3 +18,5 @@
 #include "Serialization/JsonWriter.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPProjectIndex, Log, All);
+
+FMCPProjectIndex* FMCPProjectIndex::Instance = nullptr;

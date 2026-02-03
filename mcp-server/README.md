@@ -40,3 +40,4 @@ npm start
 ### Read-only (Milestone 1)
 
 | Tool | Bridge command | Purpose |
+|---|---|---|
