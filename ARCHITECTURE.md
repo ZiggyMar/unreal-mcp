@@ -55,3 +55,4 @@ Never send a Blueprint's raw engine representation. Instead:
 UnrealMCP/
   ARCHITECTURE.md
   mcp-server/              Node/TS MCP server
+  UnrealMCPBridge/          C++ plugin source (copied into target project's Plugins/ to build)
