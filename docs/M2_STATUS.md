@@ -136,3 +136,4 @@ much riskier operations:
   actually populates the way I expect for a real broken graph, and whether the
   `severity`/`text` mapping reads sensibly, has never been checked against a real
   compiler run. Per the M2 brief, this is called out as the top thing to test first.
+- **`ResolveClassByName`'s short-name resolution** (`"Actor"` -> tries `AActor`, then
