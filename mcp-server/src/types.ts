@@ -95,3 +95,4 @@ export interface ConnectPinsResult {
 }
 
 export interface SetPinDefaultValueResult {
+  set: boolean;

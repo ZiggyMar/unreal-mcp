@@ -34,3 +34,5 @@ namespace
 		{
 			Result += TEXT(":") + PinType.PinSubCategoryObject->GetName();
 		}
+		if (PinType.IsArray())
+		{
