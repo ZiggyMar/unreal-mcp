@@ -143,3 +143,5 @@ much riskier operations:
   `A`/`U` prefix convention (e.g. structs misused as a class name, or interfaces prefixed
   `I`). Untested against real class name collisions in this project's content.
 - **`add_variable`'s numeric type mapping** (`float` -> `PC_Real` + `PC_Float`
+  subcategory, `double` -> `PC_Real` + `PC_Double`) reflects UE5's post-4.x split of the
+  old single `float` pin category into a `real` category with a float/double

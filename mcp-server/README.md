@@ -42,3 +42,4 @@ npm start
 | Tool | Bridge command | Purpose |
 |---|---|---|
 | `unreal_ping` | `ping` | Liveness check for the editor bridge. |
+| `unreal_list_blueprints` | `list_blueprints` | Project-wide (or path-scoped) list of Blueprint assets: name, path, parent class. |

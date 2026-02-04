@@ -140,3 +140,5 @@ runtime. This is a real, explicit design response to context-window pressure —
 between), not the size of any single tool's response payload. The README gives no evidence of a
 tiered/summary-first strategy for reading Blueprint graph contents specifically. Caching is
 explicit and short-lived only (`ASSET_LIST_TTL_MS`, default 10 seconds, in-memory) — confirmed not
+persistent.
+

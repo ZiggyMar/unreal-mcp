@@ -27,3 +27,4 @@ namespace
 	{
 		FString Result = PinType.PinCategory.ToString();
 		if (PinType.PinSubCategory != NAME_None)
+		{
