@@ -141,3 +141,4 @@ much riskier operations:
   guaranteed-correct resolver. It will work for common native classes but could pick an
   unexpected match for ambiguous short names, or fail for classes that don't follow the
   `A`/`U` prefix convention (e.g. structs misused as a class name, or interfaces prefixed
+  `I`). Untested against real class name collisions in this project's content.
