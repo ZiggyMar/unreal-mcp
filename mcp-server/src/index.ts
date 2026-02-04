@@ -244,3 +244,4 @@ server.registerTool(
       variableName: z.string().optional().describe("Required for nodeType VariableGet or VariableSet."),
       x: z.number().optional().describe("Cosmetic graph-editor X position. Defaults to 0."),
       y: z.number().optional().describe("Cosmetic graph-editor Y position. Defaults to 0."),
+    },
