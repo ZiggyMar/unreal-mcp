@@ -241,3 +241,4 @@ server.registerTool(
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
       functionName: z.string().optional().describe("Required for nodeType CallFunction."),
       className: z.string().optional().describe("Optional owning class for nodeType CallFunction."),
+      variableName: z.string().optional().describe("Required for nodeType VariableGet or VariableSet."),
