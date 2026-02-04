@@ -142,3 +142,4 @@ much riskier operations:
   unexpected match for ambiguous short names, or fail for classes that don't follow the
   `A`/`U` prefix convention (e.g. structs misused as a class name, or interfaces prefixed
   `I`). Untested against real class name collisions in this project's content.
+- **`add_variable`'s numeric type mapping** (`float` -> `PC_Real` + `PC_Float`

@@ -25,3 +25,5 @@ namespace
 {
 	FString PinTypeToString(const FEdGraphPinType& PinType)
 	{
+		FString Result = PinType.PinCategory.ToString();
+		if (PinType.PinSubCategory != NAME_None)
