@@ -150,3 +150,5 @@ default, and an explicit opt-in-with-warning for LAN exposure. (3) Real engineer
 CI gates include a generated-manifest drift check, TS-vs-native tool-definition parity tests, and
 a blocking dependency-audit gate — a good bar to hold ourselves to as the project matures.
 
+### GenOrca/unreal-mcp
+Apache-2.0 (confirmed directly from `LICENSE.txt` — note the non-default filename, which is why

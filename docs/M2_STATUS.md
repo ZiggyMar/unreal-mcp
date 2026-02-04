@@ -149,3 +149,4 @@ much riskier operations:
   against engine source this session (see below), so treat the exact subcategory
   behavior as best-effort until confirmed against a real variable in the editor's My
   Blueprint panel.
+- **Node id fragility under `remove_node`**: removing a node shifts every subsequent
