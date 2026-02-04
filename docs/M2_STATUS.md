@@ -145,3 +145,4 @@ much riskier operations:
 - **`add_variable`'s numeric type mapping** (`float` -> `PC_Real` + `PC_Float`
   subcategory, `double` -> `PC_Real` + `PC_Double`) reflects UE5's post-4.x split of the
   old single `float` pin category into a `real` category with a float/double
+  subcategory. This is standard UE5 behavior as far as I know, but I could not check it
