@@ -94,3 +94,4 @@ export interface ConnectPinsResult {
   note?: string;
 }
 
+export interface SetPinDefaultValueResult {
