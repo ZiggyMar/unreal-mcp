@@ -154,3 +154,5 @@ a blocking dependency-audit gate — a good bar to hold ourselves to as the proj
 Apache-2.0 (confirmed directly from `LICENSE.txt` — note the non-default filename, which is why
 the bare `LICENSE` fetch initially 404'd). Python-first (built-in Python Editor Script Plugin) with
 an optional C++ helper module (`MCPythonHelper`) reserved for the handful of things Python can't
+reach (e.g. skeleton bone introspection). Ships precompiled per-engine-version plugin `.zip`
+releases so most users never compile anything. Architecture explicitly states the same

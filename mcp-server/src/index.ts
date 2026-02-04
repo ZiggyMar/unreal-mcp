@@ -247,3 +247,4 @@ server.registerTool(
     },
   },
   async ({ path, graphName, nodeType, eventName, functionName, className, variableName, x, y }) => {
+    try {

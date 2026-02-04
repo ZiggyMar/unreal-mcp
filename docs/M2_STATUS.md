@@ -151,3 +151,4 @@ much riskier operations:
   Blueprint panel.
 - **Node id fragility under `remove_node`**: removing a node shifts every subsequent
   node's index-based id within the same graph. A model that reads a graph summary,
+  removes `n3`, then tries to use a previously-noted `n7` from the same read will hit

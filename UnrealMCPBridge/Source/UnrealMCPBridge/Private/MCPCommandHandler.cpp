@@ -563,3 +563,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	UEdGraph* TargetGraph = FindGraphByName(Blueprint, GraphName, GraphError);
 	if (!TargetGraph)
 	{
+		return MakeErrorResponse(GraphError);
+	}
