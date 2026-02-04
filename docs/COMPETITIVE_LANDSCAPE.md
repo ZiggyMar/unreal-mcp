@@ -133,3 +133,5 @@ working"). Architecturally the standout feature is the **single gateway tool**: 
 sees exactly one tool, `unreal`, which is called with an `operation` of `search`, `describe`,
 `execute`, or `configure`; the 23 "canonical" tools (`manage_blueprint`, `control_actor`,
 `manage_asset`, etc.) exist only behind that gateway. A client that tries to call a canonical tool
+name directly gets a structured `DIRECT_TOOL_CALL_REMOVED` response telling it exactly what
+gateway call to make instead. `manage_tools` additionally allows enabling/disabling tool groups at
