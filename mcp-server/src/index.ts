@@ -248,3 +248,4 @@ server.registerTool(
   },
   async ({ path, graphName, nodeType, eventName, functionName, className, variableName, x, y }) => {
     try {
+      const result = await bridge.send<AddNodeResult>("add_node", {

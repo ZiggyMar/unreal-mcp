@@ -18,3 +18,4 @@ class FInternetAddr;
  * cross-thread synchronization.
  */
 class FMCPTcpServer : public TSharedFromThis<FMCPTcpServer>
+{
