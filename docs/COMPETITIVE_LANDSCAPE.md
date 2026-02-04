@@ -148,3 +148,5 @@ reliably picks the right one. (2) Security defaults most others skip entirely: c
 auth **on by default** with an auto-generated per-project secret file, loopback-only binding by
 default, and an explicit opt-in-with-warning for LAN exposure. (3) Real engineering discipline —
 CI gates include a generated-manifest drift check, TS-vs-native tool-definition parity tests, and
+a blocking dependency-audit gate — a good bar to hold ourselves to as the project matures.
+

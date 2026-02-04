@@ -245,3 +245,4 @@ server.registerTool(
       x: z.number().optional().describe("Cosmetic graph-editor X position. Defaults to 0."),
       y: z.number().optional().describe("Cosmetic graph-editor Y position. Defaults to 0."),
     },
+  },

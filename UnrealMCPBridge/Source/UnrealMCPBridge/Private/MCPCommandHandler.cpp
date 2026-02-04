@@ -558,3 +558,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	{
 		return MakeErrorResponse(LoadError);
 	}
+
+	FString GraphError;
