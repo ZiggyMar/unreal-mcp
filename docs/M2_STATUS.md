@@ -152,3 +152,5 @@ much riskier operations:
 - **Node id fragility under `remove_node`**: removing a node shifts every subsequent
   node's index-based id within the same graph. A model that reads a graph summary,
   removes `n3`, then tries to use a previously-noted `n7` from the same read will hit
+  either the wrong node or a stale reference. Nothing currently detects or prevents
+  this — it's a known gap, not a bug fix targeted for this milestone. Recommendation for
