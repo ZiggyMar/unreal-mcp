@@ -36,3 +36,4 @@ namespace
 		}
 		if (PinType.IsArray())
 		{
+			Result += TEXT("[]");

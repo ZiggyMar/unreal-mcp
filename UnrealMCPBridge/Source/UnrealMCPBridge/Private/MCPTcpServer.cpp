@@ -91,3 +91,4 @@ void FMCPTcpServer::Stop()
 
 bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint)
 {
+	// Only ever accept loopback connections.

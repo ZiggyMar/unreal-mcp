@@ -246,3 +246,4 @@ server.registerTool(
       y: z.number().optional().describe("Cosmetic graph-editor Y position. Defaults to 0."),
     },
   },
+  async ({ path, graphName, nodeType, eventName, functionName, className, variableName, x, y }) => {
