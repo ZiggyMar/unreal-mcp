@@ -548,3 +548,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
 		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
 		!Params->TryGetStringField(TEXT("nodeId"), NodeId))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, graphName and nodeId are required"));
