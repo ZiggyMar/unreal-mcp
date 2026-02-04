@@ -41,3 +41,4 @@ npm start
 
 | Tool | Bridge command | Purpose |
 |---|---|---|
+| `unreal_ping` | `ping` | Liveness check for the editor bridge. |

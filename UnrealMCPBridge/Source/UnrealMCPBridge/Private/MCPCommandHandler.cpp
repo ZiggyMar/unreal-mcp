@@ -545,3 +545,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path, GraphName, NodeId;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||

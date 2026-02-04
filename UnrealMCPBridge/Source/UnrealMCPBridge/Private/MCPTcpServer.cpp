@@ -89,3 +89,4 @@ void FMCPTcpServer::Stop()
 	Listener.Reset();
 }
 
+bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint)
