@@ -139,3 +139,4 @@ much riskier operations:
 - **`ResolveClassByName`'s short-name resolution** (`"Actor"` -> tries `AActor`, then
   `UActor`, then bare `Actor`, via `FindFirstObject<UClass>`) is a heuristic, not a
   guaranteed-correct resolver. It will work for common native classes but could pick an
+  unexpected match for ambiguous short names, or fail for classes that don't follow the
