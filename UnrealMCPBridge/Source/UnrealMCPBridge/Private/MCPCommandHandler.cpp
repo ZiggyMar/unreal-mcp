@@ -567,3 +567,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	}
 
 	FString NodeError;
+	UEdGraphNode* Node = FindNodeById(TargetGraph, NodeId, NodeError);
+	if (!Node)

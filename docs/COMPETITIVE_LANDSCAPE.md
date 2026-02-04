@@ -157,3 +157,5 @@ an optional C++ helper module (`MCPythonHelper`) reserved for the handful of thi
 reach (e.g. skeleton bone introspection). Ships precompiled per-engine-version plugin `.zip`
 releases so most users never compile anything. Architecture explicitly states the same
 context-window rationale as ChiR24, independently arrived at: "the action set is large but the
+tool list stays small, so it never bloats the model's context" — one MCP tool per domain (21
+domains), each dispatched via an `action` parameter, 253 actions total. Also explicitly offers

@@ -154,3 +154,4 @@ much riskier operations:
   removes `n3`, then tries to use a previously-noted `n7` from the same read will hit
   either the wrong node or a stale reference. Nothing currently detects or prevents
   this — it's a known gap, not a bug fix targeted for this milestone. Recommendation for
+  a model (and for M3): re-read `list_blueprint_graphs`/`read_blueprint_graph_summary`
