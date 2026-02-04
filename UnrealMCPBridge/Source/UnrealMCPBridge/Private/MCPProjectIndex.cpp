@@ -30,3 +30,4 @@ namespace
 		{
 			Result += TEXT(":") + PinType.PinSubCategory.ToString();
 		}
+		else if (PinType.PinSubCategoryObject.IsValid())

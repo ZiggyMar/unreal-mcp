@@ -146,3 +146,4 @@ much riskier operations:
   subcategory, `double` -> `PC_Real` + `PC_Double`) reflects UE5's post-4.x split of the
   old single `float` pin category into a `real` category with a float/double
   subcategory. This is standard UE5 behavior as far as I know, but I could not check it
+  against engine source this session (see below), so treat the exact subcategory
