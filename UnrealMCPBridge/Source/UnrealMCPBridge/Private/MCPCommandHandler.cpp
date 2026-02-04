@@ -552,3 +552,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		return MakeErrorResponse(TEXT("missing_param: path, graphName and nodeId are required"));
 	}
 
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);

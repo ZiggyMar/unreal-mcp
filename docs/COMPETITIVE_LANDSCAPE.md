@@ -142,3 +142,5 @@ tiered/summary-first strategy for reading Blueprint graph contents specifically.
 explicit and short-lived only (`ASSET_LIST_TTL_MS`, default 10 seconds, in-memory) — confirmed not
 persistent.
 
+What's genuinely good: (1) the gateway pattern itself, as the most battle-tested answer in this
+survey to tool-catalog bloat — worth adapting once our own tool count grows past the point a model
