@@ -43,3 +43,4 @@ npm start
 |---|---|---|
 | `unreal_ping` | `ping` | Liveness check for the editor bridge. |
 | `unreal_list_blueprints` | `list_blueprints` | Project-wide (or path-scoped) list of Blueprint assets: name, path, parent class. |
+| `unreal_list_blueprint_graphs` | `list_blueprint_graphs` | Graph names + node counts for one Blueprint. |

@@ -146,3 +146,5 @@ What's genuinely good: (1) the gateway pattern itself, as the most battle-tested
 survey to tool-catalog bloat — worth adapting once our own tool count grows past the point a model
 reliably picks the right one. (2) Security defaults most others skip entirely: capability-token
 auth **on by default** with an auto-generated per-project secret file, loopback-only binding by
+default, and an explicit opt-in-with-warning for LAN exposure. (3) Real engineering discipline —
+CI gates include a generated-manifest drift check, TS-vs-native tool-definition parity tests, and

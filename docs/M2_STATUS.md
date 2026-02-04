@@ -147,3 +147,4 @@ much riskier operations:
   old single `float` pin category into a `real` category with a float/double
   subcategory. This is standard UE5 behavior as far as I know, but I could not check it
   against engine source this session (see below), so treat the exact subcategory
+  behavior as best-effort until confirmed against a real variable in the editor's My
