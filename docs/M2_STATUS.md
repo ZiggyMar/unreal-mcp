@@ -138,3 +138,4 @@ much riskier operations:
   compiler run. Per the M2 brief, this is called out as the top thing to test first.
 - **`ResolveClassByName`'s short-name resolution** (`"Actor"` -> tries `AActor`, then
   `UActor`, then bare `Actor`, via `FindFirstObject<UClass>`) is a heuristic, not a
+  guaranteed-correct resolver. It will work for common native classes but could pick an

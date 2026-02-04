@@ -131,3 +131,5 @@ survey, MIT-licensed (confirmed from the LICENSE file), supports the widest and 
 version range (5.0–5.8, with the README stating all versions in that range are "supported and
 working"). Architecturally the standout feature is the **single gateway tool**: the MCP client
 sees exactly one tool, `unreal`, which is called with an `operation` of `search`, `describe`,
+`execute`, or `configure`; the 23 "canonical" tools (`manage_blueprint`, `control_actor`,
+`manage_asset`, etc.) exist only behind that gateway. A client that tries to call a canonical tool
