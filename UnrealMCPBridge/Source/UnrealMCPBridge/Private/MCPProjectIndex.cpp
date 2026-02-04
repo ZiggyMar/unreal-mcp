@@ -24,3 +24,4 @@ FMCPProjectIndex* FMCPProjectIndex::Instance = nullptr;
 namespace
 {
 	FString PinTypeToString(const FEdGraphPinType& PinType)
+	{

@@ -547,3 +547,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	FString Path, GraphName, NodeId;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
 		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
+		!Params->TryGetStringField(TEXT("nodeId"), NodeId))

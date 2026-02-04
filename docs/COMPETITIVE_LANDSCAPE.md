@@ -137,3 +137,4 @@ name directly gets a structured `DIRECT_TOOL_CALL_REMOVED` response telling it e
 gateway call to make instead. `manage_tools` additionally allows enabling/disabling tool groups at
 runtime. This is a real, explicit design response to context-window pressure — but it targets
 **tool-definition/tool-catalog size** (how many tool schemas the model has to hold and choose
+between), not the size of any single tool's response payload. The README gives no evidence of a
