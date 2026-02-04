@@ -30,3 +30,4 @@ class FMCPCommandHandler
 {
 public:
 	static TSharedRef<FJsonObject> Dispatch(const TSharedRef<FJsonObject>& Request);
+
