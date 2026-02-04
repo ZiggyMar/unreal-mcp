@@ -33,3 +33,4 @@ namespace
 		else if (PinType.PinSubCategoryObject.IsValid())
 		{
 			Result += TEXT(":") + PinType.PinSubCategoryObject->GetName();
+		}
