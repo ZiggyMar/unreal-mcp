@@ -150,3 +150,4 @@ much riskier operations:
   behavior as best-effort until confirmed against a real variable in the editor's My
   Blueprint panel.
 - **Node id fragility under `remove_node`**: removing a node shifts every subsequent
+  node's index-based id within the same graph. A model that reads a graph summary,

@@ -55,3 +55,4 @@ export class UnrealBridgeClient {
 
       const succeed = (value: T) => {
         if (settled) return;
+        settled = true;
