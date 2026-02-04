@@ -156,3 +156,4 @@ the bare `LICENSE` fetch initially 404'd). Python-first (built-in Python Editor 
 an optional C++ helper module (`MCPythonHelper`) reserved for the handful of things Python can't
 reach (e.g. skeleton bone introspection). Ships precompiled per-engine-version plugin `.zip`
 releases so most users never compile anything. Architecture explicitly states the same
+context-window rationale as ChiR24, independently arrived at: "the action set is large but the

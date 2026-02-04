@@ -39,3 +39,4 @@ namespace
 			Result += TEXT("[]");
 		}
 		return Result;
+	}
