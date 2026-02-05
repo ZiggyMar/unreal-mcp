@@ -10,3 +10,4 @@ class FMCPTcpServer;
  * Owns the lifetime of the local TCP listener used to serve MCP bridge requests.
  */
 class FUnrealMCPBridgeModule : public IModuleInterface
+{

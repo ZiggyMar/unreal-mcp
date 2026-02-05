@@ -252,3 +252,4 @@ server.registerTool(
         path,
         graphName,
         nodeType,
+        eventName,

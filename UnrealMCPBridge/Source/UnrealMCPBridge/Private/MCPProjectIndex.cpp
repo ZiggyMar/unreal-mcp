@@ -50,3 +50,5 @@ namespace
 		Hit->SetStringField(TEXT("context"), Context);
 		return Hit;
 	}
+
+	// --- JSON (de)serialization for the on-disk cache ---
