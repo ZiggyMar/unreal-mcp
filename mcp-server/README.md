@@ -48,3 +48,4 @@ npm start
 | `unreal_read_node_detail` | `read_blueprint_node_detail` | Full pin/property detail for exactly one node by id. |
 
 These mirror the tiered-read strategy in `../ARCHITECTURE.md`: list graphs -> summarize one
+graph -> drill into one node, instead of ever dumping a whole Blueprint's raw engine JSON.
