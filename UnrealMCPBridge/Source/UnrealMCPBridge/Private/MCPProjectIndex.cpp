@@ -43,3 +43,5 @@ namespace
 
 	TSharedRef<FJsonObject> MakeHit(const TCHAR* Kind, const FString& Path, const FString& Name, const FString& Context)
 	{
+		TSharedRef<FJsonObject> Hit = MakeShared<FJsonObject>();
+		Hit->SetStringField(TEXT("kind"), Kind);
