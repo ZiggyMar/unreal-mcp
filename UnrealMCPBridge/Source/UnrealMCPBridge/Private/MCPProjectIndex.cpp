@@ -49,3 +49,4 @@ namespace
 		Hit->SetStringField(TEXT("name"), Name);
 		Hit->SetStringField(TEXT("context"), Context);
 		return Hit;
+	}

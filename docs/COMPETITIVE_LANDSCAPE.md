@@ -169,3 +169,5 @@ whole project by keyword.
 
 What's genuinely good: (1) the domain-tool-plus-runtime-`list_actions`-discovery pattern is a
 second, meaningfully different answer to the tool-catalog-bloat problem than ChiR24's static
+gateway — worth comparing both before picking one. (2) An explicitly low-friction contribution
+model ("add a `ue_<name>(...)` Python function, run `generate_catalog.py`, no C++, no editor
