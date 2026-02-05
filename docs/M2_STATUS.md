@@ -156,3 +156,4 @@ much riskier operations:
   this — it's a known gap, not a bug fix targeted for this milestone. Recommendation for
   a model (and for M3): re-read `list_blueprint_graphs`/`read_blueprint_graph_summary`
   after any `remove_node` before referencing further node ids in that graph.
+- **`unreal_read_blueprint_summary`/`unreal_read_node_detail` were not re-verified this

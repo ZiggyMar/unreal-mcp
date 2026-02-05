@@ -571,3 +571,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	if (!Node)
 	{
 		return MakeErrorResponse(NodeError);
+	}
+

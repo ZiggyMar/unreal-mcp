@@ -161,3 +161,5 @@ tool list stays small, so it never bloats the model's context" — one MCP tool 
 domains), each dispatched via an `action` parameter, 253 actions total. Also explicitly offers
 runtime self-description: calling a domain tool with `{"action":"list_actions"}` returns every
 action's parameters and docs on demand, rather than front-loading all 253 actions' schemas into
+every tool definition up front. Does have named `find_referencers`/`get_dependencies` asset tools
+— real cross-asset reference/dependency queries — but nothing in the README indicates these are
