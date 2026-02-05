@@ -97,3 +97,4 @@ export interface ConnectPinsResult {
 export interface SetPinDefaultValueResult {
   set: boolean;
   pin: string;
+  value: string;

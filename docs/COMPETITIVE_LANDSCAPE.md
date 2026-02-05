@@ -167,3 +167,5 @@ backed by anything other than a live, per-request AssetRegistry call; no mention
 index file, no mention of surviving an editor restart, no mention of substring search across the
 whole project by keyword.
 
+What's genuinely good: (1) the domain-tool-plus-runtime-`list_actions`-discovery pattern is a
+second, meaningfully different answer to the tool-catalog-bloat problem than ChiR24's static
