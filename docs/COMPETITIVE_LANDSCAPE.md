@@ -171,3 +171,5 @@ What's genuinely good: (1) the domain-tool-plus-runtime-`list_actions`-discovery
 second, meaningfully different answer to the tool-catalog-bloat problem than ChiR24's static
 gateway — worth comparing both before picking one. (2) An explicitly low-friction contribution
 model ("add a `ue_<name>(...)` Python function, run `generate_catalog.py`, no C++, no editor
+rebuild") is worth mirroring once we're open source and want outside contributions. (3) Naming
+`find_referencers`/`get_dependencies` as first-class, discoverable tools (rather than folding them

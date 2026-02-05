@@ -580,3 +580,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	Result->SetStringField(TEXT("comment"), Node->NodeComment);
 	Result->SetBoolField(TEXT("enabled"), Node->IsNodeEnabled());
 
+	TArray<TSharedPtr<FJsonValue>> PinArray;
+	for (UEdGraphPin* Pin : Node->Pins)

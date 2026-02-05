@@ -161,3 +161,5 @@ much riskier operations:
   `FindGraphByName`/`FindNodeById` refactor (pure extraction, same logic, both build
   clean), so M1's existing verification status still applies to them unchanged.
 
+## Engine reference source — still broken, still not a blocker
+

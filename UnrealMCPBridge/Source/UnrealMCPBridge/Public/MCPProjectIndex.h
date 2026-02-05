@@ -6,3 +6,4 @@
 struct FAssetData;
 
 struct FMCPIndexParam
+{
