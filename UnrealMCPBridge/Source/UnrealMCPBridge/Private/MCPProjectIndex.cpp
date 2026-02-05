@@ -42,3 +42,4 @@ namespace
 	}
 
 	TSharedRef<FJsonObject> MakeHit(const TCHAR* Kind, const FString& Path, const FString& Name, const FString& Context)
+	{

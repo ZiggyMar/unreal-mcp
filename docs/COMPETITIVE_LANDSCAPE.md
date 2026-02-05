@@ -159,3 +159,5 @@ releases so most users never compile anything. Architecture explicitly states th
 context-window rationale as ChiR24, independently arrived at: "the action set is large but the
 tool list stays small, so it never bloats the model's context" — one MCP tool per domain (21
 domains), each dispatched via an `action` parameter, 253 actions total. Also explicitly offers
+runtime self-description: calling a domain tool with `{"action":"list_actions"}` returns every
+action's parameters and docs on demand, rather than front-loading all 253 actions' schemas into
