@@ -46,3 +46,5 @@ namespace
 		TSharedRef<FJsonObject> Hit = MakeShared<FJsonObject>();
 		Hit->SetStringField(TEXT("kind"), Kind);
 		Hit->SetStringField(TEXT("path"), Path);
+		Hit->SetStringField(TEXT("name"), Name);
+		Hit->SetStringField(TEXT("context"), Context);

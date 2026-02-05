@@ -165,3 +165,5 @@ every tool definition up front. Does have named `find_referencers`/`get_dependen
 — real cross-asset reference/dependency queries — but nothing in the README indicates these are
 backed by anything other than a live, per-request AssetRegistry call; no mention of a persisted
 index file, no mention of surviving an editor restart, no mention of substring search across the
+whole project by keyword.
+
