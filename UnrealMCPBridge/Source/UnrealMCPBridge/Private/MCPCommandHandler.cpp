@@ -584,3 +584,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
 		if (!Pin)
+		{
+			continue;

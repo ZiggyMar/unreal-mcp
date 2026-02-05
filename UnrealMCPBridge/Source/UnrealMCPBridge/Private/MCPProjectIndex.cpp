@@ -53,3 +53,5 @@ namespace
 
 	// --- JSON (de)serialization for the on-disk cache ---
 
+	TSharedRef<FJsonObject> ParamToJson(const FMCPIndexParam& P)
+	{
