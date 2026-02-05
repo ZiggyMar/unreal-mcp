@@ -250,3 +250,4 @@ server.registerTool(
     try {
       const result = await bridge.send<AddNodeResult>("add_node", {
         path,
+        graphName,
