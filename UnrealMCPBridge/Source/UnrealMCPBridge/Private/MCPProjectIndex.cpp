@@ -48,3 +48,4 @@ namespace
 		Hit->SetStringField(TEXT("path"), Path);
 		Hit->SetStringField(TEXT("name"), Name);
 		Hit->SetStringField(TEXT("context"), Context);
+		return Hit;

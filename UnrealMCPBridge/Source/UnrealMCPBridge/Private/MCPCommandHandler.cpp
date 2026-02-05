@@ -577,3 +577,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	Result->SetStringField(TEXT("id"), NodeId);
 	Result->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 	Result->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+	Result->SetStringField(TEXT("comment"), Node->NodeComment);

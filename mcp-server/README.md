@@ -47,3 +47,4 @@ npm start
 | `unreal_read_blueprint_summary` | `read_blueprint_graph_summary` | Compact per-node summary of one graph: id, type, title, connected pins only (no position/cosmetic metadata). |
 | `unreal_read_node_detail` | `read_blueprint_node_detail` | Full pin/property detail for exactly one node by id. |
 
+These mirror the tiered-read strategy in `../ARCHITECTURE.md`: list graphs -> summarize one
