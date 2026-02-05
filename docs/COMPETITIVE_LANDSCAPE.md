@@ -173,3 +173,5 @@ gateway — worth comparing both before picking one. (2) An explicitly low-frict
 model ("add a `ue_<name>(...)` Python function, run `generate_catalog.py`, no C++, no editor
 rebuild") is worth mirroring once we're open source and want outside contributions. (3) Naming
 `find_referencers`/`get_dependencies` as first-class, discoverable tools (rather than folding them
+into a generic search) is a signal that reference-lookup is something real users specifically
+reach for — validates keeping our own `find_references` prominent rather than buried.
