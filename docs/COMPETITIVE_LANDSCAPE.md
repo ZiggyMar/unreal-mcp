@@ -175,3 +175,5 @@ rebuild") is worth mirroring once we're open source and want outside contributio
 `find_referencers`/`get_dependencies` as first-class, discoverable tools (rather than folding them
 into a generic search) is a signal that reference-lookup is something real users specifically
 reach for — validates keeping our own `find_references` prominent rather than buried.
+
+### avdo403/UnrealMCP

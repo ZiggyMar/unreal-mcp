@@ -164,3 +164,4 @@ much riskier operations:
 ## Engine reference source — still broken, still not a blocker
 
 `A:\UnrealEngineSource\UnrealEngine-5.8` was checked again this session and remains
+**not a valid git repository** (a separate re-clone is reportedly in progress outside
