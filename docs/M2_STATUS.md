@@ -158,3 +158,4 @@ much riskier operations:
   after any `remove_node` before referencing further node ids in that graph.
 - **`unreal_read_blueprint_summary`/`unreal_read_node_detail` were not re-verified this
   session** beyond the type-check — they are unchanged from M1 except for the
+  `FindGraphByName`/`FindNodeById` refactor (pure extraction, same logic, both build
