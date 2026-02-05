@@ -5,3 +5,4 @@
 
 struct FAssetData;
 
+struct FMCPIndexParam

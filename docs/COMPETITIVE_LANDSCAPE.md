@@ -163,3 +163,5 @@ runtime self-description: calling a domain tool with `{"action":"list_actions"}`
 action's parameters and docs on demand, rather than front-loading all 253 actions' schemas into
 every tool definition up front. Does have named `find_referencers`/`get_dependencies` asset tools
 — real cross-asset reference/dependency queries — but nothing in the README indicates these are
+backed by anything other than a live, per-request AssetRegistry call; no mention of a persisted
+index file, no mention of surviving an editor restart, no mention of substring search across the
