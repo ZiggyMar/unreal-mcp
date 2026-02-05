@@ -160,3 +160,4 @@ much riskier operations:
   session** beyond the type-check — they are unchanged from M1 except for the
   `FindGraphByName`/`FindNodeById` refactor (pure extraction, same logic, both build
   clean), so M1's existing verification status still applies to them unchanged.
+
