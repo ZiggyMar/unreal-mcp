@@ -255,3 +255,4 @@ server.registerTool(
         eventName,
         functionName,
         className,
+        variableName,
