@@ -180,3 +180,5 @@ reach for — validates keeping our own `find_references` prominent rather than 
 Tiny adoption (4 stars, 0 forks) but a surprisingly broad feature set — procedural world
 generation (castles, towns, dungeons via wave-function-collapse, L-system trees), an
 `AIModule`/`MassEntity` AI-navigation layer, even an `ml/mcp_rl_agent.py` reinforcement-learning
+module. C++ Editor Subsystem on the same port (55557) and general shape as chongdashu's project,
+suggesting a derivative or convention carried over from it, paired with a Python FastMCP server
