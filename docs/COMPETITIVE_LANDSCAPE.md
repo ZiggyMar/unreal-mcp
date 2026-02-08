@@ -178,3 +178,5 @@ reach for — validates keeping our own `find_references` prominent rather than 
 
 ### avdo403/UnrealMCP
 Tiny adoption (4 stars, 0 forks) but a surprisingly broad feature set — procedural world
+generation (castles, towns, dungeons via wave-function-collapse, L-system trees), an
+`AIModule`/`MassEntity` AI-navigation layer, even an `ml/mcp_rl_agent.py` reinforcement-learning

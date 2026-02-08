@@ -56,3 +56,5 @@ namespace
 	TSharedRef<FJsonObject> ParamToJson(const FMCPIndexParam& P)
 	{
 		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("name"), P.Name);
+		O->SetStringField(TEXT("type"), P.Type);
