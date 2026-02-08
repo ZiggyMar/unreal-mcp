@@ -58,3 +58,4 @@ UnrealMCP/
   UnrealMCPBridge/          C++ plugin source (copied into target project's Plugins/ to build)
   docs/                     API notes gathered from engine source + public docs
 ```
+
