@@ -94,3 +94,4 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 	// Only ever accept loopback connections.
 	if (Endpoint.Address != FIPv4Address(127, 0, 0, 1))
 	{
+		return false;

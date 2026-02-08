@@ -98,3 +98,4 @@ export interface SetPinDefaultValueResult {
   set: boolean;
   pin: string;
   value: string;
+}

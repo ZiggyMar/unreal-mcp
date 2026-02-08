@@ -177,3 +177,4 @@ into a generic search) is a signal that reference-lookup is something real users
 reach for — validates keeping our own `find_references` prominent rather than buried.
 
 ### avdo403/UnrealMCP
+Tiny adoption (4 stars, 0 forks) but a surprisingly broad feature set — procedural world

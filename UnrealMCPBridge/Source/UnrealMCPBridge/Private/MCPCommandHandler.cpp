@@ -586,3 +586,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		if (!Pin)
 		{
 			continue;
+		}
+		TSharedRef<FJsonObject> PinEntry = MakeShared<FJsonObject>();

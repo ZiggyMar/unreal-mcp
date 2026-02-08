@@ -254,3 +254,4 @@ server.registerTool(
         nodeType,
         eventName,
         functionName,
+        className,

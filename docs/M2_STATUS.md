@@ -165,3 +165,4 @@ much riskier operations:
 
 `A:\UnrealEngineSource\UnrealEngine-5.8` was checked again this session and remains
 **not a valid git repository** (a separate re-clone is reportedly in progress outside
+this task, per instruction to not wait on or fix it). As in M1, none of this milestone's
