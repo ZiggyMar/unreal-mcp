@@ -590,3 +590,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		TSharedRef<FJsonObject> PinEntry = MakeShared<FJsonObject>();
 		PinEntry->SetStringField(TEXT("name"), Pin->PinName.ToString());
 		PinEntry->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("in") : TEXT("out"));
+		PinEntry->SetStringField(TEXT("category"), Pin->PinType.PinCategory.ToString());
+		if (Pin->PinType.PinSubCategoryObject.IsValid())
