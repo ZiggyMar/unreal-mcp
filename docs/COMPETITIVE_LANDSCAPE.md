@@ -182,3 +182,5 @@ generation (castles, towns, dungeons via wave-function-collapse, L-system trees)
 `AIModule`/`MassEntity` AI-navigation layer, even an `ml/mcp_rl_agent.py` reinforcement-learning
 module. C++ Editor Subsystem on the same port (55557) and general shape as chongdashu's project,
 suggesting a derivative or convention carried over from it, paired with a Python FastMCP server
+with optional Redis caching / Prometheus / Grafana (all off by default except in-memory caching
+and metrics). README badge and footer both say MIT; no LICENSE file exists anywhere in the repo

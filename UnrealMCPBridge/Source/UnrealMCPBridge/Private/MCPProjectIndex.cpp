@@ -59,3 +59,5 @@ namespace
 		O->SetStringField(TEXT("name"), P.Name);
 		O->SetStringField(TEXT("type"), P.Type);
 		return O;
+	}
+
