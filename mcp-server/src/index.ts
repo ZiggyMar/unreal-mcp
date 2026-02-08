@@ -256,3 +256,4 @@ server.registerTool(
         functionName,
         className,
         variableName,
+        x,
