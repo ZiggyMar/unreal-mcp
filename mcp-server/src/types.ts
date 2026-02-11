@@ -99,3 +99,4 @@ export interface SetPinDefaultValueResult {
   pin: string;
   value: string;
 }
+

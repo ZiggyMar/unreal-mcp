@@ -62,3 +62,5 @@ namespace
 	}
 
 	FMCPIndexParam ParamFromJson(const TSharedPtr<FJsonObject>& O)
+	{
+		FMCPIndexParam P;
