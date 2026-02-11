@@ -257,3 +257,4 @@ server.registerTool(
         className,
         variableName,
         x,
+        y,

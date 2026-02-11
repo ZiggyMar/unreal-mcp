@@ -8,3 +8,4 @@ struct FAssetData;
 struct FMCPIndexParam
 {
 	FString Name;
+	FString Type;

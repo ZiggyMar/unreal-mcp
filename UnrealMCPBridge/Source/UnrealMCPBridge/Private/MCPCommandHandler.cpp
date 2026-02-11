@@ -595,3 +595,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		{
 			PinEntry->SetStringField(TEXT("subCategory"), Pin->PinType.PinSubCategoryObject->GetName());
 		}
+		PinEntry->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
+		PinEntry->SetBoolField(TEXT("isArray"), Pin->PinType.IsArray());
