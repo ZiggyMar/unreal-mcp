@@ -184,3 +184,5 @@ module. C++ Editor Subsystem on the same port (55557) and general shape as chong
 suggesting a derivative or convention carried over from it, paired with a Python FastMCP server
 with optional Redis caching / Prometheus / Grafana (all off by default except in-memory caching
 and metrics). README badge and footer both say MIT; no LICENSE file exists anywhere in the repo
+(confirmed via a full root listing) — one of four repos in this survey with this exact pattern. No
+token/context-efficiency mentions; no persistent index; no reference/dependency search.

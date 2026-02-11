@@ -19,3 +19,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 		UE_LOG(LogMCPBridgeModule, Error, TEXT("UnrealMCPBridge failed to start TCP server on port %d"), GMCPBridgePort);
 	}
 }
+

@@ -95,3 +95,4 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 	if (Endpoint.Address != FIPv4Address(127, 0, 0, 1))
 	{
 		return false;
+	}

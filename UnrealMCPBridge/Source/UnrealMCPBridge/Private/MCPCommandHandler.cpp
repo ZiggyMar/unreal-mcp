@@ -593,3 +593,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		PinEntry->SetStringField(TEXT("category"), Pin->PinType.PinCategory.ToString());
 		if (Pin->PinType.PinSubCategoryObject.IsValid())
 		{
+			PinEntry->SetStringField(TEXT("subCategory"), Pin->PinType.PinSubCategoryObject->GetName());
+		}
