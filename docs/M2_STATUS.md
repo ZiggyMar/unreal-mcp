@@ -169,3 +169,4 @@ this task, per instruction to not wait on or fix it). As in M1, none of this mil
 C++ used it — all API usage came from general UE knowledge and was validated by getting
 real compiler errors (there were none this time) from the actual installed engine. The
 one place this matters most — numeric pin subcategory behavior for `add_variable` — is
+flagged above as best-effort specifically because I couldn't cross-check it against
