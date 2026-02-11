@@ -259,3 +259,4 @@ server.registerTool(
         x,
         y,
       });
+      return jsonResult(result);

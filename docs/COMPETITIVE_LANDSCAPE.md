@@ -192,3 +192,5 @@ is a feature nothing else in this survey has — an automated Blueprint linter, 
 maps cleanly onto data we already compute — our M3 index already builds a per-graph node-type
 histogram — so a complexity/lint pass is a relatively short hop from where we already are. (2)
 Shipping a typed config module (pydantic) plus a committed `.env.example` for every tunable is a
+small but good config-hygiene habit.
+
