@@ -65,3 +65,5 @@ namespace
 	{
 		FMCPIndexParam P;
 		if (O.IsValid())
+		{
+			O->TryGetStringField(TEXT("name"), P.Name);

@@ -599,3 +599,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		PinEntry->SetBoolField(TEXT("isArray"), Pin->PinType.IsArray());
 
 		TArray<TSharedPtr<FJsonValue>> Links;
+		for (UEdGraphPin* Linked : Pin->LinkedTo)
+		{
