@@ -597,3 +597,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		}
 		PinEntry->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
 		PinEntry->SetBoolField(TEXT("isArray"), Pin->PinType.IsArray());
+
+		TArray<TSharedPtr<FJsonValue>> Links;

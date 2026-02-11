@@ -64,3 +64,4 @@ namespace
 	FMCPIndexParam ParamFromJson(const TSharedPtr<FJsonObject>& O)
 	{
 		FMCPIndexParam P;
+		if (O.IsValid())

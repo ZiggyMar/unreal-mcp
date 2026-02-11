@@ -172,3 +172,4 @@ one place this matters most — numeric pin subcategory behavior for `add_variab
 flagged above as best-effort specifically because I couldn't cross-check it against
 source.
 
+## Manual steps required from the user (do these in order)
