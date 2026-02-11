@@ -258,3 +258,4 @@ server.registerTool(
         variableName,
         x,
         y,
+      });

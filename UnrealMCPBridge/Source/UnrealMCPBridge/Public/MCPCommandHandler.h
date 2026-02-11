@@ -32,3 +32,4 @@ public:
 	static TSharedRef<FJsonObject> Dispatch(const TSharedRef<FJsonObject>& Request);
 
 private:
+	// --- Milestone 1: read-only ---

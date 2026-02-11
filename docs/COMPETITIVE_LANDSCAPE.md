@@ -188,3 +188,5 @@ and metrics). README badge and footer both say MIT; no LICENSE file exists anywh
 token/context-efficiency mentions; no persistent index; no reference/dependency search.
 
 What's genuinely good: (1) "Blueprint Analysis: Analyze graph complexity and detect logic issues"
+is a feature nothing else in this survey has — an automated Blueprint linter, in effect. This
+maps cleanly onto data we already compute — our M3 index already builds a per-graph node-type
