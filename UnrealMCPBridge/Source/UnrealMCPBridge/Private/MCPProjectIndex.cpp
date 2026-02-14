@@ -68,3 +68,5 @@ namespace
 		{
 			O->TryGetStringField(TEXT("name"), P.Name);
 			O->TryGetStringField(TEXT("type"), P.Type);
+		}
+		return P;

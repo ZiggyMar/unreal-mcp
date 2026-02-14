@@ -60,3 +60,4 @@ Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
 Copy the `UnrealMCPBridge` plugin folder to your Unreal project's `Plugins/` directory:
 
 ```bash
+# macOS / Linux

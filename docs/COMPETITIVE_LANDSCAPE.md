@@ -194,3 +194,5 @@ histogram — so a complexity/lint pass is a relatively short hop from where we 
 Shipping a typed config module (pydantic) plus a committed `.env.example` for every tunable is a
 small but good config-hygiene habit.
 
+### kvick-games/UnrealMCP
+604 stars but explicitly and repeatedly self-described as "VERY WIP" in its own README, and stale
