@@ -196,3 +196,4 @@ small but good config-hygiene habit.
 
 ### kvick-games/UnrealMCP
 604 stars but explicitly and repeatedly self-described as "VERY WIP" in its own README, and stale
+for over 14 months as of this survey — Blueprints are marked as not-yet-done in its own roadmap

@@ -260,3 +260,4 @@ server.registerTool(
         y,
       });
       return jsonResult(result);
+    } catch (err) {

@@ -605,3 +605,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 			{
 				continue;
 			}
+			int32 LinkedIndex = TargetGraph->Nodes.IndexOfByKey(Linked->GetOwningNode());
+			TSharedRef<FJsonObject> LinkEntry = MakeShared<FJsonObject>();

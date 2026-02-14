@@ -19,3 +19,4 @@ class FInternetAddr;
  */
 class FMCPTcpServer : public TSharedFromThis<FMCPTcpServer>
 {
+public:

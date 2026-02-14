@@ -70,3 +70,4 @@ namespace
 			O->TryGetStringField(TEXT("type"), P.Type);
 		}
 		return P;
+	}
