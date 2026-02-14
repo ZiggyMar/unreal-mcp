@@ -177,3 +177,4 @@ source.
 1. **Open `AntiVirusSquadUE58.uproject` in UE 5.8**, if not already open from M1. The
    plugin (including all M2 commands) has already been compiled directly into the
    project this session — no first-compile prompt should appear (see Verification 2
+   above for the exact build result).
