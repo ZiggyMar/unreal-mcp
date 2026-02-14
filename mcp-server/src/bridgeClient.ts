@@ -58,3 +58,4 @@ export class UnrealBridgeClient {
         settled = true;
         socket.end();
         resolve(value);
+      };
