@@ -178,3 +178,4 @@ source.
    plugin (including all M2 commands) has already been compiled directly into the
    project this session — no first-compile prompt should appear (see Verification 2
    above for the exact build result).
+2. **Confirm the bridge is listening** (same check as M1): Output Log should show
