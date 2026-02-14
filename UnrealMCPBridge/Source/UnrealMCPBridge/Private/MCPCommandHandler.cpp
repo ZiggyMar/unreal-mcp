@@ -603,3 +603,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		{
 			if (!Linked || !Linked->GetOwningNode())
 			{
+				continue;
+			}

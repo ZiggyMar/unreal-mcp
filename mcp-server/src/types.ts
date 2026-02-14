@@ -100,3 +100,4 @@ export interface SetPinDefaultValueResult {
   value: string;
 }
 
+export interface RemoveNodeResult {
