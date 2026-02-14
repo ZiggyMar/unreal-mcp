@@ -73,3 +73,4 @@ namespace
 	}
 
 	TSharedRef<FJsonObject> FunctionToJson(const FMCPIndexFunction& F)
+	{

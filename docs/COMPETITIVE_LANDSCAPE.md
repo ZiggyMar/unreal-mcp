@@ -199,3 +199,5 @@ small but good config-hygiene habit.
 for over 14 months as of this survey — Blueprints are marked as not-yet-done in its own roadmap
 checklist, so the star count reflects an early snapshot more than current capability. C++ plugin +
 Python client scripts; notably has an in-editor toolbar button to start/stop the TCP server, with
+server status visible in the editor UI rather than only in logs. The full standard MIT license
+text (with a named copyright holder and year) is embedded directly in the README, but there is no
