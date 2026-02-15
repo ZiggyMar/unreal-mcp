@@ -97,3 +97,4 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 		return false;
 	}
 
+	NewSocket->SetNonBlocking(true);

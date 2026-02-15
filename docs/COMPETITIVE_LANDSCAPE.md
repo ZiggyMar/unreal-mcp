@@ -201,3 +201,5 @@ checklist, so the star count reflects an early snapshot more than current capabi
 Python client scripts; notably has an in-editor toolbar button to start/stop the TCP server, with
 server status visible in the editor UI rather than only in logs. The full standard MIT license
 text (with a named copyright holder and year) is embedded directly in the README, but there is no
+separate LICENSE file, so GitHub's detector reports no license — a middle case between "clean
+license" and "no license at all." No token/context-efficiency mentions; no index or reference

@@ -74,3 +74,5 @@ namespace
 
 	TSharedRef<FJsonObject> FunctionToJson(const FMCPIndexFunction& F)
 	{
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("name"), F.Name);

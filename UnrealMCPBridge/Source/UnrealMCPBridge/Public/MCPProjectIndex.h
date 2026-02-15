@@ -10,3 +10,4 @@ struct FMCPIndexParam
 	FString Name;
 	FString Type;
 };
+
