@@ -81,3 +81,5 @@ namespace
 		for (const FMCPIndexParam& P : F.Params)
 		{
 			ParamsArr.Add(MakeShared<FJsonValueObject>(ParamToJson(P)));
+		}
+		O->SetArrayField(TEXT("params"), ParamsArr);
