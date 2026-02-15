@@ -33,3 +33,4 @@ public:
 
 private:
 	// --- Milestone 1: read-only ---
+	static TSharedRef<FJsonObject> HandlePing(const TSharedPtr<FJsonObject>& Params);

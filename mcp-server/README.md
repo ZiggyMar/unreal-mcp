@@ -54,3 +54,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 
 | Tool | Bridge command | Purpose |
 |---|---|---|
+| `unreal_create_blueprint` | `create_blueprint` | Create a new Blueprint asset at a path with a given parent class; saves to disk by default. |

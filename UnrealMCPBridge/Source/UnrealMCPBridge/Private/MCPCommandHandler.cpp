@@ -614,3 +614,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 		PinEntry->SetArrayField(TEXT("linkedTo"), Links);
 
 		PinArray.Add(MakeShared<FJsonValueObject>(PinEntry));
+	}
+	Result->SetArrayField(TEXT("pins"), PinArray);
