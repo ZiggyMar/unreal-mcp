@@ -83,3 +83,4 @@ namespace
 			ParamsArr.Add(MakeShared<FJsonValueObject>(ParamToJson(P)));
 		}
 		O->SetArrayField(TEXT("params"), ParamsArr);
+		return O;

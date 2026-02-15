@@ -186,3 +186,4 @@ source.
    a. `unreal_create_blueprint` with `packagePath: "/Game/_MCPTest/BP_SmokeTest"`,
       `parentClass: "Actor"`.
    b. `unreal_compile_blueprint` on that path immediately, with zero nodes added yet —
+      confirm it reports `success: true`, `errorCount: 0`, and a sensible `status`
