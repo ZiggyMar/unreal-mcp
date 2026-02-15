@@ -102,3 +102,4 @@ export interface SetPinDefaultValueResult {
 
 export interface RemoveNodeResult {
   removed: boolean;
+  id: string;
