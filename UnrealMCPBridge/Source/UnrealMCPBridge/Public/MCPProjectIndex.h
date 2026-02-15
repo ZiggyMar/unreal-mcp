@@ -11,3 +11,4 @@ struct FMCPIndexParam
 	FString Type;
 };
 
+struct FMCPIndexFunction

@@ -618,3 +618,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	Result->SetArrayField(TEXT("pins"), PinArray);
 
 	return MakeOkResponse(Result);
+}
+

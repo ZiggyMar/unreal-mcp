@@ -184,3 +184,4 @@ source.
    M2 brief's explicit priority, and it's good advice: it's the one command every other
    M2 command implicitly depends on for safety. Simplest path:
    a. `unreal_create_blueprint` with `packagePath: "/Game/_MCPTest/BP_SmokeTest"`,
+      `parentClass: "Actor"`.
