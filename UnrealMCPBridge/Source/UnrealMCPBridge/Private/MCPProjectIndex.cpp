@@ -80,3 +80,4 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> ParamsArr;
 		for (const FMCPIndexParam& P : F.Params)
 		{
+			ParamsArr.Add(MakeShared<FJsonValueObject>(ParamToJson(P)));

@@ -59,3 +59,4 @@ export class UnrealBridgeClient {
         socket.end();
         resolve(value);
       };
+

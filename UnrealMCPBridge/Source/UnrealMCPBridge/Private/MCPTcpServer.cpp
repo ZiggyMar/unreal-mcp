@@ -98,3 +98,4 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 	}
 
 	NewSocket->SetNonBlocking(true);
+	Clients.Add(MakeShared<FMCPClientConnection>(NewSocket));
