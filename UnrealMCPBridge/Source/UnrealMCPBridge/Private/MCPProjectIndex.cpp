@@ -76,3 +76,4 @@ namespace
 	{
 		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("name"), F.Name);
+		O->SetStringField(TEXT("returnType"), F.ReturnType);
