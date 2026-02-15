@@ -78,3 +78,5 @@ namespace
 		O->SetStringField(TEXT("name"), F.Name);
 		O->SetStringField(TEXT("returnType"), F.ReturnType);
 		TArray<TSharedPtr<FJsonValue>> ParamsArr;
+		for (const FMCPIndexParam& P : F.Params)
+		{
