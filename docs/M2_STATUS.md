@@ -185,3 +185,4 @@ source.
    M2 command implicitly depends on for safety. Simplest path:
    a. `unreal_create_blueprint` with `packagePath: "/Game/_MCPTest/BP_SmokeTest"`,
       `parentClass: "Actor"`.
+   b. `unreal_compile_blueprint` on that path immediately, with zero nodes added yet —

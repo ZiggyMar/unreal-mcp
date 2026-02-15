@@ -211,3 +211,5 @@ agent, without needing to tail logs. (2) A prominent, specific safety disclaimer
 source control, make backups, test in a separate project first, you are responsible for
 AI-made changes to your project") is good practice worth mirroring closely, since we — like this
 project — perform destructive in-place writes to Blueprint assets.
+
+### lilklon/UEBlueprintMCP

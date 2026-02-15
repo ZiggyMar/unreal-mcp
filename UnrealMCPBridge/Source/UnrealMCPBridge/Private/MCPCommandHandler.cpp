@@ -620,3 +620,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	return MakeOkResponse(Result);
 }
 
+// =============================== Milestone 2 ===============================
+
