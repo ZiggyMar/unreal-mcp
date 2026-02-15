@@ -182,3 +182,4 @@ source.
    `UnrealMCPBridge: listening on 127.0.0.1:8765`.
 3. **Smoke-test `unreal_compile_blueprint` first, before anything else** — this is the
    M2 brief's explicit priority, and it's good advice: it's the one command every other
+   M2 command implicitly depends on for safety. Simplest path:

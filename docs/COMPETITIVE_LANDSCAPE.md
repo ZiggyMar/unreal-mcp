@@ -205,3 +205,5 @@ separate LICENSE file, so GitHub's detector reports no license — a middle case
 license" and "no license at all." No token/context-efficiency mentions; no index or reference
 search of any kind.
 
+What's genuinely good: (1) the in-editor status/start-stop UI is a small but real UX idea we don't
+currently have — makes the bridge's connection state legible to a human working alongside the
