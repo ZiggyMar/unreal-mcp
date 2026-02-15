@@ -179,3 +179,5 @@ source.
    project this session — no first-compile prompt should appear (see Verification 2
    above for the exact build result).
 2. **Confirm the bridge is listening** (same check as M1): Output Log should show
+   `UnrealMCPBridge: listening on 127.0.0.1:8765`.
+3. **Smoke-test `unreal_compile_blueprint` first, before anything else** — this is the
