@@ -220,3 +220,5 @@ than chongdashu/sam-david/avdo403's badge-plus-claim pattern — and there is no
 anywhere in the repo. Architecturally, every operation is described as flowing through
 `FEditorAction` subclasses that provide "pre-execution validation, graceful error handling... and
 automatic dirty package tracking and save" — i.e., a consistent validate → execute → auto-save
+lifecycle shared by every command type. No token/context-efficiency mentions; no persistent index.
+

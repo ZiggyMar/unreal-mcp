@@ -629,3 +629,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		!Params->TryGetStringField(TEXT("packagePath"), PackagePath) ||
 		!Params->TryGetStringField(TEXT("parentClass"), ParentClassName))
 	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath and parentClass are required"));
+	}
