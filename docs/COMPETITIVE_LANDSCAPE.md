@@ -224,3 +224,5 @@ lifecycle shared by every command type. No token/context-efficiency mentions; no
 
 What's genuinely good: (1) the `FEditorAction` base-class pattern is a clean, general C++
 architecture for a command-handler layer — it factors validation, error formatting, and
+save-tracking out of each individual command's logic instead of duplicating that boilerplate
+across dozens of handlers. Worth comparing against how `MCPCommandHandler.cpp` is structured as our

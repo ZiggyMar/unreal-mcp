@@ -633,3 +633,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	}
 
 	bool bSave = true;
+	if (Params->HasField(TEXT("save")))
+	{

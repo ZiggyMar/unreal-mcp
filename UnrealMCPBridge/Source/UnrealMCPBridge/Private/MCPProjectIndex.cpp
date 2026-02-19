@@ -92,3 +92,4 @@ namespace
 		if (O.IsValid())
 		{
 			O->TryGetStringField(TEXT("name"), F.Name);
+			O->TryGetStringField(TEXT("returnType"), F.ReturnType);
