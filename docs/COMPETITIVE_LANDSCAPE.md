@@ -222,3 +222,5 @@ anywhere in the repo. Architecturally, every operation is described as flowing t
 automatic dirty package tracking and save" — i.e., a consistent validate → execute → auto-save
 lifecycle shared by every command type. No token/context-efficiency mentions; no persistent index.
 
+What's genuinely good: (1) the `FEditorAction` base-class pattern is a clean, general C++
+architecture for a command-handler layer — it factors validation, error formatting, and

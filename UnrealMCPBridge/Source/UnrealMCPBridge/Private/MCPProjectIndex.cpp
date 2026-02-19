@@ -90,3 +90,5 @@ namespace
 	{
 		FMCPIndexFunction F;
 		if (O.IsValid())
+		{
+			O->TryGetStringField(TEXT("name"), F.Name);

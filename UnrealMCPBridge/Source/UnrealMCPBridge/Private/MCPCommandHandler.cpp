@@ -631,3 +631,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	{
 		return MakeErrorResponse(TEXT("missing_param: packagePath and parentClass are required"));
 	}
+
+	bool bSave = true;
