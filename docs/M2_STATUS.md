@@ -191,3 +191,4 @@ source.
    c. `unreal_add_node` with `nodeType: "Event"`, `eventName: "ReceiveBeginPlay"` on its
       `EventGraph`, then `unreal_add_node` with `nodeType: "CallFunction"`,
       `functionName: "PrintString"` (on `KismetSystemLibrary`; if `className` is left
+      unset, the bridge will look for `PrintString` on the Blueprint's own generated

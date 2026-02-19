@@ -89,3 +89,4 @@ namespace
 	FMCPIndexFunction FunctionFromJson(const TSharedPtr<FJsonObject>& O)
 	{
 		FMCPIndexFunction F;
+		if (O.IsValid())
