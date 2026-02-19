@@ -189,3 +189,5 @@ source.
       confirm it reports `success: true`, `errorCount: 0`, and a sensible `status`
       (expect `"UpToDate"` or similar) for a freshly created, empty Blueprint.
    c. `unreal_add_node` with `nodeType: "Event"`, `eventName: "ReceiveBeginPlay"` on its
+      `EventGraph`, then `unreal_add_node` with `nodeType: "CallFunction"`,
+      `functionName: "PrintString"` (on `KismetSystemLibrary`; if `className` is left

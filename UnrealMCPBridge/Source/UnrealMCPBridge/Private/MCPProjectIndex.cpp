@@ -87,3 +87,5 @@ namespace
 	}
 
 	FMCPIndexFunction FunctionFromJson(const TSharedPtr<FJsonObject>& O)
+	{
+		FMCPIndexFunction F;
