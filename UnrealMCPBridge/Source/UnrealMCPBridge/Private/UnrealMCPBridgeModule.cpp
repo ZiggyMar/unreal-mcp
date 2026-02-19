@@ -20,3 +20,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 	}
 }
 
+void FUnrealMCPBridgeModule::ShutdownModule()

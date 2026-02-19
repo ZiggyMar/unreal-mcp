@@ -93,3 +93,5 @@ namespace
 		{
 			O->TryGetStringField(TEXT("name"), F.Name);
 			O->TryGetStringField(TEXT("returnType"), F.ReturnType);
+			const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
+			if (O->TryGetArrayField(TEXT("params"), ParamsArr) && ParamsArr)

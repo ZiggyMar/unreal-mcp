@@ -270,3 +270,4 @@ server.registerTool(
   "unreal_connect_pins",
   {
     title: "Connect two Blueprint node pins",
+    description:
