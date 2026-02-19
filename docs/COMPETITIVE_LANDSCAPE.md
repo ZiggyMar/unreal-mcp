@@ -226,3 +226,5 @@ What's genuinely good: (1) the `FEditorAction` base-class pattern is a clean, ge
 architecture for a command-handler layer — it factors validation, error formatting, and
 save-tracking out of each individual command's logic instead of duplicating that boilerplate
 across dozens of handlers. Worth comparing against how `MCPCommandHandler.cpp` is structured as our
+own command count grows past a couple dozen. (2) Auto-saving dirty packages after every successful
+write, combined with a persistent (not per-call) TCP socket, are both good defaults that reduce
