@@ -267,3 +267,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_connect_pins",
