@@ -195,3 +195,4 @@ source.
       class first, which won't have it — pass
       `className: "/Script/Engine.KismetSystemLibrary"` explicitly for this smoke test).
    d. `unreal_connect_pins` from the event node's exec output to the function call's
+      exec input, then `unreal_compile_blueprint` again — confirm it now reports 0
