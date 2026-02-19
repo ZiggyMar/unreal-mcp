@@ -218,3 +218,5 @@ manipulation with a persistent (not reconnect-per-call) TCP connection on port 5
 "License" section says only the word "MIT" with no badge, no link, and no grant text — weaker even
 than chongdashu/sam-david/avdo403's badge-plus-claim pattern — and there is no LICENSE file
 anywhere in the repo. Architecturally, every operation is described as flowing through
+`FEditorAction` subclasses that provide "pre-execution validation, graceful error handling... and
+automatic dirty package tracking and save" — i.e., a consistent validate → execute → auto-save

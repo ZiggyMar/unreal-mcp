@@ -627,3 +627,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	FString PackagePath, ParentClassName;
 	if (!Params.IsValid() ||
 		!Params->TryGetStringField(TEXT("packagePath"), PackagePath) ||
+		!Params->TryGetStringField(TEXT("parentClass"), ParentClassName))
+	{
