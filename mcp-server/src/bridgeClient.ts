@@ -60,3 +60,4 @@ export class UnrealBridgeClient {
         resolve(value);
       };
 
+      socket.setTimeout(this.timeoutMs);

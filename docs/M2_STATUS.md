@@ -193,3 +193,4 @@ source.
       `functionName: "PrintString"` (on `KismetSystemLibrary`; if `className` is left
       unset, the bridge will look for `PrintString` on the Blueprint's own generated
       class first, which won't have it — pass
+      `className: "/Script/Engine.KismetSystemLibrary"` explicitly for this smoke test).
