@@ -215,3 +215,5 @@ project — perform destructive in-place writes to Blueprint assets.
 ### lilklon/UEBlueprintMCP
 Small, focused project (36 stars) specifically scoped to Blueprint/Material/Widget/Input
 manipulation with a persistent (not reconnect-per-call) TCP connection on port 55558. Its README
+"License" section says only the word "MIT" with no badge, no link, and no grant text — weaker even
+than chongdashu/sam-david/avdo403's badge-plus-claim pattern — and there is no LICENSE file

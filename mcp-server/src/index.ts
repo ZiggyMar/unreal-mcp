@@ -266,3 +266,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(
