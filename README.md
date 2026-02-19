@@ -62,3 +62,4 @@ Copy the `UnrealMCPBridge` plugin folder to your Unreal project's `Plugins/` dir
 ```bash
 # macOS / Linux
 mkdir -p "/path/to/YourProject/Plugins" && cp -r UnrealMCPBridge "/path/to/YourProject/Plugins/"
+

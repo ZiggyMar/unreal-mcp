@@ -638,3 +638,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		bSave = Params->GetBoolField(TEXT("save"));
 	}
 
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{

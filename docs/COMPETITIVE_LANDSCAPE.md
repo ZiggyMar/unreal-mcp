@@ -230,3 +230,5 @@ own command count grows past a couple dozen. (2) Auto-saving dirty packages afte
 write, combined with a persistent (not per-call) TCP socket, are both good defaults that reduce
 the chance of an agent leaving a project with accumulated unsaved changes. (3) It ships a
 `docs/SKILL.md` specifically written as a Claude Code Skill for using its own tools — a nice
+formalization of "ship usage guidance as an artifact the agent actually loads," similar in spirit
+to remiphilippe's system-prompt block but packaged more formally.
