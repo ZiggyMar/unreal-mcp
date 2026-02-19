@@ -84,3 +84,5 @@ namespace
 		}
 		O->SetArrayField(TEXT("params"), ParamsArr);
 		return O;
+	}
+

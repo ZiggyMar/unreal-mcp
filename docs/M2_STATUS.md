@@ -187,3 +187,4 @@ source.
       `parentClass: "Actor"`.
    b. `unreal_compile_blueprint` on that path immediately, with zero nodes added yet —
       confirm it reports `success: true`, `errorCount: 0`, and a sensible `status`
+      (expect `"UpToDate"` or similar) for a freshly created, empty Blueprint.

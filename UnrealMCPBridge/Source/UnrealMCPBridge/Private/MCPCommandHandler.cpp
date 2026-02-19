@@ -623,3 +623,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 // =============================== Milestone 2 ===============================
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath, ParentClassName;
