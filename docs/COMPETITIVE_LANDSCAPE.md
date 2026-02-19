@@ -228,3 +228,5 @@ save-tracking out of each individual command's logic instead of duplicating that
 across dozens of handlers. Worth comparing against how `MCPCommandHandler.cpp` is structured as our
 own command count grows past a couple dozen. (2) Auto-saving dirty packages after every successful
 write, combined with a persistent (not per-call) TCP socket, are both good defaults that reduce
+the chance of an agent leaving a project with accumulated unsaved changes. (3) It ships a
+`docs/SKILL.md` specifically written as a Claude Code Skill for using its own tools — a nice

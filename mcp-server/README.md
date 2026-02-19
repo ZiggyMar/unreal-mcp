@@ -58,3 +58,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_add_node` | `add_node` | Add an Event/CustomEvent/CallFunction/VariableGet/VariableSet node; returns its new node id immediately. |
 | `unreal_connect_pins` | `connect_pins` | Connect an output pin to an input pin (exec or data), via the graph schema. |
 | `unreal_set_pin_default_value` | `set_pin_default_value` | Set a literal default on an unconnected input pin. |
+| `unreal_remove_node` | `remove_node` | Remove a node by id, breaking its links first. |
