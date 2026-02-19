@@ -96,3 +96,5 @@ namespace
 			const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
 			if (O->TryGetArrayField(TEXT("params"), ParamsArr) && ParamsArr)
 			{
+				for (const TSharedPtr<FJsonValue>& V : *ParamsArr)
+				{

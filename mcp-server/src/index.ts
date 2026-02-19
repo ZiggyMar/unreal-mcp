@@ -271,3 +271,4 @@ server.registerTool(
   {
     title: "Connect two Blueprint node pins",
     description:
+      "Connects an output pin on one node to an input pin on another (works for both exec and data pins). Source/target " +
