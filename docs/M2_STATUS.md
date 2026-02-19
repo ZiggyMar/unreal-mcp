@@ -192,3 +192,4 @@ source.
       `EventGraph`, then `unreal_add_node` with `nodeType: "CallFunction"`,
       `functionName: "PrintString"` (on `KismetSystemLibrary`; if `className` is left
       unset, the bridge will look for `PrintString` on the Blueprint's own generated
+      class first, which won't have it — pass
