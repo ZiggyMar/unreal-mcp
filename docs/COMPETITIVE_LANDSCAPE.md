@@ -234,3 +234,5 @@ formalization of "ship usage guidance as an artifact the agent actually loads," 
 to remiphilippe's system-prompt block but packaged more formally.
 
 ### mirno-ehf/ue5-mcp
+The newest and smallest-footprint architecture in the survey: a C++ editor-subsystem plugin
+exposing an HTTP server on port 9847, described as running "with zero overhead" while the editor

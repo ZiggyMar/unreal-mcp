@@ -59,3 +59,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_connect_pins` | `connect_pins` | Connect an output pin to an input pin (exec or data), via the graph schema. |
 | `unreal_set_pin_default_value` | `set_pin_default_value` | Set a literal default on an unconnected input pin. |
 | `unreal_remove_node` | `remove_node` | Remove a node by id, breaking its links first. |
+| `unreal_add_variable` | `add_variable` | Add a member variable (compact type descriptor: `bool`, `int`, `float`, `vector`, `object:<Class>`, ...). |
