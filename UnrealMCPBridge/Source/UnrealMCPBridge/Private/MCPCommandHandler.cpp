@@ -650,3 +650,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		return MakeErrorResponse(ClassError);
 	}
 
+	if (!FKismetEditorUtilities::CanCreateBlueprintOfClass(ParentClass))
+	{

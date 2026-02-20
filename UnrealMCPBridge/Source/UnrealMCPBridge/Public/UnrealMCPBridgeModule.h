@@ -11,3 +11,4 @@ class FMCPTcpServer;
  */
 class FUnrealMCPBridgeModule : public IModuleInterface
 {
+public:

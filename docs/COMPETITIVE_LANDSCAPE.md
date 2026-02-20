@@ -241,3 +241,5 @@ is open, with a **headless fallback** — when the editor is closed, it can spaw
 the caller must call `shutdown_server` when done). MIT, confirmed directly from the LICENSE file.
 The public README is very thin (23 lines); its `CLAUDE.md` fills in real numbers — 38 MCP tools,
 UE5 5.4+. No token/context-efficiency mentions; no documented persistent index (the marketing line
+"find everywhere I use GetActorLocation and replace it" implies some cross-Blueprint search
+exists, but neither the README nor `CLAUDE.md` describes its implementation, so this is genuinely
