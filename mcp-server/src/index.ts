@@ -273,3 +273,4 @@ server.registerTool(
     description:
       "Connects an output pin on one node to an input pin on another (works for both exec and data pins). Source/target " +
       "node ids come from unreal_read_blueprint_summary or unreal_add_node. Fails with incompatible_pins if the schema " +
+      "rejects the connection (e.g. mismatched data types). The error message explains why.",

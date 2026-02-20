@@ -13,3 +13,4 @@
     "start": "node dist/index.js",
     "dev": "tsc -p tsconfig.json --watch"
   },
+  "dependencies": {
