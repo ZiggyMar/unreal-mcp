@@ -101,3 +101,4 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 	Clients.Add(MakeShared<FMCPClientConnection>(NewSocket));
 	UE_LOG(LogMCPBridge, Verbose, TEXT("UnrealMCPBridge: client connected from %s"), *Endpoint.ToString());
 	return true;
+}
