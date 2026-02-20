@@ -243,3 +243,5 @@ The public README is very thin (23 lines); its `CLAUDE.md` fills in real numbers
 UE5 5.4+. No token/context-efficiency mentions; no documented persistent index (the marketing line
 "find everywhere I use GetActorLocation and replace it" implies some cross-Blueprint search
 exists, but neither the README nor `CLAUDE.md` describes its implementation, so this is genuinely
+unconfirmed either way, not a "no").
+
