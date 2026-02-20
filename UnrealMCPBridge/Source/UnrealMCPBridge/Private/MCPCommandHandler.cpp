@@ -652,3 +652,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 
 	if (!FKismetEditorUtilities::CanCreateBlueprintOfClass(ParentClass))
 	{
+		return MakeErrorResponse(FString::Printf(TEXT("class_not_blueprintable: %s"), *ParentClass->GetName()));

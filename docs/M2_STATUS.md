@@ -204,3 +204,4 @@ source.
       deliberately create a broken graph (e.g. connect two incompatible-type pins, or
       leave a required pin disconnected) to confirm `compile_blueprint` actually
       surfaces the error instead of silently reporting success.
+4. **Delete `/Game/_MCPTest/` when done** (or leave it — it's an isolated scratch
