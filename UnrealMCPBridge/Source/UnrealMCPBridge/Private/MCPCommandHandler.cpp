@@ -642,3 +642,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
 	}
+
+	FString ClassError;

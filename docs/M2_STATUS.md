@@ -198,3 +198,5 @@ source.
       exec input, then `unreal_compile_blueprint` again — confirm it now reports 0
       errors (a `PrintString` call with no `InString` connected/set should compile fine
       since it has a default).
+   e. Only after that round-trip looks right, try the riskier paths: `add_variable`
+      with each type descriptor at least once (especially `vector` and `object:` — the

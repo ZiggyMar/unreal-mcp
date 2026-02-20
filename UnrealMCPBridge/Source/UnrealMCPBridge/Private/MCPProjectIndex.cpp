@@ -99,3 +99,5 @@ namespace
 				for (const TSharedPtr<FJsonValue>& V : *ParamsArr)
 				{
 					if (V.IsValid())
+					{
+						F.Params.Add(ParamFromJson(V->AsObject()));
