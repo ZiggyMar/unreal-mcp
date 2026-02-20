@@ -203,3 +203,4 @@ source.
       two most likely to have a subtle bug per "What is stubbed" above), and
       deliberately create a broken graph (e.g. connect two incompatible-type pins, or
       leave a required pin disconnected) to confirm `compile_blueprint` actually
+      surfaces the error instead of silently reporting success.

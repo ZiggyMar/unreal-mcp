@@ -275,3 +275,4 @@ server.registerTool(
       "node ids come from unreal_read_blueprint_summary or unreal_add_node. Fails with incompatible_pins if the schema " +
       "rejects the connection (e.g. mismatched data types). The error message explains why.",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
