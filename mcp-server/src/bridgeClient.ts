@@ -61,3 +61,4 @@ export class UnrealBridgeClient {
       };
 
       socket.setTimeout(this.timeoutMs);
+

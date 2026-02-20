@@ -648,3 +648,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	if (!ParentClass)
 	{
 		return MakeErrorResponse(ClassError);
+	}
+
