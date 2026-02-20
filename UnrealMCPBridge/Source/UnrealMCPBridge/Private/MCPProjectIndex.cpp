@@ -98,3 +98,4 @@ namespace
 			{
 				for (const TSharedPtr<FJsonValue>& V : *ParamsArr)
 				{
+					if (V.IsValid())
