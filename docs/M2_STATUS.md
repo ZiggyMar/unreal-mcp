@@ -197,3 +197,4 @@ source.
    d. `unreal_connect_pins` from the event node's exec output to the function call's
       exec input, then `unreal_compile_blueprint` again — confirm it now reports 0
       errors (a `PrintString` call with no `InString` connected/set should compile fine
+      since it has a default).

@@ -232,3 +232,5 @@ the chance of an agent leaving a project with accumulated unsaved changes. (3) I
 `docs/SKILL.md` specifically written as a Claude Code Skill for using its own tools — a nice
 formalization of "ship usage guidance as an artifact the agent actually loads," similar in spirit
 to remiphilippe's system-prompt block but packaged more formally.
+
+### mirno-ehf/ue5-mcp
