@@ -239,3 +239,5 @@ exposing an HTTP server on port 9847, described as running "with zero overhead" 
 is open, with a **headless fallback** — when the editor is closed, it can spawn a standalone
 `UnrealEditor-Cmd.exe` commandlet process instead (documented cost: 2-4 GB RAM, ~60s startup, and
 the caller must call `shutdown_server` when done). MIT, confirmed directly from the LICENSE file.
+The public README is very thin (23 lines); its `CLAUDE.md` fills in real numbers — 38 MCP tools,
+UE5 5.4+. No token/context-efficiency mentions; no documented persistent index (the marketing line

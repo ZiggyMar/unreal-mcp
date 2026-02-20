@@ -15,3 +15,4 @@ struct FMCPIndexFunction
 {
 	FString Name;
 	FString ReturnType;
+	TArray<FMCPIndexParam> Params;
