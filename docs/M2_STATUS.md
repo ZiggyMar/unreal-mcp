@@ -201,3 +201,4 @@ source.
    e. Only after that round-trip looks right, try the riskier paths: `add_variable`
       with each type descriptor at least once (especially `vector` and `object:` — the
       two most likely to have a subtle bug per "What is stubbed" above), and
+      deliberately create a broken graph (e.g. connect two incompatible-type pins, or

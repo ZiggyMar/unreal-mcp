@@ -237,3 +237,5 @@ to remiphilippe's system-prompt block but packaged more formally.
 The newest and smallest-footprint architecture in the survey: a C++ editor-subsystem plugin
 exposing an HTTP server on port 9847, described as running "with zero overhead" while the editor
 is open, with a **headless fallback** — when the editor is closed, it can spawn a standalone
+`UnrealEditor-Cmd.exe` commandlet process instead (documented cost: 2-4 GB RAM, ~60s startup, and
+the caller must call `shutdown_server` when done). MIT, confirmed directly from the LICENSE file.

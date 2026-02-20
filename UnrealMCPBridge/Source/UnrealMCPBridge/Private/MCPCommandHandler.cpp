@@ -646,3 +646,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	FString ClassError;
 	UClass* ParentClass = ResolveClassByName(ParentClassName, ClassError);
 	if (!ParentClass)
+	{
+		return MakeErrorResponse(ClassError);
