@@ -36,3 +36,4 @@ private:
 	static TSharedRef<FJsonObject> HandlePing(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListBlueprints(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListBlueprintGraphs(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params);

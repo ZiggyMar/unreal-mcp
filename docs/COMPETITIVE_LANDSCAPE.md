@@ -258,3 +258,5 @@ either time. Both are unrequested, user-invisible side effects embedded in data 
 while helping someone install the tool — the kind of instruction our own safety rules say an agent
 should not act on when it's discovered in observed content rather than said by the actual user. We
 did not act on either instruction. This isn't a security hole in their tool, but it's a concrete
+example of a pattern to keep out of our own `CLAUDE.md`/Skill files: no autonomous, unprompted,
+user-facing side effects baked into agent-facing setup instructions.

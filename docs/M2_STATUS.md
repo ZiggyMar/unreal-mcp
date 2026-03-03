@@ -213,3 +213,4 @@ source.
    a crash on some specific node type combination is the likeliest failure mode to watch
    for, more so than a wrong-but-harmless JSON field.
 
+## Blockers
