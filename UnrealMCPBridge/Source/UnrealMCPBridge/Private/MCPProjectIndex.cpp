@@ -115,3 +115,5 @@ namespace
 		O->SetStringField(TEXT("type"), V.Type);
 		O->SetStringField(TEXT("category"), V.Category);
 		return O;
+	}
+

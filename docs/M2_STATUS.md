@@ -211,3 +211,4 @@ source.
    class that should resolve, `compile_blueprint` missing an error it should have
    caught, or any crash. Given the volume of first-time-exercised API in this milestone,
    a crash on some specific node type combination is the likeliest failure mode to watch
+   for, more so than a wrong-but-harmless JSON field.

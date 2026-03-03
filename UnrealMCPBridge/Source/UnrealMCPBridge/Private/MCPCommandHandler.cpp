@@ -663,3 +663,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	}
 
 	UBlueprint* NewBlueprint = FKismetEditorUtilities::CreateBlueprint(
+		ParentClass,
+		Package,

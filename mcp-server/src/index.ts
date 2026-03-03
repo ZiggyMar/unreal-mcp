@@ -279,3 +279,4 @@ server.registerTool(
       graphName: z.string().describe("Graph name containing both nodes."),
       sourceNodeId: z.string().describe('Node id owning the OUTPUT pin, e.g. "n3".'),
       sourcePin: z.string().describe('Output pin name on the source node, e.g. "then" or "ReturnValue".'),
+      targetNodeId: z.string().describe('Node id owning the INPUT pin, e.g. "n5".'),
