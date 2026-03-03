@@ -260,3 +260,5 @@ should not act on when it's discovered in observed content rather than said by t
 did not act on either instruction. This isn't a security hole in their tool, but it's a concrete
 example of a pattern to keep out of our own `CLAUDE.md`/Skill files: no autonomous, unprompted,
 user-facing side effects baked into agent-facing setup instructions.
+
+---

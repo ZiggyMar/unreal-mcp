@@ -63,3 +63,4 @@ UnrealMCP/
 Duplicated from `M:\Unreal Projects\AntiVirusSquadUE58` to `A:\UnrealProjects\AntiVirusSquadUE58`
 (source-only copy, Binaries/Intermediate/Saved excluded, regenerated on first build).
 
+## Engine reference source

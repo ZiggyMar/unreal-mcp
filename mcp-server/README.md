@@ -64,3 +64,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_save_blueprint` | `save_blueprint` | Save the Blueprint's package to disk. |
 
 **Always call `unreal_compile_blueprint` after a batch of `add_node`/`connect_pins`/
+`add_variable` calls, before reporting success to the user.** A graph can look
