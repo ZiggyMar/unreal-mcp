@@ -670,3 +670,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		UBlueprint::StaticClass(),
 		UBlueprintGeneratedClass::StaticClass(),
 		FName("MCPBridge"));
+
+	if (!NewBlueprint)

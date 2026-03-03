@@ -262,3 +262,5 @@ example of a pattern to keep out of our own `CLAUDE.md`/Skill files: no autonomo
 user-facing side effects baked into agent-facing setup instructions.
 
 ---
+
+## The UE 5.8 first-party plugin (comparison point, not a competitor)
