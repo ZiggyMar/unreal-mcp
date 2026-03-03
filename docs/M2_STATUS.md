@@ -209,3 +209,4 @@ source.
    real content).
 5. Report back anything that looks wrong — wrong pin names, a `class_not_found` for a
    class that should resolve, `compile_blueprint` missing an error it should have
+   caught, or any crash. Given the volume of first-time-exercised API in this milestone,
