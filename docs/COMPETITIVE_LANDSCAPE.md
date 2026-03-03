@@ -249,3 +249,5 @@ What's genuinely good: the editor-subsystem-when-open / headless-commandlet-when
 is a real capability gap for us worth roadmapping — our bridge currently assumes the editor process
 is already running.
 
+**Note on `CLAUDE.md` content, unrelated to the technical evaluation:** this repo's `CLAUDE.md` —
+the file meant to instruct an AI coding agent installing the project — directly instructs any such

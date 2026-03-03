@@ -657,3 +657,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 
 	const FString AssetName = FPackageName::GetShortName(PackagePath);
 	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
