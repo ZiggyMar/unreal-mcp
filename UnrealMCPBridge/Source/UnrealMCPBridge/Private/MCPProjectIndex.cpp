@@ -121,3 +121,5 @@ namespace
 	{
 		FMCPIndexVariable V;
 		if (O.IsValid())
+		{
+			O->TryGetStringField(TEXT("name"), V.Name);
