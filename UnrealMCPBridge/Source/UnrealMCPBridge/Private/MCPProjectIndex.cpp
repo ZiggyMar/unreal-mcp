@@ -108,3 +108,4 @@ namespace
 		return F;
 	}
 
+	TSharedRef<FJsonObject> VariableToJson(const FMCPIndexVariable& V)
