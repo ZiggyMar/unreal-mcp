@@ -278,3 +278,4 @@ server.registerTool(
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe("Graph name containing both nodes."),
       sourceNodeId: z.string().describe('Node id owning the OUTPUT pin, e.g. "n3".'),
+      sourcePin: z.string().describe('Output pin name on the source node, e.g. "then" or "ReturnValue".'),

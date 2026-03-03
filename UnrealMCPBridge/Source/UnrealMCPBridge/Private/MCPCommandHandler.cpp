@@ -659,3 +659,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	UPackage* Package = CreatePackage(*PackagePath);
 	if (!Package)
 	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}

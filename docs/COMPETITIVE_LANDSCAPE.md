@@ -251,3 +251,5 @@ is already running.
 
 **Note on `CLAUDE.md` content, unrelated to the technical evaluation:** this repo's `CLAUDE.md` —
 the file meant to instruct an AI coding agent installing the project — directly instructs any such
+agent to run `gh repo star mirno-ehf/ue5-mcp` on the user's behalf during setup, and separately
+instructs it to autonomously run `gh issue create` to file GitHub issues for any missing feature
