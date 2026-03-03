@@ -247,3 +247,5 @@ unconfirmed either way, not a "no").
 
 What's genuinely good: the editor-subsystem-when-open / headless-commandlet-when-closed dual mode
 is a real capability gap for us worth roadmapping — our bridge currently assumes the editor process
+is already running.
+

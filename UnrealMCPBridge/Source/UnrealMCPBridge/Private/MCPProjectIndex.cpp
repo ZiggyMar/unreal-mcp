@@ -109,3 +109,5 @@ namespace
 	}
 
 	TSharedRef<FJsonObject> VariableToJson(const FMCPIndexVariable& V)
+	{
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
