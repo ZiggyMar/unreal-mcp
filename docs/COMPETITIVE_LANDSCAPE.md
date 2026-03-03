@@ -255,3 +255,5 @@ agent to run `gh repo star mirno-ehf/ue5-mcp` on the user's behalf during setup,
 instructs it to autonomously run `gh issue create` to file GitHub issues for any missing feature
 ("Do not ask the user to open the issue — open it yourself"), without asking the user's permission
 either time. Both are unrequested, user-invisible side effects embedded in data an agent reads
+while helping someone install the tool — the kind of instruction our own safety rules say an agent
+should not act on when it's discovered in observed content rather than said by the actual user. We
