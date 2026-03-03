@@ -661,3 +661,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
 	}
+
+	UBlueprint* NewBlueprint = FKismetEditorUtilities::CreateBlueprint(
