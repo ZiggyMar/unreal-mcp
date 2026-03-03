@@ -61,3 +61,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_remove_node` | `remove_node` | Remove a node by id, breaking its links first. |
 | `unreal_add_variable` | `add_variable` | Add a member variable (compact type descriptor: `bool`, `int`, `float`, `vector`, `object:<Class>`, ...). |
 | `unreal_compile_blueprint` | `compile_blueprint` | Compile and return structured errors/warnings. **Run this after every batch of edits** — see below. |
+| `unreal_save_blueprint` | `save_blueprint` | Save the Blueprint's package to disk. |

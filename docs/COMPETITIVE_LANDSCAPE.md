@@ -245,3 +245,5 @@ UE5 5.4+. No token/context-efficiency mentions; no documented persistent index (
 exists, but neither the README nor `CLAUDE.md` describes its implementation, so this is genuinely
 unconfirmed either way, not a "no").
 
+What's genuinely good: the editor-subsystem-when-open / headless-commandlet-when-closed dual mode
+is a real capability gap for us worth roadmapping — our bridge currently assumes the editor process
