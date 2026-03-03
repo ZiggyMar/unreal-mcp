@@ -206,3 +206,4 @@ source.
       surfaces the error instead of silently reporting success.
 4. **Delete `/Game/_MCPTest/` when done** (or leave it — it's an isolated scratch
    folder under the throwaway `AntiVirusSquadUE58` duplicate project, not the user's
+   real content).
