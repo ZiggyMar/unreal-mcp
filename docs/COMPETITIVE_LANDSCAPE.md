@@ -257,3 +257,4 @@ instructs it to autonomously run `gh issue create` to file GitHub issues for any
 either time. Both are unrequested, user-invisible side effects embedded in data an agent reads
 while helping someone install the tool — the kind of instruction our own safety rules say an agent
 should not act on when it's discovered in observed content rather than said by the actual user. We
+did not act on either instruction. This isn't a security hole in their tool, but it's a concrete

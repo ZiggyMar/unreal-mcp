@@ -63,3 +63,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_compile_blueprint` | `compile_blueprint` | Compile and return structured errors/warnings. **Run this after every batch of edits** — see below. |
 | `unreal_save_blueprint` | `save_blueprint` | Save the Blueprint's package to disk. |
 
+**Always call `unreal_compile_blueprint` after a batch of `add_node`/`connect_pins`/

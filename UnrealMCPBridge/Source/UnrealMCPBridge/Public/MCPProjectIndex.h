@@ -17,3 +17,4 @@ struct FMCPIndexFunction
 	FString ReturnType;
 	TArray<FMCPIndexParam> Params;
 };
+

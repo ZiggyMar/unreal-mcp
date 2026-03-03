@@ -117,3 +117,4 @@ namespace
 		return O;
 	}
 
+	FMCPIndexVariable VariableFromJson(const TSharedPtr<FJsonObject>& O)
