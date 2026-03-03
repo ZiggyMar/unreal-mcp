@@ -106,3 +106,4 @@ export interface RemoveNodeResult {
   type: string;
 }
 
+export interface AddVariableResult {

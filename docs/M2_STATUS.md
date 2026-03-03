@@ -207,3 +207,5 @@ source.
 4. **Delete `/Game/_MCPTest/` when done** (or leave it — it's an isolated scratch
    folder under the throwaway `AntiVirusSquadUE58` duplicate project, not the user's
    real content).
+5. Report back anything that looks wrong — wrong pin names, a `class_not_found` for a
+   class that should resolve, `compile_blueprint` missing an error it should have
