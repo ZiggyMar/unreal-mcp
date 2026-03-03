@@ -118,3 +118,5 @@ namespace
 	}
 
 	FMCPIndexVariable VariableFromJson(const TSharedPtr<FJsonObject>& O)
+	{
+		FMCPIndexVariable V;

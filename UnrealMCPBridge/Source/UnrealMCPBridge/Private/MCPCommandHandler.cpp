@@ -667,3 +667,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		Package,
 		FName(*AssetName),
 		BPTYPE_Normal,
+		UBlueprint::StaticClass(),
