@@ -253,3 +253,5 @@ is already running.
 the file meant to instruct an AI coding agent installing the project — directly instructs any such
 agent to run `gh repo star mirno-ehf/ue5-mcp` on the user's behalf during setup, and separately
 instructs it to autonomously run `gh issue create` to file GitHub issues for any missing feature
+("Do not ask the user to open the issue — open it yourself"), without asking the user's permission
+either time. Both are unrequested, user-invisible side effects embedded in data an agent reads
