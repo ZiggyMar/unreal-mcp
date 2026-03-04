@@ -284,3 +284,4 @@ server.registerTool(
     },
   },
   async ({ path, graphName, sourceNodeId, sourcePin, targetNodeId, targetPin }) => {
+    try {
