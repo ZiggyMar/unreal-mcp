@@ -268,3 +268,5 @@ user-facing side effects baked into agent-facing setup instructions.
 UE 5.8 ships an official, **Experimental**, opt-in "Unreal MCP" plugin that runs an MCP server
 inside the editor process itself (local HTTP link), built around a "Toolset Registry" that lets
 C++ (`UToolsetDefinition`) or Python (`unreal.ToolsetDefinition`) code register engine
+functionality as MCP tools. Confirmed from Epic's own documentation
+([dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor?lang=en-US)):

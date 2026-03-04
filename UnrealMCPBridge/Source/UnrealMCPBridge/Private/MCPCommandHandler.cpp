@@ -676,3 +676,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		return MakeErrorResponse(TEXT("create_blueprint_failed"));
 	}
 
+	FAssetRegistryModule::AssetCreated(NewBlueprint);
+	Package->MarkPackageDirty();

@@ -63,3 +63,4 @@ export class UnrealBridgeClient {
       socket.setTimeout(this.timeoutMs);
 
       socket.on("timeout", () => {
+        fail(
