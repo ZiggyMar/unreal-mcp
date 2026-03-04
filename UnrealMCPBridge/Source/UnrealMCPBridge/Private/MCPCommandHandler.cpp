@@ -678,3 +678,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 
 	FAssetRegistryModule::AssetCreated(NewBlueprint);
 	Package->MarkPackageDirty();
+
+	bool bSaved = false;
