@@ -272,3 +272,5 @@ functionality as MCP tools. Confirmed from Epic's own documentation
 ([dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor?lang=en-US)):
 explicitly experimental ("use caution when shipping with it"), must be manually enabled ("split
 across three modules" that each need enabling), not designed for remote use, and — as of this
+survey — has no described capability for reading, analyzing, or summarizing existing Blueprint
+graph structure (its documented examples are all spawn/configure/run-automation actions), no

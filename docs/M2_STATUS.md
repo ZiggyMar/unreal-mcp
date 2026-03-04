@@ -221,3 +221,4 @@ non-blocking, exactly as in M1.
 
 The single most important open item, unchanged in kind from M1 but higher-stakes in
 substance: **no command in this milestone has ever touched a real Blueprint in a live
+editor.** `compile_blueprint` is the safety net for that gap and should be the very

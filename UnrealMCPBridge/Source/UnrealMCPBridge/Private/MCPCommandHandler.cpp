@@ -680,3 +680,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	Package->MarkPackageDirty();
 
 	bool bSaved = false;
+	FString SaveError;
+	if (bSave)
