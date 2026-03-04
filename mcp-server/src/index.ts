@@ -282,3 +282,4 @@ server.registerTool(
       targetNodeId: z.string().describe('Node id owning the INPUT pin, e.g. "n5".'),
       targetPin: z.string().describe('Input pin name on the target node, e.g. "execute" or "Target".'),
     },
+  },

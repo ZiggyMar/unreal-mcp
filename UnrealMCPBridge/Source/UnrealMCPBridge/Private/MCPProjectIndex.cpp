@@ -123,3 +123,4 @@ namespace
 		if (O.IsValid())
 		{
 			O->TryGetStringField(TEXT("name"), V.Name);
+			O->TryGetStringField(TEXT("type"), V.Type);
