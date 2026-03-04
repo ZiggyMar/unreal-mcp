@@ -66,3 +66,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 **Always call `unreal_compile_blueprint` after a batch of `add_node`/`connect_pins`/
 `add_variable` calls, before reporting success to the user.** A graph can look
 structurally fine — nodes added, pins connected — and still fail to compile (type
+mismatches, unresolved variables, missing required pins). This is the safety net for
