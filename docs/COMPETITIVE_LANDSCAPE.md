@@ -274,3 +274,5 @@ explicitly experimental ("use caution when shipping with it"), must be manually 
 across three modules" that each need enabling), not designed for remote use, and — as of this
 survey — has no described capability for reading, analyzing, or summarizing existing Blueprint
 graph structure (its documented examples are all spawn/configure/run-automation actions), no
+discussion of token budgets or response compaction, and no persistent asset index or
+dependency/reference search. It is UE-5.8-only, with no 5.6 equivalent, so it cannot serve 5.6

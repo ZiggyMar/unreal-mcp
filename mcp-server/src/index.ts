@@ -285,3 +285,4 @@ server.registerTool(
   },
   async ({ path, graphName, sourceNodeId, sourcePin, targetNodeId, targetPin }) => {
     try {
+      const result = await bridge.send<ConnectPinsResult>("connect_pins", {
