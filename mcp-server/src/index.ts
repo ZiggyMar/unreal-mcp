@@ -283,3 +283,4 @@ server.registerTool(
       targetPin: z.string().describe('Input pin name on the target node, e.g. "execute" or "Target".'),
     },
   },
+  async ({ path, graphName, sourceNodeId, sourcePin, targetNodeId, targetPin }) => {

@@ -126,3 +126,4 @@ namespace
 			O->TryGetStringField(TEXT("type"), V.Type);
 			O->TryGetStringField(TEXT("category"), V.Category);
 		}
+		return V;

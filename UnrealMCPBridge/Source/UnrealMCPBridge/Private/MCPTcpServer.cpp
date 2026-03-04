@@ -105,3 +105,4 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 
 bool FMCPTcpServer::Tick(float DeltaTime)
 {
+	for (int32 i = Clients.Num() - 1; i >= 0; --i)
