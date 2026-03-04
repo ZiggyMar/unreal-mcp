@@ -672,3 +672,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		FName("MCPBridge"));
 
 	if (!NewBlueprint)
+	{
+		return MakeErrorResponse(TEXT("create_blueprint_failed"));

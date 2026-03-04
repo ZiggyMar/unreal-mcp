@@ -18,3 +18,4 @@ struct FMCPIndexFunction
 	TArray<FMCPIndexParam> Params;
 };
 
+struct FMCPIndexVariable

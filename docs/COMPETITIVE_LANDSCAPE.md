@@ -264,3 +264,5 @@ user-facing side effects baked into agent-facing setup instructions.
 ---
 
 ## The UE 5.8 first-party plugin (comparison point, not a competitor)
+
+UE 5.8 ships an official, **Experimental**, opt-in "Unreal MCP" plugin that runs an MCP server
