@@ -130,3 +130,4 @@ namespace
 	}
 
 	TSharedRef<FJsonObject> GraphToJson(const FMCPIndexGraph& G)
+	{
