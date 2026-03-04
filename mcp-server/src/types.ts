@@ -108,3 +108,4 @@ export interface RemoveNodeResult {
 
 export interface AddVariableResult {
   added: boolean;
+  name: string;

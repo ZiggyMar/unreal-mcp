@@ -674,3 +674,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	if (!NewBlueprint)
 	{
 		return MakeErrorResponse(TEXT("create_blueprint_failed"));
+	}
+

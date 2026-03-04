@@ -124,3 +124,5 @@ namespace
 		{
 			O->TryGetStringField(TEXT("name"), V.Name);
 			O->TryGetStringField(TEXT("type"), V.Type);
+			O->TryGetStringField(TEXT("category"), V.Category);
+		}

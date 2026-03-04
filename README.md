@@ -64,3 +64,4 @@ Copy the `UnrealMCPBridge` plugin folder to your Unreal project's `Plugins/` dir
 mkdir -p "/path/to/YourProject/Plugins" && cp -r UnrealMCPBridge "/path/to/YourProject/Plugins/"
 
 # Windows (PowerShell)
+New-Item -ItemType Directory -Force -Path "C:\path\to\YourProject\Plugins"; Copy-Item -Recurse UnrealMCPBridge "C:\path\to\YourProject\Plugins\"
