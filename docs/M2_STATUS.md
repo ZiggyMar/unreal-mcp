@@ -230,3 +230,4 @@ first thing exercised, per the ordered steps above.
 UnrealMCP/
   docs/
     M2_STATUS.md                 (this file)
+  UnrealMCPBridge/

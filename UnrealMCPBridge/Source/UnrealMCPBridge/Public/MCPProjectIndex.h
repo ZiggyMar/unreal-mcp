@@ -21,3 +21,4 @@ struct FMCPIndexFunction
 struct FMCPIndexVariable
 {
 	FString Name;
+	FString Type;
