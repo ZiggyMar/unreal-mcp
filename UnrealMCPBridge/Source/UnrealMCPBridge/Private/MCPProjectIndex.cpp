@@ -134,3 +134,5 @@ namespace
 		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("name"), G.Name);
 		O->SetNumberField(TEXT("nodeCount"), G.NodeCount);
+		TSharedRef<FJsonObject> Histogram = MakeShared<FJsonObject>();
+		for (const TPair<FString, int32>& Pair : G.NodeTypeHistogram)

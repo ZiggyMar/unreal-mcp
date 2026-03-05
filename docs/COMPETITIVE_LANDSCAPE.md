@@ -279,3 +279,5 @@ dependency/reference search. It is UE-5.8-only, with no 5.6 equivalent, so it ca
 users regardless of capability. Net effect on our positioning: it validates that Epic itself sees
 value in an in-editor MCP surface, but as surveyed it doesn't compete with either of our stated
 differentiators, and it doesn't exist at all for 5.6, which we also target.
+
+Sources:
