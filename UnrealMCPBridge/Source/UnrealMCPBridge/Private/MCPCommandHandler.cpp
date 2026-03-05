@@ -689,3 +689,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetStringField(TEXT("parentClass"), ParentClass->GetName());
+	Result->SetBoolField(TEXT("saved"), bSaved);
