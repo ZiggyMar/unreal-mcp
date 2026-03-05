@@ -276,3 +276,4 @@ survey — has no described capability for reading, analyzing, or summarizing ex
 graph structure (its documented examples are all spawn/configure/run-automation actions), no
 discussion of token budgets or response compaction, and no persistent asset index or
 dependency/reference search. It is UE-5.8-only, with no 5.6 equivalent, so it cannot serve 5.6
+users regardless of capability. Net effect on our positioning: it validates that Epic itself sees
