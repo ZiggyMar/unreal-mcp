@@ -691,3 +691,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	Result->SetStringField(TEXT("name"), AssetName);
 	Result->SetStringField(TEXT("parentClass"), ParentClass->GetName());
 	Result->SetBoolField(TEXT("saved"), bSaved);
+	if (bSave && !bSaved)
+	{

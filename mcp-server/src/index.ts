@@ -288,3 +288,4 @@ server.registerTool(
       const result = await bridge.send<ConnectPinsResult>("connect_pins", {
         path,
         graphName,
+        sourceNodeId,

@@ -228,3 +228,4 @@ first thing exercised, per the ordered steps above.
 
 ```
 UnrealMCP/
+  docs/
