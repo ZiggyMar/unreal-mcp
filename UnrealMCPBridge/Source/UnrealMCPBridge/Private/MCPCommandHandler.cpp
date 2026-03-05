@@ -683,3 +683,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	FString SaveError;
 	if (bSave)
 	{
+		bSaved = SaveBlueprintPackage(NewBlueprint, SaveError);
+	}

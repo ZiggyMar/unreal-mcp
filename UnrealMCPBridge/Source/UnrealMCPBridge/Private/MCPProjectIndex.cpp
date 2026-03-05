@@ -131,3 +131,5 @@ namespace
 
 	TSharedRef<FJsonObject> GraphToJson(const FMCPIndexGraph& G)
 	{
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("name"), G.Name);
