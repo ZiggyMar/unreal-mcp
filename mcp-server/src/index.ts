@@ -287,3 +287,4 @@ server.registerTool(
     try {
       const result = await bridge.send<ConnectPinsResult>("connect_pins", {
         path,
+        graphName,

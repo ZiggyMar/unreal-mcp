@@ -225,3 +225,5 @@ editor.** `compile_blueprint` is the safety net for that gap and should be the v
 first thing exercised, per the ordered steps above.
 
 ## File map (additions since M1_STATUS.md)
+
+```
