@@ -695,3 +695,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	{
 		Result->SetStringField(TEXT("saveError"), SaveError);
 	}
+	return MakeOkResponse(Result);
+}

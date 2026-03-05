@@ -287,3 +287,5 @@ Sources:
 ---
 
 ## Ideas worth adopting into our own roadmap
+
+Every item below is a pattern described in a competitor's documentation, reimplemented in our own

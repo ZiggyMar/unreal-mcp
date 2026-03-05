@@ -140,3 +140,5 @@ namespace
 			Histogram->SetNumberField(Pair.Key, Pair.Value);
 		}
 		O->SetObjectField(TEXT("nodeTypeHistogram"), Histogram);
+		return O;
+	}

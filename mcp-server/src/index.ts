@@ -289,3 +289,4 @@ server.registerTool(
         path,
         graphName,
         sourceNodeId,
+        sourcePin,
