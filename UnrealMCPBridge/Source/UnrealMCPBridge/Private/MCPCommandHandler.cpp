@@ -693,3 +693,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	Result->SetBoolField(TEXT("saved"), bSaved);
 	if (bSave && !bSaved)
 	{
+		Result->SetStringField(TEXT("saveError"), SaveError);
+	}

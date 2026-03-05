@@ -110,3 +110,4 @@ export interface AddVariableResult {
   added: boolean;
   name: string;
   type: string;
+}
