@@ -67,3 +67,4 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 `add_variable` calls, before reporting success to the user.** A graph can look
 structurally fine — nodes added, pins connected — and still fail to compile (type
 mismatches, unresolved variables, missing required pins). This is the safety net for
+every write tool above it, and per `../docs/M2_STATUS.md` it is also the single

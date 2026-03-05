@@ -133,3 +133,4 @@ namespace
 	{
 		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("name"), G.Name);
+		O->SetNumberField(TEXT("nodeCount"), G.NodeCount);
