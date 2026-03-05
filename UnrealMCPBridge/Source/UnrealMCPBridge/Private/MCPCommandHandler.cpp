@@ -685,3 +685,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	{
 		bSaved = SaveBlueprintPackage(NewBlueprint, SaveError);
 	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();

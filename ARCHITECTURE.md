@@ -64,3 +64,4 @@ Duplicated from `M:\Unreal Projects\AntiVirusSquadUE58` to `A:\UnrealProjects\An
 (source-only copy, Binaries/Intermediate/Saved excluded, regenerated on first build).
 
 ## Engine reference source
+Shallow clone of `EpicGames/UnrealEngine` branch `5.8` at `A:\UnrealEngineSource\UnrealEngine-5.8`,
