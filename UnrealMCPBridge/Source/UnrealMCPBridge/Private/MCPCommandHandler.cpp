@@ -706,3 +706,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
 		!Params->TryGetStringField(TEXT("nodeType"), NodeType))
 	{
+		return MakeErrorResponse(TEXT("missing_param: path, graphName and nodeType are required"));
+	}

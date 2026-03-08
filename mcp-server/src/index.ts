@@ -293,3 +293,4 @@ server.registerTool(
         targetNodeId,
         targetPin,
       });
+      return jsonResult(result);
