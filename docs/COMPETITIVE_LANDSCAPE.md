@@ -310,3 +310,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 
 3. **Ship a bundled "recommended agent workflow" doc/Skill**, in the spirit of remiphilippe's
    README system-prompt block and lilklon's `docs/SKILL.md`: a short, concrete set of rules for the
+   calling agent (read before write; use the tiered summary before requesting node detail; compile
+   after every write; save when done). Cheap to write, directly improves real-world tool-use

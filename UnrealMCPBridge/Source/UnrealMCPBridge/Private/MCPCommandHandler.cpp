@@ -717,3 +717,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	}
 
 	FString GraphError;
+	UEdGraph* Graph = FindGraphByName(Blueprint, GraphName, GraphError);
+	if (!Graph)
