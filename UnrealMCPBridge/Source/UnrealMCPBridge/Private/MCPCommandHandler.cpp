@@ -704,3 +704,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	if (!Params.IsValid() ||
 		!Params->TryGetStringField(TEXT("path"), Path) ||
 		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
+		!Params->TryGetStringField(TEXT("nodeType"), NodeType))
+	{

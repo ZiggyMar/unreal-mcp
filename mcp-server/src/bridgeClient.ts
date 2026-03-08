@@ -65,3 +65,4 @@ export class UnrealBridgeClient {
       socket.on("timeout", () => {
         fail(
           new Error(
+            `Timed out after ${this.timeoutMs}ms waiting for UnrealMCPBridge response to '${cmd}'. ` +
