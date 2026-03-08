@@ -308,3 +308,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    deprioritize this in the tool list," not new work.
    **Milestone: already done (M3); carry the lesson into M4 tool-surface decisions.**
 
+3. **Ship a bundled "recommended agent workflow" doc/Skill**, in the spirit of remiphilippe's
+   README system-prompt block and lilklon's `docs/SKILL.md`: a short, concrete set of rules for the

@@ -242,3 +242,4 @@ UnrealMCP/
     src/
       index.ts                    (+8 registerTool() calls)
       types.ts                    (+8 result interfaces)
+      bridgeClient.ts              (unchanged)
