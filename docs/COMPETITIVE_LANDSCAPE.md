@@ -314,3 +314,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    after every write; save when done). Cheap to write, directly improves real-world tool-use
    reliability, and doubles as onboarding documentation.
    **Milestone: M4.**
+
+4. **Design a security posture now for whenever we add any non-stdio/non-loopback transport.**

@@ -721,3 +721,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	if (!Graph)
 	{
 		return MakeErrorResponse(GraphError);
+	}
+
