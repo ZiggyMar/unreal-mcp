@@ -65,3 +65,4 @@ Duplicated from `M:\Unreal Projects\AntiVirusSquadUE58` to `A:\UnrealProjects\An
 
 ## Engine reference source
 Shallow clone of `EpicGames/UnrealEngine` branch `5.8` at `A:\UnrealEngineSource\UnrealEngine-5.8`,
+used only as a local reference while writing the plugin, not a build dependency for end users.

@@ -111,3 +111,4 @@ export interface AddVariableResult {
   name: string;
   type: string;
 }
+

@@ -70,3 +70,4 @@ mismatches, unresolved variables, missing required pins). This is the safety net
 every write tool above it, and per `../docs/M2_STATUS.md` it is also the single
 least-verified piece of this milestone — treat its first few real runs with extra
 scrutiny.
+
