@@ -148,3 +148,4 @@ namespace
 		FMCPIndexGraph G;
 		if (O.IsValid())
 		{
+			O->TryGetStringField(TEXT("name"), G.Name);
