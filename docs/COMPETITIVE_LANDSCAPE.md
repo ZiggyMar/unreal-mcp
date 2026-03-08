@@ -300,3 +300,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    couple dozen commands), but should design our MCP-server-side tool registration so it's easy to
    collapse into one of these shapes later without a breaking rewrite.
    **Milestone: M4**, as a design decision to make before the tool count grows further, not before.
+
+2. **Keep `find_references`/cross-asset dependency lookup a prominent, explicitly-named tool, not

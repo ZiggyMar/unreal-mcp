@@ -238,3 +238,4 @@ UnrealMCP/
       Private/MCPCommandHandler.cpp  (+~500 lines: create_blueprint, add_node,
                                         connect_pins, set_pin_default_value, remove_node,
                                         add_variable, compile_blueprint, save_blueprint)
+  mcp-server/

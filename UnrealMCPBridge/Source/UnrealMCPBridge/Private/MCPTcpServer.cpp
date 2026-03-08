@@ -109,3 +109,4 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 	{
 		FMCPClientConnection& Client = *Clients[i];
 		if (!Client.IsConnected())
+		{

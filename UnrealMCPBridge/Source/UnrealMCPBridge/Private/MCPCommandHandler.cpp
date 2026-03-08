@@ -708,3 +708,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	{
 		return MakeErrorResponse(TEXT("missing_param: path, graphName and nodeType are required"));
 	}
+
+	FString LoadError;
