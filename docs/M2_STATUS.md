@@ -233,3 +233,4 @@ UnrealMCP/
   UnrealMCPBridge/
     Source/UnrealMCPBridge/
       UnrealMCPBridge.Build.cs    (+MessageLog module)
+      Public/MCPCommandHandler.h  (+8 handler decls, +FindGraphByName/FindNodeById/

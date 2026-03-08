@@ -293,3 +293,5 @@ words for evaluation — not code taken from any repo. None of the 9 surveyed re
 (see license findings below), so there is no license-inheritance concern for any of these; they're
 listed as general, cleanly-reimplementable patterns regardless.
 
+1. **Adopt a gateway or namespaced-tool pattern once our own tool count grows.**
+   ChiR24 (single `unreal` gateway, search/describe/execute/configure over 23 tools) and GenOrca

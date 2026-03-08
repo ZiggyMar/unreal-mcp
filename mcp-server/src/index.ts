@@ -291,3 +291,4 @@ server.registerTool(
         sourceNodeId,
         sourcePin,
         targetNodeId,
+        targetPin,
