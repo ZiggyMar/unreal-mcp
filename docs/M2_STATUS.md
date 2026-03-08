@@ -240,3 +240,4 @@ UnrealMCP/
                                         add_variable, compile_blueprint, save_blueprint)
   mcp-server/
     src/
+      index.ts                    (+8 registerTool() calls)

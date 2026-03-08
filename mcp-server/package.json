@@ -14,3 +14,4 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",

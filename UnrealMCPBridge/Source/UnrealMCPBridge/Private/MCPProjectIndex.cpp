@@ -154,3 +154,4 @@ namespace
 			{
 				G.NodeCount = NodeCount;
 			}
+			const TSharedPtr<FJsonObject>* Histogram = nullptr;

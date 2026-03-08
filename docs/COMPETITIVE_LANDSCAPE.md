@@ -304,3 +304,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 2. **Keep `find_references`/cross-asset dependency lookup a prominent, explicitly-named tool, not
    a buried search mode.** GenOrca and remiphilippe both independently ship named
    `find_referencers`/`get_dependencies`-style tools, validating real demand for this exact
+   capability — which we already have as M3's `find_references`. Action item is really "don't
+   deprioritize this in the tool list," not new work.
