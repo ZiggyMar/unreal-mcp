@@ -159,3 +159,5 @@ namespace
 			{
 				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Histogram)->Values)
 				{
+					if (Pair.Value.IsValid())
+					{
