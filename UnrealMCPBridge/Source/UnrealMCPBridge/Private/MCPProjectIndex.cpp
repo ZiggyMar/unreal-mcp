@@ -149,3 +149,5 @@ namespace
 		if (O.IsValid())
 		{
 			O->TryGetStringField(TEXT("name"), G.Name);
+			int32 NodeCount = 0;
+			if (O->TryGetNumberField(TEXT("nodeCount"), NodeCount))
