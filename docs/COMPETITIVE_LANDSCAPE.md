@@ -302,3 +302,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    **Milestone: M4**, as a design decision to make before the tool count grows further, not before.
 
 2. **Keep `find_references`/cross-asset dependency lookup a prominent, explicitly-named tool, not
+   a buried search mode.** GenOrca and remiphilippe both independently ship named
+   `find_referencers`/`get_dependencies`-style tools, validating real demand for this exact

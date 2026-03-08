@@ -239,3 +239,4 @@ UnrealMCP/
                                         connect_pins, set_pin_default_value, remove_node,
                                         add_variable, compile_blueprint, save_blueprint)
   mcp-server/
+    src/
