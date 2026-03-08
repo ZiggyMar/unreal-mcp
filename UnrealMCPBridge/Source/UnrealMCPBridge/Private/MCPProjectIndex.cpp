@@ -142,3 +142,4 @@ namespace
 		O->SetObjectField(TEXT("nodeTypeHistogram"), Histogram);
 		return O;
 	}
+

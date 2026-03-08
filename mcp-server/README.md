@@ -69,3 +69,4 @@ structurally fine — nodes added, pins connected — and still fail to compile 
 mismatches, unresolved variables, missing required pins). This is the safety net for
 every write tool above it, and per `../docs/M2_STATUS.md` it is also the single
 least-verified piece of this milestone — treat its first few real runs with extra
+scrutiny.
