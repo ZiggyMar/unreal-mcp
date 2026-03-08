@@ -24,3 +24,4 @@ struct FMCPIndexVariable
 	FString Type;
 	FString Category;
 };
+

@@ -158,3 +158,4 @@ namespace
 			if (O->TryGetObjectField(TEXT("nodeTypeHistogram"), Histogram) && Histogram && Histogram->IsValid())
 			{
 				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Histogram)->Values)
+				{
