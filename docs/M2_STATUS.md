@@ -234,3 +234,5 @@ UnrealMCP/
     Source/UnrealMCPBridge/
       UnrealMCPBridge.Build.cs    (+MessageLog module)
       Public/MCPCommandHandler.h  (+8 handler decls, +FindGraphByName/FindNodeById/
+                                    ResolveClassByName/ResolvePinType helpers)
+      Private/MCPCommandHandler.cpp  (+~500 lines: create_blueprint, add_node,

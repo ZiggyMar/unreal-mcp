@@ -146,3 +146,5 @@ namespace
 	FMCPIndexGraph GraphFromJson(const TSharedPtr<FJsonObject>& O)
 	{
 		FMCPIndexGraph G;
+		if (O.IsValid())
+		{
