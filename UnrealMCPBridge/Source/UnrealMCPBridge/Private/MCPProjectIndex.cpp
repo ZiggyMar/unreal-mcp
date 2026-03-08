@@ -155,3 +155,4 @@ namespace
 				G.NodeCount = NodeCount;
 			}
 			const TSharedPtr<FJsonObject>* Histogram = nullptr;
+			if (O->TryGetObjectField(TEXT("nodeTypeHistogram"), Histogram) && Histogram && Histogram->IsValid())
