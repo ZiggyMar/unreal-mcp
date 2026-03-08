@@ -698,3 +698,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	return MakeOkResponse(Result);
 }
 
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJsonObject>& Params)
+{

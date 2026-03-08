@@ -291,3 +291,5 @@ Sources:
 Every item below is a pattern described in a competitor's documentation, reimplemented in our own
 words for evaluation — not code taken from any repo. None of the 9 surveyed repos are GPL/copyleft
 (see license findings below), so there is no license-inheritance concern for any of these; they're
+listed as general, cleanly-reimplementable patterns regardless.
+
