@@ -12,3 +12,4 @@ class FMCPTcpServer;
 class FUnrealMCPBridgeModule : public IModuleInterface
 {
 public:
+	virtual void StartupModule() override;

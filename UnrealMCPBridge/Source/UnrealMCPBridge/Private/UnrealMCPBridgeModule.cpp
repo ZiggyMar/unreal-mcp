@@ -22,3 +22,4 @@ void FUnrealMCPBridgeModule::StartupModule()
 
 void FUnrealMCPBridgeModule::ShutdownModule()
 {
+	if (TcpServer.IsValid())

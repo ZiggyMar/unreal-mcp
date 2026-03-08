@@ -297,3 +297,4 @@ server.registerTool(
     } catch (err) {
       return errorResult(err);
     }
+  }

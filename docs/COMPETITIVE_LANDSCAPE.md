@@ -312,3 +312,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    README system-prompt block and lilklon's `docs/SKILL.md`: a short, concrete set of rules for the
    calling agent (read before write; use the tiered summary before requesting node detail; compile
    after every write; save when done). Cheap to write, directly improves real-world tool-use
+   reliability, and doubles as onboarding documentation.
+   **Milestone: M4.**
