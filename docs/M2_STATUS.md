@@ -231,3 +231,4 @@ UnrealMCP/
   docs/
     M2_STATUS.md                 (this file)
   UnrealMCPBridge/
+    Source/UnrealMCPBridge/
