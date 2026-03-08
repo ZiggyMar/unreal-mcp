@@ -143,3 +143,5 @@ namespace
 		return O;
 	}
 
+	FMCPIndexGraph GraphFromJson(const TSharedPtr<FJsonObject>& O)
+	{

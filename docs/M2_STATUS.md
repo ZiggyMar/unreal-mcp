@@ -232,3 +232,4 @@ UnrealMCP/
     M2_STATUS.md                 (this file)
   UnrealMCPBridge/
     Source/UnrealMCPBridge/
+      UnrealMCPBridge.Build.cs    (+MessageLog module)
