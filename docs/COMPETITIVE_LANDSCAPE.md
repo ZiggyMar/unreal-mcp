@@ -306,3 +306,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    `find_referencers`/`get_dependencies`-style tools, validating real demand for this exact
    capability — which we already have as M3's `find_references`. Action item is really "don't
    deprioritize this in the tool list," not new work.
+   **Milestone: already done (M3); carry the lesson into M4 tool-surface decisions.**
+
