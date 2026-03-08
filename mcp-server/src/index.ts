@@ -294,3 +294,4 @@ server.registerTool(
         targetPin,
       });
       return jsonResult(result);
+    } catch (err) {

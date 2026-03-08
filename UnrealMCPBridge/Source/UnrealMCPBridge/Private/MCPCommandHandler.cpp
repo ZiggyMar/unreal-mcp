@@ -710,3 +710,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	}
 
 	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)

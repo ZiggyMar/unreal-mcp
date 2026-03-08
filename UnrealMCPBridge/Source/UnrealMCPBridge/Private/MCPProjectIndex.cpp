@@ -152,3 +152,5 @@ namespace
 			int32 NodeCount = 0;
 			if (O->TryGetNumberField(TEXT("nodeCount"), NodeCount))
 			{
+				G.NodeCount = NodeCount;
+			}

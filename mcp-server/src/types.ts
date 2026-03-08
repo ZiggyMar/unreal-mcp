@@ -112,3 +112,4 @@ export interface AddVariableResult {
   type: string;
 }
 
+export type CompileMessageSeverity = "error" | "warning" | "performance_warning" | "info";
