@@ -700,3 +700,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Path, GraphName, NodeType;
+	if (!Params.IsValid() ||

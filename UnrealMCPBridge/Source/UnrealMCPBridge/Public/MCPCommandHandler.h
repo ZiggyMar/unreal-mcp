@@ -38,3 +38,4 @@ private:
 	static TSharedRef<FJsonObject> HandleListBlueprintGraphs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleReadBlueprintNodeDetail(const TSharedPtr<FJsonObject>& Params);
+
