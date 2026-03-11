@@ -25,3 +25,4 @@ struct FMCPIndexVariable
 	FString Category;
 };
 
+struct FMCPIndexGraph

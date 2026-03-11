@@ -317,3 +317,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 
 4. **Design a security posture now for whenever we add any non-stdio/non-loopback transport.**
    ChiR24's defaults — capability-token auth on by default with an auto-generated per-project
+   secret file, loopback-only binding by default, explicit opt-in-with-warning for LAN access — are
+   the strongest in the survey and worth adopting wholesale before (not after) we ship anything

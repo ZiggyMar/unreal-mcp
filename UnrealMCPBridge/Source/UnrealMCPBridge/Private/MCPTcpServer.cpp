@@ -111,3 +111,4 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 		if (!Client.IsConnected())
 		{
 			Clients.RemoveAt(i);
+			continue;
