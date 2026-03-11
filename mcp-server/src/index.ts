@@ -300,3 +300,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(
