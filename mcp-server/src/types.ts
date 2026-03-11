@@ -114,3 +114,4 @@ export interface AddVariableResult {
 
 export type CompileMessageSeverity = "error" | "warning" | "performance_warning" | "info";
 
+export interface CompileMessage {

@@ -321,3 +321,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    the strongest in the survey and worth adopting wholesale before (not after) we ship anything
    beyond local stdio/TCP.
    **Milestone: prerequisite for any M4+ networked transport, not urgent otherwise.**
+
+5. **Blueprint complexity/lint pass**, inspired by avdo403's "detect logic issues" feature — flag

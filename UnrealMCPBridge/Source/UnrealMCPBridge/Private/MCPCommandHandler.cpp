@@ -728,3 +728,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	if (Params->HasField(TEXT("x")))
 	{
 		PosX = Params->GetNumberField(TEXT("x"));
+	}
+	if (Params->HasField(TEXT("y")))
