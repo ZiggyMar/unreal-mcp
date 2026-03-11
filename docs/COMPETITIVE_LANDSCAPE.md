@@ -316,3 +316,4 @@ listed as general, cleanly-reimplementable patterns regardless.
    **Milestone: M4.**
 
 4. **Design a security posture now for whenever we add any non-stdio/non-loopback transport.**
+   ChiR24's defaults — capability-token auth on by default with an auto-generated per-project
