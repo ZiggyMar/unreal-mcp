@@ -736,3 +736,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 
 	UEdGraphNode* NewNode = nullptr;
 
+	if (NodeType == TEXT("Event"))
+	{

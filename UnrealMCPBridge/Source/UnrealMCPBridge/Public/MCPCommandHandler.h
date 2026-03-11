@@ -40,3 +40,4 @@ private:
 	static TSharedRef<FJsonObject> HandleReadBlueprintNodeDetail(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Milestone 2: write/edit ---
+	static TSharedRef<FJsonObject> HandleCreateBlueprint(const TSharedPtr<FJsonObject>& Params);

@@ -329,3 +329,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    **Milestone: M4.**
 
 6. **In-editor status UI** (toolbar button or status widget showing bridge connection state and
+   index build status, start/stop control), inspired by kvick-games. Small UX polish item, makes
+   the plugin's state legible to a human working alongside the agent without reading logs.
