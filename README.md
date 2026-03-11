@@ -67,3 +67,4 @@ mkdir -p "/path/to/YourProject/Plugins" && cp -r UnrealMCPBridge "/path/to/YourP
 New-Item -ItemType Directory -Force -Path "C:\path\to\YourProject\Plugins"; Copy-Item -Recurse UnrealMCPBridge "C:\path\to\YourProject\Plugins\"
 ```
 *Note: Rebuild/open your Unreal project to compile the plugin, and ensure it is enabled in the editor.*
+
