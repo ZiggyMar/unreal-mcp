@@ -723,3 +723,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		return MakeErrorResponse(GraphError);
 	}
 
+	double PosX = 0.0;
+	double PosY = 0.0;
