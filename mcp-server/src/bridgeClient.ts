@@ -67,3 +67,4 @@ export class UnrealBridgeClient {
           new Error(
             `Timed out after ${this.timeoutMs}ms waiting for UnrealMCPBridge response to '${cmd}'. ` +
               `Is the Unreal Editor open with the UnrealMCPBridge plugin loaded, listening on ${this.host}:${this.port}?`
+          )

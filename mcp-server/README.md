@@ -76,3 +76,4 @@ scrutiny.
 | Tool | Bridge command | Purpose |
 |---|---|---|
 | `unreal_get_project_overview` | `get_project_overview` | Cheap top-level summary: counts + folder/parent-class breakdowns. **Call this first** to orient yourself. |
+| `unreal_search_project` | `search_project` | Keyword/substring search across blueprint/function/variable/class names, via a persistent index — not a live rescan. |

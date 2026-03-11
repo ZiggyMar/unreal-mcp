@@ -112,3 +112,4 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 		{
 			Clients.RemoveAt(i);
 			continue;
+		}

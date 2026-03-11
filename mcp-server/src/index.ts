@@ -302,3 +302,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_set_pin_default_value",
+  {
