@@ -325,3 +325,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 5. **Blueprint complexity/lint pass**, inspired by avdo403's "detect logic issues" feature — flag
    graphs above a node-count threshold, orphaned nodes, excessive branching, etc. This builds
    directly on data M3 already computes (the per-graph node-type histogram in `MCPProjectIndex`),
+   so it's a relatively small addition rather than new infrastructure.
+   **Milestone: M4.**

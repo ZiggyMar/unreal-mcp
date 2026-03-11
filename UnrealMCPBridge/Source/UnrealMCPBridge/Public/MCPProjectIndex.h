@@ -26,3 +26,4 @@ struct FMCPIndexVariable
 };
 
 struct FMCPIndexGraph
+{
