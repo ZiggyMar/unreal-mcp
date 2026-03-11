@@ -174,3 +174,5 @@ namespace
 		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("path"), BP.Path);
 		O->SetStringField(TEXT("name"), BP.Name);
+		O->SetStringField(TEXT("parentClass"), BP.ParentClass);
+

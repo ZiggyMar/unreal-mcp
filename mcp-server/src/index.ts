@@ -303,3 +303,4 @@ server.registerTool(
 server.registerTool(
   "unreal_set_pin_default_value",
   {
+    title: "Set a literal default value on an unconnected input pin",

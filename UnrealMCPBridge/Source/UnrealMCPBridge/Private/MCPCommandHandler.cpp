@@ -738,3 +738,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 
 	if (NodeType == TEXT("Event"))
 	{
+		FString EventName;
+		if (!Params->TryGetStringField(TEXT("eventName"), EventName))
