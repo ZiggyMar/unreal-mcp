@@ -323,3 +323,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    **Milestone: prerequisite for any M4+ networked transport, not urgent otherwise.**
 
 5. **Blueprint complexity/lint pass**, inspired by avdo403's "detect logic issues" feature — flag
+   graphs above a node-count threshold, orphaned nodes, excessive branching, etc. This builds
+   directly on data M3 already computes (the per-graph node-type histogram in `MCPProjectIndex`),
