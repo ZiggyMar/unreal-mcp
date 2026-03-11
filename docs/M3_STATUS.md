@@ -10,3 +10,4 @@ Last updated: 2026-08-07
 ## TL;DR
 
 - **The persistent, incrementally-updated project index compiles successfully against
+  the real stock UE 5.8 install**, verified the same two ways as M1/M2 (isolated
