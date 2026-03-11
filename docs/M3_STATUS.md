@@ -9,3 +9,4 @@ Last updated: 2026-08-07
 
 ## TL;DR
 
+- **The persistent, incrementally-updated project index compiles successfully against
