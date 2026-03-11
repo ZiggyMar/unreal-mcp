@@ -327,3 +327,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    directly on data M3 already computes (the per-graph node-type histogram in `MCPProjectIndex`),
    so it's a relatively small addition rather than new infrastructure.
    **Milestone: M4.**
+
+6. **In-editor status UI** (toolbar button or status widget showing bridge connection state and

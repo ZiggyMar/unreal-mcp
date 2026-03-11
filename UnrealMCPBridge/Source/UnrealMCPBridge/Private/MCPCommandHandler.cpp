@@ -734,3 +734,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		PosY = Params->GetNumberField(TEXT("y"));
 	}
 
+	UEdGraphNode* NewNode = nullptr;
+

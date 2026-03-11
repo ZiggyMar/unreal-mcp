@@ -7,3 +7,5 @@ Last updated: 2026-08-07
 > — has been tested against a real live editor and **confirmed working**. See
 > [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md). Everything below reflects the pre-live-test state.
 
+## TL;DR
+
