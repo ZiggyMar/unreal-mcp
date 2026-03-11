@@ -164,3 +164,4 @@ namespace
 						G.NodeTypeHistogram.Add(Pair.Key, static_cast<int32>(Pair.Value->AsNumber()));
 					}
 				}
+			}
