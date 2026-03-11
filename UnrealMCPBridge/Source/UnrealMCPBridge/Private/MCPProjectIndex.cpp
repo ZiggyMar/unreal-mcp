@@ -170,3 +170,4 @@ namespace
 	}
 
 	TSharedRef<FJsonObject> BlueprintEntryToJson(const FMCPIndexBlueprint& BP)
+	{
