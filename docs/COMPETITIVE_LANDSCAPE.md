@@ -337,3 +337,4 @@ listed as general, cleanly-reimplementable patterns regardless.
    kvick-games' upfront disclaimer — we perform destructive in-place writes (M2) and should be at
    least as explicit about source-control/backup expectations before publishing.
    **Milestone: M4, as part of launch/publish prep — do this before the GitHub repo goes public.**
+

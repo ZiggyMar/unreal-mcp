@@ -743,3 +743,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			return MakeErrorResponse(TEXT("missing_param: eventName is required for nodeType=Event"));
 		}
+		UClass* ParentClass = Blueprint->ParentClass;
+		UFunction* EventFunc = ParentClass ? ParentClass->FindFunctionByName(FName(*EventName)) : nullptr;

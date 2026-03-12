@@ -305,3 +305,4 @@ server.registerTool(
   {
     title: "Set a literal default value on an unconnected input pin",
     description:
+      "Sets a literal (string-serialized) default value on an input pin, e.g. setting a float literal to \"1.5\" or a " +
