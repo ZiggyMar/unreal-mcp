@@ -751,3 +751,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				*EventName, ParentClass ? *ParentClass->GetName() : TEXT("(no parent class)")));
 		}
 
+		// An override event node for a given function is unique per graph. The real Blueprint
+		// editor focuses the existing node rather than creating a duplicate when you re-add the

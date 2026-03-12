@@ -18,3 +18,5 @@ Last updated: 2026-08-07
   `FProperty::GetCPPType()` via `TFieldIterator`.
 - **All 3 new MCP tools (16 total: 5 M1 + 8 M2 + 3 M3) verified end-to-end over real MCP
   stdio**, including a dedicated set of tests for the local-model enrichment seam
+  covering all three states: enrichment disabled (default pass-through), enrichment
+  enabled and working, and enrichment enabled but the local model unreachable (graceful
