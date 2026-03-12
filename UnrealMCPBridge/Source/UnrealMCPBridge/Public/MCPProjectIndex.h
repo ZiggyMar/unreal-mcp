@@ -28,3 +28,4 @@ struct FMCPIndexVariable
 struct FMCPIndexGraph
 {
 	FString Name;
+	int32 NodeCount = 0;

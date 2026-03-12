@@ -181,3 +181,5 @@ namespace
 		{
 			InterfacesArr.Add(MakeShared<FJsonValueString>(I));
 		}
+		O->SetArrayField(TEXT("interfaces"), InterfacesArr);
+

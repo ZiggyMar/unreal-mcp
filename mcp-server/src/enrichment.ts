@@ -4,3 +4,4 @@
 // endpoint (works out of the box with Ollama's `ollama serve` -> http://localhost:11434/v1,
 // LM Studio, vLLM's OpenAI-compatible server, etc) to generate a short one-line
 // natural-language summary per search hit, e.g. turning a bare hit like
+// `{ kind: "function", name: "TakeDamage", context: "function in BP_Enemy" }` into one
