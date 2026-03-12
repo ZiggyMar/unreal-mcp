@@ -335,3 +335,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 
 7. **Add a prominent, specific safety/backup disclaimer to our own README**, in the spirit of
    kvick-games' upfront disclaimer — we perform destructive in-place writes (M2) and should be at
+   least as explicit about source-control/backup expectations before publishing.
+   **Milestone: M4, as part of launch/publish prep — do this before the GitHub repo goes public.**

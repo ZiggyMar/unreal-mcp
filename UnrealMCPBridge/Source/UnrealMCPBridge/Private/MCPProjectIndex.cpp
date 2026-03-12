@@ -177,3 +177,5 @@ namespace
 		O->SetStringField(TEXT("parentClass"), BP.ParentClass);
 
 		TArray<TSharedPtr<FJsonValue>> InterfacesArr;
+		for (const FString& I : BP.Interfaces)
+		{
