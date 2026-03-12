@@ -342,3 +342,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    index** — that indexes Epic's own API docs (and/or our own generated notes) the way
    remiphilippe's Bleve-backed docs index does, so an agent can look up a class/function reference
    without spending tokens re-deriving it from raw engine headers. Additive to M3, not a
+   replacement.
+   **Milestone: M5 (new index type; M3 is specifically the project-structure index and should stay

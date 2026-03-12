@@ -17,3 +17,4 @@ Last updated: 2026-08-07
   `OnAssetUpdated`/`OnFilesLoaded` delegates, `GetReferencers`/`GetDependencies`, and
   `FProperty::GetCPPType()` via `TFieldIterator`.
 - **All 3 new MCP tools (16 total: 5 M1 + 8 M2 + 3 M3) verified end-to-end over real MCP
+  stdio**, including a dedicated set of tests for the local-model enrichment seam

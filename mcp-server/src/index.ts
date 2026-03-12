@@ -307,3 +307,4 @@ server.registerTool(
     description:
       "Sets a literal (string-serialized) default value on an input pin, e.g. setting a float literal to \"1.5\" or a " +
       "bool literal to \"true\". Fails with pin_is_connected if the pin already has a link: disconnect it first.",
+    inputSchema: {
