@@ -338,3 +338,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    least as explicit about source-control/backup expectations before publishing.
    **Milestone: M4, as part of launch/publish prep — do this before the GitHub repo goes public.**
 
+8. **Consider a second, complementary documentation index — distinct from M3's project-structure
+   index** — that indexes Epic's own API docs (and/or our own generated notes) the way

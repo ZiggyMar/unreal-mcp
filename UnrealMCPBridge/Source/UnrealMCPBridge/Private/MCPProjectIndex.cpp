@@ -180,3 +180,4 @@ namespace
 		for (const FString& I : BP.Interfaces)
 		{
 			InterfacesArr.Add(MakeShared<FJsonValueString>(I));
+		}

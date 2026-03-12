@@ -116,3 +116,4 @@ export type CompileMessageSeverity = "error" | "warning" | "performance_warning"
 
 export interface CompileMessage {
   severity: CompileMessageSeverity;
+  text: string;

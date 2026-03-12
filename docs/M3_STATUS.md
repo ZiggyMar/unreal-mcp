@@ -15,3 +15,4 @@ Last updated: 2026-08-07
   the **first attempt**, despite this milestone touching the riskiest new API surface
   yet: `IAssetRegistry`'s `OnAssetAdded`/`OnAssetRemoved`/`OnAssetRenamed`/
   `OnAssetUpdated`/`OnFilesLoaded` delegates, `GetReferencers`/`GetDependencies`, and
+  `FProperty::GetCPPType()` via `TFieldIterator`.
