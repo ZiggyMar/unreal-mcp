@@ -745,3 +745,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		}
 		UClass* ParentClass = Blueprint->ParentClass;
 		UFunction* EventFunc = ParentClass ? ParentClass->FindFunctionByName(FName(*EventName)) : nullptr;
+		if (!EventFunc)
+		{
