@@ -747,3 +747,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		UFunction* EventFunc = ParentClass ? ParentClass->FindFunctionByName(FName(*EventName)) : nullptr;
 		if (!EventFunc)
 		{
+			return MakeErrorResponse(FString::Printf(TEXT("event_function_not_found: %s on %s"),
+				*EventName, ParentClass ? *ParentClass->GetName() : TEXT("(no parent class)")));

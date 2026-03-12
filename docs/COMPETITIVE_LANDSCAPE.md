@@ -340,3 +340,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 
 8. **Consider a second, complementary documentation index — distinct from M3's project-structure
    index** — that indexes Epic's own API docs (and/or our own generated notes) the way
+   remiphilippe's Bleve-backed docs index does, so an agent can look up a class/function reference
+   without spending tokens re-deriving it from raw engine headers. Additive to M3, not a
