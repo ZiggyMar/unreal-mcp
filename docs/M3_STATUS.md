@@ -14,3 +14,4 @@ Last updated: 2026-08-07
   `RunUAT BuildPlugin` + direct build against `AntiVirusSquadUE58`). Both succeeded on
   the **first attempt**, despite this milestone touching the riskiest new API surface
   yet: `IAssetRegistry`'s `OnAssetAdded`/`OnAssetRemoved`/`OnAssetRenamed`/
+  `OnAssetUpdated`/`OnFilesLoaded` delegates, `GetReferencers`/`GetDependencies`, and

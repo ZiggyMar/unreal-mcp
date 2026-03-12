@@ -179,3 +179,4 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> InterfacesArr;
 		for (const FString& I : BP.Interfaces)
 		{
+			InterfacesArr.Add(MakeShared<FJsonValueString>(I));
