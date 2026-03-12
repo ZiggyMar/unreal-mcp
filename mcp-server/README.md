@@ -79,3 +79,4 @@ scrutiny.
 | `unreal_search_project` | `search_project` | Keyword/substring search across blueprint/function/variable/class names, via a persistent index — not a live rescan. |
 | `unreal_find_references` | `find_references` | What references an asset, and what it depends on, via the AssetRegistry dependency graph. The direct answer to "what uses this Blueprint." |
 
+These exist to solve the actual problem this whole project is for: finding things across

@@ -184,3 +184,5 @@ namespace
 		O->SetArrayField(TEXT("interfaces"), InterfacesArr);
 
 		TArray<TSharedPtr<FJsonValue>> FunctionsArr;
+		for (const FMCPIndexFunction& F : BP.Functions)
+		{

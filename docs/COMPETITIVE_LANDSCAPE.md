@@ -344,3 +344,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    without spending tokens re-deriving it from raw engine headers. Additive to M3, not a
    replacement.
    **Milestone: M5 (new index type; M3 is specifically the project-structure index and should stay
+   scoped that way).**
+
