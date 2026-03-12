@@ -740,3 +740,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	{
 		FString EventName;
 		if (!Params->TryGetStringField(TEXT("eventName"), EventName))
+		{
+			return MakeErrorResponse(TEXT("missing_param: eventName is required for nodeType=Event"));

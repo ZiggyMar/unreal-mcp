@@ -333,3 +333,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    the plugin's state legible to a human working alongside the agent without reading logs.
    **Milestone: M4.**
 
+7. **Add a prominent, specific safety/backup disclaimer to our own README**, in the spirit of
+   kvick-games' upfront disclaimer — we perform destructive in-place writes (M2) and should be at

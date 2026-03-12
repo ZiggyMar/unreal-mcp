@@ -27,3 +27,4 @@ struct FMCPIndexVariable
 
 struct FMCPIndexGraph
 {
+	FString Name;
