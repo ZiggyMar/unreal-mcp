@@ -193,3 +193,5 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> VariablesArr;
 		for (const FMCPIndexVariable& V : BP.Variables)
 		{
+			VariablesArr.Add(MakeShared<FJsonValueObject>(VariableToJson(V)));
+		}

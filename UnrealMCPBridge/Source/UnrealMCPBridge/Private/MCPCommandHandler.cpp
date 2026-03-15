@@ -762,3 +762,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			if (ExistingEvent && ExistingEvent->bOverrideFunction && ExistingEvent->EventReference.GetMemberName() == FName(*EventName))
 			{
 				const int32 ExistingIndex = Graph->Nodes.IndexOfByKey(ExistingEvent);
+				TSharedRef<FJsonObject> ExistingResult = MakeShared<FJsonObject>();
+				ExistingResult->SetStringField(TEXT("id"), ExistingIndex != INDEX_NONE ? MakeNodeId(ExistingIndex) : TEXT("?"));

@@ -26,3 +26,4 @@ Last updated: 2026-08-07
   the user's actual stated problem — losing track of what's connected to what across a
   large project. The index's *shape* is provably correct (compiles, round-trips JSON
   correctly); whether `RebuildFull()` actually produces sensible data for
+  `AntiVirusSquadUE58`'s real content, and whether the AssetRegistry delegates actually
