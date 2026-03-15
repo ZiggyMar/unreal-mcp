@@ -8,3 +8,4 @@
 // that also carries `summary: "Reduces health and triggers death when it hits zero"`.
 //
 // If UNREAL_MCP_LOCAL_LLM_URL is NOT set (the default), every exported function here is
+// a pure pass-through: zero network calls, zero latency added, zero setup required. This

@@ -764,3 +764,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				const int32 ExistingIndex = Graph->Nodes.IndexOfByKey(ExistingEvent);
 				TSharedRef<FJsonObject> ExistingResult = MakeShared<FJsonObject>();
 				ExistingResult->SetStringField(TEXT("id"), ExistingIndex != INDEX_NONE ? MakeNodeId(ExistingIndex) : TEXT("?"));
+				ExistingResult->SetStringField(TEXT("type"), ExistingEvent->GetClass()->GetName());
+				ExistingResult->SetStringField(TEXT("title"), ExistingEvent->GetNodeTitle(ENodeTitleType::ListView).ToString());

@@ -357,3 +357,5 @@ listed as general, cleanly-reimplementable patterns regardless.
     a `.zip` per UE version so most users never compile the C++ plugin themselves), rather than
     requiring every user to build `UnrealMCPBridge` locally. Directly relevant since we already
     target stock launcher installs specifically.
+    **Milestone: M4 — release engineering, needed once we publish.**
+

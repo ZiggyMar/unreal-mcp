@@ -118,3 +118,4 @@ export interface CompileMessage {
   severity: CompileMessageSeverity;
   text: string;
 }
+
