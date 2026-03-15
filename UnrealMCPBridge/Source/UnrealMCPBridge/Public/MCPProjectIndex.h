@@ -29,3 +29,4 @@ struct FMCPIndexGraph
 {
 	FString Name;
 	int32 NodeCount = 0;
+	TMap<FString, int32> NodeTypeHistogram;

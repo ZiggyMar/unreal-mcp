@@ -755,3 +755,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		// editor focuses the existing node rather than creating a duplicate when you re-add the
 		// same event. This matters even on a freshly-created Blueprint: new Actor-derived
 		// Blueprints can already come with pre-populated stub event nodes (e.g. BeginPlay/Tick),
+		// so a naive unconditional-create duplicates them on the very first add_node call.
+		for (UEdGraphNode* ExistingNode : Graph->Nodes)

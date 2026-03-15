@@ -6,3 +6,4 @@
 // natural-language summary per search hit, e.g. turning a bare hit like
 // `{ kind: "function", name: "TakeDamage", context: "function in BP_Enemy" }` into one
 // that also carries `summary: "Reduces health and triggers death when it hits zero"`.
+//
