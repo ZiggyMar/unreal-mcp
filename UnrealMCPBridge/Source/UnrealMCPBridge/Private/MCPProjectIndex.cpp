@@ -187,3 +187,5 @@ namespace
 		for (const FMCPIndexFunction& F : BP.Functions)
 		{
 			FunctionsArr.Add(MakeShared<FJsonValueObject>(FunctionToJson(F)));
+		}
+		O->SetArrayField(TEXT("functions"), FunctionsArr);
