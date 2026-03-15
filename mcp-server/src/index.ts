@@ -312,3 +312,4 @@ server.registerTool(
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe('Node id, e.g. "n5".'),
       pinName: z.string().describe("Input pin name."),
+      value: z.string().describe("Literal value, serialized as a string the way Blueprint pin defaults are stored."),

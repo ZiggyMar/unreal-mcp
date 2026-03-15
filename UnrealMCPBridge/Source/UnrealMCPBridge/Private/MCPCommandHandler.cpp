@@ -766,3 +766,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				ExistingResult->SetStringField(TEXT("id"), ExistingIndex != INDEX_NONE ? MakeNodeId(ExistingIndex) : TEXT("?"));
 				ExistingResult->SetStringField(TEXT("type"), ExistingEvent->GetClass()->GetName());
 				ExistingResult->SetStringField(TEXT("title"), ExistingEvent->GetNodeTitle(ENodeTitleType::ListView).ToString());
+				ExistingResult->SetBoolField(TEXT("alreadyExisted"), true);
+				return MakeOkResponse(ExistingResult);

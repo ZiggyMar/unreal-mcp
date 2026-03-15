@@ -196,3 +196,5 @@ namespace
 			VariablesArr.Add(MakeShared<FJsonValueObject>(VariableToJson(V)));
 		}
 		O->SetArrayField(TEXT("variables"), VariablesArr);
+
+		TArray<TSharedPtr<FJsonValue>> GraphsArr;

@@ -28,3 +28,5 @@ Last updated: 2026-08-07
   correctly); whether `RebuildFull()` actually produces sensible data for
   `AntiVirusSquadUE58`'s real content, and whether the AssetRegistry delegates actually
   fire and keep it fresh as the user edits, is **completely unverified** pending that one
+  manual step. See "Manual steps" below for exactly how to check this first.
+
