@@ -190,3 +190,5 @@ namespace
 		}
 		O->SetArrayField(TEXT("functions"), FunctionsArr);
 
+		TArray<TSharedPtr<FJsonValue>> VariablesArr;
+		for (const FMCPIndexVariable& V : BP.Variables)
