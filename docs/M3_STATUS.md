@@ -22,3 +22,4 @@ Last updated: 2026-08-07
   enabled and working, and enrichment enabled but the local model unreachable (graceful
   degradation — confirmed the tool still returns clean results, just without summaries).
 - **Not verified: any of this has ever run against a live Unreal Editor.** Same gap as
+  M1 and M2, restated here because it now applies to the feature that matters most for

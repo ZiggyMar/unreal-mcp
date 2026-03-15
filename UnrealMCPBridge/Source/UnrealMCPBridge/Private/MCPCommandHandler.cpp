@@ -757,3 +757,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		// Blueprints can already come with pre-populated stub event nodes (e.g. BeginPlay/Tick),
 		// so a naive unconditional-create duplicates them on the very first add_node call.
 		for (UEdGraphNode* ExistingNode : Graph->Nodes)
+		{

@@ -189,3 +189,4 @@ namespace
 			FunctionsArr.Add(MakeShared<FJsonValueObject>(FunctionToJson(F)));
 		}
 		O->SetArrayField(TEXT("functions"), FunctionsArr);
+
