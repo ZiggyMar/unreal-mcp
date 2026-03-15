@@ -760,3 +760,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			UK2Node_Event* ExistingEvent = Cast<UK2Node_Event>(ExistingNode);
 			if (ExistingEvent && ExistingEvent->bOverrideFunction && ExistingEvent->EventReference.GetMemberName() == FName(*EventName))
+			{
+				const int32 ExistingIndex = Graph->Nodes.IndexOfByKey(ExistingEvent);

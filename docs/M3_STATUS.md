@@ -25,3 +25,4 @@ Last updated: 2026-08-07
   M1 and M2, restated here because it now applies to the feature that matters most for
   the user's actual stated problem — losing track of what's connected to what across a
   large project. The index's *shape* is provably correct (compiles, round-trips JSON
+  correctly); whether `RebuildFull()` actually produces sensible data for
