@@ -359,3 +359,5 @@ listed as general, cleanly-reimplementable patterns regardless.
     target stock launcher installs specifically.
     **Milestone: M4 — release engineering, needed once we publish.**
 
+---
+
