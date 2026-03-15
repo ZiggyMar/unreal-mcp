@@ -309,3 +309,4 @@ server.registerTool(
       "bool literal to \"true\". Fails with pin_is_connected if the pin already has a link: disconnect it first.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      graphName: z.string().describe("Graph name containing the node."),

@@ -350,3 +350,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    editor-subsystem-with-headless-commandlet-fallback and remiphilippe's `UnrealEditor-Cmd`-based
    headless build/test/cook path. Our current architecture assumes the editor process is already
    running; both competitors point at the same real gap (CI use cases, or simply "the user hasn't
+   opened the editor yet").
+   **Milestone: M5 — bigger architectural addition, needs its own design pass before scoping.**
