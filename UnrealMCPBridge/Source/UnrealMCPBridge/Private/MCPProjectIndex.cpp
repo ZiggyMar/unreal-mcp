@@ -186,3 +186,4 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> FunctionsArr;
 		for (const FMCPIndexFunction& F : BP.Functions)
 		{
+			FunctionsArr.Add(MakeShared<FJsonValueObject>(FunctionToJson(F)));
