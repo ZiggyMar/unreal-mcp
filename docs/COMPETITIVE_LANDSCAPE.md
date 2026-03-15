@@ -354,3 +354,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    **Milestone: M5 — bigger architectural addition, needs its own design pass before scoping.**
 
 10. **Ship precompiled per-engine-version plugin binaries as release assets** (GenOrca's pattern:
+    a `.zip` per UE version so most users never compile the C++ plugin themselves), rather than
+    requiring every user to build `UnrealMCPBridge` locally. Directly relevant since we already

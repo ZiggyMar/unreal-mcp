@@ -192,3 +192,4 @@ namespace
 
 		TArray<TSharedPtr<FJsonValue>> VariablesArr;
 		for (const FMCPIndexVariable& V : BP.Variables)
+		{

@@ -7,3 +7,4 @@
 // `{ kind: "function", name: "TakeDamage", context: "function in BP_Enemy" }` into one
 // that also carries `summary: "Reduces health and triggers death when it hits zero"`.
 //
+// If UNREAL_MCP_LOCAL_LLM_URL is NOT set (the default), every exported function here is
