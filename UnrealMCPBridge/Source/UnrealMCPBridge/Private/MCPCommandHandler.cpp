@@ -758,3 +758,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		// so a naive unconditional-create duplicates them on the very first add_node call.
 		for (UEdGraphNode* ExistingNode : Graph->Nodes)
 		{
+			UK2Node_Event* ExistingEvent = Cast<UK2Node_Event>(ExistingNode);
+			if (ExistingEvent && ExistingEvent->bOverrideFunction && ExistingEvent->EventReference.GetMemberName() == FName(*EventName))
