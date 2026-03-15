@@ -346,3 +346,5 @@ listed as general, cleanly-reimplementable patterns regardless.
    **Milestone: M5 (new index type; M3 is specifically the project-structure index and should stay
    scoped that way).**
 
+9. **Design-spike a headless / editor-not-yet-running mode**, prompted by mirno-ehf's
+   editor-subsystem-with-headless-commandlet-fallback and remiphilippe's `UnrealEditor-Cmd`-based

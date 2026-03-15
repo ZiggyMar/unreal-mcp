@@ -23,3 +23,4 @@ public:
 	FMCPTcpServer();
 	~FMCPTcpServer();
 
+	bool Start(int32 Port);

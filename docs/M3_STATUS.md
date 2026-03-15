@@ -20,3 +20,4 @@ Last updated: 2026-08-07
   stdio**, including a dedicated set of tests for the local-model enrichment seam
   covering all three states: enrichment disabled (default pass-through), enrichment
   enabled and working, and enrichment enabled but the local model unreachable (graceful
+  degradation — confirmed the tool still returns clean results, just without summaries).
