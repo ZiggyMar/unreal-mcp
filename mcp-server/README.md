@@ -81,3 +81,4 @@ scrutiny.
 
 These exist to solve the actual problem this whole project is for: finding things across
 a large project without enumerating everything every time, and without losing track of
+what's connected to what. The index backing `unreal_search_project` /

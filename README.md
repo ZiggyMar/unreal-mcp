@@ -69,3 +69,4 @@ New-Item -ItemType Directory -Force -Path "C:\path\to\YourProject\Plugins"; Copy
 *Note: Rebuild/open your Unreal project to compile the plugin, and ensure it is enabled in the editor.*
 
 ### 2. Build the MCP Server
+Install the node dependencies and compile the typescript codebase:

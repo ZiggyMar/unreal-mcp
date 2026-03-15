@@ -69,3 +69,4 @@ export class UnrealBridgeClient {
               `Is the Unreal Editor open with the UnrealMCPBridge plugin loaded, listening on ${this.host}:${this.port}?`
           )
         );
+      });
