@@ -32,3 +32,4 @@ struct FMCPIndexGraph
 	TMap<FString, int32> NodeTypeHistogram;
 };
 
+struct FMCPIndexBlueprint
