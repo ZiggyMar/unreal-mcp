@@ -204,3 +204,4 @@ namespace
 		}
 		O->SetArrayField(TEXT("graphs"), GraphsArr);
 
+		return O;
