@@ -83,3 +83,4 @@ These exist to solve the actual problem this whole project is for: finding thing
 a large project without enumerating everything every time, and without losing track of
 what's connected to what. The index backing `unreal_search_project` /
 `unreal_get_project_overview` lives in the C++ plugin (`FMCPProjectIndex`), is persisted
+to `Saved/UnrealMCPBridge/index.json` in the target project so a fresh editor session

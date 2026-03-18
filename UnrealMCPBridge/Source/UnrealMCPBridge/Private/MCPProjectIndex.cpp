@@ -201,3 +201,4 @@ namespace
 		for (const FMCPIndexGraph& G : BP.Graphs)
 		{
 			GraphsArr.Add(MakeShared<FJsonValueObject>(GraphToJson(G)));
+		}

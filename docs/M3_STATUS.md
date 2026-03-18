@@ -32,3 +32,4 @@ Last updated: 2026-08-07
 
 ## What's new
 
+### C++ plugin — project index (`MCPProjectIndex.h`/`.cpp`, new files)
