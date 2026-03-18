@@ -361,3 +361,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 
 ---
 
+## License findings (why this matters for us specifically)
+

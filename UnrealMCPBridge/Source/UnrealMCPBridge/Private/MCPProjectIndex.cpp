@@ -198,3 +198,4 @@ namespace
 		O->SetArrayField(TEXT("variables"), VariablesArr);
 
 		TArray<TSharedPtr<FJsonValue>> GraphsArr;
+		for (const FMCPIndexGraph& G : BP.Graphs)
