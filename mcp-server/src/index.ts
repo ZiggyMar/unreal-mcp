@@ -315,3 +315,4 @@ server.registerTool(
       value: z.string().describe("Literal value, serialized as a string the way Blueprint pin defaults are stored."),
     },
   },
+  async ({ path, graphName, nodeId, pinName, value }) => {

@@ -369,3 +369,5 @@ point about hygiene in this ecosystem:
 
 - **4 of 9** repos (chongdashu, sam-david, avdo403, lilklon) — including the single most-starred
   project in the entire survey — display an MIT badge or the word "MIT" in their README with **no
+  LICENSE file and no license grant text anywhere in the repository**. Checked `LICENSE`,
+  `LICENSE.md`, `LICENSE.txt`, and a full root-directory listing for each. GitHub's own license

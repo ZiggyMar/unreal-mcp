@@ -775,3 +775,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		EventNode->EventReference.SetExternalMember(FName(*EventName), ParentClass);
 		EventNode->bOverrideFunction = true;
 		NewNode = EventNode;
+	}
+	else if (NodeType == TEXT("CustomEvent"))
