@@ -202,3 +202,5 @@ namespace
 		{
 			GraphsArr.Add(MakeShared<FJsonValueObject>(GraphToJson(G)));
 		}
+		O->SetArrayField(TEXT("graphs"), GraphsArr);
+

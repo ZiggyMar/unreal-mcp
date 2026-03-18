@@ -367,3 +367,5 @@ We will not copy code from any of these repos regardless of license — everythi
 pattern description, not code. But the license survey itself is a useful, somewhat alarming data
 point about hygiene in this ecosystem:
 
+- **4 of 9** repos (chongdashu, sam-david, avdo403, lilklon) — including the single most-starred
+  project in the entire survey — display an MIT badge or the word "MIT" in their README with **no

@@ -119,3 +119,4 @@ export interface CompileMessage {
   text: string;
 }
 
+export interface CompileBlueprintResult {
