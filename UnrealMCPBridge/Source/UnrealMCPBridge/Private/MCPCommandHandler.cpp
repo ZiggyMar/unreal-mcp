@@ -772,3 +772,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		}
 
 		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
+		EventNode->EventReference.SetExternalMember(FName(*EventName), ParentClass);

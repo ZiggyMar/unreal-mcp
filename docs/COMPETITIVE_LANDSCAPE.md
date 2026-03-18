@@ -365,3 +365,5 @@ listed as general, cleanly-reimplementable patterns regardless.
 
 We will not copy code from any of these repos regardless of license — everything above is a
 pattern description, not code. But the license survey itself is a useful, somewhat alarming data
+point about hygiene in this ecosystem:
+
