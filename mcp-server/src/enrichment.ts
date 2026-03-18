@@ -11,3 +11,4 @@
 // a pure pass-through: zero network calls, zero latency added, zero setup required. This
 // is a deliberate design choice from the M3 brief. The point is to let cheap/mechanical
 // summarization be offloaded to a small local/free model instead of spending the calling
+// model's (Claude's) own tokens on it, without that ever being a requirement to use

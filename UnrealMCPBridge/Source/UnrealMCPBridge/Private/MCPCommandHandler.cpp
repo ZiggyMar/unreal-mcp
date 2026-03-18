@@ -777,3 +777,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		NewNode = EventNode;
 	}
 	else if (NodeType == TEXT("CustomEvent"))
+	{
+		FString EventName;

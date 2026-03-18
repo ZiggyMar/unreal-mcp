@@ -371,3 +371,5 @@ point about hygiene in this ecosystem:
   project in the entire survey — display an MIT badge or the word "MIT" in their README with **no
   LICENSE file and no license grant text anywhere in the repository**. Checked `LICENSE`,
   `LICENSE.md`, `LICENSE.txt`, and a full root-directory listing for each. GitHub's own license
+  detector independently agrees, reporting "none" for all four.
+- **1 of 9** (kvick-games) has the complete, standard MIT text — copyright holder and year
