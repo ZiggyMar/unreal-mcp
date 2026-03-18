@@ -199,3 +199,5 @@ namespace
 
 		TArray<TSharedPtr<FJsonValue>> GraphsArr;
 		for (const FMCPIndexGraph& G : BP.Graphs)
+		{
+			GraphsArr.Add(MakeShared<FJsonValueObject>(GraphToJson(G)));
