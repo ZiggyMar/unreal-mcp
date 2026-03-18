@@ -770,3 +770,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				return MakeOkResponse(ExistingResult);
 			}
 		}
+
+		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
