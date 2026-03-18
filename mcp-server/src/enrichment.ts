@@ -9,3 +9,4 @@
 //
 // If UNREAL_MCP_LOCAL_LLM_URL is NOT set (the default), every exported function here is
 // a pure pass-through: zero network calls, zero latency added, zero setup required. This
+// is a deliberate design choice from the M3 brief. The point is to let cheap/mechanical

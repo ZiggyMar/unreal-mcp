@@ -30,3 +30,4 @@ Last updated: 2026-08-07
   fire and keep it fresh as the user edits, is **completely unverified** pending that one
   manual step. See "Manual steps" below for exactly how to check this first.
 
+## What's new

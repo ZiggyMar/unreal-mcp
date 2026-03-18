@@ -768,3 +768,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				ExistingResult->SetStringField(TEXT("title"), ExistingEvent->GetNodeTitle(ENodeTitleType::ListView).ToString());
 				ExistingResult->SetBoolField(TEXT("alreadyExisted"), true);
 				return MakeOkResponse(ExistingResult);
+			}
+		}
