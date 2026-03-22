@@ -33,3 +33,4 @@ struct FMCPIndexGraph
 };
 
 struct FMCPIndexBlueprint
+{
