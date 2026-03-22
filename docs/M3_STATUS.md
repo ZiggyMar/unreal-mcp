@@ -38,3 +38,4 @@ Location (source of truth): `F:\!Projects\UnrealMCP\UnrealMCPBridge\Source\Unrea
 Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\`
 
 `FMCPProjectIndex` is a singleton owned by `FUnrealMCPBridgeModule` (`Initialize()` in
+`StartupModule`, `Shutdown()` in `ShutdownModule` — see `UnrealMCPBridgeModule.cpp`).
