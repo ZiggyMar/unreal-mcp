@@ -380,3 +380,5 @@ point about hygiene in this ecosystem:
   content directly.
 - **0 of 9** are GPL or another copyleft license.
 
+Practical takeaway: get our own `LICENSE` file into the repo root before or at the moment we
+publish — not left implicit in the README — since roughly half the comparable projects in this

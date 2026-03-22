@@ -787,3 +787,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		CustomEventNode->CustomFunctionName = FBlueprintEditorUtils::FindUniqueKismetName(Blueprint, EventName);
 		NewNode = CustomEventNode;
 	}
+	else if (NodeType == TEXT("CallFunction"))
