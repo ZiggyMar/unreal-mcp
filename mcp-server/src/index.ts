@@ -322,3 +322,4 @@ server.registerTool(
         graphName,
         nodeId,
         pinName,
+        value,

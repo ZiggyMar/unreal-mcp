@@ -390,3 +390,5 @@ space apparently didn't.
 
 - **We are the only project in this survey with a confirmed persistent, incrementally-updated
   index of the project's own Blueprint structure** (functions, variables, graphs, node-type
+  histograms) that is saved to disk and survives an editor restart, kept current via
+  AssetRegistry change delegates rather than polling or full rescans. One competitor
