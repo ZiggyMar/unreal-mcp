@@ -211,3 +211,4 @@ namespace
 	{
 		FMCPIndexBlueprint BP;
 		if (!O.IsValid())
+		{

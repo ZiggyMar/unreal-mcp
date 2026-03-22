@@ -41,3 +41,4 @@ Deployed/build copy: `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBrid
 `StartupModule`, `Shutdown()` in `ShutdownModule` — see `UnrealMCPBridgeModule.cpp`).
 Design choices, matching the M3 brief:
 
+- **On editor startup**: only registers the 5 AssetRegistry delegates (cheap — no

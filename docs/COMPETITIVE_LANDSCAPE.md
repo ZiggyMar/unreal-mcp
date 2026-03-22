@@ -378,3 +378,5 @@ point about hygiene in this ecosystem:
 - **4 of 9** (remiphilippe, ChiR24, GenOrca, mirno-ehf) have an unambiguous, GitHub-recognized
   LICENSE file (Apache-2.0 × 2, MIT × 2), independently confirmed by us reading the raw file
   content directly.
+- **0 of 9** are GPL or another copyleft license.
+
