@@ -318,3 +318,4 @@ server.registerTool(
   async ({ path, graphName, nodeId, pinName, value }) => {
     try {
       const result = await bridge.send<SetPinDefaultValueResult>("set_pin_default_value", {
+        path,
