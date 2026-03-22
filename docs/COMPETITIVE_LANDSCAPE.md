@@ -373,3 +373,5 @@ point about hygiene in this ecosystem:
   `LICENSE.md`, `LICENSE.txt`, and a full root-directory listing for each. GitHub's own license
   detector independently agrees, reporting "none" for all four.
 - **1 of 9** (kvick-games) has the complete, standard MIT text — copyright holder and year
+  included — embedded directly in its README, but no dedicated LICENSE file, so GitHub still
+  reports "none." Functionally clearer than the four above, but still not machine-verifiable.

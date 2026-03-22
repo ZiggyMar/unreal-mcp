@@ -207,3 +207,4 @@ namespace
 		return O;
 	}
 
+	FMCPIndexBlueprint BlueprintEntryFromJson(const TSharedPtr<FJsonObject>& O)
