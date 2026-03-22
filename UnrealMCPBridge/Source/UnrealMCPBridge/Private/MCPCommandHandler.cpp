@@ -796,3 +796,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			return MakeErrorResponse(TEXT("missing_param: functionName is required for nodeType=CallFunction"));
 		}
+
+		UClass* OwnerClass = Blueprint->ParentClass;
