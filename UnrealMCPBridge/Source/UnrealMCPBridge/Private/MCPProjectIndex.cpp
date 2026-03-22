@@ -209,3 +209,5 @@ namespace
 
 	FMCPIndexBlueprint BlueprintEntryFromJson(const TSharedPtr<FJsonObject>& O)
 	{
+		FMCPIndexBlueprint BP;
+		if (!O.IsValid())

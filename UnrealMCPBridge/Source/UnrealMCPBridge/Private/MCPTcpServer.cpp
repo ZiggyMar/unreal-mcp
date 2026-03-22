@@ -118,3 +118,4 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 	return true; // keep ticking
 }
 
+void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
