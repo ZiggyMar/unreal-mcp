@@ -788,3 +788,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		NewNode = CustomEventNode;
 	}
 	else if (NodeType == TEXT("CallFunction"))
+	{
+		FString FunctionName, ClassName;

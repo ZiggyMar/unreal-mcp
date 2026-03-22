@@ -382,3 +382,5 @@ point about hygiene in this ecosystem:
 
 Practical takeaway: get our own `LICENSE` file into the repo root before or at the moment we
 publish — not left implicit in the README — since roughly half the comparable projects in this
+space apparently didn't.
+
