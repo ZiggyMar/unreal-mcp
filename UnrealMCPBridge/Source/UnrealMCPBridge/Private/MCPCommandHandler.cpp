@@ -790,3 +790,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	else if (NodeType == TEXT("CallFunction"))
 	{
 		FString FunctionName, ClassName;
+		Params->TryGetStringField(TEXT("functionName"), FunctionName);
+		Params->TryGetStringField(TEXT("className"), ClassName);

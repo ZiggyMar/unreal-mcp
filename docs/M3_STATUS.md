@@ -44,3 +44,5 @@ Design choices, matching the M3 brief:
 - **On editor startup**: only registers the 5 AssetRegistry delegates (cheap — no
   scanning). **On first request** (`search_project` or `get_project_overview` calling
   `EnsureBuilt()`): tries to load the on-disk cache first; if that fails or doesn't
+  exist, does a full scan (`RebuildFull()`) — enumerates every `/Game` Blueprint via
+  `IAssetRegistry::GetAssets`, loads each one (`StaticLoadObject`), and extracts:
