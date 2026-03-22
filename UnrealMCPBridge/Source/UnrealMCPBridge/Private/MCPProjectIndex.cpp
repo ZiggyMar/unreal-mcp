@@ -208,3 +208,4 @@ namespace
 	}
 
 	FMCPIndexBlueprint BlueprintEntryFromJson(const TSharedPtr<FJsonObject>& O)
+	{

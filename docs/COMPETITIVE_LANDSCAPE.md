@@ -375,3 +375,5 @@ point about hygiene in this ecosystem:
 - **1 of 9** (kvick-games) has the complete, standard MIT text — copyright holder and year
   included — embedded directly in its README, but no dedicated LICENSE file, so GitHub still
   reports "none." Functionally clearer than the four above, but still not machine-verifiable.
+- **4 of 9** (remiphilippe, ChiR24, GenOrca, mirno-ehf) have an unambiguous, GitHub-recognized
+  LICENSE file (Apache-2.0 × 2, MIT × 2), independently confirmed by us reading the raw file
