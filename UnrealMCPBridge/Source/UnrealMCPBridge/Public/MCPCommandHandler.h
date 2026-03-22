@@ -43,3 +43,4 @@ private:
 	static TSharedRef<FJsonObject> HandleCreateBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleAddNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleConnectPins(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetPinDefaultValue(const TSharedPtr<FJsonObject>& Params);
