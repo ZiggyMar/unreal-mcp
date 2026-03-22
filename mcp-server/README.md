@@ -87,3 +87,4 @@ to `Saved/UnrealMCPBridge/index.json` in the target project so a fresh editor se
 doesn't need a full rescan, and is kept fresh incrementally via AssetRegistry delegates
 as you edit — see `../docs/M3_STATUS.md` for details.
 
+`unreal_find_references` doesn't depend on that index at all — it queries the

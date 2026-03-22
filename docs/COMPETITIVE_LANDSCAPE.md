@@ -388,3 +388,5 @@ space apparently didn't.
 
 ## How we're actually different (specific, falsifiable claims only)
 
+- **We are the only project in this survey with a confirmed persistent, incrementally-updated
+  index of the project's own Blueprint structure** (functions, variables, graphs, node-type
