@@ -47,3 +47,4 @@ Design choices, matching the M3 brief:
   exist, does a full scan (`RebuildFull()`) — enumerates every `/Game` Blueprint via
   `IAssetRegistry::GetAssets`, loads each one (`StaticLoadObject`), and extracts:
   - Path, name, parent class, implemented interfaces (`Blueprint->ImplementedInterfaces`)
+  - Every function in `Blueprint->FunctionGraphs`, with **real param/return types** —

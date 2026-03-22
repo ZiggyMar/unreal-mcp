@@ -218,3 +218,5 @@ namespace
 		O->TryGetStringField(TEXT("name"), BP.Name);
 		O->TryGetStringField(TEXT("parentClass"), BP.ParentClass);
 
+		const TArray<TSharedPtr<FJsonValue>>* InterfacesArr = nullptr;
+		if (O->TryGetArrayField(TEXT("interfaces"), InterfacesArr) && InterfacesArr)

@@ -794,3 +794,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		Params->TryGetStringField(TEXT("className"), ClassName);
 		if (FunctionName.IsEmpty())
 		{
+			return MakeErrorResponse(TEXT("missing_param: functionName is required for nodeType=CallFunction"));
+		}
