@@ -121,3 +121,4 @@ export interface CompileMessage {
 
 export interface CompileBlueprintResult {
   success: boolean;
+  errorCount: number;

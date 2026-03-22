@@ -71,3 +71,4 @@ export class UnrealBridgeClient {
         );
       });
 
+      socket.on("error", (err: NodeJS.ErrnoException) => {

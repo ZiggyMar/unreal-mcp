@@ -215,3 +215,5 @@ namespace
 			return BP;
 		}
 		O->TryGetStringField(TEXT("path"), BP.Path);
+		O->TryGetStringField(TEXT("name"), BP.Name);
+		O->TryGetStringField(TEXT("parentClass"), BP.ParentClass);

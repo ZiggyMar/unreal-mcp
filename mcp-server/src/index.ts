@@ -320,3 +320,4 @@ server.registerTool(
       const result = await bridge.send<SetPinDefaultValueResult>("set_pin_default_value", {
         path,
         graphName,
+        nodeId,

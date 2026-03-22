@@ -384,3 +384,5 @@ Practical takeaway: get our own `LICENSE` file into the repo root before or at t
 publish — not left implicit in the README — since roughly half the comparable projects in this
 space apparently didn't.
 
+---
+
