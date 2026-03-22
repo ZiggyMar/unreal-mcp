@@ -46,3 +46,4 @@ Design choices, matching the M3 brief:
   `EnsureBuilt()`): tries to load the on-disk cache first; if that fails or doesn't
   exist, does a full scan (`RebuildFull()`) — enumerates every `/Game` Blueprint via
   `IAssetRegistry::GetAssets`, loads each one (`StaticLoadObject`), and extracts:
+  - Path, name, parent class, implemented interfaces (`Blueprint->ImplementedInterfaces`)

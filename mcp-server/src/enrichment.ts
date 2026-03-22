@@ -15,3 +15,4 @@
 // unreal_search_project at all.
 //
 // Best-effort only: any failure (unreachable endpoint, timeout, malformed response) for
+// an individual hit silently falls back to returning that hit without a summary. A
