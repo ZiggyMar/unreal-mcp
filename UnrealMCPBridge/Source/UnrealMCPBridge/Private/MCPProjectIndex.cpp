@@ -214,3 +214,4 @@ namespace
 		{
 			return BP;
 		}
+		O->TryGetStringField(TEXT("path"), BP.Path);

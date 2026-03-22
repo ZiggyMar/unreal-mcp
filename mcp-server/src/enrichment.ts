@@ -14,3 +14,4 @@
 // model's (Claude's) own tokens on it, without that ever being a requirement to use
 // unreal_search_project at all.
 //
+// Best-effort only: any failure (unreachable endpoint, timeout, malformed response) for

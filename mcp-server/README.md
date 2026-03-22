@@ -86,3 +86,4 @@ what's connected to what. The index backing `unreal_search_project` /
 to `Saved/UnrealMCPBridge/index.json` in the target project so a fresh editor session
 doesn't need a full rescan, and is kept fresh incrementally via AssetRegistry delegates
 as you edit — see `../docs/M3_STATUS.md` for details.
+
