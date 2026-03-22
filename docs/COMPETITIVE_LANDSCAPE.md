@@ -386,3 +386,5 @@ space apparently didn't.
 
 ---
 
+## How we're actually different (specific, falsifiable claims only)
+
