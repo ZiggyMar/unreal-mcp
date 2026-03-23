@@ -394,3 +394,5 @@ space apparently didn't.
   AssetRegistry change delegates rather than polling or full rescans. One competitor
   (remiphilippe/mcp-unreal) has a persistent index of comparable design, but of API documentation
   text, not the live project. Two others (GenOrca, remiphilippe) expose live, per-request
+  cross-asset dependency/referencer queries with no evidence of a persisted or incremental index
+  layer behind them.

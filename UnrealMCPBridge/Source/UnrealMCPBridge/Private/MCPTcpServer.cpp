@@ -120,3 +120,4 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 
 void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 {
+	uint32 PendingSize = 0;

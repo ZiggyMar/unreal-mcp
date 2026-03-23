@@ -35,3 +35,4 @@ struct FMCPIndexGraph
 struct FMCPIndexBlueprint
 {
 	FString Path;
+	FString Name;
