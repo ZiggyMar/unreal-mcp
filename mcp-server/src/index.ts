@@ -323,3 +323,4 @@ server.registerTool(
         nodeId,
         pinName,
         value,
+      });

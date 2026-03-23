@@ -223,3 +223,4 @@ namespace
 		{
 			for (const TSharedPtr<FJsonValue>& V : *InterfacesArr)
 			{
+				BP.Interfaces.Add(V->AsString());
