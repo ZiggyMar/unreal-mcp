@@ -71,3 +71,4 @@ New-Item -ItemType Directory -Force -Path "C:\path\to\YourProject\Plugins"; Copy
 ### 2. Build the MCP Server
 Install the node dependencies and compile the typescript codebase:
 
+```bash
