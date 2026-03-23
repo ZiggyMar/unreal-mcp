@@ -392,3 +392,5 @@ space apparently didn't.
   index of the project's own Blueprint structure** (functions, variables, graphs, node-type
   histograms) that is saved to disk and survives an editor restart, kept current via
   AssetRegistry change delegates rather than polling or full rescans. One competitor
+  (remiphilippe/mcp-unreal) has a persistent index of comparable design, but of API documentation
+  text, not the live project. Two others (GenOrca, remiphilippe) expose live, per-request

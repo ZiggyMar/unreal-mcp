@@ -798,3 +798,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		}
 
 		UClass* OwnerClass = Blueprint->ParentClass;
+		if (!ClassName.IsEmpty())
+		{

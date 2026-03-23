@@ -49,3 +49,4 @@ Design choices, matching the M3 brief:
   - Path, name, parent class, implemented interfaces (`Blueprint->ImplementedInterfaces`)
   - Every function in `Blueprint->FunctionGraphs`, with **real param/return types** —
     pulled from the compiled generated class's `UFunction` via `TFieldIterator<FProperty>`
+    + `FProperty::GetCPPType()`, not re-derived from graph pins

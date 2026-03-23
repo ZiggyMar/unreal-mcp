@@ -221,3 +221,5 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* InterfacesArr = nullptr;
 		if (O->TryGetArrayField(TEXT("interfaces"), InterfacesArr) && InterfacesArr)
 		{
+			for (const TSharedPtr<FJsonValue>& V : *InterfacesArr)
+			{
