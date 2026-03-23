@@ -324,3 +324,4 @@ server.registerTool(
         pinName,
         value,
       });
+      return jsonResult(result);

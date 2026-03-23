@@ -17,3 +17,4 @@
 // Best-effort only: any failure (unreachable endpoint, timeout, malformed response) for
 // an individual hit silently falls back to returning that hit without a summary. A
 // misconfigured or offline local model must never break search results.
+
