@@ -52,3 +52,4 @@ Design choices, matching the M3 brief:
     + `FProperty::GetCPPType()`, not re-derived from graph pins
   - Every variable in `Blueprint->NewVariables` (name, type via a pin-type-to-string
     helper, category)
+  - Every graph (`Blueprint->GetAllGraphs()`), with node count and a **node-type

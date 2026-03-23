@@ -24,3 +24,4 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 {
 	if (TcpServer.IsValid())
 	{
+		TcpServer->Stop();

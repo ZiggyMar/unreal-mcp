@@ -396,3 +396,4 @@ space apparently didn't.
   text, not the live project. Two others (GenOrca, remiphilippe) expose live, per-request
   cross-asset dependency/referencer queries with no evidence of a persisted or incremental index
   layer behind them.
+- **None of the 9 surveyed repos describe a tiered, summary-first strategy for reading Blueprint
