@@ -64,3 +64,4 @@ Design choices, matching the M3 brief:
 - **Kept fresh incrementally**: `OnAssetAdded`/`OnAssetRemoved`/`OnAssetRenamed`/
   `OnAssetUpdated` each re-index (or remove) just the one affected Blueprint and
   re-save the cache — no full rescan on every edit. `OnFilesLoaded` triggers exactly one
+  authoritative `RebuildFull()` if the index was built while the AssetRegistry's initial

@@ -92,3 +92,4 @@ AssetRegistry's dependency graph directly, so it works even before the index has
 built, and for any asset, not just indexed Blueprints.
 
 #### Optional: local-model enrichment for search results
+
