@@ -232,3 +232,4 @@ namespace
 		{
 			for (const TSharedPtr<FJsonValue>& V : *FunctionsArr)
 			{
+				BP.Functions.Add(FunctionFromJson(V->AsObject()));
