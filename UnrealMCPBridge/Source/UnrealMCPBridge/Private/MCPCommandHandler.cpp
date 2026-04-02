@@ -807,3 +807,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				return MakeErrorResponse(ClassError);
 			}
 		}
+		else if (Blueprint->GeneratedClass)
+		{
