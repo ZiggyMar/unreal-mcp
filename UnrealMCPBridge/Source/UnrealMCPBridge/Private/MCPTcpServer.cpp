@@ -122,3 +122,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 {
 	uint32 PendingSize = 0;
 	while (Client.Socket->HasPendingData(PendingSize) && PendingSize > 0)
+	{

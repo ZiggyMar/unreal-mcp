@@ -234,3 +234,5 @@ namespace
 			{
 				BP.Functions.Add(FunctionFromJson(V->AsObject()));
 			}
+		}
+
