@@ -63,3 +63,4 @@ Design choices, matching the M3 brief:
   the standard UE gitignore convention, so this cache is expected to never be committed.
 - **Kept fresh incrementally**: `OnAssetAdded`/`OnAssetRemoved`/`OnAssetRenamed`/
   `OnAssetUpdated` each re-index (or remove) just the one affected Blueprint and
+  re-save the cache — no full rescan on every edit. `OnFilesLoaded` triggers exactly one

@@ -237,3 +237,5 @@ namespace
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* VariablesArr = nullptr;
+		if (O->TryGetArrayField(TEXT("variables"), VariablesArr) && VariablesArr)
+		{
