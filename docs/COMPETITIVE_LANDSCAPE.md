@@ -399,3 +399,5 @@ space apparently didn't.
 - **None of the 9 surveyed repos describe a tiered, summary-first strategy for reading Blueprint
   graph contents** (list → compact per-node-type summary → full per-node pin/property detail only
   on request) — the specific approach in our own M1. Two repos (ChiR24, GenOrca) do explicitly
+  design for a model's context window, but both solve a different, adjacent problem: collapsing
+  many operations behind one or a few gateway tools to shrink the *tool catalog*, not shrinking the

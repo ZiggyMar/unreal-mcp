@@ -89,3 +89,4 @@ as you edit — see `../docs/M3_STATUS.md` for details.
 
 `unreal_find_references` doesn't depend on that index at all — it queries the
 AssetRegistry's dependency graph directly, so it works even before the index has been
+built, and for any asset, not just indexed Blueprints.
