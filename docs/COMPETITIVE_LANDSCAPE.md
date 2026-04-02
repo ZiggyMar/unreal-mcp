@@ -407,3 +407,5 @@ space apparently didn't.
   (5.4+) use open-ended "X.Y+" badges that would nominally include 5.8 but don't call out 5.8
   specifically; remiphilippe is hard-pinned to 5.7 only; kvick-games has only ever been tested on
   5.5 and hasn't been pushed to in over a year. We target 5.6 and 5.8 specifically (stock launcher
+  installs, no engine source needed to run), which is a narrower, more explicit range than most of
+  the survey states, but overlaps ChiR24's broader claim on both ends we care about.
