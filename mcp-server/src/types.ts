@@ -123,3 +123,4 @@ export interface CompileBlueprintResult {
   success: boolean;
   errorCount: number;
   warningCount: number;
+  status: string;

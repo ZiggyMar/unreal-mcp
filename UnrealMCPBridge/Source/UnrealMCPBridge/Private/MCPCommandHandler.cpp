@@ -809,3 +809,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		}
 		else if (Blueprint->GeneratedClass)
 		{
+			OwnerClass = Blueprint->GeneratedClass;
+		}

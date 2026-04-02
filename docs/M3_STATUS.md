@@ -57,3 +57,4 @@ Design choices, matching the M3 brief:
     — cheap, no per-node detail, per the brief.
 - **Persisted to disk** at `<ProjectDir>/Saved/UnrealMCPBridge/index.json` (via
   `FPaths::ProjectSavedDir()`), hand-rolled JSON (de)serialization using the same
+  `FJsonObject` Set/TryGet pattern as the rest of the plugin — deliberately not

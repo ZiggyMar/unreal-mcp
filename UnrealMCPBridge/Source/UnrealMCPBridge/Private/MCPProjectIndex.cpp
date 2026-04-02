@@ -230,3 +230,5 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* FunctionsArr = nullptr;
 		if (O->TryGetArrayField(TEXT("functions"), FunctionsArr) && FunctionsArr)
 		{
+			for (const TSharedPtr<FJsonValue>& V : *FunctionsArr)
+			{
