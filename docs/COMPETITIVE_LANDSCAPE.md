@@ -415,3 +415,5 @@ space apparently didn't.
 
 Sources used for the first-party plugin comparison:
 - [Unreal MCP in Unreal Editor — Epic Developer Community](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor?lang=en-US)
+- [Unreal Engine 5.8 Embeds an MCP Server So AI Agents Can Drive the Editor — vp-land.com](https://www.vp-land.com/p/unreal-engine-5-8-embeds-an-mcp-server-so-ai-agents-can-drive-the-editor)
+
