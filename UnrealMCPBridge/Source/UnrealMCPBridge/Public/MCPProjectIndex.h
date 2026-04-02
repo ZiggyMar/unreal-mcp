@@ -36,3 +36,4 @@ struct FMCPIndexBlueprint
 {
 	FString Path;
 	FString Name;
+	FString ParentClass;

@@ -19,3 +19,4 @@
 // misconfigured or offline local model must never break search results.
 
 import type { SearchHit } from "./types.js";
+

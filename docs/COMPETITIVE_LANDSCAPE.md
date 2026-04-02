@@ -403,3 +403,5 @@ space apparently didn't.
   many operations behind one or a few gateway tools to shrink the *tool catalog*, not shrinking the
   *response payload* of any individual Blueprint read.
 - **Among the 9, only ChiR24 explicitly enumerates and claims tested support across the full
+  5.0–5.8 range including 5.8.** GenOrca (5.6+), chongdashu (5.5+), lilklon (5.7+), and mirno-ehf
+  (5.4+) use open-ended "X.Y+" badges that would nominally include 5.8 but don't call out 5.8
