@@ -20,3 +20,4 @@
 
 import type { SearchHit } from "./types.js";
 
+const LOCAL_LLM_URL = process.env.UNREAL_MCP_LOCAL_LLM_URL;

@@ -60,3 +60,5 @@ Design choices, matching the M3 brief:
   `FJsonObject` Set/TryGet pattern as the rest of the plugin — deliberately not
   `USTRUCT`/`UPROPERTY` + `FJsonObjectConverter`, to avoid introducing UHT reflection
   into a module that currently has none of its own reflected types. `Saved/` is already
+  the standard UE gitignore convention, so this cache is expected to never be committed.
+- **Kept fresh incrementally**: `OnAssetAdded`/`OnAssetRemoved`/`OnAssetRenamed`/

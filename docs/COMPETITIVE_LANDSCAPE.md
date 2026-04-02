@@ -409,3 +409,5 @@ space apparently didn't.
   5.5 and hasn't been pushed to in over a year. We target 5.6 and 5.8 specifically (stock launcher
   installs, no engine source needed to run), which is a narrower, more explicit range than most of
   the survey states, but overlaps ChiR24's broader claim on both ends we care about.
+- **The Epic-official first-party plugin, as documented for 5.8, does not compete with either of
+  our stated differentiators** (no described Blueprint-structure read/summarize capability, no
