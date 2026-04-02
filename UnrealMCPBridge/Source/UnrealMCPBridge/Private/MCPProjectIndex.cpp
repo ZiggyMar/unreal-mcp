@@ -236,3 +236,4 @@ namespace
 			}
 		}
 
+		const TArray<TSharedPtr<FJsonValue>>* VariablesArr = nullptr;

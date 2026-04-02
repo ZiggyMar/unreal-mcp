@@ -62,3 +62,4 @@ Design choices, matching the M3 brief:
   into a module that currently has none of its own reflected types. `Saved/` is already
   the standard UE gitignore convention, so this cache is expected to never be committed.
 - **Kept fresh incrementally**: `OnAssetAdded`/`OnAssetRemoved`/`OnAssetRenamed`/
+  `OnAssetUpdated` each re-index (or remove) just the one affected Blueprint and
