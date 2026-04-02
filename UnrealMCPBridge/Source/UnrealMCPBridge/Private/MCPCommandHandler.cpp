@@ -803,3 +803,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			FString ClassError;
 			OwnerClass = ResolveClassByName(ClassName, ClassError);
 			if (!OwnerClass)
+			{
+				return MakeErrorResponse(ClassError);

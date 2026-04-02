@@ -397,3 +397,5 @@ space apparently didn't.
   cross-asset dependency/referencer queries with no evidence of a persisted or incremental index
   layer behind them.
 - **None of the 9 surveyed repos describe a tiered, summary-first strategy for reading Blueprint
+  graph contents** (list → compact per-node-type summary → full per-node pin/property detail only
+  on request) — the specific approach in our own M1. Two repos (ChiR24, GenOrca) do explicitly

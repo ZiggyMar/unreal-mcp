@@ -53,3 +53,4 @@ Design choices, matching the M3 brief:
   - Every variable in `Blueprint->NewVariables` (name, type via a pin-type-to-string
     helper, category)
   - Every graph (`Blueprint->GetAllGraphs()`), with node count and a **node-type
+    histogram** (`TMap<FString, int32>`, e.g. `{"K2Node_CallFunction": 8, "K2Node_IfThenElse": 2}`)
