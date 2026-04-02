@@ -54,3 +54,4 @@ Design choices, matching the M3 brief:
     helper, category)
   - Every graph (`Blueprint->GetAllGraphs()`), with node count and a **node-type
     histogram** (`TMap<FString, int32>`, e.g. `{"K2Node_CallFunction": 8, "K2Node_IfThenElse": 2}`)
+    — cheap, no per-node detail, per the brief.

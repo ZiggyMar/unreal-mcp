@@ -18,3 +18,4 @@
 // an individual hit silently falls back to returning that hit without a summary. A
 // misconfigured or offline local model must never break search results.
 
+import type { SearchHit } from "./types.js";

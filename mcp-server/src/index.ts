@@ -325,3 +325,4 @@ server.registerTool(
         value,
       });
       return jsonResult(result);
+    } catch (err) {

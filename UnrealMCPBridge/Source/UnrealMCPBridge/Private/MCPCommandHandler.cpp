@@ -805,3 +805,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			if (!OwnerClass)
 			{
 				return MakeErrorResponse(ClassError);
+			}
+		}

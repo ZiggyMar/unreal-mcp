@@ -72,3 +72,4 @@ export class UnrealBridgeClient {
       });
 
       socket.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "ECONNREFUSED") {
