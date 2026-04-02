@@ -413,3 +413,5 @@ space apparently didn't.
   our stated differentiators** (no described Blueprint-structure read/summarize capability, no
   persistent index) **and doesn't exist for 5.6 at all.**
 
+Sources used for the first-party plugin comparison:
+- [Unreal MCP in Unreal Editor — Epic Developer Community](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor?lang=en-US)

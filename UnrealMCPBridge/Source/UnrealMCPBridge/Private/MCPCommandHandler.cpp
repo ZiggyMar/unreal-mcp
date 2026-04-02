@@ -818,3 +818,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			return MakeErrorResponse(FString::Printf(TEXT("function_not_found: %s on %s"),
 				*FunctionName, OwnerClass ? *OwnerClass->GetName() : TEXT("(no class)")));
 		}
+
+		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
