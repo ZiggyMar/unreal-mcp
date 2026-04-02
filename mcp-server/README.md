@@ -91,3 +91,4 @@ as you edit — see `../docs/M3_STATUS.md` for details.
 AssetRegistry's dependency graph directly, so it works even before the index has been
 built, and for any asset, not just indexed Blueprints.
 
+#### Optional: local-model enrichment for search results

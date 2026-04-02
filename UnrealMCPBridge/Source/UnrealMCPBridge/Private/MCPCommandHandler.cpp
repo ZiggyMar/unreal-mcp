@@ -816,3 +816,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		if (!Function)
 		{
 			return MakeErrorResponse(FString::Printf(TEXT("function_not_found: %s on %s"),
+				*FunctionName, OwnerClass ? *OwnerClass->GetName() : TEXT("(no class)")));
+		}

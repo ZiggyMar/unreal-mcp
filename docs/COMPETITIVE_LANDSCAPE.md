@@ -411,3 +411,5 @@ space apparently didn't.
   the survey states, but overlaps ChiR24's broader claim on both ends we care about.
 - **The Epic-official first-party plugin, as documented for 5.8, does not compete with either of
   our stated differentiators** (no described Blueprint-structure read/summarize capability, no
+  persistent index) **and doesn't exist for 5.6 at all.**
+
