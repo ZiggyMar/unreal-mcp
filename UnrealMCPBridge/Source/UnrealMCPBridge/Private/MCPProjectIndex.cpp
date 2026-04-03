@@ -242,3 +242,4 @@ namespace
 			for (const TSharedPtr<FJsonValue>& V : *VariablesArr)
 			{
 				BP.Variables.Add(VariableFromJson(V->AsObject()));
+			}

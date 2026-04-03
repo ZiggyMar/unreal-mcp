@@ -38,3 +38,4 @@ struct FMCPIndexBlueprint
 	FString Name;
 	FString ParentClass;
 	TArray<FString> Interfaces;
+	TArray<FMCPIndexFunction> Functions;
