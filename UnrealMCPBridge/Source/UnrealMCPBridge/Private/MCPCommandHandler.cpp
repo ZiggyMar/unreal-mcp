@@ -822,3 +822,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
 		CallNode->SetFromFunction(Function);
 		NewNode = CallNode;
+	}
+	else if (NodeType == TEXT("VariableGet") || NodeType == TEXT("VariableSet"))
