@@ -331,3 +331,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(
