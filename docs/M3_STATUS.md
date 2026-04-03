@@ -65,3 +65,4 @@ Design choices, matching the M3 brief:
   `OnAssetUpdated` each re-index (or remove) just the one affected Blueprint and
   re-save the cache — no full rescan on every edit. `OnFilesLoaded` triggers exactly one
   authoritative `RebuildFull()` if the index was built while the AssetRegistry's initial
+  project scan was still in progress (tracked via `bAssetRegistryStillScanning`, also

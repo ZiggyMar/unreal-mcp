@@ -240,3 +240,5 @@ namespace
 		if (O->TryGetArrayField(TEXT("variables"), VariablesArr) && VariablesArr)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *VariablesArr)
+			{
+				BP.Variables.Add(VariableFromJson(V->AsObject()));
