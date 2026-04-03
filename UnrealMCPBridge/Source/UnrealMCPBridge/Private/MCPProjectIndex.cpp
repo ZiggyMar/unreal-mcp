@@ -243,3 +243,5 @@ namespace
 			{
 				BP.Variables.Add(VariableFromJson(V->AsObject()));
 			}
+		}
+

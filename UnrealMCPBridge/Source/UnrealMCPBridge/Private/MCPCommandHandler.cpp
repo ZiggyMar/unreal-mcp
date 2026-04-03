@@ -826,3 +826,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	else if (NodeType == TEXT("VariableGet") || NodeType == TEXT("VariableSet"))
 	{
 		FString VariableName;
+		if (!Params->TryGetStringField(TEXT("variableName"), VariableName))
+		{
