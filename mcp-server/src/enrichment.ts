@@ -23,3 +23,4 @@ import type { SearchHit } from "./types.js";
 const LOCAL_LLM_URL = process.env.UNREAL_MCP_LOCAL_LLM_URL;
 const LOCAL_LLM_MODEL = process.env.UNREAL_MCP_LOCAL_LLM_MODEL ?? "llama3.2";
 const ENRICH_TIMEOUT_MS = Number(process.env.UNREAL_MCP_LOCAL_LLM_TIMEOUT_MS ?? 4000);
+// Caps how many hits get a live enrichment call per search, so one big result set can't

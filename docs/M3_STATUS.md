@@ -68,3 +68,4 @@ Design choices, matching the M3 brief:
   project scan was still in progress (tracked via `bAssetRegistryStillScanning`, also
   surfaced in `get_project_overview`'s response so a model can tell if it might be
   looking at a partial picture).
+
