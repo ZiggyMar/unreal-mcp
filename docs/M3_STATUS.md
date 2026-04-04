@@ -76,3 +76,5 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 |---|---|
 | `get_project_overview` | Calls `EnsureBuilt()` then returns `FMCPProjectIndex::GetOverview()`: total counts, folder breakdown, parent-class breakdown, scanning flag. |
 | `search_project` | Calls `EnsureBuilt()` then `FMCPProjectIndex::Search()`: case-insensitive substring match across blueprint/function/variable names and parent-class names, capped and clamped to `[1, 500]`. |
+| `find_references` | **Does not use the index at all** — calls `IAssetRegistry::GetReferencers`/`GetDependencies` directly on the given package, so it works for any asset (not just indexed Blueprints) and needs no prior index build. Filters out `/Script/` engine-internal packages to stay focused on project content. |
+

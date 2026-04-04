@@ -26,3 +26,4 @@ const ENRICH_TIMEOUT_MS = Number(process.env.UNREAL_MCP_LOCAL_LLM_TIMEOUT_MS ?? 
 // Caps how many hits get a live enrichment call per search, so one big result set can't
 // turn into dozens of local-model round trips on a single tool call.
 const MAX_ENRICH_PER_CALL = Number(process.env.UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL ?? 8);
+

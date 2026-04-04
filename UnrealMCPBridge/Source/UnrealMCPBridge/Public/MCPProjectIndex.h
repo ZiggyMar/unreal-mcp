@@ -40,3 +40,4 @@ struct FMCPIndexBlueprint
 	TArray<FString> Interfaces;
 	TArray<FMCPIndexFunction> Functions;
 	TArray<FMCPIndexVariable> Variables;
+	TArray<FMCPIndexGraph> Graphs;

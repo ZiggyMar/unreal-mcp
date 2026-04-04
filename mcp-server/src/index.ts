@@ -336,3 +336,4 @@ server.registerTool(
   {
     title: "Remove a node from a Blueprint graph",
     description: "Removes a node by id and breaks all of its pin links first. Does not recompile. Call unreal_compile_blueprint afterward.",
+    inputSchema: {

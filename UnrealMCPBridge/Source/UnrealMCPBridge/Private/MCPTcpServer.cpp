@@ -125,3 +125,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 	{
 		TArray<uint8> Buffer;
 		Buffer.SetNumUninitialized(FMath::Min(PendingSize, 8192u));
+
