@@ -70,3 +70,4 @@ Design choices, matching the M3 brief:
   looking at a partial picture).
 
 New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
+`FMCPProjectIndex` or, for `find_references`, directly against `IAssetRegistry`):

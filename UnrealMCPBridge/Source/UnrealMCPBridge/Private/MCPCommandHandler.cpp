@@ -830,3 +830,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			return MakeErrorResponse(FString::Printf(TEXT("missing_param: variableName is required for nodeType=%s"), *NodeType));
 		}
+
