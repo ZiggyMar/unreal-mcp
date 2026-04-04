@@ -74,3 +74,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 
 | Command | What it does |
 |---|---|
+| `get_project_overview` | Calls `EnsureBuilt()` then returns `FMCPProjectIndex::GetOverview()`: total counts, folder breakdown, parent-class breakdown, scanning flag. |
