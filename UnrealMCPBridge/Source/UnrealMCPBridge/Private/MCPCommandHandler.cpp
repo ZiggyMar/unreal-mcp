@@ -835,3 +835,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		bool bFoundVar = false;
 		for (const FBPVariableDescription& ExistingVar : Blueprint->NewVariables)
 		{
+			if (ExistingVar.VarName == VarFName)
+			{

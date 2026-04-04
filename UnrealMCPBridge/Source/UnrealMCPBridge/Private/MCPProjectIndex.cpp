@@ -251,3 +251,4 @@ namespace
 			for (const TSharedPtr<FJsonValue>& V : *GraphsArr)
 			{
 				BP.Graphs.Add(GraphFromJson(V->AsObject()));
+			}
