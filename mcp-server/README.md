@@ -94,3 +94,4 @@ built, and for any asset, not just indexed Blueprints.
 #### Optional: local-model enrichment for search results
 
 By default, `unreal_search_project` hits are bare structural data (kind/path/name/
+context) — no natural-language summaries, no extra cost, zero setup. If you want hits to

@@ -39,3 +39,4 @@ struct FMCPIndexBlueprint
 	FString ParentClass;
 	TArray<FString> Interfaces;
 	TArray<FMCPIndexFunction> Functions;
+	TArray<FMCPIndexVariable> Variables;
