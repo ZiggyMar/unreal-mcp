@@ -69,3 +69,4 @@ Design choices, matching the M3 brief:
   surfaced in `get_project_overview`'s response so a model can tell if it might be
   looking at a partial picture).
 
+New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in

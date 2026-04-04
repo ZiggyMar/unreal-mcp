@@ -332,3 +332,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_remove_node",

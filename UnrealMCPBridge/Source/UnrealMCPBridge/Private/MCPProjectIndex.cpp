@@ -245,3 +245,4 @@ namespace
 			}
 		}
 
+		const TArray<TSharedPtr<FJsonValue>>* GraphsArr = nullptr;
