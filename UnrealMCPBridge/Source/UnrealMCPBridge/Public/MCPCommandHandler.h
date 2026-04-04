@@ -46,3 +46,4 @@ private:
 	static TSharedRef<FJsonObject> HandleSetPinDefaultValue(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleRemoveNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleAddVariable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params);
