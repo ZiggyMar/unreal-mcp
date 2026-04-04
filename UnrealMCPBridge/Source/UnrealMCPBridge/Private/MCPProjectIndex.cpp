@@ -259,3 +259,5 @@ namespace
 }
 
 void FMCPProjectIndex::Initialize()
+{
+	if (Instance)
