@@ -249,3 +249,5 @@ namespace
 		if (O->TryGetArrayField(TEXT("graphs"), GraphsArr) && GraphsArr)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *GraphsArr)
+			{
+				BP.Graphs.Add(GraphFromJson(V->AsObject()));
