@@ -75,3 +75,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 | Command | What it does |
 |---|---|
 | `get_project_overview` | Calls `EnsureBuilt()` then returns `FMCPProjectIndex::GetOverview()`: total counts, folder breakdown, parent-class breakdown, scanning flag. |
+| `search_project` | Calls `EnsureBuilt()` then `FMCPProjectIndex::Search()`: case-insensitive substring match across blueprint/function/variable names and parent-class names, capped and clamped to `[1, 500]`. |
