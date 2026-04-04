@@ -334,3 +334,4 @@ server.registerTool(
 server.registerTool(
   "unreal_remove_node",
   {
+    title: "Remove a node from a Blueprint graph",
