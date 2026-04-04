@@ -81,3 +81,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 ### Ground rules from M1/M2 — honored
 
 - No short generic names added (`MakeHit`, `PinTypeToString`, `ParamToJson`/`FromJson`
+  etc. are all specific enough not to collide with anything in Core, and none of them

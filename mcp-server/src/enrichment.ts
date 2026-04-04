@@ -28,3 +28,4 @@ const ENRICH_TIMEOUT_MS = Number(process.env.UNREAL_MCP_LOCAL_LLM_TIMEOUT_MS ?? 
 const MAX_ENRICH_PER_CALL = Number(process.env.UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL ?? 8);
 
 export function isEnrichmentEnabled(): boolean {
+  return Boolean(LOCAL_LLM_URL);
