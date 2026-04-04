@@ -246,3 +246,5 @@ namespace
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* GraphsArr = nullptr;
+		if (O->TryGetArrayField(TEXT("graphs"), GraphsArr) && GraphsArr)
+		{
