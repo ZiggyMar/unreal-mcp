@@ -843,3 +843,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		}
 		if (!bFoundVar)
 		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("variable_not_found: %s (only this Blueprint's own variables are supported, not inherited ones)"),
