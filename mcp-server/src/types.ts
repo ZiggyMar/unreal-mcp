@@ -127,3 +127,4 @@ export interface CompileBlueprintResult {
   messages: CompileMessage[];
 }
 
+export interface SaveBlueprintResult {

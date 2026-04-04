@@ -258,3 +258,4 @@ namespace
 	}
 }
 
+void FMCPProjectIndex::Initialize()
