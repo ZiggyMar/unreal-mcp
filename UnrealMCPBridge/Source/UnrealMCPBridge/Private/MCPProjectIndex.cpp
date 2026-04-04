@@ -252,3 +252,5 @@ namespace
 			{
 				BP.Graphs.Add(GraphFromJson(V->AsObject()));
 			}
+		}
+

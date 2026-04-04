@@ -837,3 +837,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			if (ExistingVar.VarName == VarFName)
 			{
+				bFoundVar = true;
+				break;
