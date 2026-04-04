@@ -841,3 +841,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				break;
 			}
 		}
+		if (!bFoundVar)
+		{
