@@ -80,3 +80,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 
 ### Ground rules from M1/M2 — honored
 
+- No short generic names added (`MakeHit`, `PinTypeToString`, `ParamToJson`/`FromJson`
