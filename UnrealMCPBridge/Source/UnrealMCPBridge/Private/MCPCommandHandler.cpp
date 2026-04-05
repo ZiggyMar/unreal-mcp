@@ -854,3 +854,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			GetNode->VariableReference.SetSelfMember(VarFName);
 			NewNode = GetNode;
 		}
+		else
+		{

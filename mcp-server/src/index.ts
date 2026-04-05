@@ -341,3 +341,4 @@ server.registerTool(
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe('Node id, e.g. "n5".'),
     },
+  },

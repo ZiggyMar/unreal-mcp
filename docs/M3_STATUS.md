@@ -86,3 +86,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 - Everything still runs on the game thread — `FMCPProjectIndex`'s own doc comment calls
   this out explicitly: both the TCP server's tick and the AssetRegistry's delegates fire
   on the game thread, so `Entries` needs no locking.
+- Same build-verification bar: isolated `RunUAT BuildPlugin` + direct build against the
