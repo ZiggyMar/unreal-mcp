@@ -74,3 +74,4 @@ Install the node dependencies and compile the typescript codebase:
 ```bash
 cd mcp-server && npm install && npm run build
 ```
+

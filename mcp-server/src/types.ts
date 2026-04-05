@@ -128,3 +128,4 @@ export interface CompileBlueprintResult {
 }
 
 export interface SaveBlueprintResult {
+  saved: boolean;

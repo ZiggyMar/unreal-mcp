@@ -264,3 +264,4 @@ void FMCPProjectIndex::Initialize()
 	{
 		return;
 	}
+	Instance = new FMCPProjectIndex();
