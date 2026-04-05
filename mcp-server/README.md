@@ -97,3 +97,4 @@ By default, `unreal_search_project` hits are bare structural data (kind/path/nam
 context) — no natural-language summaries, no extra cost, zero setup. If you want hits to
 also show a one-line "what does this do" description, point `UNREAL_MCP_LOCAL_LLM_URL`
 at any OpenAI-compatible `/chat/completions` endpoint — this works out of the box with a
+local [Ollama](https://ollama.com) model, so you can get richer search results **without

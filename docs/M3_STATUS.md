@@ -82,3 +82,5 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 
 - No short generic names added (`MakeHit`, `PinTypeToString`, `ParamToJson`/`FromJson`
   etc. are all specific enough not to collide with anything in Core, and none of them
+  are named `Check`/`Verify`/`MakeError`/`MakeOk`).
+- Everything still runs on the game thread — `FMCPProjectIndex`'s own doc comment calls

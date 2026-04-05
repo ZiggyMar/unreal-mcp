@@ -75,3 +75,4 @@ export class UnrealBridgeClient {
         if (err.code === "ECONNREFUSED") {
           fail(
             new Error(
+              `Could not connect to UnrealMCPBridge at ${this.host}:${this.port} (connection refused). ` +
