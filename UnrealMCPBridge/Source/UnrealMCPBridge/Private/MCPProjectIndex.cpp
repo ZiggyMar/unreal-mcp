@@ -262,3 +262,5 @@ void FMCPProjectIndex::Initialize()
 {
 	if (Instance)
 	{
+		return;
+	}

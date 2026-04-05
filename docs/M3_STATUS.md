@@ -84,3 +84,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
   etc. are all specific enough not to collide with anything in Core, and none of them
   are named `Check`/`Verify`/`MakeError`/`MakeOk`).
 - Everything still runs on the game thread — `FMCPProjectIndex`'s own doc comment calls
+  this out explicitly: both the TCP server's tick and the AssetRegistry's delegates fire
