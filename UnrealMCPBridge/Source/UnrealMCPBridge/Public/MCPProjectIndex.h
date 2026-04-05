@@ -42,3 +42,4 @@ struct FMCPIndexBlueprint
 	TArray<FMCPIndexVariable> Variables;
 	TArray<FMCPIndexGraph> Graphs;
 };
+

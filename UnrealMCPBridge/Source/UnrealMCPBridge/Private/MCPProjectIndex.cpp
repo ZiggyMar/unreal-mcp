@@ -265,3 +265,5 @@ void FMCPProjectIndex::Initialize()
 		return;
 	}
 	Instance = new FMCPProjectIndex();
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
