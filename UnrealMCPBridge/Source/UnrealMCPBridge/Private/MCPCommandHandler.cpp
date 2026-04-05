@@ -852,3 +852,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(Graph);
 			GetNode->VariableReference.SetSelfMember(VarFName);
+			NewNode = GetNode;
+		}

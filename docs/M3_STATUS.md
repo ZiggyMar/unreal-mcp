@@ -85,3 +85,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
   are named `Check`/`Verify`/`MakeError`/`MakeOk`).
 - Everything still runs on the game thread — `FMCPProjectIndex`'s own doc comment calls
   this out explicitly: both the TCP server's tick and the AssetRegistry's delegates fire
+  on the game thread, so `Entries` needs no locking.
