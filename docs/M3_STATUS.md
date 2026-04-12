@@ -95,3 +95,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 to `mcp-server/src/index.ts`, result types added to `types.ts`. `npm run build` and
 `npx tsc --noEmit` both clean.
 
+**`mcp-server/src/enrichment.ts` (new file)** — the local-model pluggability seam from
