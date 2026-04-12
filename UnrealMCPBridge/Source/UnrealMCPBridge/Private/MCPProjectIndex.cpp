@@ -267,3 +267,4 @@ void FMCPProjectIndex::Initialize()
 	Instance = new FMCPProjectIndex();
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	Instance->OnAssetAddedHandle = AssetRegistry.OnAssetAdded().AddRaw(Instance, &FMCPProjectIndex::OnAssetAdded);
