@@ -92,3 +92,5 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 ### MCP server — 3 new tools + optional enrichment stage
 
 `unreal_get_project_overview`, `unreal_search_project`, `unreal_find_references` added
+to `mcp-server/src/index.ts`, result types added to `types.ts`. `npm run build` and
+`npx tsc --noEmit` both clean.

@@ -76,3 +76,4 @@ export class UnrealBridgeClient {
           fail(
             new Error(
               `Could not connect to UnrealMCPBridge at ${this.host}:${this.port} (connection refused). ` +
+                `Make sure the Unreal Editor is running with the target project open and the UnrealMCPBridge plugin enabled.`
