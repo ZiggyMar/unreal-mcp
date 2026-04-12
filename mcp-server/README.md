@@ -100,3 +100,4 @@ at any OpenAI-compatible `/chat/completions` endpoint — this works out of the 
 local [Ollama](https://ollama.com) model, so you can get richer search results **without
 spending API tokens on indexing**:
 
+```bash

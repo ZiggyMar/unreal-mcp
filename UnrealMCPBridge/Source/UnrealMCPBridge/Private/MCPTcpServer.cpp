@@ -128,3 +128,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 
 		int32 BytesRead = 0;
 		if (!Client.Socket->Recv(Buffer.GetData(), Buffer.Num(), BytesRead) || BytesRead <= 0)
+		{
