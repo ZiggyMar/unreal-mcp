@@ -271,3 +271,5 @@ void FMCPProjectIndex::Initialize()
 	Instance->OnAssetRemovedHandle = AssetRegistry.OnAssetRemoved().AddRaw(Instance, &FMCPProjectIndex::OnAssetRemoved);
 	Instance->OnAssetRenamedHandle = AssetRegistry.OnAssetRenamed().AddRaw(Instance, &FMCPProjectIndex::OnAssetRenamed);
 	Instance->OnAssetUpdatedHandle = AssetRegistry.OnAssetUpdated().AddRaw(Instance, &FMCPProjectIndex::OnAssetUpdated);
+	Instance->OnFilesLoadedHandle = AssetRegistry.OnFilesLoaded().AddRaw(Instance, &FMCPProjectIndex::OnFilesLoaded);
+}

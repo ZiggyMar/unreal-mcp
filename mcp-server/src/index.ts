@@ -343,3 +343,4 @@ server.registerTool(
     },
   },
   async ({ path, graphName, nodeId }) => {
+    try {
