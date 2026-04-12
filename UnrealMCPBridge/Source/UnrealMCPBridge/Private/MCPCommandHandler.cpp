@@ -869,3 +869,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 
 	NewNode->NodePosX = PosX;
 	NewNode->NodePosY = PosY;
+	Graph->AddNode(NewNode, /*bIsUserAction=*/true, /*bSelectNewNode=*/false);
+	NewNode->CreateNewGuid();

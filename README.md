@@ -75,3 +75,4 @@ Install the node dependencies and compile the typescript codebase:
 cd mcp-server && npm install && npm run build
 ```
 
+### 3. Register the Server

@@ -44,3 +44,4 @@ struct FMCPIndexBlueprint
 };
 
 /**
+ * Project-wide, incrementally-updated index of Blueprint structure (functions,
