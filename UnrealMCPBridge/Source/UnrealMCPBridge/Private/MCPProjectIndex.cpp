@@ -282,3 +282,4 @@ void FMCPProjectIndex::Shutdown()
 	}
 
 	if (FModuleManager::Get().IsModuleLoaded(TEXT("AssetRegistry")))
+	{

@@ -875,3 +875,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	NewNode->AllocateDefaultPins();
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+

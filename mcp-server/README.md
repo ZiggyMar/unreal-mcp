@@ -102,3 +102,4 @@ spending API tokens on indexing**:
 
 ```bash
 ollama serve                       # if not already running
+ollama pull llama3.2                # or any small/fast model you like
