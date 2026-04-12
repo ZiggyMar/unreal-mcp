@@ -101,3 +101,4 @@ local [Ollama](https://ollama.com) model, so you can get richer search results *
 spending API tokens on indexing**:
 
 ```bash
+ollama serve                       # if not already running
