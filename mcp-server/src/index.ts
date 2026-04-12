@@ -345,3 +345,4 @@ server.registerTool(
   async ({ path, graphName, nodeId }) => {
     try {
       const result = await bridge.send<RemoveNodeResult>("remove_node", { path, graphName, nodeId });
+      return jsonResult(result);

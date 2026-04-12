@@ -867,3 +867,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet)"), *NodeType));
 	}
 
+	NewNode->NodePosX = PosX;
+	NewNode->NodePosY = PosY;

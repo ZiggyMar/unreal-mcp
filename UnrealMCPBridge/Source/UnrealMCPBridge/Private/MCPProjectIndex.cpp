@@ -276,3 +276,4 @@ void FMCPProjectIndex::Initialize()
 
 void FMCPProjectIndex::Shutdown()
 {
+	if (!Instance)
