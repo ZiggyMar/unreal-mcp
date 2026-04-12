@@ -89,3 +89,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 - Same build-verification bar: isolated `RunUAT BuildPlugin` + direct build against the
   real `AntiVirusSquadUE58.uproject`, both required and both run this session.
 
+### MCP server — 3 new tools + optional enrichment stage

@@ -858,3 +858,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		{
 			UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(Graph);
 			SetNode->VariableReference.SetSelfMember(VarFName);
+			NewNode = SetNode;
+		}

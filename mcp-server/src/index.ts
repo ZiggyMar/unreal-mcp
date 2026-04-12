@@ -342,3 +342,4 @@ server.registerTool(
       nodeId: z.string().describe('Node id, e.g. "n5".'),
     },
   },
+  async ({ path, graphName, nodeId }) => {
