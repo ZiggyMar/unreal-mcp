@@ -873,3 +873,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	NewNode->CreateNewGuid();
 	NewNode->PostPlacedNewNode();
 	NewNode->AllocateDefaultPins();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
