@@ -32,3 +32,4 @@ export function isEnrichmentEnabled(): boolean {
 }
 
 // In-memory, per-process cache keyed by the hit's own structural content (kind + path +
+// name + context), so repeated searches don't re-call the local model for the same item,
