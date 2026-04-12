@@ -99,3 +99,4 @@ also show a one-line "what does this do" description, point `UNREAL_MCP_LOCAL_LL
 at any OpenAI-compatible `/chat/completions` endpoint — this works out of the box with a
 local [Ollama](https://ollama.com) model, so you can get richer search results **without
 spending API tokens on indexing**:
+

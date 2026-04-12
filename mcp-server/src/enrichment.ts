@@ -31,3 +31,4 @@ export function isEnrichmentEnabled(): boolean {
   return Boolean(LOCAL_LLM_URL);
 }
 
+// In-memory, per-process cache keyed by the hit's own structural content (kind + path +
