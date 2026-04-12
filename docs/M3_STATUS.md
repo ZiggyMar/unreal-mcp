@@ -91,3 +91,4 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
 
 ### MCP server — 3 new tools + optional enrichment stage
 
+`unreal_get_project_overview`, `unreal_search_project`, `unreal_find_references` added

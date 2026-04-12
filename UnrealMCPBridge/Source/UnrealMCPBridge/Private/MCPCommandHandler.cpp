@@ -861,3 +861,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			NewNode = SetNode;
 		}
 	}
+	else
+	{
