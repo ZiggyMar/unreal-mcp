@@ -865,3 +865,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	{
 		return MakeErrorResponse(FString::Printf(
 			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet)"), *NodeType));
+	}
+

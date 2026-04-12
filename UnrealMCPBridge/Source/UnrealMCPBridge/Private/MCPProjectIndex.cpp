@@ -274,3 +274,5 @@ void FMCPProjectIndex::Initialize()
 	Instance->OnFilesLoadedHandle = AssetRegistry.OnFilesLoaded().AddRaw(Instance, &FMCPProjectIndex::OnFilesLoaded);
 }
 
+void FMCPProjectIndex::Shutdown()
+{
