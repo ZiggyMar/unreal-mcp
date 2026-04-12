@@ -96,3 +96,4 @@ to `mcp-server/src/index.ts`, result types added to `types.ts`. `npm run build` 
 `npx tsc --noEmit` both clean.
 
 **`mcp-server/src/enrichment.ts` (new file)** — the local-model pluggability seam from
+the brief. If `UNREAL_MCP_LOCAL_LLM_URL` is unset (default), `isEnrichmentEnabled()`
