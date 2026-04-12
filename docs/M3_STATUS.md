@@ -87,3 +87,5 @@ New commands in `MCPCommandHandler.cpp` (dispatch-only; all real logic lives in
   this out explicitly: both the TCP server's tick and the AssetRegistry's delegates fire
   on the game thread, so `Entries` needs no locking.
 - Same build-verification bar: isolated `RunUAT BuildPlugin` + direct build against the
+  real `AntiVirusSquadUE58.uproject`, both required and both run this session.
+
