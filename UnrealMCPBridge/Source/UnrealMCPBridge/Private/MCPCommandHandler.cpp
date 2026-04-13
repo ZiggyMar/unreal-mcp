@@ -876,3 +876,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
+	const int32 NewIndex = Graph->Nodes.IndexOfByKey(NewNode);
+

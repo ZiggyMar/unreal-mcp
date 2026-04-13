@@ -45,3 +45,4 @@ struct FMCPIndexBlueprint
 
 /**
  * Project-wide, incrementally-updated index of Blueprint structure (functions,
+ * variables, graphs, node-type histograms). Backs search_project / find_references /
