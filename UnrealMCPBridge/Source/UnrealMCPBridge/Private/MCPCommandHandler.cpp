@@ -878,3 +878,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 
 	const int32 NewIndex = Graph->Nodes.IndexOfByKey(NewNode);
 
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("id"), NewIndex != INDEX_NONE ? MakeNodeId(NewIndex) : TEXT("?"));

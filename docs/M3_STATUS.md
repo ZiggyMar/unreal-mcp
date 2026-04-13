@@ -102,3 +102,4 @@ setup, zero behavior change. If set, `unreal_search_project`'s handler calls
 `enrichSearchHits()` on the bridge's raw hits before returning them: up to
 `UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL` (default 8) hits get a POST to
 `<url>/chat/completions` (OpenAI-compatible — works with Ollama's `/v1` endpoint out of
+the box), asking for a one-line natural-language guess at what the item does, attached
