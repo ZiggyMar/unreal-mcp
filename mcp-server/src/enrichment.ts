@@ -35,3 +35,4 @@ export function isEnrichmentEnabled(): boolean {
 // name + context), so repeated searches don't re-call the local model for the same item,
 // and the cache naturally "invalidates" if the underlying structure changes shape (a
 // changed context string produces a different key). This is intentionally simple:
+// process-lifetime only, not persisted to disk. See docs/M3_STATUS.md for the rationale
