@@ -130,3 +130,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		if (!Client.Socket->Recv(Buffer.GetData(), Buffer.Num(), BytesRead) || BytesRead <= 0)
 		{
 			break;
+		}
