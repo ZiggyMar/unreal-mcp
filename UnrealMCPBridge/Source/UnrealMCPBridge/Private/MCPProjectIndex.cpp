@@ -286,3 +286,4 @@ void FMCPProjectIndex::Shutdown()
 		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 		AssetRegistry.OnAssetAdded().Remove(Instance->OnAssetAddedHandle);
 		AssetRegistry.OnAssetRemoved().Remove(Instance->OnAssetRemovedHandle);
+		AssetRegistry.OnAssetRenamed().Remove(Instance->OnAssetRenamedHandle);
