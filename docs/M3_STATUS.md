@@ -111,3 +111,4 @@ hit's own structural content, so repeat searches don't re-call the local model.
 The response's `enrichment` field (`"local-llm"` or `"none"`) tells the calling model
 whether enrichment actually ran, so it isn't left guessing why some hits do or don't
 have a `summary`.
+

@@ -295,3 +295,4 @@ void FMCPProjectIndex::Shutdown()
 	Instance = nullptr;
 }
 
+FMCPProjectIndex& FMCPProjectIndex::Get()
