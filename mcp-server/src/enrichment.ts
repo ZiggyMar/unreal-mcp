@@ -37,3 +37,4 @@ export function isEnrichmentEnabled(): boolean {
 // changed context string produces a different key). This is intentionally simple:
 // process-lifetime only, not persisted to disk. See docs/M3_STATUS.md for the rationale
 // and what a follow-up on-disk cache would look like.
+const summaryCache = new Map<string, string>();

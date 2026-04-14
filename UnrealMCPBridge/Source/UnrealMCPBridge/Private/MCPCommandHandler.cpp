@@ -884,3 +884,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
 	return MakeOkResponse(Result);
 }
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<FJsonObject>& Params)
