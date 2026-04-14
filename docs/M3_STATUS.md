@@ -112,3 +112,4 @@ The response's `enrichment` field (`"local-llm"` or `"none"`) tells the calling 
 whether enrichment actually ran, so it isn't left guessing why some hits do or don't
 have a `summary`.
 
+## Verification performed this session

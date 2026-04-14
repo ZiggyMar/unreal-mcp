@@ -39,3 +39,4 @@ export function isEnrichmentEnabled(): boolean {
 // and what a follow-up on-disk cache would look like.
 const summaryCache = new Map<string, string>();
 
+function cacheKey(hit: SearchHit): string {
