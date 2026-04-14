@@ -290,3 +290,5 @@ void FMCPProjectIndex::Shutdown()
 		AssetRegistry.OnAssetUpdated().Remove(Instance->OnAssetUpdatedHandle);
 		AssetRegistry.OnFilesLoaded().Remove(Instance->OnFilesLoadedHandle);
 	}
+
+	delete Instance;

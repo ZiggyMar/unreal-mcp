@@ -107,3 +107,4 @@ as a `summary` field. Any failure for an individual hit (unreachable endpoint, t
 malformed response) silently falls back to no summary for that hit — enrichment can
 never break a search result. Results are cached in-memory per-process, keyed by the
 hit's own structural content, so repeat searches don't re-call the local model.
+
