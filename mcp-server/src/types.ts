@@ -132,3 +132,4 @@ export interface SaveBlueprintResult {
   path: string;
 }
 
+// --- Milestone 3: project-wide index result shapes ---

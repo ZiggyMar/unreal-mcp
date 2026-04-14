@@ -76,3 +76,4 @@ cd mcp-server && npm install && npm run build
 ```
 
 ### 3. Register the Server
+Connect the server to your MCP client using the absolute path to `mcp-server/dist/index.js`:
