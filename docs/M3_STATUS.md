@@ -106,3 +106,4 @@ the box), asking for a one-line natural-language guess at what the item does, at
 as a `summary` field. Any failure for an individual hit (unreachable endpoint, timeout,
 malformed response) silently falls back to no summary for that hit — enrichment can
 never break a search result. Results are cached in-memory per-process, keyed by the
+hit's own structural content, so repeat searches don't re-call the local model.

@@ -289,3 +289,4 @@ void FMCPProjectIndex::Shutdown()
 		AssetRegistry.OnAssetRenamed().Remove(Instance->OnAssetRenamedHandle);
 		AssetRegistry.OnAssetUpdated().Remove(Instance->OnAssetUpdatedHandle);
 		AssetRegistry.OnFilesLoaded().Remove(Instance->OnFilesLoadedHandle);
+	}
