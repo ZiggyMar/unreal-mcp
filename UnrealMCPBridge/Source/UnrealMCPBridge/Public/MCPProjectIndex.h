@@ -47,3 +47,4 @@ struct FMCPIndexBlueprint
  * Project-wide, incrementally-updated index of Blueprint structure (functions,
  * variables, graphs, node-type histograms). Backs search_project / find_references /
  * get_project_overview so a model can orient itself and find things without
+ * enumerating and loading every Blueprint asset on every request. The whole point

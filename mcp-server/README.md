@@ -105,3 +105,4 @@ ollama serve                       # if not already running
 ollama pull llama3.2                # or any small/fast model you like
 
 export UNREAL_MCP_LOCAL_LLM_URL="http://localhost:11434/v1"
+export UNREAL_MCP_LOCAL_LLM_MODEL="llama3.2"   # optional, this is the default
