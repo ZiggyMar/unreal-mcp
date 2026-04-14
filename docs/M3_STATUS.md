@@ -105,3 +105,4 @@ setup, zero behavior change. If set, `unreal_search_project`'s handler calls
 the box), asking for a one-line natural-language guess at what the item does, attached
 as a `summary` field. Any failure for an individual hit (unreachable endpoint, timeout,
 malformed response) silently falls back to no summary for that hit — enrichment can
+never break a search result. Results are cached in-memory per-process, keyed by the

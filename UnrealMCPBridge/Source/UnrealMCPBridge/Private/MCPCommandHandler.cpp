@@ -882,3 +882,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("id"), NewIndex != INDEX_NONE ? MakeNodeId(NewIndex) : TEXT("?"));
 	Result->SetStringField(TEXT("type"), NewNode->GetClass()->GetName());
 	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
+	return MakeOkResponse(Result);
+}
