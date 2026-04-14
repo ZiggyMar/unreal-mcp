@@ -49,3 +49,4 @@ private:
 	static TSharedRef<FJsonObject> HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSaveBlueprint(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Milestone 3: project-wide index ---

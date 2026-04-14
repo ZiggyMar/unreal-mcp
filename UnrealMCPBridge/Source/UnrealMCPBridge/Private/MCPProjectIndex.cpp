@@ -293,3 +293,5 @@ void FMCPProjectIndex::Shutdown()
 
 	delete Instance;
 	Instance = nullptr;
+}
+
