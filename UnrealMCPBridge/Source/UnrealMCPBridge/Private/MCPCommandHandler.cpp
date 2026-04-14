@@ -890,3 +890,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	FString Path, GraphName, SourceNodeId, SourcePinName, TargetNodeId, TargetPinName;
 	if (!Params.IsValid() ||
 		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||

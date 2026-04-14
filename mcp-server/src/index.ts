@@ -352,3 +352,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(
