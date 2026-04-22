@@ -43,3 +43,4 @@ function cacheKey(hit: SearchHit): string {
   return `${hit.kind}:${hit.path}:${hit.name}:${hit.context}`;
 }
 
+async function requestSummary(hit: SearchHit): Promise<string | undefined> {
