@@ -901,3 +901,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 
 	FString LoadError;
 	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
