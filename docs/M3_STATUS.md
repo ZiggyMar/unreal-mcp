@@ -117,3 +117,4 @@ have a `summary`.
 1. **Isolated plugin package build** (`RunUAT BuildPlugin`): `Result: Succeeded`,
    `BUILD SUCCESSFUL`, first attempt.
 2. **Direct build against the real project** (`UnrealBuildTool` against
+   `AntiVirusSquadUE58.uproject`): `Result: Succeeded`, exit code 0, ~92s (incremental —
