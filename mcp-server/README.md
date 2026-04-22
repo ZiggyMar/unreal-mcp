@@ -108,3 +108,4 @@ export UNREAL_MCP_LOCAL_LLM_URL="http://localhost:11434/v1"
 export UNREAL_MCP_LOCAL_LLM_MODEL="llama3.2"   # optional, this is the default
 ```
 
+When set, up to a handful of top hits per `unreal_search_project` call get a best-effort

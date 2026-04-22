@@ -358,3 +358,4 @@ server.registerTool(
     title: "Add a member variable to a Blueprint",
     description:
       "Adds a new member variable to a Blueprint. type is a compact type descriptor: bool, byte, int, int64, float, " +
+      "double, string, name, text, vector, rotator, transform, or object:<ClassName> / class:<ClassName> for object " +
