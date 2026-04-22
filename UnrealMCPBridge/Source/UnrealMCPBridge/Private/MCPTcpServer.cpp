@@ -132,3 +132,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 			break;
 		}
 
+		FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Buffer.GetData()), BytesRead);

@@ -299,3 +299,5 @@ FMCPProjectIndex& FMCPProjectIndex::Get()
 {
 	check(Instance);
 	return *Instance;
+}
+
