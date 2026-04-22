@@ -42,3 +42,4 @@ const summaryCache = new Map<string, string>();
 function cacheKey(hit: SearchHit): string {
   return `${hit.kind}:${hit.path}:${hit.name}:${hit.context}`;
 }
+

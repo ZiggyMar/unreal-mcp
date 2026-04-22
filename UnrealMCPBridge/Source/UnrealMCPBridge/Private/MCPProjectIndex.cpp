@@ -305,3 +305,5 @@ FString FMCPProjectIndex::GetIndexFilePath()
 {
 	return FPaths::ProjectSavedDir() / TEXT("UnrealMCPBridge") / TEXT("index.json");
 }
+
+bool FMCPProjectIndex::IsBlueprintAsset(const FAssetData& AssetData)

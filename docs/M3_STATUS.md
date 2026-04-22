@@ -119,3 +119,5 @@ have a `summary`.
 2. **Direct build against the real project** (`UnrealBuildTool` against
    `AntiVirusSquadUE58.uproject`): `Result: Succeeded`, exit code 0, ~92s (incremental —
    recompiled `Module.UnrealMCPBridge.cpp`, `MCPCommandHandler.cpp`, `MCPProjectIndex.cpp`
+   [new], `UnrealMCPBridgeModule.cpp`, relinked). Updated
+   `UnrealEditor-UnrealMCPBridge.dll` is live in the project's
