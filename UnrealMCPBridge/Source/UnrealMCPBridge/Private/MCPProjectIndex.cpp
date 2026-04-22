@@ -301,3 +301,4 @@ FMCPProjectIndex& FMCPProjectIndex::Get()
 	return *Instance;
 }
 
+FString FMCPProjectIndex::GetIndexFilePath()

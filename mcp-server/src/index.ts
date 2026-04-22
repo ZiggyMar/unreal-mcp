@@ -355,3 +355,4 @@ server.registerTool(
 server.registerTool(
   "unreal_add_variable",
   {
+    title: "Add a member variable to a Blueprint",
