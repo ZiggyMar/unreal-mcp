@@ -307,3 +307,4 @@ FString FMCPProjectIndex::GetIndexFilePath()
 }
 
 bool FMCPProjectIndex::IsBlueprintAsset(const FAssetData& AssetData)
+{

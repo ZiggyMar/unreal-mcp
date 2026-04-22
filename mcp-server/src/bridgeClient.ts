@@ -79,3 +79,4 @@ export class UnrealBridgeClient {
                 `Make sure the Unreal Editor is running with the target project open and the UnrealMCPBridge plugin enabled.`
             )
           );
+        } else {

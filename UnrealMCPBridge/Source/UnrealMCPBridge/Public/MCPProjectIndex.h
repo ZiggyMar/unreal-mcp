@@ -49,3 +49,4 @@ struct FMCPIndexBlueprint
  * get_project_overview so a model can orient itself and find things without
  * enumerating and loading every Blueprint asset on every request. The whole point
  * is avoiding the "re-explain the project every conversation" cost.
+ *

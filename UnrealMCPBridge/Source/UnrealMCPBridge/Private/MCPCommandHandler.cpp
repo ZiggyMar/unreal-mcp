@@ -906,3 +906,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(LoadError);
 	}
 
+	FString GraphError;
+	UEdGraph* Graph = FindGraphByName(Blueprint, GraphName, GraphError);

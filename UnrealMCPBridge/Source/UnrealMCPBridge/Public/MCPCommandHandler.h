@@ -50,3 +50,4 @@ private:
 	static TSharedRef<FJsonObject> HandleSaveBlueprint(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Milestone 3: project-wide index ---
+	static TSharedRef<FJsonObject> HandleSearchProject(const TSharedPtr<FJsonObject>& Params);
