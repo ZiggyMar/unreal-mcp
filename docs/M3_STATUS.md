@@ -115,3 +115,4 @@ have a `summary`.
 ## Verification performed this session
 
 1. **Isolated plugin package build** (`RunUAT BuildPlugin`): `Result: Succeeded`,
+   `BUILD SUCCESSFUL`, first attempt.
