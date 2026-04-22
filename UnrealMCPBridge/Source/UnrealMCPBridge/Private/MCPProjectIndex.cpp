@@ -298,3 +298,4 @@ void FMCPProjectIndex::Shutdown()
 FMCPProjectIndex& FMCPProjectIndex::Get()
 {
 	check(Instance);
+	return *Instance;

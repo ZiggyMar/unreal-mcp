@@ -113,3 +113,5 @@ whether enrichment actually ran, so it isn't left guessing why some hits do or d
 have a `summary`.
 
 ## Verification performed this session
+
+1. **Isolated plugin package build** (`RunUAT BuildPlugin`): `Result: Succeeded`,
