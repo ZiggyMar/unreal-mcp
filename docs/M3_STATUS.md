@@ -123,3 +123,4 @@ have a `summary`.
    `UnrealEditor-UnrealMCPBridge.dll` is live in the project's
    `Plugins\UnrealMCPBridge\Binaries\Win64\`.
 3. **TypeScript**: `npm run build` and `npx tsc --noEmit` both clean for the whole
+   16-tool server.
