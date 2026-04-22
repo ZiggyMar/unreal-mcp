@@ -121,3 +121,4 @@ have a `summary`.
    recompiled `Module.UnrealMCPBridge.cpp`, `MCPCommandHandler.cpp`, `MCPProjectIndex.cpp`
    [new], `UnrealMCPBridgeModule.cpp`, relinked). Updated
    `UnrealEditor-UnrealMCPBridge.dll` is live in the project's
+   `Plugins\UnrealMCPBridge\Binaries\Win64\`.
