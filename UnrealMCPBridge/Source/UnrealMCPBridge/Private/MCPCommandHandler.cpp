@@ -895,3 +895,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		!Params->TryGetStringField(TEXT("sourcePin"), SourcePinName) ||
 		!Params->TryGetStringField(TEXT("targetNodeId"), TargetNodeId) ||
 		!Params->TryGetStringField(TEXT("targetPin"), TargetPinName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, graphName, sourceNodeId, sourcePin, targetNodeId, targetPin are required"));

@@ -354,3 +354,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_add_variable",
+  {
