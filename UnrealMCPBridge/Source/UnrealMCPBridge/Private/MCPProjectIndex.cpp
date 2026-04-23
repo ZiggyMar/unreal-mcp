@@ -312,3 +312,5 @@ bool FMCPProjectIndex::IsBlueprintAsset(const FAssetData& AssetData)
 	return Class && Class->IsChildOf(UBlueprint::StaticClass());
 }
 
+void FMCPProjectIndex::EnsureBuilt()
+{

@@ -914,3 +914,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	}
 
 	FString NodeError;
+	UEdGraphNode* SourceNode = FindNodeById(Graph, SourceNodeId, NodeError);
+	if (!SourceNode)

@@ -50,3 +50,4 @@ struct FMCPIndexBlueprint
  * enumerating and loading every Blueprint asset on every request. The whole point
  * is avoiding the "re-explain the project every conversation" cost.
  *
+ * Owned as a singleton by FUnrealMCPBridgeModule (Initialize/Shutdown called from
