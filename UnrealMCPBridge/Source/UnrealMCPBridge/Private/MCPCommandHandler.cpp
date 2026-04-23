@@ -912,3 +912,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	{
 		return MakeErrorResponse(GraphError);
 	}
+
+	FString NodeError;
