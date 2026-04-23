@@ -45,3 +45,4 @@ function cacheKey(hit: SearchHit): string {
 
 async function requestSummary(hit: SearchHit): Promise<string | undefined> {
   if (!LOCAL_LLM_URL) {
+    return undefined;
