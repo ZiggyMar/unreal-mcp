@@ -317,3 +317,4 @@ void FMCPProjectIndex::EnsureBuilt()
 	if (bBuilt)
 	{
 		return;
+	}

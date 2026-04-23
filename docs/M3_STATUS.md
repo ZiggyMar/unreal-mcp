@@ -129,3 +129,5 @@ have a `summary`.
    `find_references` response shapes. The real compiled `dist/index.js` was spawned and
    driven with the SDK `Client` over real stdio: confirmed all 16 tools registered (no
    more, no less), and each of the 3 new tools called with realistic arguments returned
+   correctly-shaped results.
+5. **Dedicated enrichment test, all three states**:

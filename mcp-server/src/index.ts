@@ -362,3 +362,4 @@ server.registerTool(
       "references. Fails if a variable with that name already exists on this Blueprint.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      variableName: z.string().describe("New variable name."),
