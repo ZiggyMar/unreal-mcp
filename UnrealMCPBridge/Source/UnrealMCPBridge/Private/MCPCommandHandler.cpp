@@ -925,3 +925,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(NodeError);
 	}
 
+	UEdGraphPin* SourcePin = SourceNode->FindPin(FName(*SourcePinName), EGPD_Output);
+	if (!SourcePin)

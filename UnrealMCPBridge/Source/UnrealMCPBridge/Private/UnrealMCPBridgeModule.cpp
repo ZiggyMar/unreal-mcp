@@ -27,3 +27,4 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 		TcpServer->Stop();
 		TcpServer.Reset();
 	}
+

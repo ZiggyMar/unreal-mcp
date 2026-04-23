@@ -51,3 +51,4 @@ private:
 
 	// --- Milestone 3: project-wide index ---
 	static TSharedRef<FJsonObject> HandleSearchProject(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleFindReferences(const TSharedPtr<FJsonObject>& Params);
