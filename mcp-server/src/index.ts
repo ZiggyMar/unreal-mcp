@@ -363,3 +363,4 @@ server.registerTool(
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       variableName: z.string().describe("New variable name."),
+      type: z

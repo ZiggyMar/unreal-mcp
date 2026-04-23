@@ -132,3 +132,4 @@ have a `summary`.
    correctly-shaped results.
 5. **Dedicated enrichment test, all three states**:
    - **Disabled (default)**: confirmed `unreal_search_project` returns hits with no
+     `summary` field and `enrichment: "none"` when `UNREAL_MCP_LOCAL_LLM_URL` is unset —
