@@ -134,3 +134,4 @@ have a `summary`.
    - **Disabled (default)**: confirmed `unreal_search_project` returns hits with no
      `summary` field and `enrichment: "none"` when `UNREAL_MCP_LOCAL_LLM_URL` is unset —
      the zero-setup default path.
+   - **Enabled and working**: a fake OpenAI-compatible `/chat/completions` server was
