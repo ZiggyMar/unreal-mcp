@@ -131,3 +131,4 @@ have a `summary`.
    more, no less), and each of the 3 new tools called with realistic arguments returned
    correctly-shaped results.
 5. **Dedicated enrichment test, all three states**:
+   - **Disabled (default)**: confirmed `unreal_search_project` returns hits with no
