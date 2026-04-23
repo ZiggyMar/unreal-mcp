@@ -361,3 +361,4 @@ server.registerTool(
       "double, string, name, text, vector, rotator, transform, or object:<ClassName> / class:<ClassName> for object " +
       "references. Fails if a variable with that name already exists on this Blueprint.",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),

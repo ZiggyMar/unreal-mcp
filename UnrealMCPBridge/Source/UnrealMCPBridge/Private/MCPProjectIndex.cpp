@@ -314,3 +314,4 @@ bool FMCPProjectIndex::IsBlueprintAsset(const FAssetData& AssetData)
 
 void FMCPProjectIndex::EnsureBuilt()
 {
+	if (bBuilt)
