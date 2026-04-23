@@ -318,3 +318,5 @@ void FMCPProjectIndex::EnsureBuilt()
 	{
 		return;
 	}
+
+	if (LoadFromDisk())
