@@ -128,3 +128,4 @@ have a `summary`.
    hand-written TCP server replays `get_project_overview`/`search_project`/
    `find_references` response shapes. The real compiled `dist/index.js` was spawned and
    driven with the SDK `Client` over real stdio: confirmed all 16 tools registered (no
+   more, no less), and each of the 3 new tools called with realistic arguments returned
