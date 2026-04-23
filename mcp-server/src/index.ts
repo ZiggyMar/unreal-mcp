@@ -365,3 +365,4 @@ server.registerTool(
       variableName: z.string().describe("New variable name."),
       type: z
         .string()
+        .describe('Compact type descriptor, e.g. "bool", "float", "string", "vector", "object:StaticMeshComponent".'),
