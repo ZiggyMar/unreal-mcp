@@ -52,3 +52,4 @@ struct FMCPIndexBlueprint
  *
  * Owned as a singleton by FUnrealMCPBridgeModule (Initialize/Shutdown called from
  * StartupModule/ShutdownModule). Persisted to Saved/UnrealMCPBridge/index.json so a
+ * fresh editor session can skip a full rebuild. Kept fresh after that via

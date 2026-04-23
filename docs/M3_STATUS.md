@@ -135,3 +135,5 @@ have a `summary`.
      `summary` field and `enrichment: "none"` when `UNREAL_MCP_LOCAL_LLM_URL` is unset —
      the zero-setup default path.
    - **Enabled and working**: a fake OpenAI-compatible `/chat/completions` server was
+     stood up; confirmed hits under the per-call cap (5 of 8) all get a `summary` field
+     and `enrichment: "local-llm"`, AND confirmed the cap itself works correctly with 12
