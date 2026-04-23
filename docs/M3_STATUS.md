@@ -124,3 +124,5 @@ have a `summary`.
    `Plugins\UnrealMCPBridge\Binaries\Win64\`.
 3. **TypeScript**: `npm run build` and `npx tsc --noEmit` both clean for the whole
    16-tool server.
+4. **Full MCP protocol test against a fake bridge** (extending the M1/M2 technique): a
+   hand-written TCP server replays `get_project_overview`/`search_project`/
