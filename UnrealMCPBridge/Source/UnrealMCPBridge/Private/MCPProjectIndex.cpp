@@ -320,3 +320,4 @@ void FMCPProjectIndex::EnsureBuilt()
 	}
 
 	if (LoadFromDisk())
+	{

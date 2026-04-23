@@ -136,3 +136,4 @@ export interface SaveBlueprintResult {
 
 export type SearchHitKind = "blueprint" | "function" | "variable";
 
+export interface SearchHit {

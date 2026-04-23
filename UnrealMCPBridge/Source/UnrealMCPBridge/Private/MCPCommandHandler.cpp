@@ -923,3 +923,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	if (!TargetNode)
 	{
 		return MakeErrorResponse(NodeError);
+	}
+
