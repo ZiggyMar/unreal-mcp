@@ -127,3 +127,4 @@ have a `summary`.
 4. **Full MCP protocol test against a fake bridge** (extending the M1/M2 technique): a
    hand-written TCP server replays `get_project_overview`/`search_project`/
    `find_references` response shapes. The real compiled `dist/index.js` was spawned and
+   driven with the SDK `Client` over real stdio: confirmed all 16 tools registered (no
