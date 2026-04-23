@@ -321,3 +321,5 @@ void FMCPProjectIndex::EnsureBuilt()
 
 	if (LoadFromDisk())
 	{
+		bBuilt = true;
+		UE_LOG(LogMCPProjectIndex, Log, TEXT("UnrealMCPBridge: loaded project index from disk (%d blueprints)"), Entries.Num());
