@@ -360,3 +360,4 @@ server.registerTool(
       "Adds a new member variable to a Blueprint. type is a compact type descriptor: bool, byte, int, int64, float, " +
       "double, string, name, text, vector, rotator, transform, or object:<ClassName> / class:<ClassName> for object " +
       "references. Fails if a variable with that name already exists on this Blueprint.",
+    inputSchema: {
