@@ -48,3 +48,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     return undefined;
   }
 
+  const prompt =

@@ -931,3 +931,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(FString::Printf(TEXT("pin_not_found: output pin '%s' on node %s"), *SourcePinName, *SourceNodeId));
 	}
 
+	UEdGraphPin* TargetPin = TargetNode->FindPin(FName(*TargetPinName), EGPD_Input);
+	if (!TargetPin)
