@@ -81,3 +81,4 @@ export class UnrealBridgeClient {
           );
         } else {
           fail(err);
+        }

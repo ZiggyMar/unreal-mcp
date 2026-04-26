@@ -49,3 +49,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
   }
 
   const prompt =
+    `In one short sentence (under 15 words), describe what this Unreal Engine Blueprint ${hit.kind} probably does, ` +

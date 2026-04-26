@@ -935,3 +935,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	if (!TargetPin)
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("pin_not_found: input pin '%s' on node %s"), *TargetPinName, *TargetNodeId));
+	}
