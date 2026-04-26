@@ -366,3 +366,4 @@ server.registerTool(
       type: z
         .string()
         .describe('Compact type descriptor, e.g. "bool", "float", "string", "vector", "object:StaticMeshComponent".'),
+      category: z.string().optional().describe("Optional category for grouping in the editor's My Blueprint panel."),

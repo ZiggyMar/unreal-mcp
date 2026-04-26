@@ -327,3 +327,5 @@ void FMCPProjectIndex::EnsureBuilt()
 	}
 
 	RebuildFull();
+}
+
