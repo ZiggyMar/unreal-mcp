@@ -136,3 +136,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		Client.RecvBuffer.AppendChars(Converter.Get(), Converter.Length());
 	}
 
+	// Process complete newline-terminated requests.
