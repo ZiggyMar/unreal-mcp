@@ -138,3 +138,4 @@ have a `summary`.
      stood up; confirmed hits under the per-call cap (5 of 8) all get a `summary` field
      and `enrichment: "local-llm"`, AND confirmed the cap itself works correctly with 12
      hits (over the default cap of 8) — exactly 8 got summaries, the other 4 passed
+     through untouched rather than being dropped.
