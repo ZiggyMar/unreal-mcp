@@ -367,3 +367,4 @@ server.registerTool(
         .string()
         .describe('Compact type descriptor, e.g. "bool", "float", "string", "vector", "object:StaticMeshComponent".'),
       category: z.string().optional().describe("Optional category for grouping in the editor's My Blueprint panel."),
+      defaultValue: z.string().optional().describe("Optional literal default value, string-serialized."),

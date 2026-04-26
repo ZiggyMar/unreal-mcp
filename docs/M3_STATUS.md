@@ -139,3 +139,4 @@ have a `summary`.
      and `enrichment: "local-llm"`, AND confirmed the cap itself works correctly with 12
      hits (over the default cap of 8) — exactly 8 got summaries, the other 4 passed
      through untouched rather than being dropped.
+   - **Enabled but unreachable**: pointed `UNREAL_MCP_LOCAL_LLM_URL` at a port nothing is
