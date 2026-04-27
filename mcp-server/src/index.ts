@@ -371,3 +371,4 @@ server.registerTool(
     },
   },
   async ({ path, variableName, type, category, defaultValue }) => {
+    try {

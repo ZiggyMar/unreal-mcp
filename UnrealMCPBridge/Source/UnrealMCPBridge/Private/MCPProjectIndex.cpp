@@ -339,3 +339,4 @@ void FMCPProjectIndex::RebuildFull()
 	FARFilter Filter;
 	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
 	Filter.bRecursiveClasses = true;
+	Filter.PackagePaths.Add(FName(TEXT("/Game")));
