@@ -55,3 +55,4 @@ struct FMCPIndexBlueprint
  * fresh editor session can skip a full rebuild. Kept fresh after that via
  * IAssetRegistry's OnAssetAdded/Removed/Renamed/Updated delegates (no polling).
  *
+ * Runs entirely on the game thread (same as everything else in this plugin): both the
