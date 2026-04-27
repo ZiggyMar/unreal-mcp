@@ -150,3 +150,4 @@ control flow (on/off/cap/failure), are all correct. It does **not** confirm the 
 index's actual runtime output against real project data — see below.
 
 ## What is stubbed / unverified
+

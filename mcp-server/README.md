@@ -116,3 +116,4 @@ without enrichment — this is designed to never be a hard dependency. See
 `src/enrichment.ts` for the implementation.
 
 ## Configuration
+

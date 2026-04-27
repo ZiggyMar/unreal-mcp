@@ -139,3 +139,4 @@ export type SearchHitKind = "blueprint" | "function" | "variable";
 export interface SearchHit {
   kind: SearchHitKind;
   path: string;
+  name: string;
