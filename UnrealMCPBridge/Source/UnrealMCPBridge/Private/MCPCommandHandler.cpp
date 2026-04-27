@@ -959,3 +959,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		Result->SetStringField(TEXT("note"), ConnectResponse.Message.ToString());
 	}
 	return MakeOkResponse(Result);
+}
+

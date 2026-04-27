@@ -348,3 +348,4 @@ void FMCPProjectIndex::RebuildFull()
 	for (const FAssetData& Asset : Assets)
 	{
 		IndexBlueprintByPath(Asset.GetObjectPathString());
+	}

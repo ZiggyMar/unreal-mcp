@@ -140,3 +140,4 @@ export interface SearchHit {
   kind: SearchHitKind;
   path: string;
   name: string;
+  context: string;

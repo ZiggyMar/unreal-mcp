@@ -53,3 +53,4 @@ private:
 	static TSharedRef<FJsonObject> HandleSearchProject(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleFindReferences(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleGetProjectOverview(const TSharedPtr<FJsonObject>& Params);
+

@@ -55,3 +55,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     `kind: ${hit.kind}\nname: ${hit.name}\ncontext: ${hit.context}\npath: ${hit.path}`;
 
   const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ENRICH_TIMEOUT_MS);
