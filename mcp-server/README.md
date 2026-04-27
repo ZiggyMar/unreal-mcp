@@ -114,3 +114,4 @@ When set, up to a handful of top hits per `unreal_search_project` call get a bes
 unset, unreachable, slow, or errors, search results are returned exactly as they would be
 without enrichment — this is designed to never be a hard dependency. See
 `src/enrichment.ts` for the implementation.
+
