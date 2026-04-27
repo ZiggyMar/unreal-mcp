@@ -333,3 +333,5 @@ void FMCPProjectIndex::RebuildFull()
 {
 	Entries.Empty();
 
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	bAssetRegistryStillScanning = AssetRegistry.IsLoadingAssets();

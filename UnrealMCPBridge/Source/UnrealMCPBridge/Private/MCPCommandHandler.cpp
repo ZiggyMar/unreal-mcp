@@ -940,3 +940,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	const UEdGraphSchema* Schema = Graph->GetSchema();
 	const FPinConnectionResponse ConnectResponse = Schema->CanCreateConnection(SourcePin, TargetPin);
 	if (ConnectResponse.Response == CONNECT_RESPONSE_DISALLOW)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("incompatible_pins: %s"), *ConnectResponse.Message.ToString()));
