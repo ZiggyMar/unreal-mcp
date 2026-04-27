@@ -346,3 +346,5 @@ void FMCPProjectIndex::RebuildFull()
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	for (const FAssetData& Asset : Assets)
+	{
+		IndexBlueprintByPath(Asset.GetObjectPathString());
