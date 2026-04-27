@@ -948,3 +948,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	if (!bConnected)
 	{
 		return MakeErrorResponse(TEXT("connect_failed"));
+	}
+
