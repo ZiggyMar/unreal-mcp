@@ -147,3 +147,4 @@ have a `summary`.
 
 This confirms the TS <-> TCP <-> JSON plumbing, and the entire enrichment seam's
 control flow (on/off/cap/failure), are all correct. It does **not** confirm the C++
+index's actual runtime output against real project data — see below.

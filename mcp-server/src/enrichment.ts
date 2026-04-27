@@ -52,3 +52,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     `In one short sentence (under 15 words), describe what this Unreal Engine Blueprint ${hit.kind} probably does, ` +
     `based only on its name and context. Do not just restate the name; infer intent. Reply with the sentence only, ` +
     `no preamble.\n` +
+    `kind: ${hit.kind}\nname: ${hit.name}\ncontext: ${hit.context}\npath: ${hit.path}`;
