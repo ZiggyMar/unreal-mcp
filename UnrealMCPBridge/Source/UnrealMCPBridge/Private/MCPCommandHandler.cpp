@@ -944,3 +944,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(FString::Printf(TEXT("incompatible_pins: %s"), *ConnectResponse.Message.ToString()));
 	}
 
+	const bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
+	if (!bConnected)
