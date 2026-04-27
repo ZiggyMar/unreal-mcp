@@ -343,3 +343,5 @@ void FMCPProjectIndex::RebuildFull()
 	Filter.bRecursivePaths = true;
 
 	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssets(Filter, Assets);
+
