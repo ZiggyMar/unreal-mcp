@@ -142,3 +142,4 @@ have a `summary`.
    - **Enabled but unreachable**: pointed `UNREAL_MCP_LOCAL_LLM_URL` at a port nothing is
      listening on; confirmed the tool call still succeeds, still reports
      `enrichment: "local-llm"` (it did attempt to run), and every hit comes back with no
+     `summary` — i.e. a broken/offline local model degrades gracefully and never breaks
