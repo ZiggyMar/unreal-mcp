@@ -337,3 +337,5 @@ void FMCPProjectIndex::RebuildFull()
 	bAssetRegistryStillScanning = AssetRegistry.IsLoadingAssets();
 
 	FARFilter Filter;
+	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	Filter.bRecursiveClasses = true;

@@ -54,3 +54,4 @@ struct FMCPIndexBlueprint
  * StartupModule/ShutdownModule). Persisted to Saved/UnrealMCPBridge/index.json so a
  * fresh editor session can skip a full rebuild. Kept fresh after that via
  * IAssetRegistry's OnAssetAdded/Removed/Renamed/Updated delegates (no polling).
+ *
