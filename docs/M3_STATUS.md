@@ -144,3 +144,4 @@ have a `summary`.
      `enrichment: "local-llm"` (it did attempt to run), and every hit comes back with no
      `summary` — i.e. a broken/offline local model degrades gracefully and never breaks
      the underlying search.
+

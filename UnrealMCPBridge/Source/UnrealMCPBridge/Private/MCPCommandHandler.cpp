@@ -942,3 +942,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	if (ConnectResponse.Response == CONNECT_RESPONSE_DISALLOW)
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("incompatible_pins: %s"), *ConnectResponse.Message.ToString()));
+	}
+

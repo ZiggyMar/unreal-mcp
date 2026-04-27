@@ -369,3 +369,4 @@ server.registerTool(
       category: z.string().optional().describe("Optional category for grouping in the editor's My Blueprint panel."),
       defaultValue: z.string().optional().describe("Optional literal default value, string-serialized."),
     },
+  },
