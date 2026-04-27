@@ -370,3 +370,4 @@ server.registerTool(
       defaultValue: z.string().optional().describe("Optional literal default value, string-serialized."),
     },
   },
+  async ({ path, variableName, type, category, defaultValue }) => {

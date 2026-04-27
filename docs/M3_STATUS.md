@@ -145,3 +145,5 @@ have a `summary`.
      `summary` — i.e. a broken/offline local model degrades gracefully and never breaks
      the underlying search.
 
+This confirms the TS <-> TCP <-> JSON plumbing, and the entire enrichment seam's
+control flow (on/off/cap/failure), are all correct. It does **not** confirm the C++

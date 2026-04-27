@@ -336,3 +336,4 @@ void FMCPProjectIndex::RebuildFull()
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	bAssetRegistryStillScanning = AssetRegistry.IsLoadingAssets();
 
+	FARFilter Filter;
