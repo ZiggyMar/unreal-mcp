@@ -137,3 +137,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 	}
 
 	// Process complete newline-terminated requests.
+	int32 NewlineIndex;

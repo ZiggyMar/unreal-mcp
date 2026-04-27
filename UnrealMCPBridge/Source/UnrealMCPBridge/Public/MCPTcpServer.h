@@ -28,3 +28,4 @@ public:
 
 private:
 	bool HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint);
+	bool Tick(float DeltaTime);

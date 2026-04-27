@@ -332,3 +332,4 @@ void FMCPProjectIndex::EnsureBuilt()
 void FMCPProjectIndex::RebuildFull()
 {
 	Entries.Empty();
+
