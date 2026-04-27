@@ -955,3 +955,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("connected"), true);
 	if (!ConnectResponse.Message.IsEmpty())
+	{
+		Result->SetStringField(TEXT("note"), ConnectResponse.Message.ToString());

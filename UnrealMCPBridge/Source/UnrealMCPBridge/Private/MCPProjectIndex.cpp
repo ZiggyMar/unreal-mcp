@@ -345,3 +345,4 @@ void FMCPProjectIndex::RebuildFull()
 	TArray<FAssetData> Assets;
 	AssetRegistry.GetAssets(Filter, Assets);
 
+	for (const FAssetData& Asset : Assets)
