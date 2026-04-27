@@ -140,3 +140,5 @@ have a `summary`.
      hits (over the default cap of 8) — exactly 8 got summaries, the other 4 passed
      through untouched rather than being dropped.
    - **Enabled but unreachable**: pointed `UNREAL_MCP_LOCAL_LLM_URL` at a port nothing is
+     listening on; confirmed the tool call still succeeds, still reports
+     `enrichment: "local-llm"` (it did attempt to run), and every hit comes back with no
