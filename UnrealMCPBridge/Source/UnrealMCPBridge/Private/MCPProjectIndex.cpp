@@ -342,3 +342,4 @@ void FMCPProjectIndex::RebuildFull()
 	Filter.PackagePaths.Add(FName(TEXT("/Game")));
 	Filter.bRecursivePaths = true;
 
+	TArray<FAssetData> Assets;

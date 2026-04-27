@@ -372,3 +372,4 @@ server.registerTool(
   },
   async ({ path, variableName, type, category, defaultValue }) => {
     try {
+      const result = await bridge.send<AddVariableResult>("add_variable", {
