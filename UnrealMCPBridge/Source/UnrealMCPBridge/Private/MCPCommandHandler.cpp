@@ -950,3 +950,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(TEXT("connect_failed"));
 	}
 
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
