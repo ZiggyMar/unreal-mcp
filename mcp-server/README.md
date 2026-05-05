@@ -118,3 +118,4 @@ without enrichment — this is designed to never be a hard dependency. See
 ## Configuration
 
 Environment variables (all optional):
+

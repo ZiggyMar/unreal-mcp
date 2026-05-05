@@ -158,3 +158,4 @@ drive:
   and its logic is a straightforward extension of already-compiling M1/M2 code (same
   `StaticLoadObject`, same `GetAllGraphs`, same `NewVariables` iteration used
   elsewhere), but whether it produces sensible output for `AntiVirusSquadUE58`'s actual
+  content — correct function param/return types via `FProperty::GetCPPType()`, correct
