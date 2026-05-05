@@ -375,3 +375,4 @@ server.registerTool(
       const result = await bridge.send<AddVariableResult>("add_variable", {
         path,
         variableName,
+        type,

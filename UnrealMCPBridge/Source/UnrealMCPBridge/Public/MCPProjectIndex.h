@@ -56,3 +56,4 @@ struct FMCPIndexBlueprint
  * IAssetRegistry's OnAssetAdded/Removed/Renamed/Updated delegates (no polling).
  *
  * Runs entirely on the game thread (same as everything else in this plugin): both the
+ * TCP server's tick and the AssetRegistry's delegates fire on the game thread, so no
