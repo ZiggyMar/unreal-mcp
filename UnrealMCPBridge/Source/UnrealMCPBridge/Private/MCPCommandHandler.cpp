@@ -961,3 +961,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	return MakeOkResponse(Result);
 }
 
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TSharedPtr<FJsonObject>& Params)
+{

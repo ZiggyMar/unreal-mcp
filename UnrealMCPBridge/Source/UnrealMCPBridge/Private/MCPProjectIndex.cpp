@@ -349,3 +349,5 @@ void FMCPProjectIndex::RebuildFull()
 	{
 		IndexBlueprintByPath(Asset.GetObjectPathString());
 	}
+
+	bBuilt = true;
