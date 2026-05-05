@@ -140,3 +140,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 	int32 NewlineIndex;
 	while (Client.RecvBuffer.FindChar(TEXT('\n'), NewlineIndex))
 	{
+		FString Line = Client.RecvBuffer.Left(NewlineIndex);

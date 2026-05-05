@@ -376,3 +376,4 @@ server.registerTool(
         path,
         variableName,
         type,
+        category,

@@ -963,3 +963,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Path, GraphName, NodeId, PinName, Value;
+	if (!Params.IsValid() ||
