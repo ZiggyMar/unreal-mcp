@@ -159,3 +159,4 @@ drive:
   `StaticLoadObject`, same `GetAllGraphs`, same `NewVariables` iteration used
   elsewhere), but whether it produces sensible output for `AntiVirusSquadUE58`'s actual
   content — correct function param/return types via `FProperty::GetCPPType()`, correct
+  interface names, a folder breakdown that actually reflects the project's structure —

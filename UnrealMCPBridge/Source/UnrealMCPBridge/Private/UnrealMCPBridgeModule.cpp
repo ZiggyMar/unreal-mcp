@@ -28,3 +28,4 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 		TcpServer.Reset();
 	}
 
+	FMCPProjectIndex::Shutdown();
