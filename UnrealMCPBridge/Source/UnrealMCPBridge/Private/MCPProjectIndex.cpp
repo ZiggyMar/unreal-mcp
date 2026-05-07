@@ -354,3 +354,4 @@ void FMCPProjectIndex::RebuildFull()
 	UE_LOG(LogMCPProjectIndex, Log, TEXT("UnrealMCPBridge: rebuilt project index (%d blueprints, assetRegistryStillScanning=%d)"),
 		Entries.Num(), bAssetRegistryStillScanning ? 1 : 0);
 	SaveToDisk();
+}

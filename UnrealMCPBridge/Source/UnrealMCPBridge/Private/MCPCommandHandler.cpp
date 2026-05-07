@@ -966,3 +966,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	FString Path, GraphName, NodeId, PinName, Value;
 	if (!Params.IsValid() ||
 		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
+		!Params->TryGetStringField(TEXT("nodeId"), NodeId) ||
