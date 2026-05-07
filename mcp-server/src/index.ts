@@ -377,3 +377,4 @@ server.registerTool(
         variableName,
         type,
         category,
+        defaultValue,
