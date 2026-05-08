@@ -161,3 +161,5 @@ drive:
   content — correct function param/return types via `FProperty::GetCPPType()`, correct
   interface names, a folder breakdown that actually reflects the project's structure —
   is unverified. `FProperty::GetCPPType()` in particular can produce verbose/unexpected
+  strings for some property types (e.g. `TSubclassOf<T>`, soft references, containers of
+  structs) that I have not been able to check against a real function signature.

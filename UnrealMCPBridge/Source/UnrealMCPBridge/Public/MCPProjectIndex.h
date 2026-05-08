@@ -57,3 +57,4 @@ struct FMCPIndexBlueprint
  *
  * Runs entirely on the game thread (same as everything else in this plugin): both the
  * TCP server's tick and the AssetRegistry's delegates fire on the game thread, so no
+ * locking is needed around Entries.

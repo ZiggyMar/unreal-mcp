@@ -141,3 +141,4 @@ export interface SearchHit {
   path: string;
   name: string;
   context: string;
+  /** Optional one-line natural-language description, added client-side by enrichment.ts
