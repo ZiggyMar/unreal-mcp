@@ -120,3 +120,4 @@ without enrichment — this is designed to never be a hard dependency. See
 Environment variables (all optional):
 
 - `UNREAL_MCP_BRIDGE_HOST` — default `127.0.0.1`
+- `UNREAL_MCP_BRIDGE_PORT` — default `8765`

@@ -360,3 +360,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 {
 	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *ObjectPath);
 	UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+	if (!Blueprint)
