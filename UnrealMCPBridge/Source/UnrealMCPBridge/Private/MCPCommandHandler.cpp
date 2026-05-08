@@ -976,3 +976,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 
 	FString LoadError;
 	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
