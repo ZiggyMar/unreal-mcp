@@ -142,3 +142,4 @@ export interface SearchHit {
   name: string;
   context: string;
   /** Optional one-line natural-language description, added client-side by enrichment.ts
+   * when UNREAL_MCP_LOCAL_LLM_URL is configured. Never present in the raw bridge response. */
