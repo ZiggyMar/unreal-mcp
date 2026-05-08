@@ -84,3 +84,4 @@ export class UnrealBridgeClient {
         }
       });
 
+      socket.on("data", (chunk: Buffer) => {

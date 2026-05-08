@@ -167,3 +167,5 @@ drive:
   `Updated` all compile against the signatures I expected, but I have not created,
   deleted, renamed, or edited a single real Blueprint while the plugin was loaded — so
   whether the index actually stays fresh as claimed (the whole point of doing this
+  incrementally instead of re-scanning) is unverified. If these delegates don't fire the
+  way I expect (wrong signature accepted by luck, wrong event semantics, etc.), the
