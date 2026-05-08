@@ -165,3 +165,4 @@ drive:
   structs) that I have not been able to check against a real function signature.
 - **The incremental delegates have never fired.** `OnAssetAdded`/`Removed`/`Renamed`/
   `Updated` all compile against the signatures I expected, but I have not created,
+  deleted, renamed, or edited a single real Blueprint while the plugin was loaded — so

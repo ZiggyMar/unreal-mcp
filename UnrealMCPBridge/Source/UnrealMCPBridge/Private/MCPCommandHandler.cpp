@@ -974,3 +974,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		return MakeErrorResponse(TEXT("missing_param: path, graphName, nodeId, pinName, value are required"));
 	}
 
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
