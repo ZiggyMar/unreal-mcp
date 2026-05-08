@@ -58,3 +58,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
   const timeout = setTimeout(() => controller.abort(), ENRICH_TIMEOUT_MS);
 
   try {
+    const base = LOCAL_LLM_URL.replace(/\/$/, "");

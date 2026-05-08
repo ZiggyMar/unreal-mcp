@@ -164,3 +164,4 @@ drive:
   strings for some property types (e.g. `TSubclassOf<T>`, soft references, containers of
   structs) that I have not been able to check against a real function signature.
 - **The incremental delegates have never fired.** `OnAssetAdded`/`Removed`/`Renamed`/
+  `Updated` all compile against the signatures I expected, but I have not created,

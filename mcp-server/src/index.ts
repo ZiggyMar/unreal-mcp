@@ -379,3 +379,4 @@ server.registerTool(
         category,
         defaultValue,
       });
+      return jsonResult(result);
