@@ -166,3 +166,4 @@ drive:
 - **The incremental delegates have never fired.** `OnAssetAdded`/`Removed`/`Renamed`/
   `Updated` all compile against the signatures I expected, but I have not created,
   deleted, renamed, or edited a single real Blueprint while the plugin was loaded — so
+  whether the index actually stays fresh as claimed (the whole point of doing this

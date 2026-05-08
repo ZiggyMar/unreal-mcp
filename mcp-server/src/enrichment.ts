@@ -59,3 +59,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
 
   try {
     const base = LOCAL_LLM_URL.replace(/\/$/, "");
+    const response = await fetch(`${base}/chat/completions`, {

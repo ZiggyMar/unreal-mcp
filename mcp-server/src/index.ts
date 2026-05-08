@@ -380,3 +380,4 @@ server.registerTool(
         defaultValue,
       });
       return jsonResult(result);
+    } catch (err) {
