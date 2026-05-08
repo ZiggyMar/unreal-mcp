@@ -57,3 +57,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ENRICH_TIMEOUT_MS);
 
+  try {

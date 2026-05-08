@@ -355,3 +355,5 @@ void FMCPProjectIndex::RebuildFull()
 		Entries.Num(), bAssetRegistryStillScanning ? 1 : 0);
 	SaveToDisk();
 }
+
+void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
