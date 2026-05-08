@@ -378,3 +378,4 @@ server.registerTool(
         type,
         category,
         defaultValue,
+      });

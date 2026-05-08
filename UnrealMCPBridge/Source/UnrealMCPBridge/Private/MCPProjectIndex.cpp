@@ -357,3 +357,4 @@ void FMCPProjectIndex::RebuildFull()
 }
 
 void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
+{

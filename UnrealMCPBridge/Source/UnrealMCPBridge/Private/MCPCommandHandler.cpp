@@ -970,3 +970,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		!Params->TryGetStringField(TEXT("nodeId"), NodeId) ||
 		!Params->TryGetStringField(TEXT("pinName"), PinName) ||
 		!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, graphName, nodeId, pinName, value are required"));
