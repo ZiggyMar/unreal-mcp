@@ -991,3 +991,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	FString NodeError;
 	UEdGraphNode* Node = FindNodeById(Graph, NodeId, NodeError);
 	if (!Node)
+	{
+		return MakeErrorResponse(NodeError);

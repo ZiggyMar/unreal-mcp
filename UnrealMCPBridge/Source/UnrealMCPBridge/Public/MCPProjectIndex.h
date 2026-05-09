@@ -60,3 +60,4 @@ struct FMCPIndexBlueprint
  * locking is needed around Entries.
  */
 class FMCPProjectIndex
+{
