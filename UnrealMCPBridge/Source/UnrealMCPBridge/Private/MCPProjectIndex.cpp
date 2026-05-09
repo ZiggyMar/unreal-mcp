@@ -368,3 +368,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 
 	FMCPIndexBlueprint Entry;
 	Entry.Path = ObjectPath;
+	Entry.Name = Blueprint->GetName();
+	Entry.ParentClass = Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : FString();
