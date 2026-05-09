@@ -123,3 +123,4 @@ Environment variables (all optional):
 - `UNREAL_MCP_BRIDGE_PORT` — default `8765`
 - `UNREAL_MCP_LOCAL_LLM_URL` — unset by default (enrichment disabled). An OpenAI-compatible
   base URL, e.g. `http://localhost:11434/v1` for Ollama.
+- `UNREAL_MCP_LOCAL_LLM_MODEL` — default `llama3.2`. Only used if the above is set.
