@@ -172,3 +172,5 @@ drive:
   index would silently go stale rather than error — this is the single most important
   thing to check first per "Manual steps" below.
 - **`find_references`'s `GetReferencers`/`GetDependencies` calls compiled against the
+  simplest 2-argument overload** (`(FName PackageName, TArray<FName>& Out)`), which
+  exists in UE 5.8 alongside more specific category-filtered overloads. This should
