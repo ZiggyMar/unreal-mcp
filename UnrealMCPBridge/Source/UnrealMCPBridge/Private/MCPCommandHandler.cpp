@@ -987,3 +987,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	{
 		return MakeErrorResponse(GraphError);
 	}
+
+	FString NodeError;
