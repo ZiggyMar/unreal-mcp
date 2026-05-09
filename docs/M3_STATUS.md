@@ -171,3 +171,4 @@ drive:
   way I expect (wrong signature accepted by luck, wrong event semantics, etc.), the
   index would silently go stale rather than error — this is the single most important
   thing to check first per "Manual steps" below.
+- **`find_references`'s `GetReferencers`/`GetDependencies` calls compiled against the

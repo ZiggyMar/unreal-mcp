@@ -59,3 +59,4 @@ struct FMCPIndexBlueprint
  * TCP server's tick and the AssetRegistry's delegates fire on the game thread, so no
  * locking is needed around Entries.
  */
+class FMCPProjectIndex
