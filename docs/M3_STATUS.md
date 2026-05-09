@@ -169,3 +169,4 @@ drive:
   whether the index actually stays fresh as claimed (the whole point of doing this
   incrementally instead of re-scanning) is unverified. If these delegates don't fire the
   way I expect (wrong signature accepted by luck, wrong event semantics, etc.), the
+  index would silently go stale rather than error — this is the single most important
