@@ -367,3 +367,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	}
 
 	FMCPIndexBlueprint Entry;
+	Entry.Path = ObjectPath;
