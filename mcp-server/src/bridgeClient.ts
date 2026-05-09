@@ -85,3 +85,4 @@ export class UnrealBridgeClient {
       });
 
       socket.on("data", (chunk: Buffer) => {
+        buffer += chunk.toString("utf8");

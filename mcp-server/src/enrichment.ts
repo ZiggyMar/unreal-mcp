@@ -63,3 +63,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        model: LOCAL_LLM_MODEL,
