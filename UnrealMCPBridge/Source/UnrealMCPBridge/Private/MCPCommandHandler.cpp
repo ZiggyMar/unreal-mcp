@@ -993,3 +993,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	if (!Node)
 	{
 		return MakeErrorResponse(NodeError);
+	}
+

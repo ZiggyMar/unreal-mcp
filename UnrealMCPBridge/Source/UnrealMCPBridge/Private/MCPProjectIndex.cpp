@@ -374,3 +374,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
 	{
 		if (Interface.Interface)
+		{
+			Entry.Interfaces.Add(Interface.Interface->GetName());
