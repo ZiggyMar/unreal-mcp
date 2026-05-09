@@ -981,3 +981,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		return MakeErrorResponse(LoadError);
 	}
 
+	FString GraphError;
+	UEdGraph* Graph = FindGraphByName(Blueprint, GraphName, GraphError);

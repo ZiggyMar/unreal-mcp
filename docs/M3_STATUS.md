@@ -170,3 +170,4 @@ drive:
   incrementally instead of re-scanning) is unverified. If these delegates don't fire the
   way I expect (wrong signature accepted by luck, wrong event semantics, etc.), the
   index would silently go stale rather than error — this is the single most important
+  thing to check first per "Manual steps" below.
