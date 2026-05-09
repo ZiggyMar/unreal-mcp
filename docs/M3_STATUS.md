@@ -175,3 +175,4 @@ drive:
   simplest 2-argument overload** (`(FName PackageName, TArray<FName>& Out)`), which
   exists in UE 5.8 alongside more specific category-filtered overloads. This should
   return "all dependency categories," but whether that's the most *useful* answer (e.g.
+  whether it includes soft/editor-only references a user might not care about) is

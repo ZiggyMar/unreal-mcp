@@ -62,3 +62,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     const response = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
