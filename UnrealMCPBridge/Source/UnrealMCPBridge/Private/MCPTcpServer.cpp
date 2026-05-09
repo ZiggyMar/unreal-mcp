@@ -142,3 +142,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 	{
 		FString Line = Client.RecvBuffer.Left(NewlineIndex);
 		Client.RecvBuffer.RightChopInline(NewlineIndex + 1);
+		Line.TrimStartAndEndInline();

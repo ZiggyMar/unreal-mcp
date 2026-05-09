@@ -364,3 +364,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	{
 		Entries.Remove(ObjectPath);
 		return;
+	}
