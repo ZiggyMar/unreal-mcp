@@ -190,3 +190,4 @@ drive:
   on structural change) so summaries survive an MCP server restart — not done this
   milestone since the brief was explicit about not blocking on this feature.
 
+## Manual steps required from the user (do these in order)
