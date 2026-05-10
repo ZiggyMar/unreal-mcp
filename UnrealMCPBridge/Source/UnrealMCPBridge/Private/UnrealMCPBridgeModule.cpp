@@ -29,3 +29,4 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 	}
 
 	FMCPProjectIndex::Shutdown();
+}
