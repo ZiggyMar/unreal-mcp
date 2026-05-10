@@ -388,3 +388,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_compile_blueprint",
+  {

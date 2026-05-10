@@ -65,3 +65,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
       body: JSON.stringify({
         model: LOCAL_LLM_MODEL,
         messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,

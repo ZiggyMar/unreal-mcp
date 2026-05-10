@@ -182,3 +182,5 @@ drive:
   has ever been written or read back for real. First run will both create and
   immediately exercise this.
 - **Enrichment against a real local model** (as opposed to this session's fake HTTP
+  stand-in) is unverified — the fake server proved the *protocol* (request shape sent,
+  response shape expected) matches what Ollama's OpenAI-compatible endpoint documents,
