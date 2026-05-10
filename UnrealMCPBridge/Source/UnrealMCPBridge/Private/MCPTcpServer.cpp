@@ -145,3 +145,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		Line.TrimStartAndEndInline();
 		if (Line.IsEmpty())
 		{
+			continue;

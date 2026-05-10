@@ -389,3 +389,4 @@ server.registerTool(
 server.registerTool(
   "unreal_compile_blueprint",
   {
+    title: "Compile a Blueprint and report errors/warnings",
