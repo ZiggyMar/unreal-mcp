@@ -379,3 +379,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		}
 	}
 
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)

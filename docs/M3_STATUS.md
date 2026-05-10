@@ -181,3 +181,4 @@ drive:
   compiles clean, logic is straightforward JSON, but no `Saved/UnrealMCPBridge/index.json`
   has ever been written or read back for real. First run will both create and
   immediately exercise this.
+- **Enrichment against a real local model** (as opposed to this session's fake HTTP
