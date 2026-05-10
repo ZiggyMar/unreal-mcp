@@ -125,3 +125,4 @@ Environment variables (all optional):
   base URL, e.g. `http://localhost:11434/v1` for Ollama.
 - `UNREAL_MCP_LOCAL_LLM_MODEL` — default `llama3.2`. Only used if the above is set.
 - `UNREAL_MCP_LOCAL_LLM_TIMEOUT_MS` — default `4000`. Per-request timeout for enrichment calls.
+- `UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL` — default `8`. Caps how many hits get a live

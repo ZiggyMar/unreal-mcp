@@ -1000,3 +1000,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("pin_not_found: input pin '%s' on node %s"), *PinName, *NodeId));
 	}
+
+	if (Pin->LinkedTo.Num() > 0)
