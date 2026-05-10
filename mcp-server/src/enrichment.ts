@@ -64,3 +64,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: LOCAL_LLM_MODEL,
+        messages: [{ role: "user", content: prompt }],
