@@ -1008,3 +1008,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 
 	Pin->DefaultValue = Value;
 	Node->PinDefaultValueChanged(Pin);
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
