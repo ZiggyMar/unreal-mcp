@@ -146,3 +146,4 @@ export interface SearchHit {
   summary?: string;
 }
 
+export interface SearchProjectResult {

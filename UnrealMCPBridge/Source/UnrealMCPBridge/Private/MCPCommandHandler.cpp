@@ -1013,3 +1013,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("set"), true);
+	Result->SetStringField(TEXT("pin"), PinName);
+	Result->SetStringField(TEXT("value"), Pin->DefaultValue);
