@@ -184,3 +184,4 @@ drive:
 - **Enrichment against a real local model** (as opposed to this session's fake HTTP
   stand-in) is unverified — the fake server proved the *protocol* (request shape sent,
   response shape expected) matches what Ollama's OpenAI-compatible endpoint documents,
+  but has not been checked against an actual running Ollama instance.
