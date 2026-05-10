@@ -128,3 +128,4 @@ Environment variables (all optional):
 - `UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL` — default `8`. Caps how many hits get a live
   enrichment call per `unreal_search_project` invocation (the rest are returned without a
   `summary`, not dropped).
+

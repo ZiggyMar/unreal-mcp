@@ -1017,3 +1017,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	Result->SetStringField(TEXT("value"), Pin->DefaultValue);
 	return MakeOkResponse(Result);
 }
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJsonObject>& Params)
