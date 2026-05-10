@@ -389,3 +389,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	}
 
 	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);

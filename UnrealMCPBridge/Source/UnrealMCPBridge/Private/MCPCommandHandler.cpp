@@ -1011,3 +1011,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("set"), true);
