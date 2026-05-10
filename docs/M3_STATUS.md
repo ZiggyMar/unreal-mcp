@@ -187,3 +187,4 @@ drive:
   but has not been checked against an actual running Ollama instance.
 - **Enrichment cache is in-memory/per-process only**, not persisted to disk. A follow-up
   could persist it alongside `index.json` (keyed the same way, invalidated the same way
+  on structural change) so summaries survive an MCP server restart — not done this
