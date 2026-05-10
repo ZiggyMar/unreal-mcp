@@ -61,3 +61,4 @@ struct FMCPIndexBlueprint
  */
 class FMCPProjectIndex
 {
+public:
