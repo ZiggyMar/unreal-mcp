@@ -179,3 +179,4 @@ drive:
   unverified against real project references.
 - **Disk persistence round-trip** (`SaveToDisk`/`LoadFromDisk`) has never actually run —
   compiles clean, logic is straightforward JSON, but no `Saved/UnrealMCPBridge/index.json`
+  has ever been written or read back for real. First run will both create and

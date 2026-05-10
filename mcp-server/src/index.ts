@@ -386,3 +386,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(

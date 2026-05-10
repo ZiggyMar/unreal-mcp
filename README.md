@@ -82,3 +82,4 @@ Connect the server to your MCP client using the absolute path to `mcp-server/dis
 ```bash
 claude mcp add unreal -- node "/path/to/unreal-mcp/mcp-server/dist/index.js"
 ```
+
