@@ -392,3 +392,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	Blueprint->GetAllGraphs(AllGraphs);
 	for (UEdGraph* Graph : AllGraphs)
 	{
+		if (!Graph)
