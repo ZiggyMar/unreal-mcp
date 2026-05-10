@@ -69,3 +69,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
         max_tokens: 40,
         stream: false,
       }),
+      signal: controller.signal,
