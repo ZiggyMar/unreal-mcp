@@ -388,3 +388,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		Entry.Variables.Add(V);
 	}
 
+	TArray<UEdGraph*> AllGraphs;

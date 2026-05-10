@@ -56,3 +56,4 @@ private:
 
 	// --- Shared lookup helpers ---
 
+	// Loads a Blueprint asset given a package/object path (e.g. "/Game/Blueprints/BP_Foo.BP_Foo").

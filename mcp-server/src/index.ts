@@ -391,3 +391,4 @@ server.registerTool(
   {
     title: "Compile a Blueprint and report errors/warnings",
     description:
+      "Compiles the Blueprint and returns structured errors/warnings (severity + message text), plus an overall " +
