@@ -67,3 +67,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
         max_tokens: 40,
+        stream: false,

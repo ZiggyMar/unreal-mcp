@@ -188,3 +188,5 @@ drive:
 - **Enrichment cache is in-memory/per-process only**, not persisted to disk. A follow-up
   could persist it alongside `index.json` (keyed the same way, invalidated the same way
   on structural change) so summaries survive an MCP server restart — not done this
+  milestone since the brief was explicit about not blocking on this feature.
+
