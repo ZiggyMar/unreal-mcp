@@ -995,3 +995,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		return MakeErrorResponse(NodeError);
 	}
 
+	UEdGraphPin* Pin = Node->FindPin(FName(*PinName), EGPD_Input);
