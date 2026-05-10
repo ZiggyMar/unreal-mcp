@@ -145,3 +145,4 @@ export interface SearchHit {
    * when UNREAL_MCP_LOCAL_LLM_URL is configured. Never present in the raw bridge response. */
   summary?: string;
 }
+

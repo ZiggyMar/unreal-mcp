@@ -1004,3 +1004,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	if (Pin->LinkedTo.Num() > 0)
 	{
 		return MakeErrorResponse(TEXT("pin_is_connected: this pin already has a link; remove that connection before setting a literal default"));
+	}
+
