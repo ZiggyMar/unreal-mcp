@@ -392,3 +392,4 @@ server.registerTool(
     title: "Compile a Blueprint and report errors/warnings",
     description:
       "Compiles the Blueprint and returns structured errors/warnings (severity + message text), plus an overall " +
+      "success flag and status. This is the safety net for every unreal_add_node / unreal_connect_pins / " +

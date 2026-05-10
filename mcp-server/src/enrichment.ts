@@ -68,3 +68,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
         temperature: 0.2,
         max_tokens: 40,
         stream: false,
+      }),
