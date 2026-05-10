@@ -385,3 +385,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		V.Name = Var.VarName.ToString();
 		V.Type = PinTypeToString(Var.VarType);
 		V.Category = Var.Category.ToString();
+		Entry.Variables.Add(V);

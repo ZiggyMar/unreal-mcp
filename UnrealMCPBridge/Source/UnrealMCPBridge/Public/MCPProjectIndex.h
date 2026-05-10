@@ -62,3 +62,4 @@ struct FMCPIndexBlueprint
 class FMCPProjectIndex
 {
 public:
+	static void Initialize();
