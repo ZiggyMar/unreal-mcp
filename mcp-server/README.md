@@ -129,3 +129,4 @@ Environment variables (all optional):
   enrichment call per `unreal_search_project` invocation (the rest are returned without a
   `summary`, not dropped).
 
+## Pointing an MCP client at this server
