@@ -396,3 +396,4 @@ server.registerTool(
       "unreal_add_variable call: always run this after a batch of edits to confirm the graph is actually valid " +
       "before telling the user it's done, since a graph can look structurally fine (nodes added, pins connected) " +
       "and still fail to compile (type mismatches, missing pins, unresolved variables, etc).",
+    inputSchema: {
