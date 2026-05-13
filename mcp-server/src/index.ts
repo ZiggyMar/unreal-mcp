@@ -398,3 +398,4 @@ server.registerTool(
       "and still fail to compile (type mismatches, missing pins, unresolved variables, etc).",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+    },

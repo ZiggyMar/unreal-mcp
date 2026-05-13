@@ -131,3 +131,4 @@ Environment variables (all optional):
 
 ## Pointing an MCP client at this server
 
+### Claude Code
