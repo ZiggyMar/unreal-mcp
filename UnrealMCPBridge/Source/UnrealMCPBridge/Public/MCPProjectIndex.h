@@ -64,3 +64,4 @@ class FMCPProjectIndex
 public:
 	static void Initialize();
 	static void Shutdown();
+	static FMCPProjectIndex& Get();

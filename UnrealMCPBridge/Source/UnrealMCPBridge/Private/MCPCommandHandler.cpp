@@ -1021,3 +1021,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path, GraphName, NodeId;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||

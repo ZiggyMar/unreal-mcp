@@ -87,3 +87,4 @@ export class UnrealBridgeClient {
       socket.on("data", (chunk: Buffer) => {
         buffer += chunk.toString("utf8");
         const newlineIndex = buffer.indexOf("\n");
+        if (newlineIndex === -1) {

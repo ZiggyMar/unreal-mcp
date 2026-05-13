@@ -70,3 +70,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
         stream: false,
       }),
       signal: controller.signal,
+    });
