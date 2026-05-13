@@ -202,3 +202,4 @@ drive:
    `folders`/`byParentClass` look like real data, not zeros or garbage. This one call
    exercises the full first-build path: `EnsureBuilt()` -> `LoadFromDisk()` fails (no
    cache yet) -> `RebuildFull()` -> scans + loads every Blueprint -> `SaveToDisk()`. If
+   this looks right, the riskiest untested path in this milestone just got confirmed in

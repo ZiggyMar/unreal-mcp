@@ -404,3 +404,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 			if (!Node)
 			{
 				continue;
+			}

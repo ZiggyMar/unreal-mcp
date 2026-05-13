@@ -72,3 +72,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
       signal: controller.signal,
     });
 
+    if (!response.ok) {
