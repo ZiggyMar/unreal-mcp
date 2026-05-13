@@ -401,3 +401,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		GraphEntry.NodeCount = Graph->Nodes.Num();
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
+			if (!Node)

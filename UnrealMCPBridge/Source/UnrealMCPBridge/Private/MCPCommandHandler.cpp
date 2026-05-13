@@ -1026,3 +1026,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
 		!Params->TryGetStringField(TEXT("nodeId"), NodeId))
 	{
+		return MakeErrorResponse(TEXT("missing_param: path, graphName, nodeId are required"));
+	}
