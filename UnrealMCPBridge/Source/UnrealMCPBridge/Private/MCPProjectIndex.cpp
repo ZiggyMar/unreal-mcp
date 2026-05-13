@@ -398,3 +398,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		}
 		FMCPIndexGraph GraphEntry;
 		GraphEntry.Name = Graph->GetName();
+		GraphEntry.NodeCount = Graph->Nodes.Num();

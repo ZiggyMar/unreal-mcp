@@ -147,3 +147,4 @@ export interface SearchHit {
 }
 
 export interface SearchProjectResult {
+  query: string;
