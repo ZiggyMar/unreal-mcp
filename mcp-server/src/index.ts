@@ -397,3 +397,4 @@ server.registerTool(
       "before telling the user it's done, since a graph can look structurally fine (nodes added, pins connected) " +
       "and still fail to compile (type mismatches, missing pins, unresolved variables, etc).",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),

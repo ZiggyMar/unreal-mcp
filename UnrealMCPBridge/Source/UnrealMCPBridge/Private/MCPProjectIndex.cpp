@@ -402,3 +402,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
 			if (!Node)
+			{
+				continue;

@@ -201,3 +201,4 @@ drive:
    confirm `blueprintCount` roughly matches what you'd expect for this project, and that
    `folders`/`byParentClass` look like real data, not zeros or garbage. This one call
    exercises the full first-build path: `EnsureBuilt()` -> `LoadFromDisk()` fails (no
+   cache yet) -> `RebuildFull()` -> scans + loads every Blueprint -> `SaveToDisk()`. If

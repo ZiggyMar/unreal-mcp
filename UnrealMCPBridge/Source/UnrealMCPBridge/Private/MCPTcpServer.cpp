@@ -148,3 +148,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 			continue;
 		}
 
+		TSharedPtr<FJsonObject> RequestObj;
