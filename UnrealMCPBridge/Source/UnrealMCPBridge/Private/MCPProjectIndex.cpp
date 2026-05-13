@@ -395,3 +395,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		if (!Graph)
 		{
 			continue;
+		}
