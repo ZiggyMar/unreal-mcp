@@ -196,3 +196,4 @@ drive:
    has been compiled directly into the project already — no first-compile prompt
    expected.
 2. **Confirm the bridge is listening** (same check as M1/M2): Output Log should show
+   `UnrealMCPBridge: listening on 127.0.0.1:8765`.

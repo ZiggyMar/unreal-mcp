@@ -396,3 +396,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		{
 			continue;
 		}
+		FMCPIndexGraph GraphEntry;
+		GraphEntry.Name = Graph->GetName();
