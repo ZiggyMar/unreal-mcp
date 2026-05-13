@@ -394,3 +394,4 @@ server.registerTool(
       "Compiles the Blueprint and returns structured errors/warnings (severity + message text), plus an overall " +
       "success flag and status. This is the safety net for every unreal_add_node / unreal_connect_pins / " +
       "unreal_add_variable call: always run this after a batch of edits to confirm the graph is actually valid " +
+      "before telling the user it's done, since a graph can look structurally fine (nodes added, pins connected) " +

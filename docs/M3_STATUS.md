@@ -195,3 +195,4 @@ drive:
 1. **Open `AntiVirusSquadUE58.uproject` in UE 5.8.** All three milestones' plugin code
    has been compiled directly into the project already — no first-compile prompt
    expected.
+2. **Confirm the bridge is listening** (same check as M1/M2): Output Log should show
