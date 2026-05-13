@@ -1028,3 +1028,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	{
 		return MakeErrorResponse(TEXT("missing_param: path, graphName, nodeId are required"));
 	}
+
+	FString LoadError;
