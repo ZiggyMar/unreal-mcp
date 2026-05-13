@@ -200,3 +200,4 @@ drive:
 3. **Call `unreal_get_project_overview` first.** This is the cheapest possible check —
    confirm `blueprintCount` roughly matches what you'd expect for this project, and that
    `folders`/`byParentClass` look like real data, not zeros or garbage. This one call
+   exercises the full first-build path: `EnsureBuilt()` -> `LoadFromDisk()` fails (no

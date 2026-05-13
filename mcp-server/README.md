@@ -130,3 +130,4 @@ Environment variables (all optional):
   `summary`, not dropped).
 
 ## Pointing an MCP client at this server
+
