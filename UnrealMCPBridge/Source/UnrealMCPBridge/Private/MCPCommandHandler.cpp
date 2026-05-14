@@ -1034,3 +1034,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	if (!Blueprint)
 	{
 		return MakeErrorResponse(LoadError);
+	}
+
