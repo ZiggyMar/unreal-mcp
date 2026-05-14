@@ -211,3 +211,4 @@ drive:
    Blueprint name, a function name you know exists) and confirm the hits make sense.
 6. **The most important check**: with the editor still open, **create, rename, or
    delete a Blueprint** (or add a variable to an existing one) directly in the editor —
+   not through the MCP tools — then immediately call `unreal_search_project` again for

@@ -402,3 +402,4 @@ server.registerTool(
   },
   async ({ path }) => {
     try {
+      const result = await bridge.send<CompileBlueprintResult>("compile_blueprint", { path });

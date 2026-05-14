@@ -5,3 +5,4 @@ project grows and as new contributions (human or AI) land. If you're fixing styl
 the reference to check against.
 
 ## C++ (`UnrealMCPBridge/`)
+
