@@ -1038,3 +1038,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 
 	FString GraphError;
 	UEdGraph* Graph = FindGraphByName(Blueprint, GraphName, GraphError);
+	if (!Graph)
+	{
