@@ -1047,3 +1047,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	UEdGraphNode* Node = FindNodeById(Graph, NodeId, NodeError);
 	if (!Node)
 	{
+		return MakeErrorResponse(NodeError);
+	}
