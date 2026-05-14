@@ -209,3 +209,5 @@ drive:
    confirms the persistence half works, independent of the in-memory data being correct.
 5. **Call `unreal_search_project` with a query you know should match something** (a
    Blueprint name, a function name you know exists) and confirm the hits make sense.
+6. **The most important check**: with the editor still open, **create, rename, or
+   delete a Blueprint** (or add a variable to an existing one) directly in the editor —

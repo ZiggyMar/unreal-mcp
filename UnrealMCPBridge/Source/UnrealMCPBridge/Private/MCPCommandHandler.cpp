@@ -1041,3 +1041,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	if (!Graph)
 	{
 		return MakeErrorResponse(GraphError);
+	}
+
