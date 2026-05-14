@@ -212,3 +212,4 @@ drive:
 6. **The most important check**: with the editor still open, **create, rename, or
    delete a Blueprint** (or add a variable to an existing one) directly in the editor —
    not through the MCP tools — then immediately call `unreal_search_project` again for
+   something related to that change, **without restarting the editor**. If the change
