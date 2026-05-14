@@ -213,3 +213,4 @@ drive:
    delete a Blueprint** (or add a variable to an existing one) directly in the editor —
    not through the MCP tools — then immediately call `unreal_search_project` again for
    something related to that change, **without restarting the editor**. If the change
+   shows up without needing to trigger a rebuild, the incremental AssetRegistry delegate

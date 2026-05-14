@@ -76,3 +76,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
       return undefined;
     }
 
+    const data = (await response.json()) as {

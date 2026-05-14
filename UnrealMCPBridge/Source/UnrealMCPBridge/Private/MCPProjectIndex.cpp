@@ -417,3 +417,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	for (UEdGraph* FuncGraph : Blueprint->FunctionGraphs)
 	{
 		if (!FuncGraph)
+		{
