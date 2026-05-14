@@ -150,3 +150,4 @@ export interface SearchProjectResult {
   query: string;
   hits: SearchHit[];
   hitCount: number;
+  truncated: boolean;

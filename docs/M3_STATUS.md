@@ -214,3 +214,5 @@ drive:
    not through the MCP tools — then immediately call `unreal_search_project` again for
    something related to that change, **without restarting the editor**. If the change
    shows up without needing to trigger a rebuild, the incremental AssetRegistry delegate
+   wiring actually works as designed. If it doesn't show up, the index has gone stale
+   silently, which would be the highest-priority bug to report back.

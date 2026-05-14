@@ -7,3 +7,4 @@ the reference to check against.
 ## C++ (`UnrealMCPBridge/`)
 
 Follows Epic's own Unreal Engine coding standard, since that's what every UE developer already
+expects and what the engine's own headers model throughout the codebase:

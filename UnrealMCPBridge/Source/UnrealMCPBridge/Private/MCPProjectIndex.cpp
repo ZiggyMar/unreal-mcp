@@ -418,3 +418,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	{
 		if (!FuncGraph)
 		{
+			continue;
+		}

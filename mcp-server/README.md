@@ -134,3 +134,4 @@ Environment variables (all optional):
 ### Claude Code
 
 ```bash
+claude mcp add unreal -- node "F:/!Projects/UnrealMCP/mcp-server/dist/index.js"

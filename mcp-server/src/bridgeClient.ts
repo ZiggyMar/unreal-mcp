@@ -89,3 +89,4 @@ export class UnrealBridgeClient {
         const newlineIndex = buffer.indexOf("\n");
         if (newlineIndex === -1) {
           return;
+        }
