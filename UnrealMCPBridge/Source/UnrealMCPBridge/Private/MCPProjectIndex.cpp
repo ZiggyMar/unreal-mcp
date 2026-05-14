@@ -416,3 +416,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	UClass* GenClass = Blueprint->GeneratedClass;
 	for (UEdGraph* FuncGraph : Blueprint->FunctionGraphs)
 	{
+		if (!FuncGraph)
