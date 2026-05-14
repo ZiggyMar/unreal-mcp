@@ -88,3 +88,4 @@ export class UnrealBridgeClient {
         buffer += chunk.toString("utf8");
         const newlineIndex = buffer.indexOf("\n");
         if (newlineIndex === -1) {
+          return;

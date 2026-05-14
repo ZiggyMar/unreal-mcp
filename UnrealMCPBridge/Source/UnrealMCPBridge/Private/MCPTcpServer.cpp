@@ -149,3 +149,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		}
 
 		TSharedPtr<FJsonObject> RequestObj;
+		TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Line);

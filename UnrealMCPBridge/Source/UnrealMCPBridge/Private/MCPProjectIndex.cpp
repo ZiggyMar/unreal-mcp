@@ -408,3 +408,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 			int32& Count = GraphEntry.NodeTypeHistogram.FindOrAdd(Node->GetClass()->GetName());
 			Count++;
 		}
+		Entry.Graphs.Add(GraphEntry);
+	}
