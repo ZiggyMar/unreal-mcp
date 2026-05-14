@@ -216,3 +216,4 @@ drive:
    shows up without needing to trigger a rebuild, the incremental AssetRegistry delegate
    wiring actually works as designed. If it doesn't show up, the index has gone stale
    silently, which would be the highest-priority bug to report back.
+7. **Try `unreal_find_references`** on a Blueprint you know is used somewhere (e.g.

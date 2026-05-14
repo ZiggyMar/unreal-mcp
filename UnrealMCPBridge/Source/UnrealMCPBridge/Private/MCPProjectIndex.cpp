@@ -420,3 +420,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		{
 			continue;
 		}
+		FMCPIndexFunction FuncEntry;
