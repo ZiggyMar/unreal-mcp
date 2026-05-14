@@ -204,3 +204,5 @@ drive:
    cache yet) -> `RebuildFull()` -> scans + loads every Blueprint -> `SaveToDisk()`. If
    this looks right, the riskiest untested path in this milestone just got confirmed in
    one shot.
+4. **Check that `Saved/UnrealMCPBridge/index.json` now exists** in the project folder,
+   and has plausible contents (blueprint paths, function names you recognize). This
