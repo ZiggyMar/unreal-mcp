@@ -68,3 +68,4 @@ public:
 
 	// Builds the index if it hasn't been built yet this session: loads the on-disk
 	// cache if present, otherwise does a full AssetRegistry scan + per-Blueprint load.
+	// Cheap to call repeatedly: a no-op once built.
