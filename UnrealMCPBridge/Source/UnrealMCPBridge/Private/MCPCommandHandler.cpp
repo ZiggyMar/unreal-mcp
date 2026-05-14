@@ -1049,3 +1049,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	{
 		return MakeErrorResponse(NodeError);
 	}
+
+	const FString RemovedType = Node->GetClass()->GetName();

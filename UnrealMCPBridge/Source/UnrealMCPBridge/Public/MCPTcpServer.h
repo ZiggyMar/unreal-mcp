@@ -31,3 +31,4 @@ private:
 	bool Tick(float DeltaTime);
 	void ProcessClientSocket(class FMCPClientConnection& Client);
 
+	TUniquePtr<FTcpListener> Listener;
