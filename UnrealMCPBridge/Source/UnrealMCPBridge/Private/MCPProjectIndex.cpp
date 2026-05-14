@@ -411,3 +411,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		Entry.Graphs.Add(GraphEntry);
 	}
 
+	// Function params/return type come from the compiled generated class's UFunction
+	// (real reflection data) rather than re-deriving them from graph pins.
