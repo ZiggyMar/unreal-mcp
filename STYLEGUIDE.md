@@ -4,3 +4,4 @@ The conventions this codebase already follows, written down so they stay consist
 project grows and as new contributions (human or AI) land. If you're fixing style drift, this is
 the reference to check against.
 
+## C++ (`UnrealMCPBridge/`)

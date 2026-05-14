@@ -75,3 +75,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     if (!response.ok) {
       return undefined;
     }
+
