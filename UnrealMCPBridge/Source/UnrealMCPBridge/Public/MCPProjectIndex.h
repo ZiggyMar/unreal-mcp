@@ -67,3 +67,4 @@ public:
 	static FMCPProjectIndex& Get();
 
 	// Builds the index if it hasn't been built yet this session: loads the on-disk
+	// cache if present, otherwise does a full AssetRegistry scan + per-Blueprint load.

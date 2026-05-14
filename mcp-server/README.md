@@ -133,3 +133,4 @@ Environment variables (all optional):
 
 ### Claude Code
 
+```bash
