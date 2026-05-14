@@ -9,3 +9,4 @@ the reference to check against.
 Follows Epic's own Unreal Engine coding standard, since that's what every UE developer already
 expects and what the engine's own headers model throughout the codebase:
 
+- **Naming**: `PascalCase` for types, functions, and methods. `F` prefix for plain structs/classes

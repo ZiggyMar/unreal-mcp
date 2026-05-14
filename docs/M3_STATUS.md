@@ -217,3 +217,4 @@ drive:
    wiring actually works as designed. If it doesn't show up, the index has gone stale
    silently, which would be the highest-priority bug to report back.
 7. **Try `unreal_find_references`** on a Blueprint you know is used somewhere (e.g.
+   referenced in a level, or a parent of another Blueprint) and confirm `referencedBy`
