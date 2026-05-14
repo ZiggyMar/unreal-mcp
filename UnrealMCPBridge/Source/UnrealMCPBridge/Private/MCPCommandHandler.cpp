@@ -1053,3 +1053,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	const FString RemovedType = Node->GetClass()->GetName();
 	Node->BreakAllNodeLinks();
 	FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile=*/true);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
