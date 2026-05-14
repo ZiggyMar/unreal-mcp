@@ -423,3 +423,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		FMCPIndexFunction FuncEntry;
 		FuncEntry.Name = FuncGraph->GetName();
 
+		UFunction* Func = GenClass ? GenClass->FindFunctionByName(FName(*FuncGraph->GetName())) : nullptr;
