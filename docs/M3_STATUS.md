@@ -207,3 +207,4 @@ drive:
 4. **Check that `Saved/UnrealMCPBridge/index.json` now exists** in the project folder,
    and has plausible contents (blueprint paths, function names you recognize). This
    confirms the persistence half works, independent of the in-memory data being correct.
+5. **Call `unreal_search_project` with a query you know should match something** (a

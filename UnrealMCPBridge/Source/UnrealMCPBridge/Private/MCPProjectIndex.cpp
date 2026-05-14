@@ -410,3 +410,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		}
 		Entry.Graphs.Add(GraphEntry);
 	}
+
