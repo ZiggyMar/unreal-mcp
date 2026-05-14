@@ -1055,3 +1055,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile=*/true);
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
