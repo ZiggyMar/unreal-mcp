@@ -66,3 +66,4 @@ public:
 	static void Shutdown();
 	static FMCPProjectIndex& Get();
 
+	// Builds the index if it hasn't been built yet this session: loads the on-disk
