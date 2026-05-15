@@ -1058,3 +1058,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetStringField(TEXT("id"), NodeId);
+	Result->SetStringField(TEXT("type"), RemovedType);

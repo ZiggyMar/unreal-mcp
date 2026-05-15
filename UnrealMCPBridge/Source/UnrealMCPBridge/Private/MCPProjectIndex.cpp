@@ -426,3 +426,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		UFunction* Func = GenClass ? GenClass->FindFunctionByName(FName(*FuncGraph->GetName())) : nullptr;
 		if (Func)
 		{
+			for (TFieldIterator<FProperty> PropIt(Func); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)

@@ -79,3 +79,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
+    const text = data.choices?.[0]?.message?.content?.trim();
