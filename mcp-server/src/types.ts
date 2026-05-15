@@ -151,3 +151,4 @@ export interface SearchProjectResult {
   hits: SearchHit[];
   hitCount: number;
   truncated: boolean;
+}
