@@ -222,3 +222,4 @@ drive:
 8. **Optional**: set up Ollama (see `mcp-server/README.md`'s enrichment section) and
    confirm `unreal_search_project` results start including a `summary` field that
    actually reads sensibly for real blueprint/function names, not just the fake-server
+   echo this session's tests used.
