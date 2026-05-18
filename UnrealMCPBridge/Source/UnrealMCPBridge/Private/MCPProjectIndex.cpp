@@ -427,3 +427,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		if (Func)
 		{
 			for (TFieldIterator<FProperty> PropIt(Func); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
+			{
+				FProperty* Prop = *PropIt;
