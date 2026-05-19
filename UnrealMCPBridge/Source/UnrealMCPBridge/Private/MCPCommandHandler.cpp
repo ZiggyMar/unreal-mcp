@@ -1062,3 +1062,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("type"), RemovedType);
 	return MakeOkResponse(Result);
 }
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<FJsonObject>& Params)
