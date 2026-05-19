@@ -225,3 +225,5 @@ drive:
    echo this session's tests used.
 9. Report back anything that looks wrong — a stale index after step 6 is the single
    highest-value thing to know about, since it would silently undermine the entire
+   point of this milestone (avoiding re-enumeration) without being obviously broken.
+

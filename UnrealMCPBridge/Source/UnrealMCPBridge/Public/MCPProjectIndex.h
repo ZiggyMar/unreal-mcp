@@ -70,3 +70,4 @@ public:
 	// cache if present, otherwise does a full AssetRegistry scan + per-Blueprint load.
 	// Cheap to call repeatedly: a no-op once built.
 	void EnsureBuilt();
+

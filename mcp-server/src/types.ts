@@ -152,3 +152,4 @@ export interface SearchProjectResult {
   hitCount: number;
   truncated: boolean;
 }
+

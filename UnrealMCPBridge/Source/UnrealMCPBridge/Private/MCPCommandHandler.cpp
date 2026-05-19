@@ -1066,3 +1066,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path, VariableName, TypeStr;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||

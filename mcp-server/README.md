@@ -137,3 +137,4 @@ Environment variables (all optional):
 claude mcp add unreal -- node "F:/!Projects/UnrealMCP/mcp-server/dist/index.js"
 ```
 
+(Adjust the path if you've moved the repo. Run `npm run build` first so `dist/index.js`
