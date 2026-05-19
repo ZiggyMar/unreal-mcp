@@ -410,3 +410,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(

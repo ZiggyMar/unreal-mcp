@@ -433,3 +433,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 				{
 					FuncEntry.ReturnType = Prop->GetCPPType();
 				}
+				else
+				{
