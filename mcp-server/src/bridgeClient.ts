@@ -90,3 +90,4 @@ export class UnrealBridgeClient {
         if (newlineIndex === -1) {
           return;
         }
+        const line = buffer.slice(0, newlineIndex).trim();

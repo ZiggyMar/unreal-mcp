@@ -80,3 +80,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const text = data.choices?.[0]?.message?.content?.trim();
+    return text || undefined;

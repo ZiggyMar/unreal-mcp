@@ -14,3 +14,4 @@ expects and what the engine's own headers model throughout the codebase:
   `TUniquePtr`, `TSharedPtr`), `E` for enums, `b` prefix for booleans (`bBuilt`,
   `bAssetRegistryStillScanning`). Local variables and function parameters are also `PascalCase`
   (this is Epic's convention, not a typo) — `PascalCase` for everything except member fields with
+  no prefix, which don't exist here since every field either has a type prefix or is private.
