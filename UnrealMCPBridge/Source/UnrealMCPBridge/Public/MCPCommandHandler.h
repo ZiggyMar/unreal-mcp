@@ -59,3 +59,4 @@ private:
 	// Loads a Blueprint asset given a package/object path (e.g. "/Game/Blueprints/BP_Foo.BP_Foo").
 	static class UBlueprint* LoadBlueprintByPath(const FString& Path, FString& OutError);
 
+	// Finds one of a Blueprint's graphs (event graph, function, macro, ...) by name.

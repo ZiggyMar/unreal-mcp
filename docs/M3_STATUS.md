@@ -223,3 +223,4 @@ drive:
    confirm `unreal_search_project` results start including a `summary` field that
    actually reads sensibly for real blueprint/function names, not just the fake-server
    echo this session's tests used.
+9. Report back anything that looks wrong — a stale index after step 6 is the single

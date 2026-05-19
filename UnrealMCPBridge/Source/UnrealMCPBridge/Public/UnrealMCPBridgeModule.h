@@ -17,3 +17,4 @@ public:
 
 private:
 	TSharedPtr<FMCPTcpServer> TcpServer;
+};
