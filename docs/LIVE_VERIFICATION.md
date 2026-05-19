@@ -5,3 +5,4 @@ a real ~20-Blueprint game project, not a synthetic test project.
 
 Every milestone up to this point had been build-verified and protocol-verified, but never run
 against an actual open Unreal Editor (see the "unverified" sections of `M1_STATUS.md`,
+`M2_STATUS.md`, and `M3_STATUS.md`). This session closes that gap.
