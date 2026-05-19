@@ -86,3 +86,4 @@ claude mcp add unreal -- node "/path/to/unreal-mcp/mcp-server/dist/index.js"
 **Claude Desktop** (`claude_desktop_config.json`):
 ```json
 {
+  "mcpServers": {
