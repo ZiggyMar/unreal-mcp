@@ -1070,3 +1070,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 		!Params->TryGetStringField(TEXT("path"), Path) ||
 		!Params->TryGetStringField(TEXT("variableName"), VariableName) ||
 		!Params->TryGetStringField(TEXT("type"), TypeStr))
+	{

@@ -435,3 +435,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 				}
 				else
 				{
+					FMCPIndexParam Param;
