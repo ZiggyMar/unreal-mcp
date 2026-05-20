@@ -234,3 +234,4 @@ milestones have now succeeded — this milestone's on the first attempt for both
 having the largest and riskiest new API surface yet (5 AssetRegistry delegate
 signatures, dependency-graph queries, reflection-based function signature extraction).
 The engine reference source clone remains broken and was, again, a non-blocking gap —
+noted again here for completeness since it's still relevant to the numeric-type-mapping

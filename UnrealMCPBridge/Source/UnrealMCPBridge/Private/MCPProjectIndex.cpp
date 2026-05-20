@@ -442,3 +442,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 				}
 			}
 		}
+		Entry.Functions.Add(FuncEntry);

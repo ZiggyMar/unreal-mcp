@@ -60,3 +60,4 @@ private:
 	static class UBlueprint* LoadBlueprintByPath(const FString& Path, FString& OutError);
 
 	// Finds one of a Blueprint's graphs (event graph, function, macro, ...) by name.
+	static class UEdGraph* FindGraphByName(class UBlueprint* Blueprint, const FString& GraphName, FString& OutError);
