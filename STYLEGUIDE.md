@@ -17,3 +17,4 @@ expects and what the engine's own headers model throughout the codebase:
   no prefix, which don't exist here since every field either has a type prefix or is private.
 - **Braces**: Allman style — opening brace on its own line, for functions, classes, and control
   flow alike:
+  ```cpp
