@@ -71,3 +71,4 @@ public:
 	// Cheap to call repeatedly: a no-op once built.
 	void EnsureBuilt();
 
+	// Forces a full rescan of every Blueprint in the AssetRegistry, replacing Entries.

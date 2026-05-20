@@ -1073,3 +1073,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	{
 		return MakeErrorResponse(TEXT("missing_param: path, variableName, type are required"));
 	}
+
+	FString Category, DefaultValue;
