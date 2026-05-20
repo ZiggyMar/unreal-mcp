@@ -232,3 +232,4 @@ drive:
 **None that stopped progress.** All three build verifications across all three
 milestones have now succeeded — this milestone's on the first attempt for both, despite
 having the largest and riskiest new API surface yet (5 AssetRegistry delegate
+signatures, dependency-graph queries, reflection-based function signature extraction).

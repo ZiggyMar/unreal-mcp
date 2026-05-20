@@ -1075,3 +1075,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	}
 
 	FString Category, DefaultValue;
+	Params->TryGetStringField(TEXT("category"), Category);
+	Params->TryGetStringField(TEXT("defaultValue"), DefaultValue);

@@ -83,3 +83,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     return text || undefined;
   } catch {
     // Covers: connection refused (no local server running), timeout/abort, non-JSON
+    // response, unexpected shape. Enrichment is always optional, so never throw.
