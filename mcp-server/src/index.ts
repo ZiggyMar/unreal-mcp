@@ -411,3 +411,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_save_blueprint",

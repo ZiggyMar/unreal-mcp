@@ -229,3 +229,4 @@ drive:
 
 ## Blockers
 
+**None that stopped progress.** All three build verifications across all three
