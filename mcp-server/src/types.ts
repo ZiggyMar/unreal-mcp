@@ -153,3 +153,4 @@ export interface SearchProjectResult {
   truncated: boolean;
 }
 
+export interface ReferenceEntry {
