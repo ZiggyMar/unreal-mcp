@@ -19,3 +19,4 @@ expects and what the engine's own headers model throughout the codebase:
   flow alike:
   ```cpp
   if (!Blueprint)
+  {

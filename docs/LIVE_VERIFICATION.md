@@ -7,3 +7,4 @@ Every milestone up to this point had been build-verified and protocol-verified, 
 against an actual open Unreal Editor (see the "unverified" sections of `M1_STATUS.md`,
 `M2_STATUS.md`, and `M3_STATUS.md`). This session closes that gap.
 
+## What was tested, against real project data
