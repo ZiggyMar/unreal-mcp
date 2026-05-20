@@ -18,3 +18,4 @@ expects and what the engine's own headers model throughout the codebase:
 - **Braces**: Allman style — opening brace on its own line, for functions, classes, and control
   flow alike:
   ```cpp
+  if (!Blueprint)

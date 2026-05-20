@@ -1071,3 +1071,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 		!Params->TryGetStringField(TEXT("variableName"), VariableName) ||
 		!Params->TryGetStringField(TEXT("type"), TypeStr))
 	{
+		return MakeErrorResponse(TEXT("missing_param: path, variableName, type are required"));
+	}

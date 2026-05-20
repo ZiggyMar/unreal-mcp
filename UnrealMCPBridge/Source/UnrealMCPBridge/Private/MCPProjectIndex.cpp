@@ -436,3 +436,5 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 				else
 				{
 					FMCPIndexParam Param;
+					Param.Name = Prop->GetName();
+					Param.Type = Prop->GetCPPType();

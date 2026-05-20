@@ -82,3 +82,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     const text = data.choices?.[0]?.message?.content?.trim();
     return text || undefined;
   } catch {
+    // Covers: connection refused (no local server running), timeout/abort, non-JSON
