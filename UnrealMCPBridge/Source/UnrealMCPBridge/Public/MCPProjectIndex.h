@@ -72,3 +72,4 @@ public:
 	void EnsureBuilt();
 
 	// Forces a full rescan of every Blueprint in the AssetRegistry, replacing Entries.
+	void RebuildFull();
