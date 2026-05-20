@@ -441,3 +441,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 					FuncEntry.Params.Add(Param);
 				}
 			}
+		}

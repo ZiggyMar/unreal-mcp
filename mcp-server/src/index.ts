@@ -413,3 +413,4 @@ server.registerTool(
 server.registerTool(
   "unreal_save_blueprint",
   {
+    title: "Save a Blueprint's package to disk",
