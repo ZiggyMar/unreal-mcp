@@ -1088,3 +1088,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	FEdGraphPinType PinType;
 	FString TypeError;
 	if (!ResolvePinType(TypeStr, PinType, TypeError))
+	{
+		return MakeErrorResponse(TypeError);

@@ -31,3 +31,4 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 	FMCPProjectIndex::Shutdown();
 }
 
+IMPLEMENT_MODULE(FUnrealMCPBridgeModule, UnrealMCPBridge)

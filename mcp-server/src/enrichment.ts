@@ -86,3 +86,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     // response, unexpected shape. Enrichment is always optional, so never throw.
     return undefined;
   } finally {
+    clearTimeout(timeout);
