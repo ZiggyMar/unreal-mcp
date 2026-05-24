@@ -24,3 +24,4 @@ expects and what the engine's own headers model throughout the codebase:
   }
   ```
 - **Indentation**: tabs, not spaces (matches Epic's own source and `.editorconfig` defaults for UE
+  projects).

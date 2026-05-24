@@ -154,3 +154,4 @@ export interface SearchProjectResult {
 }
 
 export interface ReferenceEntry {
+  package: string;
