@@ -9,3 +9,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
 
 ## What was tested, against real project data
 
+1. **Editor loads the plugin correctly.** Output Log confirmed:

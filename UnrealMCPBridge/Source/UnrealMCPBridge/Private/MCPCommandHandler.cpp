@@ -1083,3 +1083,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	if (!Blueprint)
 	{
 		return MakeErrorResponse(LoadError);
+	}
