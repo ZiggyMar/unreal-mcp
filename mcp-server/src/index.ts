@@ -415,3 +415,4 @@ server.registerTool(
   {
     title: "Save a Blueprint's package to disk",
     description:
+      "Saves the Blueprint's package to disk in place. Edits made via unreal_add_node/unreal_connect_pins/etc exist " +

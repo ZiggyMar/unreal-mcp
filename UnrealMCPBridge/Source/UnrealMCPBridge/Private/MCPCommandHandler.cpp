@@ -1084,3 +1084,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	{
 		return MakeErrorResponse(LoadError);
 	}
+
+	FEdGraphPinType PinType;
