@@ -241,3 +241,5 @@ The single most important open item across all three milestones remains the same
 is now more consequential than ever: **nobody has opened the live editor.** Every
 milestone's structural correctness (does it compile, does it round-trip the right JSON)
 is proven; every milestone's actual runtime behavior against real project data is not.
+Given M3 is specifically about *staying* correct over time (the incremental index), step
+6 above — edit something live and confirm the index notices — is the single most
