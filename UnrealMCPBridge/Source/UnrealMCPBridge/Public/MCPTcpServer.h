@@ -32,3 +32,4 @@ private:
 	void ProcessClientSocket(class FMCPClientConnection& Client);
 
 	TUniquePtr<FTcpListener> Listener;
+	TArray<TSharedPtr<class FMCPClientConnection>> Clients;

@@ -448,3 +448,4 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 	Entries.Add(ObjectPath, MoveTemp(Entry));
 }
 
+void FMCPProjectIndex::SaveToDisk() const

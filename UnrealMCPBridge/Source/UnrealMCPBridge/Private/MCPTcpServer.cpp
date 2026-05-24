@@ -155,3 +155,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		if (FJsonSerializer::Deserialize(Reader, RequestObj) && RequestObj.IsValid())
 		{
 			Response = FMCPCommandHandler::Dispatch(RequestObj.ToSharedRef());
+		}

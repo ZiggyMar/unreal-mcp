@@ -239,3 +239,4 @@ caveat carried over from M2.
 
 The single most important open item across all three milestones remains the same, and
 is now more consequential than ever: **nobody has opened the live editor.** Every
+milestone's structural correctness (does it compile, does it round-trip the right JSON)
