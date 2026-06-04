@@ -31,3 +31,4 @@ expects and what the engine's own headers model throughout the codebase:
   than throwing or asserting — every command path in `MCPCommandHandler.cpp` reports failures back
   as a structured JSON error (`{"ok": false, "error": "..."}`) instead of crashing the editor.
   Never use engine `check()`/`ensure()` on data that comes from an MCP request; those are for
+  programmer errors, not malformed input from a client.
