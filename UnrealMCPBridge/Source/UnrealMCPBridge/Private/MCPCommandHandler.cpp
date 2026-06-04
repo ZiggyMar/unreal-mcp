@@ -1094,3 +1094,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 
 	const FName VarFName(*VariableName);
 	for (const FBPVariableDescription& ExistingVar : Blueprint->NewVariables)
+	{
+		if (ExistingVar.VarName == VarFName)
