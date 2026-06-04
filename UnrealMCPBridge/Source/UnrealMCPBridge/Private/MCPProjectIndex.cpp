@@ -461,3 +461,5 @@ void FMCPProjectIndex::SaveToDisk() const
 	Root->SetObjectField(TEXT("blueprints"), BlueprintsObj);
 
 	FString OutStr;
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutStr);

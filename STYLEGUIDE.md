@@ -33,3 +33,4 @@ expects and what the engine's own headers model throughout the codebase:
   Never use engine `check()`/`ensure()` on data that comes from an MCP request; those are for
   programmer errors, not malformed input from a client.
 - **Comments**: `/** ... */` Doxygen-style block comments on classes and non-obvious public
+  methods, explaining *why* something exists or a non-obvious constraint (see `MCPProjectIndex.h`'s
