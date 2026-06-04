@@ -74,3 +74,4 @@ public:
 	// Forces a full rescan of every Blueprint in the AssetRegistry, replacing Entries.
 	void RebuildFull();
 
+	// Case-insensitive substring search across blueprint/function/variable names and
