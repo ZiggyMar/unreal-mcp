@@ -460,3 +460,4 @@ void FMCPProjectIndex::SaveToDisk() const
 	}
 	Root->SetObjectField(TEXT("blueprints"), BlueprintsObj);
 
+	FString OutStr;

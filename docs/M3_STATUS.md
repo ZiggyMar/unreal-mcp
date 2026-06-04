@@ -249,3 +249,4 @@ important manual check across all three milestones combined.
 
 ```
 UnrealMCP/
+  README.md                      (new — top-level repo overview, see separate file)

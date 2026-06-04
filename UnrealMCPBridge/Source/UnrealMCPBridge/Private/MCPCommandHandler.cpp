@@ -1101,3 +1101,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 		}
 	}
 
+	const bool bAdded = FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarFName, PinType, DefaultValue);
+	if (!bAdded)
