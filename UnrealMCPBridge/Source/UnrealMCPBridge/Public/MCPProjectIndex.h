@@ -75,3 +75,4 @@ public:
 	void RebuildFull();
 
 	// Case-insensitive substring search across blueprint/function/variable names and
+	// parent-class names. Returns compact {kind, path, name, context} hit objects,

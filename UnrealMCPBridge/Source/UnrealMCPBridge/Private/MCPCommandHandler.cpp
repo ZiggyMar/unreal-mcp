@@ -1105,3 +1105,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	if (!bAdded)
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("add_variable_failed: %s"), *VariableName));
+	}
+

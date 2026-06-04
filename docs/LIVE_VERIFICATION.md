@@ -14,3 +14,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    LogPluginManager: Mounting Project plugin UnrealMCPBridge
    LogModuleManager: InternalLoadLibrary: 'UnrealMCPBridge' (...UnrealEditor-UnrealMCPBridge.dll)
    LogMCPBridge: UnrealMCPBridge: listening on 127.0.0.1:8765
+   ```
