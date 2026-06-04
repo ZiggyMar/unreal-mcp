@@ -142,3 +142,4 @@ exists.)
 
 Verify it's registered with `claude mcp list`, and check tool availability inside a
 session with `/mcp`.
+

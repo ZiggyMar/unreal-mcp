@@ -1092,3 +1092,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 		return MakeErrorResponse(TypeError);
 	}
 
+	const FName VarFName(*VariableName);
+	for (const FBPVariableDescription& ExistingVar : Blueprint->NewVariables)

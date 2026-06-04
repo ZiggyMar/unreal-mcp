@@ -243,3 +243,4 @@ milestone's structural correctness (does it compile, does it round-trip the righ
 is proven; every milestone's actual runtime behavior against real project data is not.
 Given M3 is specifically about *staying* correct over time (the incremental index), step
 6 above — edit something live and confirm the index notices — is the single most
+important manual check across all three milestones combined.

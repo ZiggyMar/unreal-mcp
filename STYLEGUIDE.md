@@ -28,3 +28,4 @@ expects and what the engine's own headers model throughout the codebase:
 - **Headers**: `#pragma once`, not include guards. Forward-declare where possible (see
   `MCPTcpServer.h`'s `class FSocket;` etc) instead of including headers a `.h` doesn't need.
 - **Error handling**: commands return `bool` with an `FString& OutError` output parameter rather
+  than throwing or asserting — every command path in `MCPCommandHandler.cpp` reports failures back
