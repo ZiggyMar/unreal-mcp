@@ -418,3 +418,4 @@ server.registerTool(
       "Saves the Blueprint's package to disk in place. Edits made via unreal_add_node/unreal_connect_pins/etc exist " +
       "only in the running editor's memory until this is called (or unreal_create_blueprint's default save=true ran).",
     inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),

@@ -454,3 +454,4 @@ void FMCPProjectIndex::SaveToDisk() const
 	Root->SetNumberField(TEXT("version"), 1);
 
 	TSharedRef<FJsonObject> BlueprintsObj = MakeShared<FJsonObject>();
+	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)

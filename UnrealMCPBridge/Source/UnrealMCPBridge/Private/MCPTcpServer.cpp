@@ -156,3 +156,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		{
 			Response = FMCPCommandHandler::Dispatch(RequestObj.ToSharedRef());
 		}
+		else

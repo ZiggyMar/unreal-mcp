@@ -155,3 +155,4 @@ export interface SearchProjectResult {
 
 export interface ReferenceEntry {
   package: string;
+  assetName?: string;
