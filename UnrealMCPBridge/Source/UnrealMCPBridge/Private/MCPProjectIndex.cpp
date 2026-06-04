@@ -452,3 +452,5 @@ void FMCPProjectIndex::SaveToDisk() const
 {
 	TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetNumberField(TEXT("version"), 1);
+
+	TSharedRef<FJsonObject> BlueprintsObj = MakeShared<FJsonObject>();

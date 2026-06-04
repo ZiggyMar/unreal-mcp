@@ -87,3 +87,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
     return undefined;
   } finally {
     clearTimeout(timeout);
+  }

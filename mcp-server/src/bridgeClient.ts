@@ -92,3 +92,4 @@ export class UnrealBridgeClient {
         }
         const line = buffer.slice(0, newlineIndex).trim();
         try {
+          const parsed = JSON.parse(line) as BridgeResponse<T>;
