@@ -34,3 +34,4 @@ expects and what the engine's own headers model throughout the codebase:
   programmer errors, not malformed input from a client.
 - **Comments**: `/** ... */` Doxygen-style block comments on classes and non-obvious public
   methods, explaining *why* something exists or a non-obvious constraint (see `MCPProjectIndex.h`'s
+  class comment). Single-line `//` comments inline only when the *why* isn't obvious from the code
