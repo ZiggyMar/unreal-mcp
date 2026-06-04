@@ -1099,3 +1099,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 		{
 			return MakeErrorResponse(FString::Printf(TEXT("variable_already_exists: %s"), *VariableName));
 		}
+	}
+

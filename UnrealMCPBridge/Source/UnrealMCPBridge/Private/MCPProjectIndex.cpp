@@ -458,3 +458,5 @@ void FMCPProjectIndex::SaveToDisk() const
 	{
 		BlueprintsObj->SetObjectField(Pair.Key, BlueprintEntryToJson(Pair.Value));
 	}
+	Root->SetObjectField(TEXT("blueprints"), BlueprintsObj);
+
