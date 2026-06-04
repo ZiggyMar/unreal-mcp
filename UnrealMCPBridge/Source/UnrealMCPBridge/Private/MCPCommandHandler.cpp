@@ -1096,3 +1096,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	for (const FBPVariableDescription& ExistingVar : Blueprint->NewVariables)
 	{
 		if (ExistingVar.VarName == VarFName)
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("variable_already_exists: %s"), *VariableName));
