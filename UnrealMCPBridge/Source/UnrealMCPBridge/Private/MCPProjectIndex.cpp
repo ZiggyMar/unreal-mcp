@@ -455,3 +455,5 @@ void FMCPProjectIndex::SaveToDisk() const
 
 	TSharedRef<FJsonObject> BlueprintsObj = MakeShared<FJsonObject>();
 	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
+	{
+		BlueprintsObj->SetObjectField(Pair.Key, BlueprintEntryToJson(Pair.Value));

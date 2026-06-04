@@ -12,3 +12,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
 1. **Editor loads the plugin correctly.** Output Log confirmed:
    ```
    LogPluginManager: Mounting Project plugin UnrealMCPBridge
+   LogModuleManager: InternalLoadLibrary: 'UnrealMCPBridge' (...UnrealEditor-UnrealMCPBridge.dll)

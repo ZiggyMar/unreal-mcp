@@ -419,3 +419,4 @@ server.registerTool(
       "only in the running editor's memory until this is called (or unreal_create_blueprint's default save=true ran).",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+    },

@@ -245,3 +245,4 @@ Given M3 is specifically about *staying* correct over time (the incremental inde
 6 above — edit something live and confirm the index notices — is the single most
 important manual check across all three milestones combined.
 
+## File map (additions since M2_STATUS.md)
