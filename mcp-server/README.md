@@ -144,3 +144,4 @@ Verify it's registered with `claude mcp list`, and check tool availability insid
 session with `/mcp`.
 
 ### Claude Desktop
+
