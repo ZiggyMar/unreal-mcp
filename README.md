@@ -89,3 +89,4 @@ claude mcp add unreal -- node "/path/to/unreal-mcp/mcp-server/dist/index.js"
   "mcpServers": {
     "unreal": {
       "command": "node",
+      "args": ["/path/to/unreal-mcp/mcp-server/dist/index.js"]

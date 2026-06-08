@@ -473,3 +473,4 @@ void FMCPProjectIndex::SaveToDisk() const
 }
 
 bool FMCPProjectIndex::LoadFromDisk()
+{
