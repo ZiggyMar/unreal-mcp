@@ -254,3 +254,4 @@ UnrealMCP/
     M3_STATUS.md                 (this file)
   UnrealMCPBridge/
     Source/UnrealMCPBridge/
+      Public/
