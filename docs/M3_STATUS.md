@@ -256,3 +256,4 @@ UnrealMCP/
     Source/UnrealMCPBridge/
       Public/
         MCPProjectIndex.h         (new — FMCPProjectIndex + FMCPIndex* structs)
+        MCPCommandHandler.h        (+3 handler decls)

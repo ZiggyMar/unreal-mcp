@@ -92,3 +92,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
 
 /**
  * Attaches a best-effort `summary` field to up to MAX_ENRICH_PER_CALL hits (the rest are
+ * returned unchanged, not dropped). No-op pass-through (original array, no copies, no

@@ -468,3 +468,5 @@ void FMCPProjectIndex::SaveToDisk() const
 	const FString FilePath = GetIndexFilePath();
 	if (!FFileHelper::SaveStringToFile(OutStr, *FilePath))
 	{
+		UE_LOG(LogMCPProjectIndex, Warning, TEXT("UnrealMCPBridge: failed to save project index to %s"), *FilePath);
+	}
