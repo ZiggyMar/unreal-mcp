@@ -1120,3 +1120,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;

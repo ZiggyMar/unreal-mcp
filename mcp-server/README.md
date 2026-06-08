@@ -147,3 +147,4 @@ session with `/mcp`.
 
 Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) and add:
 
+```json

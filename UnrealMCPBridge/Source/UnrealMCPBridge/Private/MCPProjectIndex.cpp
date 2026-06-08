@@ -474,3 +474,5 @@ void FMCPProjectIndex::SaveToDisk() const
 
 bool FMCPProjectIndex::LoadFromDisk()
 {
+	const FString FilePath = GetIndexFilePath();
+	FString FileContents;

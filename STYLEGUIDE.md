@@ -41,3 +41,4 @@ expects and what the engine's own headers model throughout the codebase:
   building `FJsonObject`s inline, and avoid short generic helper names (`MakeError`, `Check`,
   `Verify`, etc.) in files that transitively include Core headers — this collided with UE's own
   `Templates/ValueOrError.h` once already (see `docs/M1_STATUS.md`).
+- **Threading**: everything in this plugin runs on the game thread by design (the TCP server ticks
