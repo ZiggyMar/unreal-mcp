@@ -33,3 +33,4 @@ private:
 
 	TUniquePtr<FTcpListener> Listener;
 	TArray<TSharedPtr<class FMCPClientConnection>> Clients;
+	FTSTicker::FDelegateHandle TickHandle;

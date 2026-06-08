@@ -262,3 +262,5 @@ UnrealMCP/
         MCPCommandHandler.cpp      (+3 handlers: search_project, find_references, get_project_overview)
         UnrealMCPBridgeModule.cpp  (+FMCPProjectIndex::Initialize()/Shutdown() calls)
   mcp-server/
+    src/
+      index.ts                    (+3 registerTool() calls)

@@ -476,3 +476,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 {
 	const FString FilePath = GetIndexFilePath();
 	FString FileContents;
+	if (!FFileHelper::LoadFileToString(FileContents, *FilePath))

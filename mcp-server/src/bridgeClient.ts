@@ -94,3 +94,4 @@ export class UnrealBridgeClient {
         try {
           const parsed = JSON.parse(line) as BridgeResponse<T>;
           if (!parsed.ok) {
+            fail(new Error(parsed.error ?? `UnrealMCPBridge returned an error for '${cmd}'`));
