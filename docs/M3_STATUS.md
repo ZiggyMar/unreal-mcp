@@ -252,3 +252,5 @@ UnrealMCP/
   README.md                      (new — top-level repo overview, see separate file)
   docs/
     M3_STATUS.md                 (this file)
+  UnrealMCPBridge/
+    Source/UnrealMCPBridge/

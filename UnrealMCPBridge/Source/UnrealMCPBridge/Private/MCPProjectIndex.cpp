@@ -464,3 +464,5 @@ void FMCPProjectIndex::SaveToDisk() const
 	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
 		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutStr);
 	FJsonSerializer::Serialize(Root, Writer);
+
+	const FString FilePath = GetIndexFilePath();
