@@ -424,3 +424,4 @@ server.registerTool(
   async ({ path }) => {
     try {
       const result = await bridge.send<SaveBlueprintResult>("save_blueprint", { path });
+      return jsonResult(result);

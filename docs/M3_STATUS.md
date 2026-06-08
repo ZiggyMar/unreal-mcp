@@ -255,3 +255,4 @@ UnrealMCP/
   UnrealMCPBridge/
     Source/UnrealMCPBridge/
       Public/
+        MCPProjectIndex.h         (new — FMCPProjectIndex + FMCPIndex* structs)

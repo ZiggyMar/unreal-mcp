@@ -467,3 +467,4 @@ void FMCPProjectIndex::SaveToDisk() const
 
 	const FString FilePath = GetIndexFilePath();
 	if (!FFileHelper::SaveStringToFile(OutStr, *FilePath))
+	{
