@@ -38,3 +38,4 @@ expects and what the engine's own headers model throughout the codebase:
   itself — not restating what the next line does. No em dashes in comments; use a period, comma, or
   colon instead, whichever reads most naturally. No emoji.
 - **Response builders**: use the shared `MakeOkResponse` / `MakeErrorResponse` helpers rather than
+  building `FJsonObject`s inline, and avoid short generic helper names (`MakeError`, `Check`,
