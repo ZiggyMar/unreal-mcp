@@ -1111,3 +1111,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	{
 		FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, VarFName, nullptr, FText::FromString(Category));
 	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();

@@ -37,3 +37,4 @@ expects and what the engine's own headers model throughout the codebase:
   class comment). Single-line `//` comments inline only when the *why* isn't obvious from the code
   itself — not restating what the next line does. No em dashes in comments; use a period, comma, or
   colon instead, whichever reads most naturally. No emoji.
+- **Response builders**: use the shared `MakeOkResponse` / `MakeErrorResponse` helpers rather than

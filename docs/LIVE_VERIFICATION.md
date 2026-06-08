@@ -15,3 +15,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    LogModuleManager: InternalLoadLibrary: 'UnrealMCPBridge' (...UnrealEditor-UnrealMCPBridge.dll)
    LogMCPBridge: UnrealMCPBridge: listening on 127.0.0.1:8765
    ```
+2. **Read path (M1), against real data**: `ping`, `get_project_overview`, `list_blueprints`,

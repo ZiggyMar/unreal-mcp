@@ -158,3 +158,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		}
 		else
 		{
+			Response->SetBoolField(TEXT("ok"), false);
