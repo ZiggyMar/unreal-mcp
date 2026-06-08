@@ -260,3 +260,4 @@ UnrealMCP/
       Private/
         MCPProjectIndex.cpp        (new — ~450 lines: build/persist/search/overview + AssetRegistry delegates)
         MCPCommandHandler.cpp      (+3 handlers: search_project, find_references, get_project_overview)
+        UnrealMCPBridgeModule.cpp  (+FMCPProjectIndex::Initialize()/Shutdown() calls)

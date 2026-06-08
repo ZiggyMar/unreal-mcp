@@ -426,3 +426,4 @@ server.registerTool(
       const result = await bridge.send<SaveBlueprintResult>("save_blueprint", { path });
       return jsonResult(result);
     } catch (err) {
+      return errorResult(err);

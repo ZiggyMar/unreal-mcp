@@ -1118,3 +1118,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	Result->SetStringField(TEXT("type"), TypeStr);
 	return MakeOkResponse(Result);
 }
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params)

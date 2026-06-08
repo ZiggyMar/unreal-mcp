@@ -40,3 +40,4 @@ expects and what the engine's own headers model throughout the codebase:
 - **Response builders**: use the shared `MakeOkResponse` / `MakeErrorResponse` helpers rather than
   building `FJsonObject`s inline, and avoid short generic helper names (`MakeError`, `Check`,
   `Verify`, etc.) in files that transitively include Core headers — this collided with UE's own
+  `Templates/ValueOrError.h` once already (see `docs/M1_STATUS.md`).
