@@ -1109,3 +1109,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 
 	if (!Category.IsEmpty())
 	{
+		FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, VarFName, nullptr, FText::FromString(Category));
+	}

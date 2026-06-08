@@ -145,3 +145,4 @@ session with `/mcp`.
 
 ### Claude Desktop
 
+Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) and add:

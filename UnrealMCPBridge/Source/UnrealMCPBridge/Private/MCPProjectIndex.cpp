@@ -466,3 +466,4 @@ void FMCPProjectIndex::SaveToDisk() const
 	FJsonSerializer::Serialize(Root, Writer);
 
 	const FString FilePath = GetIndexFilePath();
+	if (!FFileHelper::SaveStringToFile(OutStr, *FilePath))
