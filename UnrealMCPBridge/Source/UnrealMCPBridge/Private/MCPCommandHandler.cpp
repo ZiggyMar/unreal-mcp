@@ -1116,3 +1116,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	Result->SetBoolField(TEXT("added"), true);
 	Result->SetStringField(TEXT("name"), VariableName);
 	Result->SetStringField(TEXT("type"), TypeStr);
+	return MakeOkResponse(Result);
+}
