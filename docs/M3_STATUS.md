@@ -264,3 +264,4 @@ UnrealMCP/
   mcp-server/
     src/
       index.ts                    (+3 registerTool() calls)
+      types.ts                    (+7 result/hit interfaces)
