@@ -1124,3 +1124,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	FString Path;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
 	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}

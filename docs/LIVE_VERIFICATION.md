@@ -18,3 +18,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
 2. **Read path (M1), against real data**: `ping`, `get_project_overview`, `list_blueprints`,
    `search_project`, `list_blueprint_graphs`, `find_references`, `read_blueprint_graph_summary`
    all returned correct, sane results against the real project: 19 real Blueprints (e.g.
+   `AVS_GameInstance`, `BP_Vacuum`, `WB_MainMenu`), correct parent classes, correct graph/node

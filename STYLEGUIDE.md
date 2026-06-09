@@ -43,3 +43,4 @@ expects and what the engine's own headers model throughout the codebase:
   `Templates/ValueOrError.h` once already (see `docs/M1_STATUS.md`).
 - **Threading**: everything in this plugin runs on the game thread by design (the TCP server ticks
   via `FTSTicker`, AssetRegistry delegates fire on the game thread) specifically so command
+  handlers can call Editor/Kismet2/AssetRegistry APIs directly with no locking. Don't introduce a
