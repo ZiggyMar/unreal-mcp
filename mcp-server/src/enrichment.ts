@@ -96,3 +96,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
  * network calls) if enrichment is disabled or there are no hits.
  */
 export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> {
+  if (!isEnrichmentEnabled() || hits.length === 0) {

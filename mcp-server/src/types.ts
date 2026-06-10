@@ -159,3 +159,4 @@ export interface ReferenceEntry {
   assetClass?: string;
 }
 
+export interface FindReferencesResult {

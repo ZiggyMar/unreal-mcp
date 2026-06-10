@@ -482,3 +482,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 	}
 
 	TSharedPtr<FJsonObject> Root;
+	TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(FileContents);

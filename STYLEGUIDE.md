@@ -46,3 +46,4 @@ expects and what the engine's own headers model throughout the codebase:
   handlers can call Editor/Kismet2/AssetRegistry APIs directly with no locking. Don't introduce a
   background thread without re-checking this assumption project-wide.
 
+## TypeScript (`mcp-server/`)
