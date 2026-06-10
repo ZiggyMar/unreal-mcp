@@ -32,3 +32,4 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 }
 
 IMPLEMENT_MODULE(FUnrealMCPBridgeModule, UnrealMCPBridge)
+
