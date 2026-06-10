@@ -480,3 +480,5 @@ bool FMCPProjectIndex::LoadFromDisk()
 	{
 		return false;
 	}
+
+	TSharedPtr<FJsonObject> Root;
