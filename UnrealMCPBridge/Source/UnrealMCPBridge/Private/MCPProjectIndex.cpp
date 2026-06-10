@@ -479,3 +479,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 	if (!FFileHelper::LoadFileToString(FileContents, *FilePath))
 	{
 		return false;
+	}
