@@ -1131,3 +1131,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
 	if (!Blueprint)
 	{
+		return MakeErrorResponse(LoadError);
+	}
