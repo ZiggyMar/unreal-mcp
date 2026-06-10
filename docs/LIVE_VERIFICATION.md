@@ -20,3 +20,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    all returned correct, sane results against the real project: 19 real Blueprints (e.g.
    `AVS_GameInstance`, `BP_Vacuum`, `WB_MainMenu`), correct parent classes, correct graph/node
    counts (134+ graphs, 1200+ nodes project-wide).
+3. **Write path (M2), live**: `create_blueprint` → `add_node` (Event) → `compile_blueprint` →
