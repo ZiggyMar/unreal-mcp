@@ -265,3 +265,4 @@ UnrealMCP/
     src/
       index.ts                    (+3 registerTool() calls)
       types.ts                    (+7 result/hit interfaces)
+      enrichment.ts                (new — optional local-LLM enrichment stage)
