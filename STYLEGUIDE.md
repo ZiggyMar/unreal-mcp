@@ -47,3 +47,4 @@ expects and what the engine's own headers model throughout the codebase:
   background thread without re-checking this assumption project-wide.
 
 ## TypeScript (`mcp-server/`)
+

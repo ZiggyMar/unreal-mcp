@@ -431,3 +431,4 @@ server.registerTool(
   }
 );
 
+// =============================== Milestone 3: project-wide index tools ===============================

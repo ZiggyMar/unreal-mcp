@@ -1133,3 +1133,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	{
 		return MakeErrorResponse(LoadError);
 	}
+
+	FCompilerResultsLog ResultsLog;
