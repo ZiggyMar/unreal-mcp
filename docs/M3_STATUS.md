@@ -266,3 +266,4 @@ UnrealMCP/
       index.ts                    (+3 registerTool() calls)
       types.ts                    (+7 result/hit interfaces)
       enrichment.ts                (new — optional local-LLM enrichment stage)
+    README.md                     (+M3 tool table, +enrichment setup section, +config env vars)

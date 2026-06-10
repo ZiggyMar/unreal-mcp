@@ -45,3 +45,4 @@ expects and what the engine's own headers model throughout the codebase:
   via `FTSTicker`, AssetRegistry delegates fire on the game thread) specifically so command
   handlers can call Editor/Kismet2/AssetRegistry APIs directly with no locking. Don't introduce a
   background thread without re-checking this assumption project-wide.
+

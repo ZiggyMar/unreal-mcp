@@ -78,3 +78,4 @@ public:
 	// parent-class names. Returns compact {kind, path, name, context} hit objects,
 	// capped at MaxResults.
 	TArray<TSharedPtr<FJsonValue>> Search(const FString& Query, int32 MaxResults) const;
+
