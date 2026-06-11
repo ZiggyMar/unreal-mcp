@@ -162,3 +162,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 			Response->SetStringField(TEXT("error"), TEXT("invalid_json"));
 		}
 
+		FString OutStr;
