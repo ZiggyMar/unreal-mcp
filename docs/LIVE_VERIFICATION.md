@@ -22,3 +22,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    counts (134+ graphs, 1200+ nodes project-wide).
 3. **Write path (M2), live**: `create_blueprint` → `add_node` (Event) → `compile_blueprint` →
    `save_blueprint` all succeeded against the real editor, producing a real, saved, compiling
+   Blueprint asset (`/Game/_MCPTest/BP_MCPLiveTest2`). Then `add_node` (CallFunction: PrintString)
