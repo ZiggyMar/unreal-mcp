@@ -98,3 +98,4 @@ async function requestSummary(hit: SearchHit): Promise<string | undefined> {
 export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> {
   if (!isEnrichmentEnabled() || hits.length === 0) {
     return hits;
+  }

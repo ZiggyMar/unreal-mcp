@@ -160,3 +160,4 @@ export interface ReferenceEntry {
 }
 
 export interface FindReferencesResult {
+  path: string;
