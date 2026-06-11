@@ -79,3 +79,4 @@ public:
 	// capped at MaxResults.
 	TArray<TSharedPtr<FJsonValue>> Search(const FString& Query, int32 MaxResults) const;
 
+	// Cheap top-level summary: counts + top-level folder breakdown + parent-class breakdown.
