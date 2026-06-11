@@ -1139,3 +1139,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 
 	TArray<TSharedPtr<FJsonValue>> MessageArray;
 	for (const TSharedRef<FTokenizedMessage>& Message : ResultsLog.Messages)
+	{
+		FString Severity;
