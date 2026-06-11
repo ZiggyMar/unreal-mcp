@@ -50,3 +50,4 @@ expects and what the engine's own headers model throughout the codebase:
 
 - **Formatting**: 2-space indentation, double quotes for strings, semicolons, trailing commas in
   multi-line literals.
+- **Naming**: `camelCase` for variables and functions, `PascalCase` for interfaces and types

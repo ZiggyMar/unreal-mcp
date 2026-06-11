@@ -489,3 +489,5 @@ bool FMCPProjectIndex::LoadFromDisk()
 		return false;
 	}
 
+	const TSharedPtr<FJsonObject>* BlueprintsObj = nullptr;
+	if (!Root->TryGetObjectField(TEXT("blueprints"), BlueprintsObj) || !BlueprintsObj || !BlueprintsObj->IsValid())
