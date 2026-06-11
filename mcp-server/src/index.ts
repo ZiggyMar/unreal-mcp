@@ -432,3 +432,4 @@ server.registerTool(
 );
 
 // =============================== Milestone 3: project-wide index tools ===============================
+// These exist to solve the actual pain point that motivated this whole project: finding

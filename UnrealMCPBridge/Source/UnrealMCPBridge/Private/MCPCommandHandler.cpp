@@ -1137,3 +1137,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	FCompilerResultsLog ResultsLog;
 	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &ResultsLog);
 
+	TArray<TSharedPtr<FJsonValue>> MessageArray;
+	for (const TSharedRef<FTokenizedMessage>& Message : ResultsLog.Messages)
