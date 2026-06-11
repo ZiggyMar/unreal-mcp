@@ -486,3 +486,5 @@ bool FMCPProjectIndex::LoadFromDisk()
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
 	{
 		UE_LOG(LogMCPProjectIndex, Warning, TEXT("UnrealMCPBridge: failed to parse project index cache at %s, will rebuild"), *FilePath);
+		return false;
+	}
