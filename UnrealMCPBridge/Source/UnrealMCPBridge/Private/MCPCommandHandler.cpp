@@ -1141,3 +1141,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	for (const TSharedRef<FTokenizedMessage>& Message : ResultsLog.Messages)
 	{
 		FString Severity;
+		switch (Message->GetSeverity())
+		{
