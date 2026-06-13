@@ -494,3 +494,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 	{
 		return false;
 	}
+
