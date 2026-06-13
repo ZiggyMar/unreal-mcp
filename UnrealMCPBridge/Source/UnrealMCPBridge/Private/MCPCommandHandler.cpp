@@ -1146,3 +1146,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 		case EMessageSeverity::Error:
 			Severity = TEXT("error");
 			break;
+		case EMessageSeverity::PerformanceWarning:
+			Severity = TEXT("performance_warning");

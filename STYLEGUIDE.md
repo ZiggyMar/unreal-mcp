@@ -54,3 +54,4 @@ expects and what the engine's own headers model throughout the codebase:
   (`BridgeRequest`, `SearchHit`). Interfaces over `type` aliases for object shapes; `type` for
   unions/utility types.
 - **Types**: explicit return types on exported functions. Prefer `unknown` over `any`; narrow with
+  a real check or a cast with a comment explaining why the cast is safe.
