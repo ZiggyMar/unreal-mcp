@@ -499,3 +499,5 @@ bool FMCPProjectIndex::LoadFromDisk()
 	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*BlueprintsObj)->Values)
 	{
 		if (Pair.Value.IsValid())
+		{
+			Entries.Add(Pair.Key, BlueprintEntryFromJson(Pair.Value->AsObject()));
