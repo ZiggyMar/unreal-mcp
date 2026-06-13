@@ -162,3 +162,4 @@ export interface ReferenceEntry {
 export interface FindReferencesResult {
   path: string;
   referencedBy: ReferenceEntry[];
+  referencedByCount: number;

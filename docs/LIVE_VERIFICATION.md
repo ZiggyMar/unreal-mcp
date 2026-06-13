@@ -25,3 +25,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    Blueprint asset (`/Game/_MCPTest/BP_MCPLiveTest2`). Then `add_node` (CallFunction: PrintString)
    → `set_pin_default_value` → `connect_pins` → `compile_blueprint` → `save_blueprint` produced a
    real, working `BeginPlay → Print String` graph. The screenshot below is that exact graph, opened
+   in the real Blueprint editor.
