@@ -81,3 +81,4 @@ public:
 
 	// Cheap top-level summary: counts + top-level folder breakdown + parent-class breakdown.
 	TSharedRef<FJsonObject> GetOverview() const;
+

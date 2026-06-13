@@ -96,3 +96,4 @@ export class UnrealBridgeClient {
           if (!parsed.ok) {
             fail(new Error(parsed.error ?? `UnrealMCPBridge returned an error for '${cmd}'`));
             return;
+          }
