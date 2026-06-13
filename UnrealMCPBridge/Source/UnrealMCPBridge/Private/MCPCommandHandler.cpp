@@ -1154,3 +1154,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 			break;
 		default:
 			Severity = TEXT("info");
+			break;
+		}
