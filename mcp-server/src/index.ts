@@ -439,3 +439,4 @@ server.registerTool(
 // call. See ../ARCHITECTURE.md and docs/M3_STATUS.md.
 
 server.registerTool(
+  "unreal_get_project_overview",
