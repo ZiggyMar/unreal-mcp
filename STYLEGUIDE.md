@@ -57,3 +57,4 @@ expects and what the engine's own headers model throughout the codebase:
   a real check or a cast with a comment explaining why the cast is safe.
 - **Async**: `async`/`await` throughout, except where wrapping a callback-based Node API
   (`bridgeClient.ts`'s `net.Socket` handling) genuinely requires `new Promise(...)`.
+- **Comments**: `/** ... */` JSDoc on exported functions and non-obvious module-level constants.

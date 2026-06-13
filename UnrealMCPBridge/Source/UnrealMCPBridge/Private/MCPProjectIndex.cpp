@@ -501,3 +501,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 		if (Pair.Value.IsValid())
 		{
 			Entries.Add(Pair.Key, BlueprintEntryFromJson(Pair.Value->AsObject()));
+		}
