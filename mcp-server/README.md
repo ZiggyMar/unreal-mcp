@@ -152,3 +152,4 @@ Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) an
   "mcpServers": {
     "unreal": {
       "command": "node",
+      "args": ["F:/!Projects/UnrealMCP/mcp-server/dist/index.js"]

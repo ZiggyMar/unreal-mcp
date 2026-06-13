@@ -435,3 +435,4 @@ server.registerTool(
 // These exist to solve the actual pain point that motivated this whole project: finding
 // things across a large project without either re-enumerating everything every time, or
 // the model losing track of what's connected to what. They're backed by a persistent,
+// incrementally-updated index on the C++ side (FMCPProjectIndex), not a live re-scan per

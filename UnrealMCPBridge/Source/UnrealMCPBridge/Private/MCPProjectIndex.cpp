@@ -495,3 +495,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 		return false;
 	}
 
+	Entries.Empty();

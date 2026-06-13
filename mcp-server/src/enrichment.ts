@@ -100,3 +100,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
     return hits;
   }
 
+  const toEnrich = hits.slice(0, MAX_ENRICH_PER_CALL);
