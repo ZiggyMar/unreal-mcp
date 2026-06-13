@@ -1159,3 +1159,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 
 		TSharedRef<FJsonObject> MsgEntry = MakeShared<FJsonObject>();
 		MsgEntry->SetStringField(TEXT("severity"), Severity);
+		MsgEntry->SetStringField(TEXT("text"), Message->ToText().ToString());
+		MessageArray.Add(MakeShared<FJsonValueObject>(MsgEntry));
