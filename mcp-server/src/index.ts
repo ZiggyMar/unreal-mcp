@@ -436,3 +436,4 @@ server.registerTool(
 // things across a large project without either re-enumerating everything every time, or
 // the model losing track of what's connected to what. They're backed by a persistent,
 // incrementally-updated index on the C++ side (FMCPProjectIndex), not a live re-scan per
+// call. See ../ARCHITECTURE.md and docs/M3_STATUS.md.
