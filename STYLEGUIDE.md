@@ -60,3 +60,4 @@ expects and what the engine's own headers model throughout the codebase:
 - **Comments**: `/** ... */` JSDoc on exported functions and non-obvious module-level constants.
   Module-header comments (see the top of `enrichment.ts`) are fine for explaining a whole file's
   design rationale when it isn't obvious from the code alone. Same em-dash/emoji rules as C++.
+- **Error handling**: bridge-facing calls throw `Error` with a message that tells the *user* what
