@@ -496,3 +496,5 @@ bool FMCPProjectIndex::LoadFromDisk()
 	}
 
 	Entries.Empty();
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*BlueprintsObj)->Values)
+	{
