@@ -58,3 +58,4 @@ expects and what the engine's own headers model throughout the codebase:
 - **Async**: `async`/`await` throughout, except where wrapping a callback-based Node API
   (`bridgeClient.ts`'s `net.Socket` handling) genuinely requires `new Promise(...)`.
 - **Comments**: `/** ... */` JSDoc on exported functions and non-obvious module-level constants.
+  Module-header comments (see the top of `enrichment.ts`) are fine for explaining a whole file's

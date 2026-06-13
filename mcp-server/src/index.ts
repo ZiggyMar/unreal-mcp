@@ -438,3 +438,4 @@ server.registerTool(
 // incrementally-updated index on the C++ side (FMCPProjectIndex), not a live re-scan per
 // call. See ../ARCHITECTURE.md and docs/M3_STATUS.md.
 
+server.registerTool(

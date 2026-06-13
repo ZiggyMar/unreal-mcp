@@ -502,3 +502,5 @@ bool FMCPProjectIndex::LoadFromDisk()
 		{
 			Entries.Add(Pair.Key, BlueprintEntryFromJson(Pair.Value->AsObject()));
 		}
+	}
+
