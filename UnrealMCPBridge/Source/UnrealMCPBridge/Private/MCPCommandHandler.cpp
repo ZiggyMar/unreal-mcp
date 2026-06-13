@@ -1144,3 +1144,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 		switch (Message->GetSeverity())
 		{
 		case EMessageSeverity::Error:
+			Severity = TEXT("error");
+			break;

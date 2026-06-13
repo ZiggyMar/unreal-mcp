@@ -53,3 +53,4 @@ expects and what the engine's own headers model throughout the codebase:
 - **Naming**: `camelCase` for variables and functions, `PascalCase` for interfaces and types
   (`BridgeRequest`, `SearchHit`). Interfaces over `type` aliases for object shapes; `type` for
   unions/utility types.
+- **Types**: explicit return types on exported functions. Prefer `unknown` over `any`; narrow with
