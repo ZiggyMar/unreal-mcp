@@ -1171,3 +1171,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 		break;
 	case BS_UpToDateWithWarnings:
 		StatusStr = TEXT("UpToDateWithWarnings");
+		break;
+	case BS_Dirty:

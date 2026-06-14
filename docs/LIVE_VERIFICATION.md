@@ -28,3 +28,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    in the real Blueprint editor.
 4. **Index freshness (M3), live, without restarting the editor**: `get_project_overview`'s
    `blueprintCount` incremented immediately after `create_blueprint`, and `search_project` found
+   the new Blueprint by name immediately, confirming the `IAssetRegistry` delegate-driven
