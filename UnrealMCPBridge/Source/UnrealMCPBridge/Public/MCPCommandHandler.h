@@ -65,3 +65,4 @@ private:
 	// Resolves a node id (as produced by read_blueprint_graph_summary / add_node, "n<index>")
 	// back to a node within a specific graph. Not stable across editor sessions or edits.
 	static class UEdGraphNode* FindNodeById(class UEdGraph* Graph, const FString& NodeId, FString& OutError);
+

@@ -441,3 +441,4 @@ server.registerTool(
 server.registerTool(
   "unreal_get_project_overview",
   {
+    title: "Get a cheap project-wide overview",
