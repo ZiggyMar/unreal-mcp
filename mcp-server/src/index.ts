@@ -444,3 +444,4 @@ server.registerTool(
     title: "Get a cheap project-wide overview",
     description:
       "Returns a cheap top-level summary of the whole project's Blueprint structure: total counts (blueprints, " +
+      "functions, variables, graphs, nodes), a breakdown by top-level content folder, and a breakdown by parent " +

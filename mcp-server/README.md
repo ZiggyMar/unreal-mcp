@@ -157,3 +157,4 @@ Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) an
   }
 }
 ```
+
