@@ -440,3 +440,4 @@ server.registerTool(
 
 server.registerTool(
   "unreal_get_project_overview",
+  {
