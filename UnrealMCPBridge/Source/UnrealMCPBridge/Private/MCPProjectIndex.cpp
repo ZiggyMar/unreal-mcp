@@ -513,3 +513,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 	const FString LowerQuery = Query.ToLower();
 
 	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
+	{
