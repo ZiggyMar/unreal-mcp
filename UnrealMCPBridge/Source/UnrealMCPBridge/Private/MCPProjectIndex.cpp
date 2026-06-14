@@ -514,3 +514,5 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 
 	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
 	{
+		if (Hits.Num() >= MaxResults)
+		{
