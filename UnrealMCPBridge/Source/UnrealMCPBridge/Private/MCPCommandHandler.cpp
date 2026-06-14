@@ -1167,3 +1167,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	switch (Blueprint->Status)
 	{
 	case BS_UpToDate:
+		StatusStr = TEXT("UpToDate");
+		break;

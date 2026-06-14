@@ -105,3 +105,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
     toEnrich.map(async (hit) => {
       const key = cacheKey(hit);
       const cached = summaryCache.get(key);
+      if (cached !== undefined) {
