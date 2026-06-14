@@ -83,3 +83,4 @@ public:
 	TSharedRef<FJsonObject> GetOverview() const;
 
 	int32 GetIndexedBlueprintCount() const { return Entries.Num(); }
+

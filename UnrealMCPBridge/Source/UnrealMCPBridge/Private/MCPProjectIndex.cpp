@@ -510,3 +510,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, int32 MaxResults) const
 {
 	TArray<TSharedPtr<FJsonValue>> Hits;
+	const FString LowerQuery = Query.ToLower();
