@@ -107,3 +107,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
       const cached = summaryCache.get(key);
       if (cached !== undefined) {
         return cached;
+      }

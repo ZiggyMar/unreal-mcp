@@ -517,3 +517,5 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 		if (Hits.Num() >= MaxResults)
 		{
 			break;
+		}
+		const FMCPIndexBlueprint& BP = Pair.Value;
