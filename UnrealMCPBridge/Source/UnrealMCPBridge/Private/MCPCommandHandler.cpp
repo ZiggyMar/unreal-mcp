@@ -1163,3 +1163,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 		MessageArray.Add(MakeShared<FJsonValueObject>(MsgEntry));
 	}
 
+	FString StatusStr;
+	switch (Blueprint->Status)
