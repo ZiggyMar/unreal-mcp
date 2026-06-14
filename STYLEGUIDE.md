@@ -64,3 +64,4 @@ expects and what the engine's own headers model throughout the codebase:
   to check (see `bridgeClient.ts`'s `ECONNREFUSED` message) rather than a bare stack trace. MCP
   tool handlers catch and convert to `errorResult(err)` — a thrown error should never escape a
   tool call and crash the server.
+
