@@ -507,3 +507,4 @@ bool FMCPProjectIndex::LoadFromDisk()
 	return true;
 }
 
+TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, int32 MaxResults) const

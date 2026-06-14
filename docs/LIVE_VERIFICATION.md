@@ -26,3 +26,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    → `set_pin_default_value` → `connect_pins` → `compile_blueprint` → `save_blueprint` produced a
    real, working `BeginPlay → Print String` graph. The screenshot below is that exact graph, opened
    in the real Blueprint editor.
+4. **Index freshness (M3), live, without restarting the editor**: `get_project_overview`'s
