@@ -104,3 +104,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
   const summaries = await Promise.all(
     toEnrich.map(async (hit) => {
       const key = cacheKey(hit);
+      const cached = summaryCache.get(key);

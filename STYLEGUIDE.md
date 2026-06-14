@@ -62,3 +62,4 @@ expects and what the engine's own headers model throughout the codebase:
   design rationale when it isn't obvious from the code alone. Same em-dash/emoji rules as C++.
 - **Error handling**: bridge-facing calls throw `Error` with a message that tells the *user* what
   to check (see `bridgeClient.ts`'s `ECONNREFUSED` message) rather than a bare stack trace. MCP
+  tool handlers catch and convert to `errorResult(err)` — a thrown error should never escape a
