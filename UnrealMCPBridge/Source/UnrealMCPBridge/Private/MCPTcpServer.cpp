@@ -166,3 +166,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
 			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutStr);
 		FJsonSerializer::Serialize(Response, Writer);
+		OutStr.AppendChar(TEXT('\n'));
