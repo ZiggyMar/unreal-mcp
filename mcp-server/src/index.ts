@@ -449,3 +449,4 @@ server.registerTool(
       "unfamiliar project. It costs one cheap index lookup instead of enumerating everything, and on a fresh editor " +
       "session may trigger the one-time index build (subsequent calls are fast).",
     inputSchema: {},
+  },
