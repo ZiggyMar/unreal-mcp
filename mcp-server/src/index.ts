@@ -447,3 +447,4 @@ server.registerTool(
       "functions, variables, graphs, nodes), a breakdown by top-level content folder, and a breakdown by parent " +
       "class. Call this FIRST (before unreal_search_project or unreal_list_blueprints) to orient yourself in an " +
       "unfamiliar project. It costs one cheap index lookup instead of enumerating everything, and on a fresh editor " +
+      "session may trigger the one-time index build (subsequent calls are fast).",

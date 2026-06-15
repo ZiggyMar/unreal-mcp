@@ -66,3 +66,4 @@ private:
 	// back to a node within a specific graph. Not stable across editor sessions or edits.
 	static class UEdGraphNode* FindNodeById(class UEdGraph* Graph, const FString& NodeId, FString& OutError);
 
+	// Resolves a class by short name ("Actor", "Pawn") or full path ("/Script/Engine.Actor",

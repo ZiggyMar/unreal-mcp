@@ -523,3 +523,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 		if (BP.Name.ToLower().Contains(LowerQuery) || BP.ParentClass.ToLower().Contains(LowerQuery))
 		{
 			Hits.Add(MakeShared<FJsonValueObject>(
+				MakeHit(TEXT("blueprint"), BP.Path, BP.Name, FString::Printf(TEXT("parent=%s"), *BP.ParentClass))));
