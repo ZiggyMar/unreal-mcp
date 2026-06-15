@@ -519,3 +519,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 			break;
 		}
 		const FMCPIndexBlueprint& BP = Pair.Value;
+

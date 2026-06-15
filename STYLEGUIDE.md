@@ -68,3 +68,4 @@ expects and what the engine's own headers model throughout the codebase:
 ## Documentation (`*.md`)
 
 - No em dashes (—). Use a period, comma, colon, or parentheses instead, whichever reads most
+  naturally for that sentence.

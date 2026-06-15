@@ -1176,3 +1176,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 		StatusStr = TEXT("Dirty");
 		break;
 	case BS_Error:
+		StatusStr = TEXT("Error");
+		break;
