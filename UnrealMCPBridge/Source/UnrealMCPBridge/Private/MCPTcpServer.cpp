@@ -168,3 +168,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		FJsonSerializer::Serialize(Response, Writer);
 		OutStr.AppendChar(TEXT('\n'));
 
+		FTCHARToUTF8 UTF8Str(*OutStr);
