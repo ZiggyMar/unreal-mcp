@@ -98,3 +98,4 @@ export class UnrealBridgeClient {
             return;
           }
           succeed(parsed.result as T);
+        } catch (err) {
