@@ -1186,3 +1186,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 		break;
 	}
 
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("errorCount"), ResultsLog.NumErrors);
