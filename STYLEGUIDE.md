@@ -73,3 +73,4 @@ expects and what the engine's own headers model throughout the codebase:
 - Arrows (`→`) are fine for flow/sequence notation (`list → summary → detail`) — that's a
   deliberate technical-writing convention, not decorative.
 - Headings: sentence case, not Title Case (`## What's different about this one`, not
+  `## What's Different About This One`).

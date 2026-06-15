@@ -110,3 +110,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
       }
       const summary = await requestSummary(hit);
       if (summary) {
+        summaryCache.set(key, summary);
