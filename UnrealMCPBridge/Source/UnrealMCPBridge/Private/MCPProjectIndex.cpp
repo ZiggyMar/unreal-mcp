@@ -529,3 +529,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 		for (const FMCPIndexFunction& Fn : BP.Functions)
 		{
 			if (Fn.Name.ToLower().Contains(LowerQuery))
+			{

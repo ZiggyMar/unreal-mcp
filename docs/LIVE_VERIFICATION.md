@@ -32,3 +32,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    incremental index actually works, not just compiles. This was the single highest-priority
    unverified claim across all three milestones.
 
+## Bug found and fixed during this session
