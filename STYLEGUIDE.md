@@ -76,3 +76,4 @@ expects and what the engine's own headers model throughout the codebase:
   `## What's Different About This One`).
 - Code identifiers, file paths, and commands always in backticks inline; fenced code blocks with a
   language tag (` ```cpp `, ` ```ts `, ` ```bash `) for anything longer than one line.
+- Status docs (`docs/M*_STATUS.md`, `docs/LIVE_VERIFICATION.md`) report what's actually

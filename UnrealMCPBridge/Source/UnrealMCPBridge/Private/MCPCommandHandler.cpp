@@ -1193,3 +1193,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	Result->SetStringField(TEXT("status"), StatusStr);
 	Result->SetArrayField(TEXT("messages"), MessageArray);
 	return MakeOkResponse(Result);
+}
+
