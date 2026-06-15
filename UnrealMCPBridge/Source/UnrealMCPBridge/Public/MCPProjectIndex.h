@@ -87,3 +87,4 @@ public:
 private:
 	FMCPProjectIndex() = default;
 
+	void IndexBlueprintByPath(const FString& ObjectPath);
