@@ -166,3 +166,4 @@ export interface FindReferencesResult {
   dependsOn: ReferenceEntry[];
   dependsOnCount: number;
 }
+
