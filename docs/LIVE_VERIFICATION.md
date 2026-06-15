@@ -31,3 +31,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
    the new Blueprint by name immediately, confirming the `IAssetRegistry` delegate-driven
    incremental index actually works, not just compiles. This was the single highest-priority
    unverified claim across all three milestones.
+
