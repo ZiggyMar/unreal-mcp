@@ -1184,3 +1184,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	default:
 		StatusStr = TEXT("Unknown");
 		break;
+	}
+
