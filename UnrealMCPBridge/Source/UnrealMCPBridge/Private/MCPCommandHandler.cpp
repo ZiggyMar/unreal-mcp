@@ -1191,3 +1191,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	Result->SetNumberField(TEXT("warningCount"), ResultsLog.NumWarnings);
 	Result->SetBoolField(TEXT("success"), ResultsLog.NumErrors == 0);
 	Result->SetStringField(TEXT("status"), StatusStr);
+	Result->SetArrayField(TEXT("messages"), MessageArray);
+	return MakeOkResponse(Result);

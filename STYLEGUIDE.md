@@ -75,3 +75,4 @@ expects and what the engine's own headers model throughout the codebase:
 - Headings: sentence case, not Title Case (`## What's different about this one`, not
   `## What's Different About This One`).
 - Code identifiers, file paths, and commands always in backticks inline; fenced code blocks with a
+  language tag (` ```cpp `, ` ```ts `, ` ```bash `) for anything longer than one line.

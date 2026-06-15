@@ -450,3 +450,4 @@ server.registerTool(
       "session may trigger the one-time index build (subsequent calls are fast).",
     inputSchema: {},
   },
+  async () => {

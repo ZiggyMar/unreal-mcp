@@ -530,3 +530,5 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 		{
 			if (Fn.Name.ToLower().Contains(LowerQuery))
 			{
+				Hits.Add(MakeShared<FJsonValueObject>(
+					MakeHit(TEXT("function"), BP.Path, Fn.Name, FString::Printf(TEXT("function in %s"), *BP.Name))));
