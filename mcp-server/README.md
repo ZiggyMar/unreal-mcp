@@ -158,3 +158,4 @@ Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) an
 }
 ```
 
+Restart Claude Desktop after saving. The `unreal_*` tools should then appear in the tool

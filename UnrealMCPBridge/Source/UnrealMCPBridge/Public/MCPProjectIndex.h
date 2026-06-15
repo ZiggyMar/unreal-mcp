@@ -85,3 +85,4 @@ public:
 	int32 GetIndexedBlueprintCount() const { return Entries.Num(); }
 
 private:
+	FMCPProjectIndex() = default;

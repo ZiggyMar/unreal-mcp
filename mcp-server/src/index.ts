@@ -446,3 +446,4 @@ server.registerTool(
       "Returns a cheap top-level summary of the whole project's Blueprint structure: total counts (blueprints, " +
       "functions, variables, graphs, nodes), a breakdown by top-level content folder, and a breakdown by parent " +
       "class. Call this FIRST (before unreal_search_project or unreal_list_blueprints) to orient yourself in an " +
+      "unfamiliar project. It costs one cheap index lookup instead of enumerating everything, and on a fresh editor " +
