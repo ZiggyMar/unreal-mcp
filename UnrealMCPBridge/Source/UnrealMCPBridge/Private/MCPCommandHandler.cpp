@@ -1195,3 +1195,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	return MakeOkResponse(Result);
 }
 
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
