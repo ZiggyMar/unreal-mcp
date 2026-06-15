@@ -520,3 +520,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 		}
 		const FMCPIndexBlueprint& BP = Pair.Value;
 
+		if (BP.Name.ToLower().Contains(LowerQuery) || BP.ParentClass.ToLower().Contains(LowerQuery))

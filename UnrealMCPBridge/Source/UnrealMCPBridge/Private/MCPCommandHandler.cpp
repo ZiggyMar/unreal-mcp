@@ -1178,3 +1178,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	case BS_Error:
 		StatusStr = TEXT("Error");
 		break;
+	case BS_BeingCreated:
+		StatusStr = TEXT("BeingCreated");

@@ -69,3 +69,4 @@ expects and what the engine's own headers model throughout the codebase:
 
 - No em dashes (—). Use a period, comma, colon, or parentheses instead, whichever reads most
   naturally for that sentence.
+- No emoji, anywhere, including status docs and commit messages.
