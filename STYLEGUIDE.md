@@ -78,3 +78,4 @@ expects and what the engine's own headers model throughout the codebase:
   language tag (` ```cpp `, ` ```ts `, ` ```bash `) for anything longer than one line.
 - Status docs (`docs/M*_STATUS.md`, `docs/LIVE_VERIFICATION.md`) report what's actually
   verified versus what's compiled-but-unverified, explicitly and separately. Never blur the two.
+
