@@ -526,3 +526,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 				MakeHit(TEXT("blueprint"), BP.Path, BP.Name, FString::Printf(TEXT("parent=%s"), *BP.ParentClass))));
 		}
 
+		for (const FMCPIndexFunction& Fn : BP.Functions)
