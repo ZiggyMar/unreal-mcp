@@ -112,3 +112,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
       if (summary) {
         summaryCache.set(key, summary);
       }
+      return summary;
