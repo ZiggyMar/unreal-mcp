@@ -1203,3 +1203,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 		return MakeErrorResponse(TEXT("missing_param: path"));
 	}
 
+	FString LoadError;
