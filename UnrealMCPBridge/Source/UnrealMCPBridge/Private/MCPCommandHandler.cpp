@@ -1214,3 +1214,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 	const bool bSaved = SaveBlueprintPackage(Blueprint, SaveError);
 	if (!bSaved)
 	{
+		return MakeErrorResponse(SaveError);
+	}

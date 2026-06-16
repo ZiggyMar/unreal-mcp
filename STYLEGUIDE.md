@@ -86,3 +86,4 @@ Imperative mood summary line (`Fix duplicate-event bug`, not `Fixed` or `Fixes`)
 shows what changed). No em dashes, no emoji.
 
 ## Naming consistency across the project
+
