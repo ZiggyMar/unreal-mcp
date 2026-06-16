@@ -163,3 +163,4 @@ picker for any chat.
 
 ## Notes / limitations
 
+- One TCP request per tool call, on a fresh connection — no pipelining, no persistent

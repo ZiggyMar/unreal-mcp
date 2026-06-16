@@ -82,3 +82,4 @@ expects and what the engine's own headers model throughout the codebase:
 ## Commit messages
 
 Imperative mood summary line (`Fix duplicate-event bug`, not `Fixed` or `Fixes`), body explaining
+*why* the change matters and what was actually verified, not just what changed (the diff already

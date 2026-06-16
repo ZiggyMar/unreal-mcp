@@ -1206,3 +1206,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 	FString LoadError;
 	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
 	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
