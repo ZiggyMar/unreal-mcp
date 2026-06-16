@@ -452,3 +452,4 @@ server.registerTool(
   },
   async () => {
     try {
+      const result = await bridge.send<GetProjectOverviewResult>("get_project_overview");
