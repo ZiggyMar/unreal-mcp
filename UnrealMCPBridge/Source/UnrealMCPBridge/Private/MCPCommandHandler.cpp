@@ -1208,3 +1208,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 	if (!Blueprint)
 	{
 		return MakeErrorResponse(LoadError);
+	}
+

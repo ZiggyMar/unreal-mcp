@@ -544,3 +544,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 			}
 		}
 	}
+
