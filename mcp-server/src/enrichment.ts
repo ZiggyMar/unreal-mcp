@@ -113,3 +113,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
         summaryCache.set(key, summary);
       }
       return summary;
+    })

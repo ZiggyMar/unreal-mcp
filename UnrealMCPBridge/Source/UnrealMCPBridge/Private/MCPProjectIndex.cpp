@@ -538,3 +538,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 		for (const FMCPIndexVariable& Var : BP.Variables)
 		{
 			if (Var.Name.ToLower().Contains(LowerQuery))
+			{
