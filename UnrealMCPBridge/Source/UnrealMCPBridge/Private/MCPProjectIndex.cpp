@@ -547,3 +547,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 
 	if (Hits.Num() > MaxResults)
 	{
+		Hits.SetNum(MaxResults);
