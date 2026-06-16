@@ -164,3 +164,4 @@ picker for any chat.
 ## Notes / limitations
 
 - One TCP request per tool call, on a fresh connection — no pipelining, no persistent
+  session state. This is intentionally simple; revisit if latency becomes an issue.

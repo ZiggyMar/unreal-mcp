@@ -37,3 +37,4 @@ against an actual open Unreal Editor (see the "unverified" sections of `M1_STATU
 `add_node` with `nodeType: "Event"` created a **duplicate** override-event node instead of
 reusing an existing one. This only shows up against a real editor: new Actor-derived Blueprints
 come with pre-populated, disconnected stub event nodes (`BeginPlay`, `ActorBeginOverlap`, `Tick`)
+that don't exist in a synthetic/mocked graph. The first live `add_node(eventName="ReceiveBeginPlay")`
