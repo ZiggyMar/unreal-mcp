@@ -89,3 +89,4 @@ private:
 
 	void IndexBlueprintByPath(const FString& ObjectPath);
 	void SaveToDisk() const;
+	bool LoadFromDisk();
