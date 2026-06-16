@@ -115,3 +115,4 @@ export async function enrichSearchHits(hits: SearchHit[]): Promise<SearchHit[]> 
       return summary;
     })
   );
+

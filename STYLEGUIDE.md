@@ -83,3 +83,4 @@ expects and what the engine's own headers model throughout the codebase:
 
 Imperative mood summary line (`Fix duplicate-event bug`, not `Fixed` or `Fixes`), body explaining
 *why* the change matters and what was actually verified, not just what changed (the diff already
+shows what changed). No em dashes, no emoji.
