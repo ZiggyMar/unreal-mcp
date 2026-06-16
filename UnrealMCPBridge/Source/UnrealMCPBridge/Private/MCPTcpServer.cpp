@@ -169,3 +169,4 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		OutStr.AppendChar(TEXT('\n'));
 
 		FTCHARToUTF8 UTF8Str(*OutStr);
+		int32 BytesSent = 0;

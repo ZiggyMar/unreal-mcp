@@ -167,3 +167,4 @@ export interface FindReferencesResult {
   dependsOnCount: number;
 }
 
+export interface FolderBreakdown {
