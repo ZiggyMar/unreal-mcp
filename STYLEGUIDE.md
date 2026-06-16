@@ -81,3 +81,4 @@ expects and what the engine's own headers model throughout the codebase:
 
 ## Commit messages
 
+Imperative mood summary line (`Fix duplicate-event bug`, not `Fixed` or `Fixes`), body explaining

@@ -541,3 +541,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 			{
 				Hits.Add(MakeShared<FJsonValueObject>(MakeHit(
 					TEXT("variable"), BP.Path, Var.Name, FString::Printf(TEXT("%s variable in %s"), *Var.Type, *BP.Name))));
+			}
