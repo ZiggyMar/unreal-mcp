@@ -454,3 +454,4 @@ server.registerTool(
     try {
       const result = await bridge.send<GetProjectOverviewResult>("get_project_overview");
       return jsonResult(result);
+    } catch (err) {
