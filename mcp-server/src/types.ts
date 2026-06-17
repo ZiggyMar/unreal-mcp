@@ -170,3 +170,4 @@ export interface FindReferencesResult {
 export interface FolderBreakdown {
   folder: string;
   blueprintCount: number;
+}

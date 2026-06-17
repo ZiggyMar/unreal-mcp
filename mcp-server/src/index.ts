@@ -461,3 +461,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_search_project",

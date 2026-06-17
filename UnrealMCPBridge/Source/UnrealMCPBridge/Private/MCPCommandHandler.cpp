@@ -1227,3 +1227,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Query;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
