@@ -460,3 +460,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(

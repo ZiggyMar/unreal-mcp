@@ -90,3 +90,4 @@ shows what changed). No em dashes, no emoji.
 - "Blueprint" (capitalized) when referring to the UE concept, never "blueprint" or "BP" in prose
   (code identifiers like `BP_Foo` are fine).
 - "MCP" always uppercase, never "Mcp" or "mcp" in prose (lowercase `mcp-server` is fine as the
+  literal folder/package name).
