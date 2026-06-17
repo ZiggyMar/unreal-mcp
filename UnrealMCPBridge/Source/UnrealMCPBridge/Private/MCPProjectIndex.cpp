@@ -560,3 +560,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	int32 TotalNodes = 0;
 	TMap<FString, int32> FolderCounts;
 	TMap<FString, int32> ParentClassCounts;
+
