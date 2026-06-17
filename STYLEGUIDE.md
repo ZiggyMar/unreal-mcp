@@ -91,3 +91,4 @@ shows what changed). No em dashes, no emoji.
   (code identifiers like `BP_Foo` are fine).
 - "MCP" always uppercase, never "Mcp" or "mcp" in prose (lowercase `mcp-server` is fine as the
   literal folder/package name).
+- Command names in the bridge protocol are `snake_case` (`get_project_overview`); MCP tool names

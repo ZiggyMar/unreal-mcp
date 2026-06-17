@@ -1225,3 +1225,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 
 // =============================== Milestone 3 ===============================
 
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr<FJsonObject>& Params)
+{
