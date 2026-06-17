@@ -167,3 +167,4 @@ picker for any chat.
   session state. This is intentionally simple; revisit if latency becomes an issue.
 - Node ids (e.g. `"n12"`, including ones returned by `unreal_add_node`) are just the
   node's index into that graph's node array at read/write time — they are **not** stable
+  across editor sessions, and **removing a node shifts every later index in that graph**.
