@@ -1231,3 +1231,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
 	{
 		return MakeErrorResponse(TEXT("missing_param: query"));
+	}
+

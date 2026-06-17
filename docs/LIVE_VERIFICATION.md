@@ -41,3 +41,4 @@ that don't exist in a synthetic/mocked graph. The first live `add_node(eventName
 call created a second `Event BeginPlay` node alongside the existing one instead of recognizing it.
 
 Fixed in `MCPCommandHandler.cpp`'s `HandleAddNode`: before creating a new override-event node, the
+graph's existing nodes are checked for a `UK2Node_Event` with a matching `EventReference`. If one

@@ -94,3 +94,4 @@ shows what changed). No em dashes, no emoji.
 - Command names in the bridge protocol are `snake_case` (`get_project_overview`); MCP tool names
   are `unreal_`-prefixed `snake_case` (`unreal_get_project_overview`); C++ handler methods are
   `PascalCase` (`HandleGetProjectOverview`). This three-way mapping is consistent throughout
+  `MCPCommandHandler.cpp` and `index.ts` — keep it that way for any new command.
