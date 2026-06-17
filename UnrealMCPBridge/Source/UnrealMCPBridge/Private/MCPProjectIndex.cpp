@@ -552,3 +552,5 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 	return Hits;
 }
 
+TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
+{

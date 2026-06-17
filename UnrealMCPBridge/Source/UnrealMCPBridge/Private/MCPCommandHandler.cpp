@@ -1219,3 +1219,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("saved"), true);
+	Result->SetStringField(TEXT("path"), Path);
+	return MakeOkResponse(Result);
