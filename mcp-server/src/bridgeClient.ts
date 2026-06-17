@@ -101,3 +101,4 @@ export class UnrealBridgeClient {
         } catch (err) {
           fail(new Error(`Failed to parse UnrealMCPBridge response: ${(err as Error).message}`));
         }
+      });

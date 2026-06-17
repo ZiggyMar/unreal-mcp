@@ -39,3 +39,4 @@ reusing an existing one. This only shows up against a real editor: new Actor-der
 come with pre-populated, disconnected stub event nodes (`BeginPlay`, `ActorBeginOverlap`, `Tick`)
 that don't exist in a synthetic/mocked graph. The first live `add_node(eventName="ReceiveBeginPlay")`
 call created a second `Event BeginPlay` node alongside the existing one instead of recognizing it.
+
