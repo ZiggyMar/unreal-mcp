@@ -88,3 +88,4 @@ shows what changed). No em dashes, no emoji.
 ## Naming consistency across the project
 
 - "Blueprint" (capitalized) when referring to the UE concept, never "blueprint" or "BP" in prose
+  (code identifiers like `BP_Foo` are fine).
