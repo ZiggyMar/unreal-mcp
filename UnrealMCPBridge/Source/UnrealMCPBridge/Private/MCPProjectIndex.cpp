@@ -554,3 +554,4 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 
 TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 {
+	int32 TotalFunctions = 0;
