@@ -463,3 +463,4 @@ server.registerTool(
 server.registerTool(
   "unreal_search_project",
   {
+    title: "Search the project-wide Blueprint index",

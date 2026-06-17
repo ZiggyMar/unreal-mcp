@@ -1233,3 +1233,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 		return MakeErrorResponse(TEXT("missing_param: query"));
 	}
 
+	int32 MaxResults = 50;
