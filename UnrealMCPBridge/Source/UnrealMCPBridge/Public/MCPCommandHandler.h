@@ -69,3 +69,4 @@ private:
 	// Resolves a class by short name ("Actor", "Pawn") or full path ("/Script/Engine.Actor",
 	// "/Game/BP_Base.BP_Base_C"). Tries A-/U- native prefixes for short names.
 	static UClass* ResolveClassByName(const FString& ClassName, FString& OutError);
+
