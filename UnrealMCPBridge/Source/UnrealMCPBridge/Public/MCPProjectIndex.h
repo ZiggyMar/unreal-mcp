@@ -91,3 +91,4 @@ private:
 	void SaveToDisk() const;
 	bool LoadFromDisk();
 	static FString GetIndexFilePath();
+	static bool IsBlueprintAsset(const FAssetData& AssetData);
