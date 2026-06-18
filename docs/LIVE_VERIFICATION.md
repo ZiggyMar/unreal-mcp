@@ -42,3 +42,4 @@ call created a second `Event BeginPlay` node alongside the existing one instead 
 
 Fixed in `MCPCommandHandler.cpp`'s `HandleAddNode`: before creating a new override-event node, the
 graph's existing nodes are checked for a `UK2Node_Event` with a matching `EventReference`. If one
+exists, its id is returned with `alreadyExisted: true` instead of creating a duplicate, matching

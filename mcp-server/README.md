@@ -168,3 +168,4 @@ picker for any chat.
 - Node ids (e.g. `"n12"`, including ones returned by `unreal_add_node`) are just the
   node's index into that graph's node array at read/write time — they are **not** stable
   across editor sessions, and **removing a node shifts every later index in that graph**.
+  Re-read the graph (`unreal_read_blueprint_summary`) after any `unreal_remove_node`

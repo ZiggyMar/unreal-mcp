@@ -564,3 +564,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
 	{
 		const FMCPIndexBlueprint& BP = Pair.Value;
+		TotalFunctions += BP.Functions.Num();
+		TotalVariables += BP.Variables.Num();
