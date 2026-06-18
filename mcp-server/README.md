@@ -169,3 +169,4 @@ picker for any chat.
   node's index into that graph's node array at read/write time — they are **not** stable
   across editor sessions, and **removing a node shifts every later index in that graph**.
   Re-read the graph (`unreal_read_blueprint_summary`) after any `unreal_remove_node`
+  before referencing further node ids in it.

@@ -1238,3 +1238,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 	{
 		MaxResults = static_cast<int32>(Params->GetNumberField(TEXT("maxResults")));
 	}
+	MaxResults = FMath::Clamp(MaxResults, 1, 500);
+
