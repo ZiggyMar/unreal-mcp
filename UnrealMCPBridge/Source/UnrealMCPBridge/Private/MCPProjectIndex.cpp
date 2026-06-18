@@ -566,3 +566,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		const FMCPIndexBlueprint& BP = Pair.Value;
 		TotalFunctions += BP.Functions.Num();
 		TotalVariables += BP.Variables.Num();
+		TotalGraphs += BP.Graphs.Num();
