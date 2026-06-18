@@ -569,3 +569,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		TotalGraphs += BP.Graphs.Num();
 		for (const FMCPIndexGraph& G : BP.Graphs)
 		{
+			TotalNodes += G.NodeCount;

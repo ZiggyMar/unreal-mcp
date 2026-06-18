@@ -1240,3 +1240,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 	}
 	MaxResults = FMath::Clamp(MaxResults, 1, 500);
 
+	FMCPProjectIndex::Get().EnsureBuilt();
+	TArray<TSharedPtr<FJsonValue>> Hits = FMCPProjectIndex::Get().Search(Query, MaxResults);
