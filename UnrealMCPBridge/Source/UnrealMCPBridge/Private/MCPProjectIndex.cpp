@@ -576,3 +576,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		int32& ParentCount = ParentClassCounts.FindOrAdd(ParentKey);
 		ParentCount++;
 
+		FString Folder = TEXT("(root)");
