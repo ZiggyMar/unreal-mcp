@@ -467,3 +467,4 @@ server.registerTool(
     description:
       "Keyword/substring search (case-insensitive) across every indexed Blueprint's name, parent class, function " +
       "names, and variable names. Returns compact hits (kind, path, name, one-line context), capped at maxResults " +
+      "and marked `truncated: true` if the cap was hit. Narrow your query rather than assuming you saw every match. " +

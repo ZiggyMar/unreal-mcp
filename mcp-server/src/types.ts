@@ -172,3 +172,4 @@ export interface FolderBreakdown {
   blueprintCount: number;
 }
 
+export interface ParentClassBreakdown {
