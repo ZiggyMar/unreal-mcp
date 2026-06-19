@@ -574,3 +574,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 
 		const FString ParentKey = BP.ParentClass.IsEmpty() ? TEXT("Unknown") : BP.ParentClass;
 		int32& ParentCount = ParentClassCounts.FindOrAdd(ParentKey);
+		ParentCount++;
+

@@ -1248,3 +1248,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 	Result->SetArrayField(TEXT("hits"), Hits);
 	Result->SetNumberField(TEXT("hitCount"), Hits.Num());
 	Result->SetBoolField(TEXT("truncated"), Hits.Num() >= MaxResults);
+	return MakeOkResponse(Result);
