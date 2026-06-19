@@ -103,3 +103,4 @@ export class UnrealBridgeClient {
         }
       });
 
+      socket.connect(this.port, this.host, () => {

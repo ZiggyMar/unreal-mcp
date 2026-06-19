@@ -469,3 +469,4 @@ server.registerTool(
       "names, and variable names. Returns compact hits (kind, path, name, one-line context), capped at maxResults " +
       "and marked `truncated: true` if the cap was hit. Narrow your query rather than assuming you saw every match. " +
       "This is the main way to find something without enumerating the whole project, and is backed by a persistent " +
+      "index kept fresh as the project changes, not a live rescan. If UNREAL_MCP_LOCAL_LLM_URL is configured server-" +
