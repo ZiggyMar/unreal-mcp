@@ -47,3 +47,4 @@ how the real Blueprint editor behaves when you re-add an event that's already th
 via Live Coding-style rebuild + relaunch + a repeat test showing the node count staying at 3 (not 4)
 with `alreadyExisted: true` in the response.
 
+## Screenshot

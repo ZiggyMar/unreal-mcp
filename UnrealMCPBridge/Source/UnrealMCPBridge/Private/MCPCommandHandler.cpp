@@ -1259,3 +1259,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 		return MakeErrorResponse(TEXT("missing_param: path"));
 	}
 
+	int32 MaxResults = 200;
+	if (Params->HasField(TEXT("maxResults")))

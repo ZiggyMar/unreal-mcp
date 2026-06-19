@@ -583,3 +583,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 			FString Head;
 			if (Trimmed.Split(TEXT("/"), &Head, nullptr))
 			{
+				Folder = Head;
+			}
