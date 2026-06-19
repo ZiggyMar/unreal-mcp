@@ -579,3 +579,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		FString Folder = TEXT("(root)");
 		if (BP.Path.StartsWith(TEXT("/Game/")))
 		{
+			FString Trimmed = BP.Path.Mid(6);

@@ -173,3 +173,4 @@ export interface FolderBreakdown {
 }
 
 export interface ParentClassBreakdown {
+  parentClass: string;

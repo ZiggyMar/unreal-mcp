@@ -470,3 +470,4 @@ server.registerTool(
       "and marked `truncated: true` if the cap was hit. Narrow your query rather than assuming you saw every match. " +
       "This is the main way to find something without enumerating the whole project, and is backed by a persistent " +
       "index kept fresh as the project changes, not a live rescan. If UNREAL_MCP_LOCAL_LLM_URL is configured server-" +
+      "side, up to a handful of top hits are best-effort enriched with a one-line natural-language `summary` field " +
