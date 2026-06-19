@@ -580,3 +580,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		if (BP.Path.StartsWith(TEXT("/Game/")))
 		{
 			FString Trimmed = BP.Path.Mid(6);
+			FString Head;
+			if (Trimmed.Split(TEXT("/"), &Head, nullptr))
