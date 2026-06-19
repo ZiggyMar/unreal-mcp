@@ -1253,3 +1253,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
