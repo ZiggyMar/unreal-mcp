@@ -171,3 +171,4 @@ picker for any chat.
   Re-read the graph (`unreal_read_blueprint_summary`) after any `unreal_remove_node`
   before referencing further node ids in it.
 - `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
+  directly on the target Blueprint, not variables inherited from a parent Blueprint.

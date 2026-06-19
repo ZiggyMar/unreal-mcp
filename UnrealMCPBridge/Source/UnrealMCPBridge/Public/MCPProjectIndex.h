@@ -94,3 +94,4 @@ private:
 	static bool IsBlueprintAsset(const FAssetData& AssetData);
 
 	void OnAssetAdded(const FAssetData& AssetData);
+	void OnAssetRemoved(const FAssetData& AssetData);
