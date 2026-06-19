@@ -1257,3 +1257,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
 	{
 		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+

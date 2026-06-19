@@ -582,3 +582,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 			FString Trimmed = BP.Path.Mid(6);
 			FString Head;
 			if (Trimmed.Split(TEXT("/"), &Head, nullptr))
+			{
