@@ -70,3 +70,4 @@ private:
 	// "/Game/BP_Base.BP_Base_C"). Tries A-/U- native prefixes for short names.
 	static UClass* ResolveClassByName(const FString& ClassName, FString& OutError);
 
+	// Parses a compact type descriptor (see add_variable / set_pin_default_value docs in

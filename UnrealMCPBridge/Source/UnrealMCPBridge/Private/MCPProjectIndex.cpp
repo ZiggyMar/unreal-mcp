@@ -577,3 +577,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		ParentCount++;
 
 		FString Folder = TEXT("(root)");
+		if (BP.Path.StartsWith(TEXT("/Game/")))
+		{

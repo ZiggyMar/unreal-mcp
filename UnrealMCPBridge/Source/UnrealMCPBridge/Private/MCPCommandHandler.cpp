@@ -1251,3 +1251,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 	return MakeOkResponse(Result);
 }
 
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPtr<FJsonObject>& Params)
+{
