@@ -44,3 +44,4 @@ Fixed in `MCPCommandHandler.cpp`'s `HandleAddNode`: before creating a new overri
 graph's existing nodes are checked for a `UK2Node_Event` with a matching `EventReference`. If one
 exists, its id is returned with `alreadyExisted: true` instead of creating a duplicate, matching
 how the real Blueprint editor behaves when you re-add an event that's already there. Verified fixed
+via Live Coding-style rebuild + relaunch + a repeat test showing the node count staying at 3 (not 4)

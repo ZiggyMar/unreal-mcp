@@ -170,3 +170,4 @@ picker for any chat.
   across editor sessions, and **removing a node shifts every later index in that graph**.
   Re-read the graph (`unreal_read_blueprint_summary`) after any `unreal_remove_node`
   before referencing further node ids in it.
+- `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
