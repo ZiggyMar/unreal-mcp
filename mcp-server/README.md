@@ -172,3 +172,4 @@ picker for any chat.
   before referencing further node ids in it.
 - `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
   directly on the target Blueprint, not variables inherited from a parent Blueprint.
+- No diff-based/transactional edit model yet — each write tool is a single independent
