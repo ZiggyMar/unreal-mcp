@@ -466,3 +466,4 @@ server.registerTool(
     title: "Search the project-wide Blueprint index",
     description:
       "Keyword/substring search (case-insensitive) across every indexed Blueprint's name, parent class, function " +
+      "names, and variable names. Returns compact hits (kind, path, name, one-line context), capped at maxResults " +
