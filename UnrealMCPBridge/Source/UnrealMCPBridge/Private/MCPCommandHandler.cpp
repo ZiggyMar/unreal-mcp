@@ -1266,3 +1266,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	}
 	MaxResults = FMath::Clamp(MaxResults, 1, 2000);
 
+	// Accept either a full object path ("/Game/X/BP_Foo.BP_Foo") or a bare package path
+	// ("/Game/X/BP_Foo"), since GetReferencers/GetDependencies operate on package names.
