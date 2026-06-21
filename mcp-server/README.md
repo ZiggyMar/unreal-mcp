@@ -173,3 +173,4 @@ picker for any chat.
 - `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
   directly on the target Blueprint, not variables inherited from a parent Blueprint.
 - No diff-based/transactional edit model yet — each write tool is a single independent
+  op (per `../ARCHITECTURE.md`'s plan). If you need several nodes wired together, call

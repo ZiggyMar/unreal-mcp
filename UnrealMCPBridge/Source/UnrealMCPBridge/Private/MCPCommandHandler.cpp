@@ -1261,3 +1261,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 
 	int32 MaxResults = 200;
 	if (Params->HasField(TEXT("maxResults")))
+	{
+		MaxResults = static_cast<int32>(Params->GetNumberField(TEXT("maxResults")));
