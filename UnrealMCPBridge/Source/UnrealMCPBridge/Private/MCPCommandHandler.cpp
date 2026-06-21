@@ -1270,3 +1270,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	// ("/Game/X/BP_Foo"), since GetReferencers/GetDependencies operate on package names.
 	FString PackageName = Path;
 	int32 DotIndex;
+	if (PackageName.FindChar(TEXT('.'), DotIndex))
+	{
