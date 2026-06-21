@@ -174,3 +174,4 @@ export interface FolderBreakdown {
 
 export interface ParentClassBreakdown {
   parentClass: string;
+  count: number;
