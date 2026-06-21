@@ -175,3 +175,4 @@ picker for any chat.
 - No diff-based/transactional edit model yet — each write tool is a single independent
   op (per `../ARCHITECTURE.md`'s plan). If you need several nodes wired together, call
   `unreal_add_node` for each, then `unreal_connect_pins` for each link, then
+  `unreal_compile_blueprint` once at the end.
