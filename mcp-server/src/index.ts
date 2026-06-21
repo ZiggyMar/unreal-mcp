@@ -475,3 +475,4 @@ server.registerTool(
       'whether that ran ("local-llm" or "none").',
     inputSchema: {
       query: z.string().describe('Case-insensitive substring to search for, e.g. "health" or "BP_Enemy".'),
+      maxResults: z.number().optional().describe("Cap on returned hits. Defaults to 50, clamped to [1, 500]."),
