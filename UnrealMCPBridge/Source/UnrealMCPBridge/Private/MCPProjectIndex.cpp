@@ -595,3 +595,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	Result->SetNumberField(TEXT("totalFunctions"), TotalFunctions);
 	Result->SetNumberField(TEXT("totalVariables"), TotalVariables);
 	Result->SetNumberField(TEXT("totalGraphs"), TotalGraphs);
+	Result->SetNumberField(TEXT("totalNodes"), TotalNodes);
+

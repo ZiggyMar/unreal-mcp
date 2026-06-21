@@ -1274,3 +1274,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	{
 		PackageName = PackageName.Left(DotIndex);
 	}
+
+	if (!FPackageName::DoesPackageExist(PackageName))
