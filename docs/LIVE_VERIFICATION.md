@@ -49,3 +49,4 @@ with `alreadyExisted: true` in the response.
 
 ## Screenshot
 
+![Live Blueprint graph, created entirely via MCP tool calls](images/live_blueprint_graph.png)

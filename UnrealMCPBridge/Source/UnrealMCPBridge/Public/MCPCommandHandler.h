@@ -71,3 +71,4 @@ private:
 	static UClass* ResolveClassByName(const FString& ClassName, FString& OutError);
 
 	// Parses a compact type descriptor (see add_variable / set_pin_default_value docs in
+	// mcp-server) into an FEdGraphPinType: bool, byte, int, int64, float, double, string,
