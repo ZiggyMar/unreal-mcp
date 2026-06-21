@@ -594,3 +594,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	Result->SetNumberField(TEXT("blueprintCount"), Entries.Num());
 	Result->SetNumberField(TEXT("totalFunctions"), TotalFunctions);
 	Result->SetNumberField(TEXT("totalVariables"), TotalVariables);
+	Result->SetNumberField(TEXT("totalGraphs"), TotalGraphs);

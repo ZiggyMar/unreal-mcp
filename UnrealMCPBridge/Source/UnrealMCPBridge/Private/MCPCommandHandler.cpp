@@ -1272,3 +1272,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	int32 DotIndex;
 	if (PackageName.FindChar(TEXT('.'), DotIndex))
 	{
+		PackageName = PackageName.Left(DotIndex);
+	}

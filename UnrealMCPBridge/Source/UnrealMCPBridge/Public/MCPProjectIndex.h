@@ -97,3 +97,4 @@ private:
 	void OnAssetRemoved(const FAssetData& AssetData);
 	void OnAssetRenamed(const FAssetData& AssetData, const FString& OldObjectPath);
 	void OnAssetUpdated(const FAssetData& AssetData);
+	void OnFilesLoaded();
