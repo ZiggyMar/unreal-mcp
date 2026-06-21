@@ -598,3 +598,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	Result->SetNumberField(TEXT("totalNodes"), TotalNodes);
 
 	TArray<TSharedPtr<FJsonValue>> FolderArray;
+	for (const TPair<FString, int32>& FolderPair : FolderCounts)
