@@ -591,3 +591,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	}
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("blueprintCount"), Entries.Num());
