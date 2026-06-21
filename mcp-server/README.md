@@ -176,3 +176,4 @@ picker for any chat.
   op (per `../ARCHITECTURE.md`'s plan). If you need several nodes wired together, call
   `unreal_add_node` for each, then `unreal_connect_pins` for each link, then
   `unreal_compile_blueprint` once at the end.
+- No auth/encryption on the bridge socket — it only binds to loopback, which is the

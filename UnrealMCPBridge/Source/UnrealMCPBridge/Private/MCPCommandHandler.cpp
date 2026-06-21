@@ -1278,3 +1278,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	if (!FPackageName::DoesPackageExist(PackageName))
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_not_found: %s"), *PackageName));
+	}
