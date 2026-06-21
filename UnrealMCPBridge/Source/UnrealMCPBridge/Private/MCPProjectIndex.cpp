@@ -586,3 +586,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 				Folder = Head;
 			}
 		}
+		int32& FolderCount = FolderCounts.FindOrAdd(Folder);
+		FolderCount++;
