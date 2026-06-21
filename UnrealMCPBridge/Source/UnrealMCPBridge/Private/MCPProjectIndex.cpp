@@ -597,3 +597,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	Result->SetNumberField(TEXT("totalGraphs"), TotalGraphs);
 	Result->SetNumberField(TEXT("totalNodes"), TotalNodes);
 
+	TArray<TSharedPtr<FJsonValue>> FolderArray;
