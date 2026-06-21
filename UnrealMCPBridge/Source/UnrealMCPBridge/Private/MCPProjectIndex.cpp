@@ -585,3 +585,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 			{
 				Folder = Head;
 			}
+		}
