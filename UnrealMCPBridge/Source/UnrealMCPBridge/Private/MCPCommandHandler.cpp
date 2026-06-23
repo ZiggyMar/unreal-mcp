@@ -1279,3 +1279,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_not_found: %s"), *PackageName));
 	}
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();

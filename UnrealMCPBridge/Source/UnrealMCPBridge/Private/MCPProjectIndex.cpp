@@ -599,3 +599,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 
 	TArray<TSharedPtr<FJsonValue>> FolderArray;
 	for (const TPair<FString, int32>& FolderPair : FolderCounts)
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
