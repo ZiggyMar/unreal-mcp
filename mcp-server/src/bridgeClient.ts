@@ -105,3 +105,4 @@ export class UnrealBridgeClient {
 
       socket.connect(this.port, this.host, () => {
         socket.write(requestLine, "utf8");
+      });

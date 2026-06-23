@@ -98,3 +98,4 @@ claude mcp add unreal -- node "/path/to/unreal-mcp/mcp-server/dist/index.js"
 Once registered, open your project in the Unreal Editor and verify the connection via `unreal_ping`.
 
 For more configuration options and details, see [`mcp-server/README.md`](file:///f:/Projects/UnrealMCP/mcp-server/README.md).
+

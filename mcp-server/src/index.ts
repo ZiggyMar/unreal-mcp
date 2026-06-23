@@ -478,3 +478,4 @@ server.registerTool(
       maxResults: z.number().optional().describe("Cap on returned hits. Defaults to 50, clamped to [1, 500]."),
     },
   },
+  async ({ query, maxResults }) => {
