@@ -602,3 +602,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	{
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("folder"), FolderPair.Key);
+		Entry->SetNumberField(TEXT("blueprintCount"), FolderPair.Value);
+		FolderArray.Add(MakeShared<FJsonValueObject>(Entry));
