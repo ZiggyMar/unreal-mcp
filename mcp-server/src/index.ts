@@ -479,3 +479,4 @@ server.registerTool(
     },
   },
   async ({ query, maxResults }) => {
+    try {
