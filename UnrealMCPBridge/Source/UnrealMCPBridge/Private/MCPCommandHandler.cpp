@@ -1283,3 +1283,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
 	TArray<FName> Referencers;
+	AssetRegistry.GetReferencers(FName(*PackageName), Referencers);
+
