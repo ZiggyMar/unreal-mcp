@@ -1285,3 +1285,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	TArray<FName> Referencers;
 	AssetRegistry.GetReferencers(FName(*PackageName), Referencers);
 
+	TArray<FName> Dependencies;
+	AssetRegistry.GetDependencies(FName(*PackageName), Dependencies);
