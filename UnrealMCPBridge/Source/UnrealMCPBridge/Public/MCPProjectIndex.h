@@ -99,3 +99,4 @@ private:
 	void OnAssetUpdated(const FAssetData& AssetData);
 	void OnFilesLoaded();
 
+	TMap<FString, FMCPIndexBlueprint> Entries;

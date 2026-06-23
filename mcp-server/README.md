@@ -178,3 +178,4 @@ picker for any chat.
   `unreal_compile_blueprint` once at the end.
 - No auth/encryption on the bridge socket — it only binds to loopback, which is the
   intended security boundary.
+- The project index (`unreal_search_project` / `unreal_get_project_overview`) only
