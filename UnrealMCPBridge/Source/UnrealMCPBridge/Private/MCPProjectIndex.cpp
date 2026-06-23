@@ -601,3 +601,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	for (const TPair<FString, int32>& FolderPair : FolderCounts)
 	{
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("folder"), FolderPair.Key);

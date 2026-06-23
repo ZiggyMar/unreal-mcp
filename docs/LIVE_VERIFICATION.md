@@ -52,3 +52,4 @@ with `alreadyExisted: true` in the response.
 ![Live Blueprint graph, created entirely via MCP tool calls](images/live_blueprint_graph.png)
 
 This is the real Unreal Editor, real Blueprint editor, showing `BP_MCPLiveTest2`'s `EventGraph`
+after the tool calls above, not a mockup. The greyed-out `ActorBeginOverlap`/`Tick` nodes are
