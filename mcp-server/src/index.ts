@@ -480,3 +480,4 @@ server.registerTool(
   },
   async ({ query, maxResults }) => {
     try {
+      const result = await bridge.send<SearchProjectResult>("search_project", { query, maxResults });
