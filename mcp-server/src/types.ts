@@ -177,3 +177,4 @@ export interface ParentClassBreakdown {
   count: number;
 }
 
+export interface GetProjectOverviewResult {
