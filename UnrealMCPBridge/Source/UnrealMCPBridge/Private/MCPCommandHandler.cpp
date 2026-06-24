@@ -1293,3 +1293,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		for (const FName& PkgName : Names)
 		{
+			if (Arr.Num() >= MaxResults)
