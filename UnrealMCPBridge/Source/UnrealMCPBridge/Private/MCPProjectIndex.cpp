@@ -611,3 +611,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	for (const TPair<FString, int32>& PCPair : ParentClassCounts)
 	{
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("parentClass"), PCPair.Key);
+		Entry->SetNumberField(TEXT("count"), PCPair.Value);

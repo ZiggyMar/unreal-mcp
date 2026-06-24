@@ -55,3 +55,4 @@ This is the real Unreal Editor, real Blueprint editor, showing `BP_MCPLiveTest2`
 after the tool calls above, not a mockup. The greyed-out `ActorBeginOverlap`/`Tick` nodes are
 UE's own default stub events, unconnected and correctly reported as disabled by the engine itself.
 
+## What's still not covered

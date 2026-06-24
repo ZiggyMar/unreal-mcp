@@ -100,3 +100,4 @@ private:
 	void OnFilesLoaded();
 
 	TMap<FString, FMCPIndexBlueprint> Entries;
+	bool bBuilt = false;
