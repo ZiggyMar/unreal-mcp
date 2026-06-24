@@ -179,3 +179,4 @@ picker for any chat.
 - No auth/encryption on the bridge socket — it only binds to loopback, which is the
   intended security boundary.
 - The project index (`unreal_search_project` / `unreal_get_project_overview`) only
+  covers Blueprints under `/Game`, and only the data already introspected elsewhere

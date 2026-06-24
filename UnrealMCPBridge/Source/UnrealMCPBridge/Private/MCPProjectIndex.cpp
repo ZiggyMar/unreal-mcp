@@ -610,3 +610,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	TArray<TSharedPtr<FJsonValue>> ParentClassArray;
 	for (const TPair<FString, int32>& PCPair : ParentClassCounts)
 	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
