@@ -1296,3 +1296,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			if (Arr.Num() >= MaxResults)
 			{
 				break;
+			}
+			const FString PkgStr = PkgName.ToString();
