@@ -613,3 +613,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("parentClass"), PCPair.Key);
 		Entry->SetNumberField(TEXT("count"), PCPair.Value);
+		ParentClassArray.Add(MakeShared<FJsonValueObject>(Entry));
