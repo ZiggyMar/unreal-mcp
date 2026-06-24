@@ -1291,3 +1291,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	auto BuildArray = [&AssetRegistry, MaxResults](const TArray<FName>& Names) -> TArray<TSharedPtr<FJsonValue>>
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FName& PkgName : Names)
+		{

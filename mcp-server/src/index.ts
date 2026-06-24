@@ -482,3 +482,4 @@ server.registerTool(
     try {
       const result = await bridge.send<SearchProjectResult>("search_project", { query, maxResults });
       const enrichedHits = await enrichSearchHits(result.hits);
+      return jsonResult({
