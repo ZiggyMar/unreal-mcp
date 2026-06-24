@@ -608,3 +608,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	Result->SetArrayField(TEXT("folders"), FolderArray);
 
 	TArray<TSharedPtr<FJsonValue>> ParentClassArray;
+	for (const TPair<FString, int32>& PCPair : ParentClassCounts)
+	{
