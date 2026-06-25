@@ -486,3 +486,4 @@ server.registerTool(
         ...result,
         hits: enrichedHits,
         enrichment: isEnrichmentEnabled() ? "local-llm" : "none",
+      });

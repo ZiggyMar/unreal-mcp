@@ -13,3 +13,4 @@ Things planned beyond the current milestones, roughly in the order they make sen
 - **MCP registries / awesome-mcp-servers lists**: submit once the repo has a working demo, for organic discovery.
 
 ## Visibility
+
