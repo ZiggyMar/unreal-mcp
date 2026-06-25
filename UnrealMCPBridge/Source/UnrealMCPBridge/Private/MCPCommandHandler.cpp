@@ -1302,3 +1302,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			if (PkgStr.StartsWith(TEXT("/Script/")))
 			{
 				continue;
+			}
+

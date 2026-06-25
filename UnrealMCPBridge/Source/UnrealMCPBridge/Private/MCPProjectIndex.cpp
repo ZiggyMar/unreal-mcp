@@ -617,3 +617,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	}
 	Result->SetArrayField(TEXT("byParentClass"), ParentClassArray);
 
+	Result->SetBoolField(TEXT("assetRegistryStillScanning"), bAssetRegistryStillScanning);
+
