@@ -616,3 +616,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 		ParentClassArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 	Result->SetArrayField(TEXT("byParentClass"), ParentClassArray);
+

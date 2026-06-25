@@ -56,3 +56,4 @@ after the tool calls above, not a mockup. The greyed-out `ActorBeginOverlap`/`Ti
 UE's own default stub events, unconnected and correctly reported as disabled by the engine itself.
 
 ## What's still not covered
+

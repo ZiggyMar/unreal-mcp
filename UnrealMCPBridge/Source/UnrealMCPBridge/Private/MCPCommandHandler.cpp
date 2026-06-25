@@ -1300,3 +1300,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			const FString PkgStr = PkgName.ToString();
 			// Skip engine/script-internal packages to keep this focused on project content.
 			if (PkgStr.StartsWith(TEXT("/Script/")))
+			{
+				continue;

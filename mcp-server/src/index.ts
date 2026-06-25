@@ -485,3 +485,4 @@ server.registerTool(
       return jsonResult({
         ...result,
         hits: enrichedHits,
+        enrichment: isEnrichmentEnabled() ? "local-llm" : "none",
