@@ -178,3 +178,4 @@ export interface ParentClassBreakdown {
 }
 
 export interface GetProjectOverviewResult {
+  blueprintCount: number;

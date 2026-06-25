@@ -484,3 +484,4 @@ server.registerTool(
       const enrichedHits = await enrichSearchHits(result.hits);
       return jsonResult({
         ...result,
+        hits: enrichedHits,
