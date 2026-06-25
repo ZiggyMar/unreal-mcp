@@ -73,3 +73,4 @@ private:
 	// Parses a compact type descriptor (see add_variable / set_pin_default_value docs in
 	// mcp-server) into an FEdGraphPinType: bool, byte, int, int64, float, double, string,
 	// name, text, vector, rotator, transform, object:<Class>, class:<Class>.
+	static bool ResolvePinType(const FString& TypeStr, struct FEdGraphPinType& OutType, FString& OutError);
