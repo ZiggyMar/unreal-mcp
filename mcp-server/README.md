@@ -181,3 +181,4 @@ picker for any chat.
 - The project index (`unreal_search_project` / `unreal_get_project_overview`) only
   covers Blueprints under `/Game`, and only the data already introspected elsewhere
   (functions/variables/graphs/node-type counts) — it is not a full-text search over
+  node contents or comments.

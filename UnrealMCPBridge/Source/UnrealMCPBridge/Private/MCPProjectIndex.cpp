@@ -619,3 +619,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 
 	Result->SetBoolField(TEXT("assetRegistryStillScanning"), bAssetRegistryStillScanning);
 
+	return Result;
