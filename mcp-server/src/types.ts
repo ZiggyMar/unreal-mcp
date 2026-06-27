@@ -180,3 +180,4 @@ export interface ParentClassBreakdown {
 export interface GetProjectOverviewResult {
   blueprintCount: number;
   totalFunctions: number;
+  totalVariables: number;

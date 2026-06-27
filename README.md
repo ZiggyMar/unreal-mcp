@@ -100,3 +100,4 @@ Once registered, open your project in the Unreal Editor and verify the connectio
 For more configuration options and details, see [`mcp-server/README.md`](file:///f:/Projects/UnrealMCP/mcp-server/README.md).
 
 
+## Contributing

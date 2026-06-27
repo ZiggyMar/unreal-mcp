@@ -183,3 +183,4 @@ picker for any chat.
   (functions/variables/graphs/node-type counts) — it is not a full-text search over
   node contents or comments.
 - Local-model enrichment's cache is in-memory and per-process only (cleared when the MCP
+  server restarts) — not yet persisted to disk. See `docs/M3_STATUS.md` for what a
