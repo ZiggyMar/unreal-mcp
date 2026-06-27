@@ -59,3 +59,4 @@ UE's own default stub events, unconnected and correctly reported as disabled by 
 
 - Only `create_blueprint`, `add_node` (Event + CallFunction), `set_pin_default_value`,
   `connect_pins`, `compile_blueprint`, `save_blueprint`, and all of M1/M3's read commands have run
+  live. `add_variable`, `remove_node`, `read_blueprint_node_detail`, and `add_node` with
