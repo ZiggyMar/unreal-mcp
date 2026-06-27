@@ -14,3 +14,4 @@ Things planned beyond the current milestones, roughly in the order they make sen
 
 ## Visibility
 
+- Launch posts (Show HN, r/unrealengine, X): drafted once there's something real to demo, reviewed and posted by hand, not automated. No bought/farmed engagement (see project conventions).
