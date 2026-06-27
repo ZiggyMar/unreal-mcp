@@ -184,3 +184,4 @@ picker for any chat.
   node contents or comments.
 - Local-model enrichment's cache is in-memory and per-process only (cleared when the MCP
   server restarts) — not yet persisted to disk. See `docs/M3_STATUS.md` for what a
+  follow-up on-disk cache would look like.
