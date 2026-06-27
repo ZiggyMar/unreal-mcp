@@ -1319,3 +1319,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 		return Arr;
 	};
 
+	TArray<TSharedPtr<FJsonValue>> ReferencerArray = BuildArray(Referencers);
+	TArray<TSharedPtr<FJsonValue>> DependencyArray = BuildArray(Dependencies);
