@@ -102,3 +102,4 @@ private:
 	TMap<FString, FMCPIndexBlueprint> Entries;
 	bool bBuilt = false;
 	bool bAssetRegistryStillScanning = false;
+

@@ -623,3 +623,5 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 }
 
 void FMCPProjectIndex::OnAssetAdded(const FAssetData& AssetData)
+{
+	if (!bBuilt || !IsBlueprintAsset(AssetData))
