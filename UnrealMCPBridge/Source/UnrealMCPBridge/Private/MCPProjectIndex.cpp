@@ -622,3 +622,4 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	return Result;
 }
 
+void FMCPProjectIndex::OnAssetAdded(const FAssetData& AssetData)

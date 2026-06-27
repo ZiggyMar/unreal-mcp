@@ -487,3 +487,4 @@ server.registerTool(
         hits: enrichedHits,
         enrichment: isEnrichmentEnabled() ? "local-llm" : "none",
       });
+    } catch (err) {

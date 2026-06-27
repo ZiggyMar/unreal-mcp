@@ -1308,3 +1308,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			Entry->SetStringField(TEXT("package"), PkgStr);
 
 			TArray<FAssetData> AssetsInPackage;
+			AssetRegistry.GetAssetsByPackageName(PkgName, AssetsInPackage);
