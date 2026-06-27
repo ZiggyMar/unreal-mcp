@@ -635,3 +635,4 @@ void FMCPProjectIndex::OnAssetAdded(const FAssetData& AssetData)
 void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
 {
 	if (!bBuilt)
+	{
