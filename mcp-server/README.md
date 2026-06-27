@@ -182,3 +182,4 @@ picker for any chat.
   covers Blueprints under `/Game`, and only the data already introspected elsewhere
   (functions/variables/graphs/node-type counts) — it is not a full-text search over
   node contents or comments.
+- Local-model enrichment's cache is in-memory and per-process only (cleared when the MCP

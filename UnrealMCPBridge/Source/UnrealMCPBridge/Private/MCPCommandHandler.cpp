@@ -1309,3 +1309,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 
 			TArray<FAssetData> AssetsInPackage;
 			AssetRegistry.GetAssetsByPackageName(PkgName, AssetsInPackage);
+			if (AssetsInPackage.Num() > 0)
+			{

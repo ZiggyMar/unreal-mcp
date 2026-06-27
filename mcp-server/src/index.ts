@@ -488,3 +488,4 @@ server.registerTool(
         enrichment: isEnrichmentEnabled() ? "local-llm" : "none",
       });
     } catch (err) {
+      return errorResult(err);
