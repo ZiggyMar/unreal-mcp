@@ -1311,3 +1311,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			AssetRegistry.GetAssetsByPackageName(PkgName, AssetsInPackage);
 			if (AssetsInPackage.Num() > 0)
 			{
+				Entry->SetStringField(TEXT("assetName"), AssetsInPackage[0].AssetName.ToString());
+				Entry->SetStringField(TEXT("assetClass"), AssetsInPackage[0].AssetClassPath.GetAssetName().ToString());
