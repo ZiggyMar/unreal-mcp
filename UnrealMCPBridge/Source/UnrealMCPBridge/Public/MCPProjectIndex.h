@@ -103,3 +103,4 @@ private:
 	bool bBuilt = false;
 	bool bAssetRegistryStillScanning = false;
 
+	FDelegateHandle OnAssetAddedHandle;

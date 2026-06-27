@@ -1317,3 +1317,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			Arr.Add(MakeShared<FJsonValueObject>(Entry));
 		}
 		return Arr;
+	};
+

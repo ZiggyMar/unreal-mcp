@@ -629,3 +629,4 @@ void FMCPProjectIndex::OnAssetAdded(const FAssetData& AssetData)
 		return;
 	}
 	IndexBlueprintByPath(AssetData.GetObjectPathString());
+	SaveToDisk();
