@@ -1313,3 +1313,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 			{
 				Entry->SetStringField(TEXT("assetName"), AssetsInPackage[0].AssetName.ToString());
 				Entry->SetStringField(TEXT("assetClass"), AssetsInPackage[0].AssetClassPath.GetAssetName().ToString());
+			}
+			Arr.Add(MakeShared<FJsonValueObject>(Entry));
