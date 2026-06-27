@@ -1323,3 +1323,4 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	TArray<TSharedPtr<FJsonValue>> DependencyArray = BuildArray(Dependencies);
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), PackageName);
