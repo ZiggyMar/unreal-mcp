@@ -107,3 +107,4 @@ export class UnrealBridgeClient {
         socket.write(requestLine, "utf8");
       });
     });
+  }
