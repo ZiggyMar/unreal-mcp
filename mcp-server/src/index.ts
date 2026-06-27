@@ -493,3 +493,4 @@ server.registerTool(
   }
 );
 
+server.registerTool(

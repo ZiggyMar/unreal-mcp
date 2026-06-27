@@ -104,3 +104,4 @@ private:
 	bool bAssetRegistryStillScanning = false;
 
 	FDelegateHandle OnAssetAddedHandle;
+	FDelegateHandle OnAssetRemovedHandle;
