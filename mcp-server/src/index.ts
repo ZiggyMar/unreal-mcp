@@ -496,3 +496,4 @@ server.registerTool(
 server.registerTool(
   "unreal_find_references",
   {
+    title: "Find what references, and is referenced by, an asset",
