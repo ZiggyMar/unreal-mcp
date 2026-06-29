@@ -499,3 +499,4 @@ server.registerTool(
     title: "Find what references, and is referenced by, an asset",
     description:
       "Given an asset path (typically a Blueprint), returns what other assets reference it (referencedBy) and what " +
+      "it depends on (dependsOn), via the AssetRegistry's dependency graph. Engine/script-internal references are " +

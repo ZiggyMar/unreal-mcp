@@ -183,3 +183,4 @@ export interface GetProjectOverviewResult {
   totalVariables: number;
   totalGraphs: number;
   totalNodes: number;
+  folders: FolderBreakdown[];
