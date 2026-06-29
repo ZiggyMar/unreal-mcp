@@ -494,3 +494,4 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_find_references",

@@ -62,3 +62,4 @@ UE's own default stub events, unconnected and correctly reported as disabled by 
   live. `add_variable`, `remove_node`, `read_blueprint_node_detail`, and `add_node` with
   `CustomEvent`/`VariableGet`/`VariableSet` have not yet been exercised against a live editor.
 - Only tested on UE 5.8. UE 5.6 build/live-test still outstanding.
+- Only tested against one project. Behavior against Blueprints with more exotic node types
