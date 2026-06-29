@@ -186,3 +186,4 @@ picker for any chat.
   server restarts) — not yet persisted to disk. See `docs/M3_STATUS.md` for what a
   follow-up on-disk cache would look like.
 - See `../docs/M1_STATUS.md` / `M2_STATUS.md` / `M3_STATUS.md` for exactly what has and
+  hasn't been verified against a live editor session at each milestone.
