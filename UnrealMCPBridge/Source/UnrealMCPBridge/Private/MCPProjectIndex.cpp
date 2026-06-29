@@ -641,3 +641,4 @@ void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
 	if (Entries.Remove(AssetData.GetObjectPathString()) > 0)
 	{
 		SaveToDisk();
+	}
