@@ -647,3 +647,4 @@ void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
 void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString& OldObjectPath)
 {
 	if (!bBuilt)
+	{
