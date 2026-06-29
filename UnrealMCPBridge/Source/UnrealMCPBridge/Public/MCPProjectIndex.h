@@ -106,3 +106,4 @@ private:
 	FDelegateHandle OnAssetAddedHandle;
 	FDelegateHandle OnAssetRemovedHandle;
 	FDelegateHandle OnAssetRenamedHandle;
+	FDelegateHandle OnAssetUpdatedHandle;
