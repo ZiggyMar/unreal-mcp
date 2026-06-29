@@ -1326,3 +1326,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 	Result->SetStringField(TEXT("path"), PackageName);
 	Result->SetArrayField(TEXT("referencedBy"), ReferencerArray);
 	Result->SetNumberField(TEXT("referencedByCount"), Referencers.Num());
+	Result->SetArrayField(TEXT("dependsOn"), DependencyArray);
+	Result->SetNumberField(TEXT("dependsOnCount"), Dependencies.Num());
