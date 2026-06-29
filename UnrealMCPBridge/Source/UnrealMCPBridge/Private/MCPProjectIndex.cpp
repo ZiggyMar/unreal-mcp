@@ -650,3 +650,4 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 	{
 		return;
 	}
+	Entries.Remove(OldObjectPath);
