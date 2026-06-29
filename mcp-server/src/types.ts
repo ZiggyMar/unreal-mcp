@@ -182,3 +182,4 @@ export interface GetProjectOverviewResult {
   totalFunctions: number;
   totalVariables: number;
   totalGraphs: number;
+  totalNodes: number;

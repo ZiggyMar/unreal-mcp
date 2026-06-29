@@ -642,3 +642,5 @@ void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
 	{
 		SaveToDisk();
 	}
+}
+

@@ -1334,3 +1334,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindReferences(const TSharedPt
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetProjectOverview(const TSharedPtr<FJsonObject>& Params)
 {
 	FMCPProjectIndex::Get().EnsureBuilt();
+	TSharedRef<FJsonObject> Result = FMCPProjectIndex::Get().GetOverview();
+	return MakeOkResponse(Result);
