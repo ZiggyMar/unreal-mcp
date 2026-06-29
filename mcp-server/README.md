@@ -187,3 +187,4 @@ picker for any chat.
   follow-up on-disk cache would look like.
 - See `../docs/M1_STATUS.md` / `M2_STATUS.md` / `M3_STATUS.md` for exactly what has and
   hasn't been verified against a live editor session at each milestone.
+
