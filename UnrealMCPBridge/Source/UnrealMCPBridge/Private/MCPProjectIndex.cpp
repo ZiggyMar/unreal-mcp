@@ -638,3 +638,4 @@ void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
 	{
 		return;
 	}
+	if (Entries.Remove(AssetData.GetObjectPathString()) > 0)
