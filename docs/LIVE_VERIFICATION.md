@@ -64,3 +64,4 @@ UE's own default stub events, unconnected and correctly reported as disabled by 
 - Only tested on UE 5.8. UE 5.6 build/live-test still outstanding.
 - Only tested against one project. Behavior against Blueprints with more exotic node types
   (macros, timelines, interfaces with default implementations) is unverified.
+
