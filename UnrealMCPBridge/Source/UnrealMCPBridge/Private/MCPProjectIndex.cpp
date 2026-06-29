@@ -648,3 +648,5 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 {
 	if (!bBuilt)
 	{
+		return;
+	}
