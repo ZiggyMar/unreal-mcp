@@ -657,3 +657,4 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 	}
 	SaveToDisk();
 }
+
