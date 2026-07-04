@@ -654,3 +654,4 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 	if (IsBlueprintAsset(AssetData))
 	{
 		IndexBlueprintByPath(AssetData.GetObjectPathString());
+	}
