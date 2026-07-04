@@ -652,3 +652,5 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 	}
 	Entries.Remove(OldObjectPath);
 	if (IsBlueprintAsset(AssetData))
+	{
+		IndexBlueprintByPath(AssetData.GetObjectPathString());
