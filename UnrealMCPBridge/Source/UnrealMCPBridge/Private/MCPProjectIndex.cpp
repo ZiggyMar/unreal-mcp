@@ -655,3 +655,5 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 	{
 		IndexBlueprintByPath(AssetData.GetObjectPathString());
 	}
+	SaveToDisk();
+}

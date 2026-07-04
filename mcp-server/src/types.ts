@@ -184,3 +184,4 @@ export interface GetProjectOverviewResult {
   totalGraphs: number;
   totalNodes: number;
   folders: FolderBreakdown[];
+  byParentClass: ParentClassBreakdown[];

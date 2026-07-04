@@ -501,3 +501,4 @@ server.registerTool(
       "Given an asset path (typically a Blueprint), returns what other assets reference it (referencedBy) and what " +
       "it depends on (dependsOn), via the AssetRegistry's dependency graph. Engine/script-internal references are " +
       'filtered out to keep this focused on project content. This is the direct answer to "what uses this Blueprint" ' +
+      'or "what does this Blueprint depend on" without opening each candidate manually, which is usually the single ' +
