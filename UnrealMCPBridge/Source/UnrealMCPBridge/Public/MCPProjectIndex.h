@@ -108,3 +108,4 @@ private:
 	FDelegateHandle OnAssetRenamedHandle;
 	FDelegateHandle OnAssetUpdatedHandle;
 	FDelegateHandle OnFilesLoadedHandle;
+
