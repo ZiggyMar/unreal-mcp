@@ -660,3 +660,4 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 
 void FMCPProjectIndex::OnAssetUpdated(const FAssetData& AssetData)
 {
+	if (!bBuilt || !IsBlueprintAsset(AssetData))
