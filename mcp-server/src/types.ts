@@ -185,3 +185,4 @@ export interface GetProjectOverviewResult {
   totalNodes: number;
   folders: FolderBreakdown[];
   byParentClass: ParentClassBreakdown[];
+  assetRegistryStillScanning: boolean;
