@@ -504,3 +504,4 @@ server.registerTool(
       'or "what does this Blueprint depend on" without opening each candidate manually, which is usually the single ' +
       "most useful tool for understanding how a change might ripple across a large project.",
     inputSchema: {
+      path: z
