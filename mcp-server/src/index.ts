@@ -505,3 +505,4 @@ server.registerTool(
       "most useful tool for understanding how a change might ripple across a large project.",
     inputSchema: {
       path: z
+        .string()

@@ -109,3 +109,4 @@ private:
 	FDelegateHandle OnAssetUpdatedHandle;
 	FDelegateHandle OnFilesLoadedHandle;
 
+	static FMCPProjectIndex* Instance;
