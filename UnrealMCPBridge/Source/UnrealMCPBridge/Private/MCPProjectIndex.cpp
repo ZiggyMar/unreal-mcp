@@ -673,3 +673,5 @@ void FMCPProjectIndex::OnFilesLoaded()
 	// If we built (or loaded a stale cache) while the AssetRegistry was still doing its
 	// initial project scan, do one authoritative rebuild now that it's complete.
 	if (bBuilt && bAssetRegistryStillScanning)
+	{
+		RebuildFull();
