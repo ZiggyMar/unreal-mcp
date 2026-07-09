@@ -508,3 +508,4 @@ server.registerTool(
         .string()
         .describe('Asset path, e.g. "/Game/Blueprints/BP_Foo.BP_Foo" or just the package "/Game/Blueprints/BP_Foo".'),
       maxResults: z.number().optional().describe("Cap per list (referencedBy / dependsOn). Defaults to 200."),
+    },
