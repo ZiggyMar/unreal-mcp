@@ -110,3 +110,4 @@ private:
 	FDelegateHandle OnFilesLoadedHandle;
 
 	static FMCPProjectIndex* Instance;
+};

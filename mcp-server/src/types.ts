@@ -186,3 +186,4 @@ export interface GetProjectOverviewResult {
   folders: FolderBreakdown[];
   byParentClass: ParentClassBreakdown[];
   assetRegistryStillScanning: boolean;
+}
