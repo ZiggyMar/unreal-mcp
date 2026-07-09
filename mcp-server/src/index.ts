@@ -506,3 +506,4 @@ server.registerTool(
     inputSchema: {
       path: z
         .string()
+        .describe('Asset path, e.g. "/Game/Blueprints/BP_Foo.BP_Foo" or just the package "/Game/Blueprints/BP_Foo".'),
