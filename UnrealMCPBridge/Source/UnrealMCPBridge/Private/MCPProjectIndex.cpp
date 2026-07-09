@@ -669,3 +669,4 @@ void FMCPProjectIndex::OnAssetUpdated(const FAssetData& AssetData)
 }
 
 void FMCPProjectIndex::OnFilesLoaded()
+{
