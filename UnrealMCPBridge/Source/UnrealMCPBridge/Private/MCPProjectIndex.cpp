@@ -676,3 +676,5 @@ void FMCPProjectIndex::OnFilesLoaded()
 	{
 		RebuildFull();
 	}
+}
+
