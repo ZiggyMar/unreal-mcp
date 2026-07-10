@@ -511,3 +511,4 @@ server.registerTool(
     },
   },
   async ({ path, maxResults }) => {
+    try {
