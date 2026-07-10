@@ -111,3 +111,4 @@ private:
 
 	static FMCPProjectIndex* Instance;
 };
+

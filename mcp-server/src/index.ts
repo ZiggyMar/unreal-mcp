@@ -510,3 +510,4 @@ server.registerTool(
       maxResults: z.number().optional().describe("Cap per list (referencedBy / dependsOn). Defaults to 200."),
     },
   },
+  async ({ path, maxResults }) => {

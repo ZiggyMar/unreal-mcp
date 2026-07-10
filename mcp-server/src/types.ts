@@ -187,3 +187,4 @@ export interface GetProjectOverviewResult {
   byParentClass: ParentClassBreakdown[];
   assetRegistryStillScanning: boolean;
 }
+
