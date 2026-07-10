@@ -675,3 +675,4 @@ void FMCPProjectIndex::OnFilesLoaded()
 	if (bBuilt && bAssetRegistryStillScanning)
 	{
 		RebuildFull();
+	}
