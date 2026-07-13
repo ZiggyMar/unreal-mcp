@@ -514,3 +514,4 @@ server.registerTool(
     try {
       const result = await bridge.send<FindReferencesResult>("find_references", { path, maxResults });
       return jsonResult(result);
+    } catch (err) {
