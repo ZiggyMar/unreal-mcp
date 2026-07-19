@@ -105,3 +105,4 @@ For more configuration options and details, see [`mcp-server/README.md`](file://
 Issues and PRs welcome. This project is young and moving fast, so check the status docs above before assuming something works end-to-end.
 
 ## License
+
