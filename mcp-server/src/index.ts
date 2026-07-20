@@ -520,3 +520,4 @@ server.registerTool(
   }
 );
 
+async function main() {
