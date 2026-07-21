@@ -524,3 +524,4 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}`);
+}
