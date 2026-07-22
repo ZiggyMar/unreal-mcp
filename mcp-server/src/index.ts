@@ -526,3 +526,4 @@ async function main() {
   console.error(`unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}`);
 }
 
+main().catch((err) => {
