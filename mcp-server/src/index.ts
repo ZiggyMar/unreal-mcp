@@ -528,3 +528,4 @@ async function main() {
 
 main().catch((err) => {
   console.error("unreal-mcp-server: fatal error", err);
+  process.exit(1);
