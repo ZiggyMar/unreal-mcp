@@ -43,7 +43,11 @@ This removes the sharp edge entirely rather than documenting around it, and it r
 This also unblocks a prerequisite the M5 handoff notes flagged: stable cross-session node
 references.
 
-### 2. Transactional writes, so a human can undo what the agent did (safety gap)
+### 2. Transactional writes, so a human can undo what the agent did (DONE)
+
+**Shipped.** Every write opens a named `FScopedTransaction` ("MCP: Add Node", ...) and calls
+`Modify()` before mutating. Regression-verified live; the Ctrl+Z keypress itself still awaits a
+human check. The original writeup follows for context.
 
 **The finding:** `MCPCommandHandler.cpp` contains **zero** occurrences of `FScopedTransaction`,
 `Modify()`, or `GEditor`. Verified by search across the whole file.

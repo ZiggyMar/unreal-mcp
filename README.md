@@ -56,10 +56,14 @@ node. On 5.6 it was the `.uplugin` hard-pinning `EngineVersion` to `5.8.0`: ever
 because UnrealBuildTool ignores that field, but the runtime plugin loader honors it, so the editor
 stopped on a modal incompatibility dialog and the bridge never started.
 
-Still outstanding: a few less-common commands (`remove_node`, and the
-`CustomEvent`/`VariableGet`/`VariableSet` node types) have not been exercised in a live editor yet,
-and M5 currently covers `UFunction`-backed nodes only, not native `UK2Node` types like branches,
-loops, and casts.
+Since then, all of that has been exercised live too: `remove_node` and `VariableGet` are covered by
+the node-id and control-flow suites, and `add_node` now places `Branch`, `Sequence`, `Cast`, and
+standard-library macros (`ForEachLoop`, `WhileLoop`, ...) directly, verified by building and
+compiling a real conditional graph through the bridge alone. Node ids are persistent GUIDs, and
+every write is undoable with Ctrl+Z under a named "MCP:" transaction. Still outstanding:
+`CustomEvent`/`VariableSet` node types have not had a dedicated live check, and the M5 catalog
+covers `UFunction`-backed nodes; native `UK2Node` types are placed via the dedicated `nodeType`
+values rather than discovered through `unreal_find_node`.
 
 ## Quickstart (3-Step Installation)
 
@@ -70,8 +74,8 @@ Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
 **Easiest path**: download the prebuilt plugin for your engine version and unzip it into your
 project's `Plugins/UnrealMCPBridge/` folder, so you never compile it yourself:
 
-- [v0.1.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.8) for UE 5.8
-- [v0.1.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.6) for UE 5.6
+- [v0.2.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.2.0-ue5.8) for UE 5.8
+- [v0.2.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.2.0-ue5.6) for UE 5.6
 
 Or build it yourself by copying the `UnrealMCPBridge` plugin folder to your Unreal project's
 `Plugins/` directory:
