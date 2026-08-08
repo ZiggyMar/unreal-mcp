@@ -58,6 +58,10 @@ private:
 	static TSharedRef<FJsonObject> HandleFindNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleGetNodeSignature(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Milestone 7 groundwork: functions and graph organization ---
+	static TSharedRef<FJsonObject> HandleCreateFunction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleOrganizeGraph(const TSharedPtr<FJsonObject>& Params);
+
 	// --- Shared lookup helpers ---
 
 	// Loads a Blueprint asset given a package/object path (e.g. "/Game/Blueprints/BP_Foo.BP_Foo").

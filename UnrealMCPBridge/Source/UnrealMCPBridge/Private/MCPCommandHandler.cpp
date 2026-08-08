@@ -21,6 +21,9 @@
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_MacroInstance.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
+#include "EdGraphNode_Comment.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
@@ -388,6 +391,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("get_node_signature"))
 	{
 		Response = HandleGetNodeSignature(Params);
+	}
+	else if (Cmd == TEXT("create_function"))
+	{
+		Response = HandleCreateFunction(Params);
+	}
+	else if (Cmd == TEXT("organize_graph"))
+	{
+		Response = HandleOrganizeGraph(Params);
 	}
 	else
 	{
@@ -840,7 +851,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			return MakeErrorResponse(TEXT("missing_param: functionName is required for nodeType=CallFunction"));
 		}
 
-		UClass* OwnerClass = Blueprint->ParentClass;
+		UClass* OwnerClass = nullptr;
+		UFunction* Function = nullptr;
 		if (!ClassName.IsEmpty())
 		{
 			FString ClassError;
@@ -849,13 +861,31 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			{
 				return MakeErrorResponse(ClassError);
 			}
+			Function = OwnerClass->FindFunctionByName(FName(*FunctionName));
 		}
-		else if (Blueprint->GeneratedClass)
+		else
 		{
-			OwnerClass = Blueprint->GeneratedClass;
+			// No class given: this Blueprint's own surface first, then its parent chain.
+			// The skeleton class matters specifically for functions created this session
+			// (e.g. via create_function) that have not been compiled into GeneratedClass
+			// yet. The skeleton is regenerated on every structural change, which is
+			// exactly how the editor's own My Blueprint panel resolves uncompiled
+			// functions, so checking it makes "create a function, then call it" work
+			// without forcing a compile in between.
+			UClass* Candidates[] = { Blueprint->GeneratedClass.Get(), Blueprint->SkeletonGeneratedClass.Get(), Blueprint->ParentClass.Get() };
+			for (UClass* Candidate : Candidates)
+			{
+				if (Candidate)
+				{
+					OwnerClass = Candidate;
+					Function = Candidate->FindFunctionByName(FName(*FunctionName));
+					if (Function)
+					{
+						break;
+					}
+				}
+			}
 		}
-
-		UFunction* Function = OwnerClass ? OwnerClass->FindFunctionByName(FName(*FunctionName)) : nullptr;
 		if (!Function)
 		{
 			// A close-but-wrong function name is the most common way a caller fails here, and
@@ -1013,6 +1043,15 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	NewNode->CreateNewGuid();
 	NewNode->PostPlacedNewNode();
 	NewNode->AllocateDefaultPins();
+
+	// Optional comment, so a caller can annotate as it builds instead of needing a second
+	// call per node. AGENT_WORKFLOW.md tells agents to do exactly that.
+	FString Comment;
+	if (Params->TryGetStringField(TEXT("comment"), Comment) && !Comment.IsEmpty())
+	{
+		NewNode->NodeComment = Comment;
+		NewNode->bCommentBubbleVisible = true;
+	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -1561,5 +1600,249 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetNodeSignature(const TShared
 	}
 
 	return MakeOkResponse(Signature);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, FunctionName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("functionName"), FunctionName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and functionName are required"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	// Reject a name that already exists as a graph rather than silently uniquifying:
+	// a caller that asks for "HandleDamage" and gets "HandleDamage_0" would then wire
+	// calls to the wrong name.
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+	for (UEdGraph* Existing : AllGraphs)
+	{
+		if (Existing && Existing->GetName().Equals(FunctionName, ESearchCase::IgnoreCase))
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("graph_already_exists: %s"), *FunctionName));
+		}
+	}
+
+	// Parse inputs/outputs up front so a bad type string fails before anything mutates.
+	struct FParsedPin
+	{
+		FString Name;
+		FEdGraphPinType Type;
+	};
+	TArray<FParsedPin> Inputs, Outputs;
+	auto ParsePinArray = [&Params](const TCHAR* Field, TArray<FParsedPin>& Out, FString& OutError) -> bool
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Params->TryGetArrayField(Field, Arr))
+		{
+			return true; // absent is fine
+		}
+		for (const TSharedPtr<FJsonValue>& Entry : *Arr)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			FString Name, TypeStr;
+			if (!Entry.IsValid() || !Entry->TryGetObject(Obj) ||
+				!(*Obj)->TryGetStringField(TEXT("name"), Name) ||
+				!(*Obj)->TryGetStringField(TEXT("type"), TypeStr))
+			{
+				OutError = FString::Printf(TEXT("bad_param: each %s entry needs {name, type}"), Field);
+				return false;
+			}
+			FParsedPin Pin;
+			Pin.Name = Name;
+			if (!ResolvePinType(TypeStr, Pin.Type, OutError))
+			{
+				return false;
+			}
+			Out.Add(Pin);
+		}
+		return true;
+	};
+
+	FString ParseError;
+	if (!ParsePinArray(TEXT("inputs"), Inputs, ParseError) || !ParsePinArray(TEXT("outputs"), Outputs, ParseError))
+	{
+		return MakeErrorResponse(ParseError);
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateFunction", "MCP: Create Function"));
+	Blueprint->Modify();
+
+	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+		Blueprint, FName(*FunctionName), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, nullptr);
+
+	TArray<UK2Node_FunctionEntry*> EntryNodes;
+	NewGraph->GetNodesOfClass(EntryNodes);
+	if (EntryNodes.Num() == 0)
+	{
+		return MakeErrorResponse(TEXT("internal: function graph created without an entry node"));
+	}
+	UK2Node_FunctionEntry* Entry = EntryNodes[0];
+
+	// Function INPUTS are output pins on the entry node; function OUTPUTS are input pins
+	// on the result node. Backwards at first glance, correct from the graph's perspective.
+	for (const FParsedPin& In : Inputs)
+	{
+		Entry->CreateUserDefinedPin(FName(*In.Name), In.Type, EGPD_Output);
+	}
+
+	UK2Node_FunctionResult* ResultNode = nullptr;
+	if (Outputs.Num() > 0)
+	{
+		ResultNode = FBlueprintEditorUtils::FindOrCreateFunctionResultNode(Entry);
+		if (!ResultNode)
+		{
+			return MakeErrorResponse(TEXT("internal: could not create a function result node"));
+		}
+		ResultNode->NodePosX = Entry->NodePosX + 500;
+		ResultNode->NodePosY = Entry->NodePosY;
+		for (const FParsedPin& OutPin : Outputs)
+		{
+			ResultNode->CreateUserDefinedPin(FName(*OutPin.Name), OutPin.Type, EGPD_Input);
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("graphName"), NewGraph->GetName());
+	Result->SetStringField(TEXT("entryNodeId"), MakeNodeId(Entry));
+	if (ResultNode)
+	{
+		Result->SetStringField(TEXT("resultNodeId"), MakeNodeId(ResultNode));
+	}
+	Result->SetNumberField(TEXT("inputCount"), Inputs.Num());
+	Result->SetNumberField(TEXT("outputCount"), Outputs.Num());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, GraphName, Action;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
+		!Params->TryGetStringField(TEXT("action"), Action))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, graphName, action are required"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+	FString GraphError;
+	UEdGraph* Graph = FindGraphByName(Blueprint, GraphName, GraphError);
+	if (!Graph)
+	{
+		return MakeErrorResponse(GraphError);
+	}
+
+	if (Action == TEXT("set_node_comment"))
+	{
+		FString NodeId, Comment;
+		if (!Params->TryGetStringField(TEXT("nodeId"), NodeId) ||
+			!Params->TryGetStringField(TEXT("comment"), Comment))
+		{
+			return MakeErrorResponse(TEXT("missing_param: nodeId and comment are required for set_node_comment"));
+		}
+		FString NodeError;
+		UEdGraphNode* Node = FindNodeById(Graph, NodeId, NodeError);
+		if (!Node)
+		{
+			return MakeErrorResponse(NodeError);
+		}
+
+		const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetComment", "MCP: Set Node Comment"));
+		Node->Modify();
+		Node->NodeComment = Comment;
+		Node->bCommentBubbleVisible = !Comment.IsEmpty();
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+		TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("id"), MakeNodeId(Node));
+		Result->SetStringField(TEXT("comment"), Comment);
+		return MakeOkResponse(Result);
+	}
+
+	if (Action == TEXT("add_comment_box"))
+	{
+		FString Text;
+		if (!Params->TryGetStringField(TEXT("text"), Text))
+		{
+			return MakeErrorResponse(TEXT("missing_param: text is required for add_comment_box"));
+		}
+		double X = 0, Y = 0, Width = 400, Height = 300;
+		Params->TryGetNumberField(TEXT("x"), X);
+		Params->TryGetNumberField(TEXT("y"), Y);
+		Params->TryGetNumberField(TEXT("width"), Width);
+		Params->TryGetNumberField(TEXT("height"), Height);
+
+		const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddCommentBox", "MCP: Add Comment Box"));
+		Graph->Modify();
+		Blueprint->Modify();
+
+		UEdGraphNode_Comment* CommentNode = NewObject<UEdGraphNode_Comment>(Graph);
+		CommentNode->NodeComment = Text;
+		CommentNode->NodePosX = static_cast<int32>(X);
+		CommentNode->NodePosY = static_cast<int32>(Y);
+		CommentNode->NodeWidth = static_cast<int32>(Width);
+		CommentNode->NodeHeight = static_cast<int32>(Height);
+		Graph->AddNode(CommentNode, /*bIsUserAction=*/true, /*bSelectNewNode=*/false);
+		CommentNode->CreateNewGuid();
+		CommentNode->PostPlacedNewNode();
+		CommentNode->AllocateDefaultPins();
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+		TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("id"), MakeNodeId(CommentNode));
+		Result->SetStringField(TEXT("text"), Text);
+		return MakeOkResponse(Result);
+	}
+
+	if (Action == TEXT("move_node"))
+	{
+		FString NodeId;
+		double X = 0, Y = 0;
+		if (!Params->TryGetStringField(TEXT("nodeId"), NodeId) ||
+			!Params->TryGetNumberField(TEXT("x"), X) ||
+			!Params->TryGetNumberField(TEXT("y"), Y))
+		{
+			return MakeErrorResponse(TEXT("missing_param: nodeId, x, y are required for move_node"));
+		}
+		FString NodeError;
+		UEdGraphNode* Node = FindNodeById(Graph, NodeId, NodeError);
+		if (!Node)
+		{
+			return MakeErrorResponse(NodeError);
+		}
+
+		const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPMoveNode", "MCP: Move Node"));
+		Node->Modify();
+		Node->NodePosX = static_cast<int32>(X);
+		Node->NodePosY = static_cast<int32>(Y);
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+		TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("id"), MakeNodeId(Node));
+		Result->SetNumberField(TEXT("x"), Node->NodePosX);
+		Result->SetNumberField(TEXT("y"), Node->NodePosY);
+		return MakeOkResponse(Result);
+	}
+
+	return MakeErrorResponse(FString::Printf(
+		TEXT("unknown_action: %s (expected set_node_comment, add_comment_box, move_node)"), *Action));
 }
 

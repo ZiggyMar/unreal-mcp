@@ -75,6 +75,37 @@ Given (1) and (2), a natural third step: let a write command report what it *wou
 doing it. Cheap to add once writes are transactional, and it fits the "read before write" workflow
 guidance worth shipping to the calling agent anyway.
 
+## Part 1b: gaps identified by asking "what would a human coder reach for next?"
+
+Added 2026-08-08 at the owner's request to surface things not yet targeted. Ordered by how hard
+they block the "AI does everything a coder does" goal, crossed with token savings.
+
+1. **Batch graph op.** One command that takes a list of nodes, wires, and pin defaults and builds
+   them in a single transaction. Today a 10-node graph costs ~25 round trips; batching cuts that
+   to 1, which is the single biggest token/latency saver available. Also makes one Ctrl+Z undo an
+   entire authored feature.
+2. **Class defaults (CDO) editing.** Set any property on a Blueprint's class defaults
+   (`bReplicates`, movement speeds, a mesh reference). Without it, half of what a designer tweaks
+   per-Blueprint is unreachable.
+3. **Components.** Add and list SCS components (StaticMesh, Collision, Audio, custom). An Actor
+   Blueprint without components is a brain with no body; this is likely the biggest remaining
+   capability gap after functions.
+4. **Project settings and INI access.** Read/write config-backed settings objects (default
+   GameMode, maps, input). Explicitly requested by the owner ("change settings... the INI").
+5. **Blueprint Interfaces and Event Dispatchers.** Create/implement interfaces, add dispatchers,
+   bind events. Core to how well-architected Blueprint projects decouple systems, and exactly the
+   kind of structure an AI should be encouraged to build.
+6. **Enum and Struct assets.** UserDefinedEnum/UserDefinedStruct creation, since real game logic
+   grows data types alongside graphs.
+7. **Enhanced Input assets.** InputAction + InputMappingContext creation and wiring, since 5.x
+   gameplay code starts at input.
+8. **Asset management verbs.** Rename/move/duplicate/delete with reference fixup via
+   AssetTools, so refactoring is not editor-only.
+9. **Blueprint snapshot/diff.** Capture a compact structural snapshot before a batch of edits and
+   diff after, so an agent can show "here is what I changed" and a human can review before save.
+10. **Event didYouMean.** `add_node`'s `event_function_not_found` should list the parent class's
+    overridable events the way function lookups already suggest near-misses.
+
 ## Part 2: carried from the competitive survey
 
 Full rationale for each is in [COMPETITIVE_LANDSCAPE.md](COMPETITIVE_LANDSCAPE.md). Listed here so
