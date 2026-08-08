@@ -31,6 +31,21 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
 
 ## Sharp edges that remain
 
+Learned by building a full replicated multiplayer feature through these tools; every item below
+cost one failed call to discover:
+
+- **The target pin on function calls is named `self`**, even though the editor displays it as
+  "Target". Wire component and object targets to `.self`.
+- **Cast output pins on Blueprint classes contain spaces**: casting to `BP_VacuumPlayer` yields
+  a pin named `AsBP Vacuum Player`, not `AsBP_VacuumPlayer`. Native classes have no spaces
+  (`AsPawn`).
+- **Struct pin defaults are comma triples**: vectors and rotators take `"0, -90, 0"`, never the
+  named form `"(Pitch=0,Yaw=-90)"`. Rotator order is Pitch, Yaw, Roll.
+- **Enum pin defaults take the entry name**: `"SnapToTarget"`, `"MOVE_Falling"`.
+- **Create events before their callers.** A `CallFunction` for a CustomEvent (or a function from
+  `unreal_create_function`) resolves against the skeleton class, which updates when the event is
+  created, so within one `build_graph` batch order the event node earlier in the `nodes` array.
+
 - **Exec pin names are not uniform.** Regular nodes use `execute` (in) and `then` (out). Branch
   outputs are `then`/`else`. Sequence outputs are `then_0`/`then_1`. **Macro nodes (ForEachLoop,
   WhileLoop, ...) use `Exec` with a capital E** as their input. When unsure, read the node's

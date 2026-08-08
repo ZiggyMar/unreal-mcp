@@ -25,6 +25,7 @@
 #include "K2Node_FunctionResult.h"
 #include "K2Node_InputKey.h"
 #include "K2Node_InputAxisEvent.h"
+#include "K2Node_Self.h"
 #include "EdGraphNode_Comment.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -977,6 +978,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		InputNode->InputKey = Key;
 		NewNode = InputNode;
 	}
+	else if (NodeType == TEXT("Self"))
+	{
+		// A reference to the owning instance, for comparisons and passing self around.
+		NewNode = NewObject<UK2Node_Self>(Graph);
+	}
 	else if (NodeType == TEXT("InputAxis"))
 	{
 		FString AxisName;
@@ -1187,7 +1193,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	else
 	{
 		return MakeErrorResponse(FString::Printf(
-			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet, Branch, Sequence, Cast, Macro, InputKey, InputAxis)"), *NodeType));
+			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet, Branch, Sequence, Cast, Macro, InputKey, InputAxis, Self)"), *NodeType));
 	}
 
 	// Everything above this point is validation that can bail out; nothing has been
