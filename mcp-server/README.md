@@ -202,11 +202,11 @@ picker for any chat.
 - One TCP request per tool call, on a fresh connection, with no pipelining and no
   persistent session state. This is intentionally simple; revisit if latency becomes an
   issue.
-- Node ids (e.g. `"n12"`, including ones returned by `unreal_add_node`) are just the
-  node's index into that graph's node array at read/write time. They are **not** stable
-  across editor sessions, and **removing a node shifts every later index in that graph**.
-  Re-read the graph (`unreal_read_blueprint_summary`) after any `unreal_remove_node`
-  before referencing further node ids in it.
+- Node ids are the node's persistent `NodeGuid` (a 32-character hex string), which Unreal
+  serializes with the asset. They survive editor restarts, and removing one node does not
+  affect any other node's id, so there is no longer any need to re-read a graph after
+  `unreal_remove_node` before using ids from an earlier read. Legacy `"n<index>"` ids are
+  still accepted for one release for backward compatibility, but are never returned.
 - `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
   directly on the target Blueprint, not variables inherited from a parent Blueprint.
 - No diff-based/transactional edit model yet. Each write tool is a single independent

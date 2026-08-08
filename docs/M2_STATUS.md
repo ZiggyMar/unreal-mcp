@@ -7,6 +7,11 @@ Last updated: 2026-08-07
 > fixed (`add_node` duplicating an already-present override-event node). Everything below reflects
 > the pre-live-test state; treat LIVE_VERIFICATION.md as the current source of truth on what
 > actually works against a running editor.
+>
+> **Superseded**: the index-based node id scheme described below, and the "real sharp edge" it
+> created, are gone. Node ids are now the node's persistent `NodeGuid`, so they survive editor
+> restarts and are unaffected by removing other nodes. Legacy `"n<index>"` ids are still accepted
+> for one release but are never returned.
 
 ## TL;DR
 
