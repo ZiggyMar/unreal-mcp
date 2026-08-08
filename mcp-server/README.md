@@ -91,6 +91,42 @@ as you edit. See `../docs/M3_STATUS.md` for details.
 AssetRegistry's dependency graph directly, so it works even before the index has been
 built, and for any asset, not just indexed Blueprints.
 
+### Node/function ground-truth catalog (Milestone 5)
+
+| Tool | Bridge command | Purpose |
+|---|---|---|
+| `unreal_find_node` | `find_node` | Search the running engine's real Blueprint-callable function catalog by intent or partial name. Returns exact `functionName`/`className` values `unreal_add_node` accepts. |
+| `unreal_get_node_signature` | `get_node_signature` | Exact pins for one function: each parameter's name, type, direction, and default, from live reflection. |
+
+These solve a different problem than the tools above. The project index answers "what is in
+*this project*." The node catalog answers "what does *this engine version* actually expose, and
+what exactly is it called." No general-purpose model reliably knows Unreal's exact node names,
+pin names, and signatures, and that is the most common cause of a failed edit.
+
+`FMCPNodeCatalog` builds the catalog by walking `UClass`/`UFunction` reflection in the running
+editor, so its answers are correct for whatever engine version is open rather than recalled from
+training. Unlike the project index it needs no on-disk cache: the walk loads no assets, so it is
+cheap enough to build lazily once per session.
+
+**Call `unreal_find_node` before `unreal_add_node` whenever you are not certain a function name
+and its owning class are exactly right.** If you skip it and get the name wrong, `unreal_add_node`
+now fails with a `didYouMean` list of near-misses drawn from the catalog rather than a bare
+`function_not_found`, so the mistake is recoverable in one step:
+
+```json
+{
+  "ok": false,
+  "error": "function_not_found: PrintSting on KismetSystemLibrary",
+  "didYouMean": [
+    { "functionName": "PrintString", "className": "/Script/Engine.KismetSystemLibrary" }
+  ]
+}
+```
+
+Neither tool ever returns the whole catalog, which runs to thousands of entries. `find_node` hits
+carry a `paramCount` and omit the pin list; full pins come only from `get_node_signature` for one
+function at a time. This is the same tiered approach as the M1 reads.
+
 #### Optional: local-model enrichment for search results
 
 By default, `unreal_search_project` hits are bare structural data (kind/path/name/
