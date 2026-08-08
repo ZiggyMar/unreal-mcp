@@ -21,6 +21,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Logging/TokenizedMessage.h"
+#include "ScopedTransaction.h"
 #include "Dom/JsonValue.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/UObjectGlobals.h"
@@ -919,6 +920,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet)"), *NodeType));
 	}
 
+	// Everything above this point is validation that can bail out; nothing has been
+	// mutated yet, so the transaction opens here and never wraps a no-op.
+	// Modify() must be called inside the transaction and before the change, since that
+	// is what snapshots the prior state into the undo buffer.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddNode", "MCP: Add Node"));
+	Graph->Modify();
+	Blueprint->Modify();
+
 	NewNode->NodePosX = PosX;
 	NewNode->NodePosY = PosY;
 	Graph->AddNode(NewNode, /*bIsUserAction=*/true, /*bSelectNewNode=*/false);
@@ -994,6 +1003,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(FString::Printf(TEXT("incompatible_pins: %s"), *ConnectResponse.Message.ToString()));
 	}
 
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPConnectPins", "MCP: Connect Pins"));
+	Graph->Modify();
+	Blueprint->Modify();
+	// Both endpoints change, since a link is recorded on each pin's owning node.
+	SourceNode->Modify();
+	TargetNode->Modify();
+
 	const bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
 	if (!bConnected)
 	{
@@ -1056,6 +1072,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		return MakeErrorResponse(TEXT("pin_is_connected: this pin already has a link; remove that connection before setting a literal default"));
 	}
 
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetPinDefault", "MCP: Set Pin Default Value"));
+	Node->Modify();
+	Blueprint->Modify();
+
 	Pin->DefaultValue = Value;
 	Node->PinDefaultValueChanged(Pin);
 
@@ -1103,6 +1123,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 	// Capture both before RemoveNode, since Node is not safe to dereference afterwards.
 	const FString RemovedType = Node->GetClass()->GetName();
 	const FString RemovedId = MakeNodeId(Node);
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveNode", "MCP: Remove Node"));
+	Graph->Modify();
+	Blueprint->Modify();
+	Node->Modify();
+
 	Node->BreakAllNodeLinks();
 	FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile=*/true);
 
@@ -1152,6 +1178,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 			return MakeErrorResponse(FString::Printf(TEXT("variable_already_exists: %s"), *VariableName));
 		}
 	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddVariable", "MCP: Add Variable"));
+	Blueprint->Modify();
 
 	const bool bAdded = FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarFName, PinType, DefaultValue);
 	if (!bAdded)
