@@ -30,7 +30,14 @@ reliably knows UE's exact node names, pin names, and function signatures.
   without an editor restart. It also caught a real bug that compiling and protocol testing could
   not (`add_node` duplicating an already-present override-event node). See
   [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md).
-- **UE 5.8 release published**: [v0.1.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.8).
+- **M4: UE 5.6 support, live-verified and released.** The plugin source needs zero changes for 5.6;
+  the same source builds for both. One real bug had to be fixed to get there, and only live
+  verification could have found it: the `.uplugin` hard-pinned `EngineVersion` to `5.8.0`, which
+  every build check ignored but the runtime plugin loader did not, leaving the 5.6 editor stuck on
+  a modal incompatibility dialog before the bridge could start. 21 of 21 live checks pass on 5.6.
+  See [docs/UE56_STATUS.md](docs/UE56_STATUS.md).
+- **Releases published**: [v0.1.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.8)
+  and [v0.1.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.6).
 - **Competitive survey** of 9 other Unreal MCP projects, including which of their ideas are worth
   adopting. See [docs/COMPETITIVE_LANDSCAPE.md](docs/COMPETITIVE_LANDSCAPE.md).
 
