@@ -99,6 +99,18 @@ cost one failed call to discover:
 - **Deleting a CustomEvent does not free its name until the Blueprint compiles.** Recreating an
   event with the same name before compiling yields `Name_0` and breaks every caller. Delete,
   compile, then recreate.
+- **Locate nodes by connectivity, never by first title match.** Repeated surgeries leave
+  duplicate survivors; a refactor that grabs "the" node by title can rewire a dead twin while
+  the real chain dangles, and everything still compiles. When something compiles clean but does
+  nothing at runtime, dump the link map and look for a severed exec chain first.
+- **Class pins can go stale across recompiles within a session.** A literal Blueprint-class pin
+  default set early can end up pointing at a reinstanced generation and silently match nothing.
+  Prefer native base classes on scan pins (filter with a Cast), or re-set class pins after the
+  final compile.
+- **Debug prints are a first-class diagnostic.** When behavior contradicts a clean compile,
+  splice PrintStrings (prefix them, e.g. "DBG") at each stage of the chain, run PIE, and read
+  which stage never fires. Strip them by bridging each print's exec source to its target before
+  removing the node.
 
 ## Performance judgment (Blueprint cost is real)
 
