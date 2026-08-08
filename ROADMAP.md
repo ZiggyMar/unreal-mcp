@@ -36,6 +36,11 @@ reliably knows UE's exact node names, pin names, and function signatures.
   every build check ignored but the runtime plugin loader did not, leaving the 5.6 editor stuck on
   a modal incompatibility dialog before the bridge could start. 21 of 21 live checks pass on 5.6.
   See [docs/UE56_STATUS.md](docs/UE56_STATUS.md).
+- **M5 first increment: the node/function ground-truth catalog.** `FMCPNodeCatalog` reads the
+  running engine's real Blueprint-callable function surface via reflection: 12,402 functions on
+  5.6 and 15,775 on 5.8, built in about 0.1s. Backs `find_node` and `get_node_signature`, and makes
+  `add_node` return `didYouMean` near-misses instead of a bare `function_not_found`. Live-verified
+  39/39 on 5.6 and 40/40 on 5.8. See [docs/M5_STATUS.md](docs/M5_STATUS.md).
 - **Releases published**: [v0.1.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.8)
   and [v0.1.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.6).
 - **Competitive survey** of 9 other Unreal MCP projects, including which of their ideas are worth
@@ -52,7 +57,19 @@ hashes, and the test project pins `"EngineAssociation": "5.6"`.
 What remains: live-editor verification on 5.6 the same way 5.8 got it, then package and publish
 `v0.1.0-ue5.6`, then write `docs/UE56_STATUS.md`.
 
-## M5: the node/function ground-truth catalog
+## M5 remainder: the native node palette
+
+**The function half of this is done and shipped** (see Done above and
+[docs/M5_STATUS.md](docs/M5_STATUS.md)). What remains is the second, more valuable and more
+expensive half: enumerating native `UK2Node` types (branches, loops, casts, math operators) via
+`FBlueprintActionDatabase` / `UBlueprintNodeSpawner`, which back the editor's own right-click
+palette. The verified design path for that is in [docs/M5_DESIGN.md](docs/M5_DESIGN.md).
+
+One design assumption already fell: the shipped catalog needs no on-disk cache, because the
+reflection walk costs about 0.1s. Whether that holds for the action-database half is an open
+question, since priming template nodes for every spawner is a different cost profile.
+
+The original framing of the problem, kept because it still explains why this matters most:
 
 The largest unsolved problem, and the one that most directly limits how useful this is in
 practice. No general-purpose model reliably knows the exact node names, pin names, and

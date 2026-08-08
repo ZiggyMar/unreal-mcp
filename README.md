@@ -42,6 +42,7 @@ This is being built and verified in public, milestone by milestone. Each milesto
 - [Milestone 2: create/edit Blueprint graphs](docs/M2_STATUS.md): create Blueprints, add nodes, connect pins, add variables, compile with structured error reporting.
 - [Milestone 3: persistent project index, search, references](docs/M3_STATUS.md): incrementally-updated index (AssetRegistry-backed, disk-cached), `search_project`, `find_references`, `get_project_overview`, optional local-model enrichment for search results.
 - [Milestone 4: UE 5.6 support](docs/UE56_STATUS.md): live-verified on 5.6, 21 of 21 checks passing, and released. The plugin source needs zero changes between the two engine versions.
+- [Milestone 5: node/function ground-truth catalog](docs/M5_STATUS.md): `unreal_find_node` and `unreal_get_node_signature`, reading the running engine's real Blueprint-callable surface via reflection (12,402 functions on 5.6, 15,775 on 5.8, built in ~0.1s). `unreal_add_node` now answers a wrong function name with `didYouMean` near-misses instead of a dead end.
 
 All four milestones are build-verified, protocol-verified, **and live-verified on both engine
 versions**. See [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) for the 5.8 session against a
@@ -56,7 +57,9 @@ because UnrealBuildTool ignores that field, but the runtime plugin loader honors
 stopped on a modal incompatibility dialog and the bridge never started.
 
 Still outstanding: a few less-common commands (`remove_node`, and the
-`CustomEvent`/`VariableGet`/`VariableSet` node types) have not been exercised in a live editor yet.
+`CustomEvent`/`VariableGet`/`VariableSet` node types) have not been exercised in a live editor yet,
+and M5 currently covers `UFunction`-backed nodes only, not native `UK2Node` types like branches,
+loops, and casts.
 
 ## Quickstart (3-Step Installation)
 
