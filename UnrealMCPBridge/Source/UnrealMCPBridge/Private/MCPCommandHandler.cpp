@@ -23,7 +23,25 @@
 #include "K2Node_MacroInstance.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
+#include "K2Node_InputKey.h"
+#include "K2Node_InputAxisEvent.h"
 #include "EdGraphNode_Comment.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
+#include "Factories/WorldFactory.h"
+#include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
+#include "GameMapsSettings.h"
+#include "GameFramework/InputSettings.h"
+#include "Settings/LevelEditorPlaySettings.h"
+#include "Editor.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "InputCoreTypes.h"
+#include "FileHelpers.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
@@ -403,6 +421,62 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("build_graph"))
 	{
 		Response = HandleBuildGraph(Params);
+	}
+	else if (Cmd == TEXT("list_assets"))
+	{
+		Response = HandleListAssets(Params);
+	}
+	else if (Cmd == TEXT("create_level"))
+	{
+		Response = HandleCreateLevel(Params);
+	}
+	else if (Cmd == TEXT("set_game_settings"))
+	{
+		Response = HandleSetGameSettings(Params);
+	}
+	else if (Cmd == TEXT("add_input_mapping"))
+	{
+		Response = HandleAddInputMapping(Params);
+	}
+	else if (Cmd == TEXT("start_pie"))
+	{
+		Response = HandleStartPie(Params);
+	}
+	else if (Cmd == TEXT("stop_pie"))
+	{
+		Response = HandleStopPie(Params);
+	}
+	else if (Cmd == TEXT("pie_status"))
+	{
+		Response = HandlePieStatus(Params);
+	}
+	else if (Cmd == TEXT("open_level"))
+	{
+		Response = HandleOpenLevel(Params);
+	}
+	else if (Cmd == TEXT("spawn_actor"))
+	{
+		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("save_level"))
+	{
+		Response = HandleSaveLevel(Params);
+	}
+	else if (Cmd == TEXT("add_component"))
+	{
+		Response = HandleAddComponent(Params);
+	}
+	else if (Cmd == TEXT("list_components"))
+	{
+		Response = HandleListComponents(Params);
+	}
+	else if (Cmd == TEXT("set_component_property"))
+	{
+		Response = HandleSetComponentProperty(Params);
+	}
+	else if (Cmd == TEXT("set_class_default"))
+	{
+		Response = HandleSetClassDefault(Params);
 	}
 	else
 	{
@@ -855,7 +929,64 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		}
 		UK2Node_CustomEvent* CustomEventNode = NewObject<UK2Node_CustomEvent>(Graph);
 		CustomEventNode->CustomFunctionName = FBlueprintEditorUtils::FindUniqueKismetName(Blueprint, EventName);
+
+		// Multiplayer RPCs: netMode Server/Multicast/Client plus reliable, the same flags
+		// the details panel's Replicates dropdown sets. Without these a "multiplayer"
+		// graph is single-player logic wearing a costume.
+		FString NetMode;
+		if (Params->TryGetStringField(TEXT("netMode"), NetMode) && !NetMode.IsEmpty())
+		{
+			if (NetMode == TEXT("Server"))
+			{
+				CustomEventNode->FunctionFlags |= FUNC_Net | FUNC_NetServer;
+			}
+			else if (NetMode == TEXT("Multicast"))
+			{
+				CustomEventNode->FunctionFlags |= FUNC_Net | FUNC_NetMulticast;
+			}
+			else if (NetMode == TEXT("Client"))
+			{
+				CustomEventNode->FunctionFlags |= FUNC_Net | FUNC_NetClient;
+			}
+			else
+			{
+				return MakeErrorResponse(FString::Printf(TEXT("unknown_netMode: %s (expected Server, Multicast, Client)"), *NetMode));
+			}
+			bool bReliable = false;
+			Params->TryGetBoolField(TEXT("reliable"), bReliable);
+			if (bReliable)
+			{
+				CustomEventNode->FunctionFlags |= FUNC_NetReliable;
+			}
+		}
 		NewNode = CustomEventNode;
+	}
+	else if (NodeType == TEXT("InputKey"))
+	{
+		FString KeyName;
+		if (!Params->TryGetStringField(TEXT("key"), KeyName))
+		{
+			return MakeErrorResponse(TEXT("missing_param: key is required for nodeType=InputKey (e.g. F, SpaceBar, LeftMouseButton)"));
+		}
+		const FKey Key(*KeyName);
+		if (!Key.IsValid())
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("unknown_key: %s"), *KeyName));
+		}
+		UK2Node_InputKey* InputNode = NewObject<UK2Node_InputKey>(Graph);
+		InputNode->InputKey = Key;
+		NewNode = InputNode;
+	}
+	else if (NodeType == TEXT("InputAxis"))
+	{
+		FString AxisName;
+		if (!Params->TryGetStringField(TEXT("axisName"), AxisName))
+		{
+			return MakeErrorResponse(TEXT("missing_param: axisName is required for nodeType=InputAxis (add the mapping first via add_input_mapping)"));
+		}
+		UK2Node_InputAxisEvent* AxisNode = NewObject<UK2Node_InputAxisEvent>(Graph);
+		AxisNode->Initialize(FName(*AxisName));
+		NewNode = AxisNode;
 	}
 	else if (NodeType == TEXT("CallFunction"))
 	{
@@ -946,8 +1077,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		}
 		if (!bFoundVar)
 		{
+			// Not one of the Blueprint's own variables: fall back to inherited/native
+			// properties, which is how "Mesh" or "CharacterMovement" on a Character are
+			// read. SetSelfMember resolves against the whole class hierarchy at compile
+			// time, so the node works the same either way.
+			const UClass* LookupClass = Blueprint->SkeletonGeneratedClass
+				? Blueprint->SkeletonGeneratedClass.Get()
+				: Blueprint->ParentClass.Get();
+			if (LookupClass && LookupClass->FindPropertyByName(VarFName))
+			{
+				bFoundVar = true;
+			}
+		}
+		if (!bFoundVar)
+		{
 			return MakeErrorResponse(FString::Printf(
-				TEXT("variable_not_found: %s (only this Blueprint's own variables are supported, not inherited ones)"),
+				TEXT("variable_not_found: %s (not a Blueprint variable, and no inherited property has that name)"),
 				*VariableName));
 		}
 
@@ -1042,7 +1187,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	else
 	{
 		return MakeErrorResponse(FString::Printf(
-			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet, Branch, Sequence, Cast, Macro)"), *NodeType));
+			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet, Branch, Sequence, Cast, Macro, InputKey, InputAxis)"), *NodeType));
 	}
 
 	// Everything above this point is validation that can bail out; nothing has been
@@ -1072,6 +1217,35 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	{
 		NewNode->NodeComment = Comment;
 		NewNode->bCommentBubbleVisible = true;
+	}
+
+	// Typed parameters on a CustomEvent (its data OUTPUT pins, since an event emits its
+	// arguments into the graph). Added after AllocateDefaultPins so the exec pin exists
+	// first, matching how the editor's details panel adds them.
+	if (UK2Node_CustomEvent* AsCustomEvent = Cast<UK2Node_CustomEvent>(NewNode))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* EventInputs = nullptr;
+		if (Params->TryGetArrayField(TEXT("inputs"), EventInputs))
+		{
+			for (const TSharedPtr<FJsonValue>& Entry : *EventInputs)
+			{
+				const TSharedPtr<FJsonObject>* Obj = nullptr;
+				FString PinName, TypeStr;
+				if (!Entry.IsValid() || !Entry->TryGetObject(Obj) ||
+					!(*Obj)->TryGetStringField(TEXT("name"), PinName) ||
+					!(*Obj)->TryGetStringField(TEXT("type"), TypeStr))
+				{
+					return MakeErrorResponse(TEXT("bad_param: each CustomEvent input needs {name, type}"));
+				}
+				FEdGraphPinType PinType;
+				FString TypeError;
+				if (!ResolvePinType(TypeStr, PinType, TypeError))
+				{
+					return MakeErrorResponse(TypeError);
+				}
+				AsCustomEvent->CreateUserDefinedPin(FName(*PinName), PinType, EGPD_Output);
+			}
+		}
 	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -1215,7 +1389,25 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	Node->Modify();
 	Blueprint->Modify();
 
-	Pin->DefaultValue = Value;
+	// Object/class pins store their default in DefaultObject, not DefaultValue, so an
+	// asset reference ("/Game/X/SK_Foo.SK_Foo") must be resolved and set there. Writing
+	// the string into DefaultValue silently produces a None pin.
+	if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object ||
+		Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Class ||
+		Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_SoftObject ||
+		Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_SoftClass)
+	{
+		UObject* Loaded = LoadObject<UObject>(nullptr, *Value);
+		if (!Loaded)
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("asset_not_found: %s (object pins take a full asset path)"), *Value));
+		}
+		Pin->DefaultObject = Loaded;
+	}
+	else
+	{
+		Pin->DefaultValue = Value;
+	}
 	Node->PinDefaultValueChanged(Pin);
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1223,7 +1415,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("set"), true);
 	Result->SetStringField(TEXT("pin"), PinName);
-	Result->SetStringField(TEXT("value"), Pin->DefaultValue);
+	Result->SetStringField(TEXT("value"), Pin->DefaultObject ? Pin->DefaultObject->GetPathName() : Pin->DefaultValue);
 	return MakeOkResponse(Result);
 }
 
@@ -1325,6 +1517,32 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	if (!bAdded)
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("add_variable_failed: %s"), *VariableName));
+	}
+
+	// Replication, the flags half of multiplayer state. repNotify also creates the
+	// OnRep_<Name> function graph the same way the editor does, so the caller can
+	// immediately build logic inside it.
+	bool bReplicated = false, bRepNotify = false;
+	Params->TryGetBoolField(TEXT("replicated"), bReplicated);
+	Params->TryGetBoolField(TEXT("repNotify"), bRepNotify);
+	if (bReplicated || bRepNotify)
+	{
+		const int32 VarIndex = FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, VarFName);
+		if (VarIndex == INDEX_NONE)
+		{
+			return MakeErrorResponse(TEXT("internal: variable added but not found for replication setup"));
+		}
+		Blueprint->NewVariables[VarIndex].PropertyFlags |= CPF_Net;
+		if (bRepNotify)
+		{
+			const FName RepFuncName(*FString::Printf(TEXT("OnRep_%s"), *VariableName));
+			UEdGraph* RepGraph = FBlueprintEditorUtils::CreateNewGraph(
+				Blueprint, RepFuncName, UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+			FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, RepGraph, /*bIsUserCreated=*/true, nullptr);
+			Blueprint->NewVariables[VarIndex].PropertyFlags |= CPF_RepNotify;
+			Blueprint->NewVariables[VarIndex].RepNotifyFunc = RepFuncName;
+		}
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	}
 
 	if (!Category.IsEmpty())
@@ -2146,7 +2364,23 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 				}
 				Node->Modify();
 				SavedDefaults.Add({ Pin, Pin->DefaultValue });
-				Pin->DefaultValue = Value;
+				if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object ||
+					Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Class ||
+					Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_SoftObject ||
+					Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_SoftClass)
+				{
+					UObject* Loaded = LoadObject<UObject>(nullptr, *Value);
+					if (!Loaded)
+					{
+						RollbackBatch();
+						return MakeErrorResponse(FString::Printf(TEXT("pinDefault %d: asset_not_found: %s"), i, *Value));
+					}
+					Pin->DefaultObject = Loaded;
+				}
+				else
+				{
+					Pin->DefaultValue = Value;
+				}
 				Node->PinDefaultValueChanged(Pin);
 				++DefaultsSet;
 			}
@@ -2190,5 +2424,688 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 	}
 
 	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ClassName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("className"), ClassName) || ClassName.IsEmpty())
+	{
+		return MakeErrorResponse(TEXT("missing_param: className is required (e.g. SkeletalMesh, AnimBlueprint, AnimSequence)"));
+	}
+
+	FString ClassError;
+	UClass* AssetClass = ResolveClassByName(ClassName, ClassError);
+	if (!AssetClass)
+	{
+		return MakeErrorResponse(ClassError);
+	}
+
+	FString PathPrefix = TEXT("/Game");
+	Params->TryGetStringField(TEXT("pathPrefix"), PathPrefix);
+	int32 MaxResults = 100;
+	double MaxRaw = 0.0;
+	if (Params->TryGetNumberField(TEXT("maxResults"), MaxRaw))
+	{
+		MaxResults = FMath::Clamp(static_cast<int32>(MaxRaw), 1, 500);
+	}
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	FARFilter Filter;
+	Filter.ClassPaths.Add(AssetClass->GetClassPathName());
+	Filter.bRecursiveClasses = true;
+	Filter.PackagePaths.Add(FName(*PathPrefix));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	AssetRegistryModule.Get().GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Hits;
+	for (const FAssetData& Asset : Assets)
+	{
+		if (Hits.Num() >= MaxResults)
+		{
+			break;
+		}
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Asset.AssetName.ToString());
+		Entry->SetStringField(TEXT("path"), Asset.GetObjectPathString());
+		Entry->SetStringField(TEXT("class"), Asset.AssetClassPath.GetAssetName().ToString());
+		Hits.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("assets"), Hits);
+	Result->SetNumberField(TEXT("count"), Hits.Num());
+	Result->SetBoolField(TEXT("truncated"), Assets.Num() > MaxResults);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("packagePath"), PackagePath))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Maps/NewLevel"));
+	}
+
+	// Refuse an existing path BEFORE touching AssetTools: CreateAsset answers an existing
+	// asset with a modal overwrite dialog, which freezes the game thread and therefore
+	// this whole bridge until a human clicks it. A modal is never an acceptable failure
+	// mode for a headless caller.
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("asset_already_exists: %s"), *PackagePath));
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	const FString PackageDir = FPackageName::GetLongPackagePath(PackagePath);
+
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
+	UWorldFactory* Factory = NewObject<UWorldFactory>();
+	UObject* NewAsset = AssetToolsModule.Get().CreateAsset(AssetName, PackageDir, UWorld::StaticClass(), Factory);
+	UWorld* NewWorld = Cast<UWorld>(NewAsset);
+	if (!NewWorld)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("create_level_failed: %s (does an asset already exist there?)"), *PackagePath));
+	}
+
+	// Optional per-level GameMode override, so the level is playable without touching
+	// project-wide defaults.
+	FString GameModeClassName;
+	if (Params->TryGetStringField(TEXT("gameModeClass"), GameModeClassName) && !GameModeClassName.IsEmpty())
+	{
+		FString ClassError;
+		UClass* GameModeClass = ResolveClassByName(GameModeClassName, ClassError);
+		if (!GameModeClass)
+		{
+			return MakeErrorResponse(ClassError);
+		}
+		AWorldSettings* WorldSettings = NewWorld->GetWorldSettings();
+		if (WorldSettings)
+		{
+			WorldSettings->DefaultGameMode = GameModeClass;
+		}
+	}
+
+	// Maps save with the map extension, not the asset extension.
+	UPackage* Package = NewWorld->GetOutermost();
+	Package->MarkPackageDirty();
+	const FString FileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetMapPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	const bool bSaved = UPackage::SavePackage(Package, NewWorld, *FileName, SaveArgs);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), NewWorld->GetPathName());
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetGameSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return MakeErrorResponse(TEXT("missing_param: provide defaultGameMode, editorStartupMap, and/or gameDefaultMap"));
+	}
+
+	UGameMapsSettings* Settings = GetMutableDefault<UGameMapsSettings>();
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	bool bChangedAnything = false;
+
+	FString DefaultGameMode;
+	if (Params->TryGetStringField(TEXT("defaultGameMode"), DefaultGameMode) && !DefaultGameMode.IsEmpty())
+	{
+		UGameMapsSettings::SetGlobalDefaultGameMode(DefaultGameMode);
+		Result->SetStringField(TEXT("defaultGameMode"), DefaultGameMode);
+		bChangedAnything = true;
+	}
+	FString EditorStartupMap;
+	if (Params->TryGetStringField(TEXT("editorStartupMap"), EditorStartupMap) && !EditorStartupMap.IsEmpty())
+	{
+		Settings->EditorStartupMap = FSoftObjectPath(EditorStartupMap);
+		Result->SetStringField(TEXT("editorStartupMap"), EditorStartupMap);
+		bChangedAnything = true;
+	}
+	FString GameDefaultMap;
+	if (Params->TryGetStringField(TEXT("gameDefaultMap"), GameDefaultMap) && !GameDefaultMap.IsEmpty())
+	{
+		UGameMapsSettings::SetGameDefaultMap(GameDefaultMap);
+		Result->SetStringField(TEXT("gameDefaultMap"), GameDefaultMap);
+		bChangedAnything = true;
+	}
+
+	if (!bChangedAnything)
+	{
+		return MakeErrorResponse(TEXT("missing_param: provide defaultGameMode, editorStartupMap, and/or gameDefaultMap"));
+	}
+
+	// Persists to DefaultEngine.ini so the change survives an editor restart.
+	Settings->TryUpdateDefaultConfigFile();
+	Result->SetBoolField(TEXT("saved"), true);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddInputMapping(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Kind, Name, KeyName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("kind"), Kind) ||
+		!Params->TryGetStringField(TEXT("name"), Name) ||
+		!Params->TryGetStringField(TEXT("key"), KeyName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: kind (action|axis), name, key are required"));
+	}
+
+	const FKey Key(*KeyName);
+	if (!Key.IsValid())
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("unknown_key: %s (use UE key names like F, SpaceBar, W, MouseX, Gamepad_LeftX)"), *KeyName));
+	}
+
+	UInputSettings* InputSettings = UInputSettings::GetInputSettings();
+	if (Kind == TEXT("action"))
+	{
+		InputSettings->AddActionMapping(FInputActionKeyMapping(FName(*Name), Key), /*bForceRebuildKeymaps=*/true);
+	}
+	else if (Kind == TEXT("axis"))
+	{
+		double Scale = 1.0;
+		Params->TryGetNumberField(TEXT("scale"), Scale);
+		InputSettings->AddAxisMapping(FInputAxisKeyMapping(FName(*Name), Key, static_cast<float>(Scale)), /*bForceRebuildKeymaps=*/true);
+	}
+	else
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("unknown_kind: %s (expected action or axis)"), *Kind));
+	}
+
+	InputSettings->SaveKeyMappings();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("kind"), Kind);
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("key"), KeyName);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleStartPie(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor)
+	{
+		return MakeErrorResponse(TEXT("no_editor"));
+	}
+	if (GEditor->PlayWorld)
+	{
+		return MakeErrorResponse(TEXT("pie_already_running: call stop_pie first"));
+	}
+
+	int32 NumPlayers = 2;
+	bool bListenServer = true;
+	double NumRaw = 0.0;
+	if (Params.IsValid() && Params->TryGetNumberField(TEXT("numPlayers"), NumRaw))
+	{
+		NumPlayers = FMath::Clamp(static_cast<int32>(NumRaw), 1, 4);
+	}
+	if (Params.IsValid())
+	{
+		Params->TryGetBoolField(TEXT("listenServer"), bListenServer);
+	}
+
+	ULevelEditorPlaySettings* PlaySettings = GetMutableDefault<ULevelEditorPlaySettings>();
+	PlaySettings->SetPlayNumberOfClients(NumPlayers);
+	PlaySettings->SetPlayNetMode(bListenServer && NumPlayers > 1 ? PIE_ListenServer : PIE_Standalone);
+	PlaySettings->SetRunUnderOneProcess(true);
+
+	FRequestPlaySessionParams SessionParams;
+	GEditor->RequestPlaySession(SessionParams);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("requested"), true);
+	Result->SetNumberField(TEXT("numPlayers"), NumPlayers);
+	Result->SetBoolField(TEXT("listenServer"), bListenServer);
+	Result->SetStringField(TEXT("note"), TEXT("PIE starts on the next editor tick; poll pie_status and read the editor log for runtime errors"));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleStopPie(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor)
+	{
+		return MakeErrorResponse(TEXT("no_editor"));
+	}
+	const bool bWasRunning = GEditor->PlayWorld != nullptr;
+	if (bWasRunning)
+	{
+		GEditor->RequestEndPlayMap();
+	}
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("wasRunning"), bWasRunning);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandlePieStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("running"), GEditor && GEditor->PlayWorld != nullptr);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleOpenLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+	if (!FPackageName::DoesPackageExist(Path))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("level_not_found: %s"), *Path));
+	}
+
+	// bSaveDirty=true so switching maps never raises the save-changes modal, which would
+	// freeze the bridge. Anything dirty in the current map is saved, not discarded.
+	const bool bOpened = UEditorLoadingAndSavingUtils::LoadMap(Path) != nullptr;
+	if (!bOpened)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("open_level_failed: %s"), *Path));
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("openedLevel"), World ? World->GetOutermost()->GetName() : Path);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSpawnActor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ClassName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("actorClass"), ClassName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: actorClass"));
+	}
+	FString ClassError;
+	UClass* ActorClass = ResolveClassByName(ClassName, ClassError);
+	if (!ActorClass)
+	{
+		return MakeErrorResponse(ClassError);
+	}
+	if (!ActorClass->IsChildOf(AActor::StaticClass()))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("not_an_actor_class: %s"), *ActorClass->GetName()));
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return MakeErrorResponse(TEXT("no_editor_world: open a level first (open_level)"));
+	}
+
+	auto ReadVector = [&Params](const TCHAR* Prefix, double DefaultValue) -> FVector
+	{
+		double X = DefaultValue, Y = DefaultValue, Z = DefaultValue;
+		Params->TryGetNumberField(FString::Printf(TEXT("%sX"), Prefix), X);
+		Params->TryGetNumberField(FString::Printf(TEXT("%sY"), Prefix), Y);
+		Params->TryGetNumberField(FString::Printf(TEXT("%sZ"), Prefix), Z);
+		return FVector(X, Y, Z);
+	};
+	const FVector Location = ReadVector(TEXT("loc"), 0.0);
+	const FVector Scale = ReadVector(TEXT("scale"), 1.0);
+	double Pitch = 0, Yaw = 0, Roll = 0;
+	Params->TryGetNumberField(TEXT("pitch"), Pitch);
+	Params->TryGetNumberField(TEXT("yaw"), Yaw);
+	Params->TryGetNumberField(TEXT("roll"), Roll);
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSpawnActor", "MCP: Spawn Actor"));
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AActor* Actor = World->SpawnActor(ActorClass, &Location, nullptr, SpawnParams);
+	if (!Actor)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("spawn_failed: %s"), *ActorClass->GetName()));
+	}
+	Actor->SetActorRotation(FRotator(Pitch, Yaw, Roll));
+	Actor->SetActorScale3D(Scale);
+
+	FString Label;
+	if (Params->TryGetStringField(TEXT("label"), Label) && !Label.IsEmpty())
+	{
+		Actor->SetActorLabel(Label);
+	}
+
+	// Convenience for the most common level-blocking need: a StaticMeshActor with a mesh
+	// assigned in one call (floors, walls, platforms).
+	FString MeshPath;
+	if (Params->TryGetStringField(TEXT("staticMesh"), MeshPath) && !MeshPath.IsEmpty())
+	{
+		AStaticMeshActor* MeshActor = Cast<AStaticMeshActor>(Actor);
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+		if (!MeshActor || !Mesh)
+		{
+			return MakeErrorResponse(MeshActor
+				? FString::Printf(TEXT("static_mesh_not_found: %s"), *MeshPath)
+				: TEXT("staticMesh only applies to actorClass StaticMeshActor"));
+		}
+		MeshActor->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+	}
+
+	World->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("actor"), Actor->GetName());
+	Result->SetStringField(TEXT("label"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("class"), ActorClass->GetName());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	const bool bSaved = FEditorFileUtils::SaveCurrentLevel();
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddComponent(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, ComponentClassName, ComponentName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("componentClass"), ComponentClassName) ||
+		!Params->TryGetStringField(TEXT("name"), ComponentName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, componentClass, name are required"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+	if (!Blueprint->SimpleConstructionScript)
+	{
+		return MakeErrorResponse(TEXT("no_construction_script: this Blueprint type cannot own components"));
+	}
+
+	FString ClassError;
+	UClass* ComponentClass = ResolveClassByName(ComponentClassName, ClassError);
+	if (!ComponentClass)
+	{
+		return MakeErrorResponse(ClassError);
+	}
+	if (!ComponentClass->IsChildOf(UActorComponent::StaticClass()))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("not_a_component_class: %s"), *ComponentClass->GetName()));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddComponent", "MCP: Add Component"));
+	Blueprint->Modify();
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	USCS_Node* NewNode = SCS->CreateNode(ComponentClass, FName(*ComponentName));
+	if (!NewNode)
+	{
+		return MakeErrorResponse(TEXT("component_creation_failed"));
+	}
+
+	// Optional attachment to an existing SCS component by variable name; root otherwise.
+	FString ParentName;
+	if (Params->TryGetStringField(TEXT("parent"), ParentName) && !ParentName.IsEmpty())
+	{
+		USCS_Node* ParentNode = nullptr;
+		for (USCS_Node* Existing : SCS->GetAllNodes())
+		{
+			if (Existing && Existing->GetVariableName() == FName(*ParentName))
+			{
+				ParentNode = Existing;
+				break;
+			}
+		}
+		if (!ParentNode)
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("parent_component_not_found: %s"), *ParentName));
+		}
+		ParentNode->AddChildNode(NewNode);
+	}
+	else
+	{
+		SCS->AddNode(NewNode);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("name"), NewNode->GetVariableName().ToString());
+	Result->SetStringField(TEXT("class"), ComponentClass->GetName());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListComponents(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Components;
+	if (Blueprint->SimpleConstructionScript)
+	{
+		for (const USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+		{
+			if (!Node)
+			{
+				continue;
+			}
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
+			Entry->SetStringField(TEXT("class"), Node->ComponentClass ? Node->ComponentClass->GetName() : TEXT("?"));
+			Components.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	// Native components inherited from the parent class, reported by PROPERTY name
+	// (Mesh, CapsuleComponent, CharacterMovement), because that is the name VariableGet
+	// accepts in a graph. The CDO's instance names (CharacterMesh0, CollisionCylinder)
+	// are useless to a graph author.
+	TArray<TSharedPtr<FJsonValue>> Inherited;
+	if (const UClass* ParentClass = Blueprint->ParentClass)
+	{
+		for (TFieldIterator<FObjectProperty> It(ParentClass); It; ++It)
+		{
+			if (!It->PropertyClass || !It->PropertyClass->IsChildOf(UActorComponent::StaticClass()))
+			{
+				continue;
+			}
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), It->GetName());
+			Entry->SetStringField(TEXT("class"), It->PropertyClass->GetName());
+			Inherited.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("components"), Components);
+	Result->SetArrayField(TEXT("inherited"), Inherited);
+	return MakeOkResponse(Result);
+}
+
+namespace
+{
+	// Shared by set_component_property and set_class_default: set a reflected property
+	// from its string form, answering an unknown name with the object's real properties.
+	TSharedRef<FJsonObject> SetPropertyFromString(UObject* Target, const FString& PropertyName, const FString& Value,
+		TSharedRef<FJsonObject> (*MakeOk)(const TSharedPtr<FJsonObject>&),
+		TSharedRef<FJsonObject> (*MakeError)(const FString&))
+	{
+		FProperty* Property = Target->GetClass()->FindPropertyByName(FName(*PropertyName));
+		if (!Property)
+		{
+			TArray<FString> Names;
+			for (TFieldIterator<FProperty> It(Target->GetClass()); It; ++It)
+			{
+				Names.Add(It->GetName());
+			}
+			// Compact near-miss list: contains-match first, then edit distance so plain
+			// typos (TargettArmLength) still land on the right answer.
+			auto EditDistance = [](const FString& A, const FString& B) -> int32
+			{
+				const int32 LenA = A.Len(), LenB = B.Len();
+				TArray<int32> Prev, Curr;
+				Prev.SetNumUninitialized(LenB + 1);
+				Curr.SetNumUninitialized(LenB + 1);
+				for (int32 Col = 0; Col <= LenB; ++Col) { Prev[Col] = Col; }
+				for (int32 Row = 1; Row <= LenA; ++Row)
+				{
+					Curr[0] = Row;
+					for (int32 Col = 1; Col <= LenB; ++Col)
+					{
+						const int32 Cost = (FChar::ToLower(A[Row - 1]) == FChar::ToLower(B[Col - 1])) ? 0 : 1;
+						Curr[Col] = FMath::Min3(Curr[Col - 1] + 1, Prev[Col] + 1, Prev[Col - 1] + Cost);
+					}
+					Prev = Curr;
+				}
+				return Prev[LenB];
+			};
+
+			const int32 MaxDistance = FMath::Max(2, PropertyName.Len() / 4);
+			TArray<FString> Similar;
+			for (const FString& Name : Names)
+			{
+				if (Name.Contains(PropertyName) || PropertyName.Contains(Name) ||
+					(FMath::Abs(Name.Len() - PropertyName.Len()) <= MaxDistance && EditDistance(Name, PropertyName) <= MaxDistance))
+				{
+					Similar.Add(Name);
+					if (Similar.Num() >= 8)
+					{
+						break;
+					}
+				}
+			}
+			const FString Hint = Similar.Num() > 0
+				? FString::Printf(TEXT(" (similar: %s)"), *FString::Join(Similar, TEXT(", ")))
+				: FString::Printf(TEXT(" (%d properties exist; none match)"), Names.Num());
+			return MakeError(FString::Printf(TEXT("property_not_found: %s on %s%s"),
+				*PropertyName, *Target->GetClass()->GetName(), *Hint));
+		}
+
+		Target->Modify();
+		void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
+		const TCHAR* ImportResult = Property->ImportText_Direct(*Value, ValuePtr, Target, PPF_None);
+		if (!ImportResult)
+		{
+			return MakeError(FString::Printf(TEXT("value_parse_failed: could not parse '%s' as %s (property %s)"),
+				*Value, *Property->GetCPPType(), *PropertyName));
+		}
+
+		FPropertyChangedEvent ChangeEvent(Property);
+		Target->PostEditChangeProperty(ChangeEvent);
+
+		TSharedRef<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+		ResultObj->SetStringField(TEXT("property"), PropertyName);
+		ResultObj->SetStringField(TEXT("type"), Property->GetCPPType());
+		FString NewValue;
+		Property->ExportTextItem_Direct(NewValue, ValuePtr, nullptr, Target, PPF_None);
+		ResultObj->SetStringField(TEXT("value"), NewValue);
+		return MakeOk(ResultObj);
+	}
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetComponentProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, ComponentName, PropertyName, Value;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("component"), ComponentName) ||
+		!Params->TryGetStringField(TEXT("property"), PropertyName) ||
+		!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, component, property, value are required"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+	if (!Blueprint->SimpleConstructionScript)
+	{
+		return MakeErrorResponse(TEXT("no_construction_script"));
+	}
+
+	USCS_Node* TargetNode = nullptr;
+	TArray<FString> Available;
+	for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+	{
+		if (!Node)
+		{
+			continue;
+		}
+		Available.Add(Node->GetVariableName().ToString());
+		if (Node->GetVariableName() == FName(*ComponentName))
+		{
+			TargetNode = Node;
+		}
+	}
+	if (!TargetNode || !TargetNode->ComponentTemplate)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("component_not_found: %s (available: %s)"),
+			*ComponentName, *FString::Join(Available, TEXT(", "))));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetComponentProp", "MCP: Set Component Property"));
+	Blueprint->Modify();
+	TSharedRef<FJsonObject> Response = SetPropertyFromString(
+		TargetNode->ComponentTemplate, PropertyName, Value, &MakeOkResponse, &MakeErrorResponse);
+	if (Response->GetBoolField(TEXT("ok")))
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	}
+	return Response;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, PropertyName, Value;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("property"), PropertyName) ||
+		!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, property, value are required"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+	if (!Blueprint->GeneratedClass)
+	{
+		return MakeErrorResponse(TEXT("no_generated_class: compile the Blueprint first"));
+	}
+
+	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+	if (!CDO)
+	{
+		return MakeErrorResponse(TEXT("no_class_default_object"));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetClassDefault", "MCP: Set Class Default"));
+	Blueprint->Modify();
+	TSharedRef<FJsonObject> Response = SetPropertyFromString(CDO, PropertyName, Value, &MakeOkResponse, &MakeErrorResponse);
+	if (Response->GetBoolField(TEXT("ok")))
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	}
+	return Response;
 }
 

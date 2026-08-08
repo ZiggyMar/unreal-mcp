@@ -65,6 +65,26 @@ private:
 	// --- Batch: many nodes/wires/defaults in one atomic transaction ---
 	static TSharedRef<FJsonObject> HandleBuildGraph(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Assets, levels, project settings, PIE (challenge tooling, part A) ---
+	static TSharedRef<FJsonObject> HandleListAssets(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCreateLevel(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetGameSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleAddInputMapping(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleStartPie(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleStopPie(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandlePieStatus(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Level editing: open, populate, save ---
+	static TSharedRef<FJsonObject> HandleOpenLevel(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSpawnActor(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSaveLevel(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Components and class defaults (challenge tooling, part B) ---
+	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListComponents(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetComponentProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
+
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
 	// must already hold a transaction and have decided how failures roll back.
 	static TSharedRef<FJsonObject> AddNodeCore(class UBlueprint* Blueprint, class UEdGraph* Graph,
