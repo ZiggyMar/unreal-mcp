@@ -751,6 +751,26 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 				*EventName, ParentClass ? *ParentClass->GetName() : TEXT("(no parent class)")));
 		}
 
+		// An override event node for a given function is unique per graph — the real Blueprint
+		// editor focuses the existing node rather than creating a duplicate when you re-add the
+		// same event. This matters even on a freshly-created Blueprint: new Actor-derived
+		// Blueprints can already come with pre-populated stub event nodes (e.g. BeginPlay/Tick),
+		// so a naive unconditional-create duplicates them on the very first add_node call.
+		for (UEdGraphNode* ExistingNode : Graph->Nodes)
+		{
+			UK2Node_Event* ExistingEvent = Cast<UK2Node_Event>(ExistingNode);
+			if (ExistingEvent && ExistingEvent->bOverrideFunction && ExistingEvent->EventReference.GetMemberName() == FName(*EventName))
+			{
+				const int32 ExistingIndex = Graph->Nodes.IndexOfByKey(ExistingEvent);
+				TSharedRef<FJsonObject> ExistingResult = MakeShared<FJsonObject>();
+				ExistingResult->SetStringField(TEXT("id"), ExistingIndex != INDEX_NONE ? MakeNodeId(ExistingIndex) : TEXT("?"));
+				ExistingResult->SetStringField(TEXT("type"), ExistingEvent->GetClass()->GetName());
+				ExistingResult->SetStringField(TEXT("title"), ExistingEvent->GetNodeTitle(ENodeTitleType::ListView).ToString());
+				ExistingResult->SetBoolField(TEXT("alreadyExisted"), true);
+				return MakeOkResponse(ExistingResult);
+			}
+		}
+
 		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
 		EventNode->EventReference.SetExternalMember(FName(*EventName), ParentClass);
 		EventNode->bOverrideFunction = true;

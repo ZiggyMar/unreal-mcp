@@ -38,7 +38,15 @@ This is being built and verified in public, milestone by milestone. Each milesto
 - [Milestone 2 — create/edit Blueprint graphs](docs/M2_STATUS.md): create Blueprints, add nodes, connect pins, add variables, compile with structured error reporting.
 - [Milestone 3 — persistent project index, search, references](docs/M3_STATUS.md): incrementally-updated index (AssetRegistry-backed, disk-cached), `search_project`, `find_references`, `get_project_overview`, optional local-model enrichment for search results.
 
-All three milestones are now build-verified (compiles clean against a real stock UE 5.8 install, both as an isolated plugin package and directly in a real project) and protocol-verified (all 16 MCP tools exercised end-to-end over real MCP stdio against a fake bridge). The one thing every milestone currently shares as a caveat: nobody has yet run a full session inside the live graphical Editor, so actual runtime behavior against real project data — as opposed to compiling and speaking the right protocol — is unverified. That's the next thing to close out; see each status doc for the exact manual steps, with M3's being the highest priority since it's what the incremental-index claim actually depends on.
+All three milestones are build-verified, protocol-verified, **and now live-verified**: see
+[docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) for a real session against a real ~20-Blueprint
+project — reads returning correct real data, a full create/wire/compile/save write round-trip, and
+confirmation that the incremental project index actually stays fresh without restarting the editor
+(M3's core claim). That session also caught and fixed a real bug (`add_node` duplicating an
+already-present override-event node) that no amount of compiling or protocol testing would have
+surfaced. Still outstanding: UE 5.6 hasn't been live-tested yet (5.8 only so far), and a handful of
+less-common commands (`add_variable`, `remove_node`, `CustomEvent`/`VariableGet`/`VariableSet` nodes)
+haven't been exercised live.
 
 ## Setup
 
