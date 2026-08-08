@@ -1,15 +1,15 @@
-# Milestone 1 Status — Read-only Blueprint introspection, end-to-end
+# Milestone 1 Status: read-only Blueprint introspection, end-to-end
 
 Last updated: 2026-08-07
 
 > **Update 2026-08-08**: the read path in this document has now been exercised against a real,
-> live Unreal Editor with real project data — see [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md).
+> live Unreal Editor with real project data. See [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md).
 > Everything below reflects the pre-live-test state.
 
 ## TL;DR
 
 - **C++ plugin (`UnrealMCPBridge`) compiles successfully against a real, stock-launcher
-  UE 5.8 install** (`F:\UE_5.8`) — verified twice: once as a standalone `RunUAT BuildPlugin`
+  UE 5.8 install** (`F:\UE_5.8`), verified twice: once as a standalone `RunUAT BuildPlugin`
   package, and once built directly into the target project (`AntiVirusSquadUE58`) via
   `UnrealBuildTool`. See "Verified" below for exact commands/output.
 - **MCP server (`mcp-server/`) builds, type-checks, and was verified end-to-end over the
@@ -20,7 +20,7 @@ Last updated: 2026-08-07
   wire protocol between the plugin and the server was verified against a hand-written
   fake server that mimics the bridge's exact framing, but the real `FMCPTcpServer` has
   never accepted a real connection or served a real Blueprint. **This is the one thing
-  the user must confirm manually** — see "Manual step required" below.
+  the user must confirm manually** (see "Manual step required" below).
 - Engine reference source clone (`A:\UnrealEngineSource\UnrealEngine-5.8`) is **broken**
   (partial/corrupt clone, not a valid git repo) and was not used for this milestone. All
   C++ was written from public UE API knowledge and corrected against real compiler errors
@@ -28,13 +28,13 @@ Last updated: 2026-08-07
 
 ## What compiles / runs (verified)
 
-### C++ plugin — `UnrealMCPBridge/`
+### C++ plugin: `UnrealMCPBridge/`
 
 Location: `F:\!Projects\UnrealMCP\UnrealMCPBridge\` (source of truth), copied to
 `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\` (build/runtime location).
 
 Engine install used: `F:\UE_5.8` (found via
-`C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat` — a stock Epic Games
+`C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat`, a stock Epic Games
 Launcher install, `UE_5.8`, changelist `55116800`, `IsPromotedBuild: 1`). A UE 5.6 install
 also exists at `M:\Unreal\UE_5.6` but was not used since the target project pins
 `"EngineAssociation": "5.8"`.
@@ -42,7 +42,7 @@ also exists at `M:\Unreal\UE_5.6` but was not used since the target project pins
 Compiler toolchain: Visual Studio 2022 Community (MSVC 14.44.35207) at `D:\community`,
 found automatically by UBT.
 
-**Verification 1 — isolated plugin package build** (proves the plugin is self-contained
+**Verification 1: isolated plugin package build** (proves the plugin is self-contained
 and correct against public APIs only):
 
 ```
@@ -55,7 +55,7 @@ F:\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat BuildPlugin ^
 Result: `BUILD SUCCESSFUL`. Produced
 `UnrealEditor-UnrealMCPBridge.dll` + `.pdb` for Win64 Development.
 
-**Verification 2 — built directly against the target project**, i.e. what actually
+**Verification 2: built directly against the target project**, i.e. what actually
 happens when the project's editor target compiles with this plugin enabled:
 
 ```
@@ -67,20 +67,20 @@ F:\UE_5.8\Engine\Build\BatchFiles\Build.bat UnrealEditor Win64 Development ^
 Result: **`Result: Succeeded`**, exit code 0, total execution time ~130s. Output binary
 confirmed at `A:\UnrealProjects\AntiVirusSquadUE58\Plugins\UnrealMCPBridge\Binaries\Win64\UnrealEditor-UnrealMCPBridge.dll`
 (+ `.pdb`), i.e. the binaries are already sitting in the actual target project, not just a
-scratch package — the user should not need to trigger a first-time compile prompt at all.
+scratch package, so the user should not need to trigger a first-time compile prompt at all.
 As a side effect this build also compiled the project's other existing plugins that needed
 it (e.g. modules named `Kronos`/`KronosEditor` already present in the project), which
-happened cleanly alongside `UnrealMCPBridge` — good evidence our plugin doesn't conflict
+happened cleanly alongside `UnrealMCPBridge`. Good evidence our plugin doesn't conflict
 with anything already in the project.
 
-Note: `AntiVirusSquadUE58` is a **Blueprint-only project** — it has no `Source/` directory
+Note: `AntiVirusSquadUE58` is a **Blueprint-only project**. It has no `Source/` directory
 of its own. Before this milestone it had no reason to ever compile anything. Adding
 `UnrealMCPBridge` as a C++ plugin makes this the *first* thing in the project that
 requires a build step.
 
 Fix applied during this milestone: the first build attempt failed with C2440/C2679 errors
 because a local helper function named `MakeError(...)` collided with Unreal's own global
-`MakeError()` template from `Templates/ValueOrError.h` (pulled in transitively) — overload
+`MakeError()` template from `Templates/ValueOrError.h` (pulled in transitively). Overload
 resolution silently preferred UE's version, which returns a `TValueOrError_ErrorProxy<T>`,
 not our `TSharedRef<FJsonObject>`. Renamed our helpers to `MakeOkResponse` /
 `MakeErrorResponse` throughout `MCPCommandHandler.cpp` and the isolated build then
@@ -90,17 +90,17 @@ succeeded cleanly. Worth remembering for M2: avoid short generic names like `Mak
 **Plugin registration**: `UnrealMCPBridge.uplugin` sets `"EnabledByDefault": true`, and
 `AntiVirusSquadUE58.uproject`'s `Plugins` array was updated to explicitly list
 `{ "Name": "UnrealMCPBridge", "Enabled": true, "TargetAllowList": ["Editor"] }` so the
-plugin loads automatically — the user should not need to enable it manually via
+plugin loads automatically, so the user should not need to enable it manually via
 Edit > Plugins.
 
-### MCP server — `mcp-server/`
+### MCP server: `mcp-server/`
 
 Location: `F:\!Projects\UnrealMCP\mcp-server\`.
 
-- `npm install` — succeeded, 96 packages, 0 vulnerabilities.
-- `npm run build` (`tsc -p tsconfig.json`) — succeeded, produced `dist/*.js` + source maps.
-- `npx tsc --noEmit` — clean, zero errors.
-- `node dist/index.js` — starts, connects an MCP stdio transport, logs
+- `npm install`: succeeded, 96 packages, 0 vulnerabilities.
+- `npm run build` (`tsc -p tsconfig.json`): succeeded, produced `dist/*.js` + source maps.
+- `npx tsc --noEmit`: clean, zero errors.
+- `node dist/index.js`: starts, connects an MCP stdio transport, logs
   `unreal-mcp-server: connected via stdio; bridge target 127.0.0.1:8765`, and stays
   running waiting for MCP client input (did not crash).
 
@@ -123,7 +123,7 @@ checked into the repo):
    crash or protocol violation) with the expected connection-refused message.
 
 This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. It does
-**not** confirm the C++ side of that same protocol against a live editor — see below.
+**not** confirm the C++ side of that same protocol against a live editor. See below.
 
 ## What is stubbed / unverified
 
@@ -149,13 +149,13 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
   limitation in `mcp-server/README.md`.
 - **UE 5.6 build.** Only built/verified against 5.8 (`F:\UE_5.8`), matching the target
   project's `EngineAssociation`. A UE 5.6 install exists at `M:\Unreal\UE_5.6` but was not
-  exercised — ARCHITECTURE.md notes the plugin must be built once per engine version;
+  exercised. ARCHITECTURE.md notes the plugin must be built once per engine version;
   that second build is not part of this milestone's target project.
 - **Engine reference source.** `A:\UnrealEngineSource\UnrealEngine-5.8` is present on disk
   but is **not a valid git repository** (`git status` fails with "not a git repository");
   it's a partial/broken clone per a long-path write failure during cloning. It was not
   used for anything in this milestone. All engine API usage came from public UE
-  documentation/knowledge and was validated the hard way — by fixing real compiler errors
+  documentation/knowledge and was validated the hard way, by fixing real compiler errors
   against the actual installed engine headers/libs. If/when the source clone is repaired,
   it's still only useful as a reference for future milestones, not a blocker for this one.
 
@@ -167,13 +167,13 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    `Plugins\UnrealMCPBridge\Binaries\Win64\`), so the editor should open straight into
    normal Blueprint editing with no "binaries need building" prompt. If you *do* get
    prompted anyway (e.g. because engine version/module hash checks are picky about a build
-   done outside the editor), say **yes** — it should be a fast incremental rebuild, not a
+   done outside the editor), say **yes**. It should be a fast incremental rebuild, not a
    from-scratch one.
 2. **Confirm the bridge is listening**: with the editor open, check
    `Window > Developer Tools > Output Log` for a line like
    `LogMCPBridge: UnrealMCPBridge: listening on 127.0.0.1:8765`. If you instead see
    `LogMCPBridgeModule: Error: UnrealMCPBridge failed to start TCP server on port 8765`,
-   something else on the machine already owns port 8765 — check for a stale prior editor
+   something else on the machine already owns port 8765. Check for a stale prior editor
    instance still running.
 3. **Smoke-test from the mcp-server side** once the editor is open, from
    `F:\!Projects\UnrealMCP\mcp-server`:
@@ -189,19 +189,19 @@ This confirms the MCP <-> TCP <-> JSON plumbing is correct on the server side. I
    query actually enumerates real Blueprints in `AntiVirusSquadUE58`'s Content folder, then
    pick one and try `unreal_list_blueprint_graphs` -> `unreal_read_blueprint_summary` on
    it. Report back anything that looks wrong (wrong parent class names, missing graphs,
-   empty pin lists on graphs you know have connections, etc.) — those are the most likely
+   empty pin lists on graphs you know have connections, etc.). Those are the most likely
    spots for a first-contact bug given none of this has touched real data yet.
 
 ## Blockers
 
-**None that stopped progress.** The one real risk factor — no engine install on the
-machine at all — did not materialize: a stock UE 5.8 launcher install was found at
+**None that stopped progress.** The one real risk factor (no engine install on the
+machine at all) did not materialize: a stock UE 5.8 launcher install was found at
 `F:\UE_5.8` and successfully used for two independent build verifications. The broken
 engine source clone was a non-blocking gap (reference material only, per the architecture
 doc) and is being handled outside this task.
 
 The single most important open item is the **unverified live-editor read** described
-above — everything that can be checked without a GUI session has been checked; the
+above. Everything that can be checked without a GUI session has been checked; the
 remaining risk is entirely in runtime behavior against real Editor/AssetRegistry state
 that only manifests once a human opens the project.
 
