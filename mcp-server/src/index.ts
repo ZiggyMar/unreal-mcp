@@ -11,8 +11,10 @@ import type {
   CompileBlueprintResult,
   ConnectPinsResult,
   CreateBlueprintResult,
+  FindNodeResult,
   FindReferencesResult,
   GetProjectOverviewResult,
+  NodeCatalogEntry,
   ListBlueprintGraphsResult,
   ListBlueprintsResult,
   PingResult,
@@ -513,6 +515,68 @@ server.registerTool(
   async ({ path, maxResults }) => {
     try {
       const result = await bridge.send<FindReferencesResult>("find_references", { path, maxResults });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_find_node",
+  {
+    title: "Find the exact Blueprint node/function for an intent",
+    description:
+      "Searches the running editor's real catalog of Blueprint-callable functions, built from live C++ reflection " +
+      "on the exact engine version that is open, so the names and signatures it returns are correct by construction " +
+      "rather than recalled. Search by intent or partial name (e.g. \"spawn actor\", \"line trace\", \"print\") and get " +
+      "back exact functionName and className values that unreal_add_node will accept, ranked exact then prefix then " +
+      "contains. **Call this before unreal_add_node whenever you are not certain a function name and its owning class " +
+      "are exactly right**, which is most of the time: guessing Unreal's API surface from memory is the single most " +
+      "common cause of a failed edit. Returns compact entries without full pin lists; follow up with " +
+      "unreal_get_node_signature for exact pins.",
+    inputSchema: {
+      query: z
+        .string()
+        .describe('What you are looking for, e.g. "spawn actor", "PrintString", "get player controller".'),
+      maxResults: z.number().optional().describe("Cap on hits returned. Defaults to 20, max 100."),
+    },
+  },
+  async ({ query, maxResults }) => {
+    try {
+      const result = await bridge.send<FindNodeResult>("find_node", { query, maxResults });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_get_node_signature",
+  {
+    title: "Get a Blueprint function's exact pins and parameter types",
+    description:
+      "Given an exact function name (and optionally its owning class, to disambiguate), returns that function's real " +
+      "parameter list from engine reflection: each parameter's name, C++ type, direction (in/out/return), and default " +
+      "value where one exists. Use this to get pin names exactly right before calling unreal_connect_pins or " +
+      "unreal_set_pin_default_value, instead of guessing what a pin is called. If the name does not resolve, the error " +
+      "includes a didYouMean list of near-misses. Find the function name first with unreal_find_node if you do not " +
+      "already know it.",
+    inputSchema: {
+      functionName: z.string().describe('Exact function name, e.g. "PrintString".'),
+      className: z
+        .string()
+        .optional()
+        .describe(
+          'Optional owning class to disambiguate, short name or full path, e.g. "KismetSystemLibrary" or ' +
+            '"/Script/Engine.KismetSystemLibrary". Omit to take the first exact name match.'
+        ),
+    },
+  },
+  async ({ functionName, className }) => {
+    try {
+      const result = await bridge.send<NodeCatalogEntry>("get_node_signature", { functionName, className });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
