@@ -78,6 +78,18 @@ cost one failed call to discover:
 - **Comment boxes carry the narrative; node comments carry the why.** Fill both. A box whose
   text is just "Comment" is worse than no box.
 
+## Performance judgment (Blueprint cost is real)
+
+- **`GetAllActorsOfClass` is not free**, and neither is anything else that scans the world. Never
+  put it on Tick. Prefer a looping timer (0.1-0.2s is imperceptible for gameplay scans) that only
+  exists while the feature is active: start it in the event that turns the feature on, clear it in
+  the event that turns it off. Caching a found actor is even cheaper, but remember late joiners.
+- **Keep casts out of hot loops** where the design allows: filter cheaply first (distance, tags),
+  cast last, or type the data so no cast is needed.
+- **Treat compile warnings as failures** for graphs you author. `unreal_compile_blueprint` returns
+  `warningCount` and messages; "references unknown Axis" is a warning, and it means input is
+  silently dead. Zero errors AND zero warnings is the definition of done.
+
 ## Cost discipline (tokens are money)
 
 - Prefer `search_project` and `find_node` over any read that returns more than you need.

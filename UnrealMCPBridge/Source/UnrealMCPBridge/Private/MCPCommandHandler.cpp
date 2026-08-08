@@ -2628,7 +2628,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddInputMapping(const TSharedP
 		return MakeErrorResponse(FString::Printf(TEXT("unknown_kind: %s (expected action or axis)"), *Kind));
 	}
 
+	// SaveKeyMappings alone writes the Saved config layer, which does NOT survive as
+	// project configuration: mappings added through it vanished on the next editor
+	// restart, leaving every InputAxis node referencing an unknown axis (found by the
+	// owner when WASD died). TryUpdateDefaultConfigFile persists to Config/DefaultInput.ini.
 	InputSettings->SaveKeyMappings();
+	InputSettings->TryUpdateDefaultConfigFile();
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("kind"), Kind);
