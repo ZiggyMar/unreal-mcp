@@ -45,6 +45,11 @@ cost one failed call to discover:
 - **Create events before their callers.** A `CallFunction` for a CustomEvent (or a function from
   `unreal_create_function`) resolves against the skeleton class, which updates when the event is
   created, so within one `build_graph` batch order the event node earlier in the `nodes` array.
+- **Re-runs are not free.** A script that dies mid-way and is re-run will re-create every
+  CustomEvent it already made (auto-renamed `Name_0`, `Name_1`) and orphan the old chains as
+  dead spaghetti. Before re-running authoring steps, read the graph and skip what already
+  exists, or clean up duplicates deliberately. Verify object-property sets took effect by
+  checking the echoed value; a path that fails to resolve is an error, not a success.
 
 - **Exec pin names are not uniform.** Regular nodes use `execute` (in) and `then` (out). Branch
   outputs are `then`/`else`. Sequence outputs are `then_0`/`then_1`. **Macro nodes (ForEachLoop,
@@ -59,6 +64,19 @@ cost one failed call to discover:
   right `className` so you never guess.
 - **Position nodes as you place them.** `x`/`y` cost nothing and are cosmetic to the compiler,
   but a human will open this graph later. Lay nodes left to right in execution order.
+
+## Working in a real project (not a scratch one)
+
+- **Touch only what the task names.** If movement already works, do not rebuild movement. Read
+  first (`search_project`, graph summaries), reuse existing functions and events, and add the
+  smallest graph that delivers the request. The owner's test of good judgment: "if I don't need
+  to touch a system that's already in the event graph, I won't touch it."
+- **Read the graph before placing nodes.** Fresh Actor Blueprints ship with stub events
+  (BeginPlay, Overlap, Tick) near the origin, and existing projects have real logic there. Take
+  the max extents from `read_blueprint_summary` and place new work clear of them, or your nodes
+  will land on top of theirs.
+- **Comment boxes carry the narrative; node comments carry the why.** Fill both. A box whose
+  text is just "Comment" is worse than no box.
 
 ## Cost discipline (tokens are money)
 

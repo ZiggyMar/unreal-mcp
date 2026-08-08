@@ -2040,7 +2040,6 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr
 		Blueprint->Modify();
 
 		UEdGraphNode_Comment* CommentNode = NewObject<UEdGraphNode_Comment>(Graph);
-		CommentNode->NodeComment = Text;
 		CommentNode->NodePosX = static_cast<int32>(X);
 		CommentNode->NodePosY = static_cast<int32>(Y);
 		CommentNode->NodeWidth = static_cast<int32>(Width);
@@ -2049,6 +2048,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr
 		CommentNode->CreateNewGuid();
 		CommentNode->PostPlacedNewNode();
 		CommentNode->AllocateDefaultPins();
+		// AFTER PostPlacedNewNode, which resets NodeComment to the default "Comment"
+		// text. Setting it earlier silently wiped the caller's text on every box; found
+		// by the owner playtesting and noticing the boxes carried no information.
+		CommentNode->NodeComment = Text;
 		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
 		TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -3008,6 +3011,23 @@ namespace
 		{
 			return MakeError(FString::Printf(TEXT("value_parse_failed: could not parse '%s' as %s (property %s)"),
 				*Value, *Property->GetCPPType(), *PropertyName));
+		}
+
+		// Silent-None guard. ImportText on an object/class property with an unresolvable
+		// path "succeeds" by writing null, which reads back as a working call that set
+		// nothing. That exact failure cost a playtest: DefaultPawnClass was set before
+		// the pawn Blueprint existed, the tool said ok, and PIE spawned the engine
+		// default pawn. If the caller passed something that is not None but the property
+		// resolved to null, that is an error, and a weak model especially needs it said.
+		if (const FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(Property))
+		{
+			const bool bCallerMeantNull = Value.IsEmpty() || Value == TEXT("None") || Value == TEXT("none") || Value == TEXT("null");
+			if (!bCallerMeantNull && ObjectProperty->GetObjectPropertyValue(ValuePtr) == nullptr)
+			{
+				return MakeError(FString::Printf(
+					TEXT("asset_not_resolved: '%s' did not resolve for %s; the property is now None, which is almost never what you meant. Check the path exists (list_assets) and create referenced assets before referencing them."),
+					*Value, *PropertyName));
+			}
 		}
 
 		FPropertyChangedEvent ChangeEvent(Property);
