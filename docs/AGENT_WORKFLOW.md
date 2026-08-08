@@ -1,0 +1,64 @@
+# Recommended agent workflow
+
+How an AI assistant should drive these tools to build Blueprint logic reliably. This exists
+because the difference between a smooth run and a flailing one is almost never model quality, it
+is tool-call order. Ship this to your agent as context (a system prompt block, a Claude Code
+Skill, or CLAUDE.md section) when working on an Unreal project through this MCP server.
+
+## The golden path for building a feature
+
+1. **Orient once, cheaply.** `unreal_get_project_overview` first. It costs one index lookup and
+   tells you the project's shape: how many Blueprints, in which folders, derived from what.
+2. **Find, don't enumerate.** `unreal_search_project` to locate the Blueprints, functions, and
+   variables relevant to the request. Never list everything and read through it.
+3. **Read tiered, narrow as you go.** `unreal_list_blueprint_graphs` for a Blueprint you will
+   touch, `unreal_read_blueprint_summary` for the one graph that matters,
+   `unreal_read_node_detail` only for nodes you will wire into. Do not pull full graphs you do
+   not need; that cost is exactly what this server exists to avoid.
+4. **Check reality before writing.** For any function call you are not certain about,
+   `unreal_find_node` (search by intent) then `unreal_get_node_signature` (exact pins). Guessing
+   Unreal's API surface from memory is the single most common cause of a failed edit. If you do
+   guess and miss, the error's `didYouMean` list is there to correct you in one step; use it
+   rather than retrying blind.
+5. **Write in small batches.** `unreal_add_node` / `unreal_connect_pins` /
+   `unreal_set_pin_default_value` for one coherent piece of logic at a time. Node ids returned by
+   `unreal_add_node` are persistent GUIDs; hold onto them instead of re-reading the graph.
+6. **Compile after every batch.** `unreal_compile_blueprint`, always, before telling the user
+   anything is done. A graph can look structurally fine and still fail to compile. Zero errors is
+   the definition of done for a batch, not "the calls returned ok".
+7. **Save when a unit of work is complete.** `unreal_save_blueprint`. Edits live only in editor
+   memory until saved.
+
+## Sharp edges that remain
+
+- **Exec pin names are not uniform.** Regular nodes use `execute` (in) and `then` (out). Branch
+  outputs are `then`/`else`. Sequence outputs are `then_0`/`then_1`. **Macro nodes (ForEachLoop,
+  WhileLoop, ...) use `Exec` with a capital E** as their input. When unsure, read the node's
+  detail; its pins are ground truth.
+- **`set_pin_default_value` refuses connected pins** (`pin_is_connected`). Disconnect first, or
+  reconsider which pin you meant.
+- **Variables must exist before `VariableGet`/`VariableSet` nodes reference them**, via
+  `unreal_add_variable`. Inherited parent-class variables are not supported yet.
+- **`CallFunction` needs `className` for static library functions.** `PrintString` lives on
+  `/Script/Engine.KismetSystemLibrary`, not on your Blueprint. `unreal_find_node` gives you the
+  right `className` so you never guess.
+- **Position nodes as you place them.** `x`/`y` cost nothing and are cosmetic to the compiler,
+  but a human will open this graph later. Lay nodes left to right in execution order.
+
+## Cost discipline (tokens are money)
+
+- Prefer `search_project` and `find_node` over any read that returns more than you need.
+- `find_node` hits are deliberately compact (no pin lists). Only call `get_node_signature` for
+  functions you will actually place.
+- If the user runs a local Ollama model, the server enriches search hits with one-line summaries
+  for free; nothing needs to change in how you call the tools.
+
+## Honesty rules
+
+- Never report a feature as built until `unreal_compile_blueprint` returned zero errors on every
+  Blueprint you touched.
+- If a call fails, say what failed and what you did about it. The error strings here are designed
+  to be actionable (`didYouMean`, available-macro lists, schema explanations for rejected pin
+  connections); act on them, then report.
+- Your edits are undoable: each write lands in the editor's undo history under an "MCP:" prefix.
+  Tell the user this if they seem hesitant about letting you edit their project.

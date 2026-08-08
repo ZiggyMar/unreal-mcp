@@ -197,6 +197,13 @@ Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) an
 Restart Claude Desktop after saving. The `unreal_*` tools should then appear in the tool
 picker for any chat.
 
+## Recommended agent workflow
+
+If you are pointing an AI assistant at these tools, give it
+[../docs/AGENT_WORKFLOW.md](../docs/AGENT_WORKFLOW.md) as context (system prompt block, Claude
+Code Skill, or CLAUDE.md section). It encodes the tool-call order that works, the exec-pin naming
+sharp edges, and the compile-before-claiming-done rule, and it measurably reduces flailing.
+
 ## Notes / limitations
 
 - One TCP request per tool call, on a fresh connection, with no pipelining and no
