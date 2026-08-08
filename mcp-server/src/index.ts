@@ -224,31 +224,42 @@ server.registerTool(
   {
     title: "Add a node to a Blueprint graph",
     description:
-      "Adds one node to a graph and returns its new node id immediately (e.g. \"n12\") so you can reference it in the " +
-      "same conversation (via unreal_connect_pins, unreal_set_pin_default_value, etc) without re-reading the whole " +
-      "graph. Node ids are only valid for this editor session; they are graph-array indices, not persisted identifiers.\n\n" +
+      "Adds one node to a graph and returns its new node id immediately so you can reference it in the same " +
+      "conversation (via unreal_connect_pins, unreal_set_pin_default_value, etc) without re-reading the whole graph. " +
+      "Node ids are the node's persistent GUID: stable across editor restarts and unaffected by removing other nodes.\n\n" +
       "nodeType determines which other params are required:\n" +
       '  - "Event": eventName = a function on the Blueprint\'s parent class to override (e.g. "ReceiveBeginPlay", "ReceiveTick").\n' +
       '  - "CustomEvent": eventName = name for the new custom event (auto-uniquified if it collides).\n' +
       '  - "CallFunction": functionName required; className optional (short name or full path); defaults to searching ' +
-      "the Blueprint's own generated class, then its parent class.\n" +
+      "the Blueprint's own generated class, then its parent class. If the name is close but wrong, the error includes " +
+      "a didYouMean list of near-misses.\n" +
       '  - "VariableGet" / "VariableSet": variableName = an existing member variable on this Blueprint (added via ' +
-      "unreal_add_variable). Inherited variables from a parent class are not yet supported.\n\n" +
-      "x/y are optional graph-editor position hints (cosmetic only, for the human opening the graph later). The model " +
-      "should not need to reason about them.",
+      "unreal_add_variable). Inherited variables from a parent class are not yet supported.\n" +
+      '  - "Branch": an if/else on a bool. Pins: execute, Condition, then, else. No other params.\n' +
+      '  - "Sequence": executes its output pins in order (then_0, then_1). No other params.\n' +
+      '  - "Cast": targetClass required (short name or full path); pure optional (default false = has exec pins). ' +
+      "Pins: execute, Object, then, CastFailed, As<Class>.\n" +
+      '  - "Macro": macroName required, from the engine\'s standard macro library: ForEachLoop, ForLoop, WhileLoop, ' +
+      "DoOnce, DoN, Gate, FlipFlop, IsValid, etc. A wrong name returns the full list of available macros. NOTE: macro " +
+      'nodes name their input exec pin "Exec" (capital E), unlike regular nodes\' "execute".\n\n' +
+      "x/y are optional graph-editor position hints (cosmetic only, for the human opening the graph later). Set them " +
+      "roughly left-to-right in execution order so the graph stays readable to a human.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
-      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet"]),
+      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
       functionName: z.string().optional().describe("Required for nodeType CallFunction."),
       className: z.string().optional().describe("Optional owning class for nodeType CallFunction."),
       variableName: z.string().optional().describe("Required for nodeType VariableGet or VariableSet."),
+      targetClass: z.string().optional().describe("Required for nodeType Cast: the class to cast to."),
+      pure: z.boolean().optional().describe("Cast only: true for the pure (no exec pins) form. Defaults to false."),
+      macroName: z.string().optional().describe('Required for nodeType Macro, e.g. "ForEachLoop", "WhileLoop", "DoOnce".'),
       x: z.number().optional().describe("Cosmetic graph-editor X position. Defaults to 0."),
       y: z.number().optional().describe("Cosmetic graph-editor Y position. Defaults to 0."),
     },
   },
-  async ({ path, graphName, nodeType, eventName, functionName, className, variableName, x, y }) => {
+  async ({ path, graphName, nodeType, eventName, functionName, className, variableName, targetClass, pure, macroName, x, y }) => {
     try {
       const result = await bridge.send<AddNodeResult>("add_node", {
         path,
@@ -258,6 +269,9 @@ server.registerTool(
         functionName,
         className,
         variableName,
+        targetClass,
+        pure,
+        macroName,
         x,
         y,
       });
@@ -279,9 +293,9 @@ server.registerTool(
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe("Graph name containing both nodes."),
-      sourceNodeId: z.string().describe('Node id owning the OUTPUT pin, e.g. "n3".'),
+      sourceNodeId: z.string().describe("Node id (GUID) owning the OUTPUT pin."),
       sourcePin: z.string().describe('Output pin name on the source node, e.g. "then" or "ReturnValue".'),
-      targetNodeId: z.string().describe('Node id owning the INPUT pin, e.g. "n5".'),
+      targetNodeId: z.string().describe("Node id (GUID) owning the INPUT pin."),
       targetPin: z.string().describe('Input pin name on the target node, e.g. "execute" or "Target".'),
     },
   },
@@ -312,7 +326,7 @@ server.registerTool(
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe("Graph name containing the node."),
-      nodeId: z.string().describe('Node id, e.g. "n5".'),
+      nodeId: z.string().describe("Node id (GUID) of the node owning the pin."),
       pinName: z.string().describe("Input pin name."),
       value: z.string().describe("Literal value, serialized as a string the way Blueprint pin defaults are stored."),
     },

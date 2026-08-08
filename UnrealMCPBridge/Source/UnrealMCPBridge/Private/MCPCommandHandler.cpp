@@ -17,6 +17,10 @@
 #include "K2Node_CallFunction.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
+#include "K2Node_IfThenElse.h"
+#include "K2Node_ExecutionSequence.h"
+#include "K2Node_DynamicCast.h"
+#include "K2Node_MacroInstance.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
@@ -914,10 +918,85 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			NewNode = SetNode;
 		}
 	}
+	else if (NodeType == TEXT("Branch"))
+	{
+		// The graph-editor "Branch" node. Pins: execute, Condition (bool), then, else.
+		NewNode = NewObject<UK2Node_IfThenElse>(Graph);
+	}
+	else if (NodeType == TEXT("Sequence"))
+	{
+		// Executes outputs in order. Allocates two output pins by default (then_0, then_1).
+		NewNode = NewObject<UK2Node_ExecutionSequence>(Graph);
+	}
+	else if (NodeType == TEXT("Cast"))
+	{
+		FString TargetClassName;
+		if (!Params->TryGetStringField(TEXT("targetClass"), TargetClassName))
+		{
+			return MakeErrorResponse(TEXT("missing_param: targetClass is required for nodeType=Cast"));
+		}
+		FString ClassError;
+		UClass* TargetClass = ResolveClassByName(TargetClassName, ClassError);
+		if (!TargetClass)
+		{
+			return MakeErrorResponse(ClassError);
+		}
+
+		UK2Node_DynamicCast* CastNode = NewObject<UK2Node_DynamicCast>(Graph);
+		CastNode->TargetType = TargetClass;
+		// Impure (with exec pins) by default, matching what the editor gives you when you
+		// drag off an exec line; pass pure=true for the pure form.
+		bool bPure = false;
+		Params->TryGetBoolField(TEXT("pure"), bPure);
+		CastNode->SetPurity(bPure);
+		NewNode = CastNode;
+	}
+	else if (NodeType == TEXT("Macro"))
+	{
+		FString MacroName;
+		if (!Params->TryGetStringField(TEXT("macroName"), MacroName))
+		{
+			return MakeErrorResponse(TEXT("missing_param: macroName is required for nodeType=Macro (e.g. ForEachLoop, WhileLoop, DoOnce, Gate, FlipFlop)"));
+		}
+
+		// The engine's standard macro library is where ForEachLoop/WhileLoop/etc live.
+		// This is the same asset the editor's own right-click palette pulls them from.
+		UBlueprint* MacroLib = LoadObject<UBlueprint>(nullptr, TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros"));
+		if (!MacroLib)
+		{
+			return MakeErrorResponse(TEXT("standard_macro_library_not_found: /Engine/EditorBlueprintResources/StandardMacros"));
+		}
+
+		UEdGraph* MacroGraph = nullptr;
+		TArray<FString> AvailableMacros;
+		for (UEdGraph* Candidate : MacroLib->MacroGraphs)
+		{
+			if (!Candidate)
+			{
+				continue;
+			}
+			AvailableMacros.Add(Candidate->GetName());
+			if (Candidate->GetName().Equals(MacroName, ESearchCase::IgnoreCase))
+			{
+				MacroGraph = Candidate;
+			}
+		}
+		if (!MacroGraph)
+		{
+			// List what actually exists, in the same spirit as add_node's didYouMean:
+			// the caller should never have to guess at engine-defined names.
+			return MakeErrorResponse(FString::Printf(TEXT("macro_not_found: %s (available: %s)"),
+				*MacroName, *FString::Join(AvailableMacros, TEXT(", "))));
+		}
+
+		UK2Node_MacroInstance* MacroNode = NewObject<UK2Node_MacroInstance>(Graph);
+		MacroNode->SetMacroGraph(MacroGraph);
+		NewNode = MacroNode;
+	}
 	else
 	{
 		return MakeErrorResponse(FString::Printf(
-			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet)"), *NodeType));
+			TEXT("unknown_node_type: %s (expected Event, CustomEvent, CallFunction, VariableGet, VariableSet, Branch, Sequence, Cast, Macro)"), *NodeType));
 	}
 
 	// Everything above this point is validation that can bail out; nothing has been
