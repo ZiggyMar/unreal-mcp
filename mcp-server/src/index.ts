@@ -11,10 +11,12 @@ import type {
   CompileBlueprintResult,
   ConnectPinsResult,
   CreateBlueprintResult,
+  CreateFunctionResult,
   FindNodeResult,
   FindReferencesResult,
   GetProjectOverviewResult,
   NodeCatalogEntry,
+  OrganizeGraphResult,
   ListBlueprintGraphsResult,
   ListBlueprintsResult,
   PingResult,
@@ -243,7 +245,8 @@ server.registerTool(
       "DoOnce, DoN, Gate, FlipFlop, IsValid, etc. A wrong name returns the full list of available macros. NOTE: macro " +
       'nodes name their input exec pin "Exec" (capital E), unlike regular nodes\' "execute".\n\n' +
       "x/y are optional graph-editor position hints (cosmetic only, for the human opening the graph later). Set them " +
-      "roughly left-to-right in execution order so the graph stays readable to a human.",
+      "roughly left-to-right in execution order so the graph stays readable to a human. comment is an optional " +
+      "annotation shown on the node; use it to explain WHY a node exists, as you place it.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
@@ -257,9 +260,10 @@ server.registerTool(
       macroName: z.string().optional().describe('Required for nodeType Macro, e.g. "ForEachLoop", "WhileLoop", "DoOnce".'),
       x: z.number().optional().describe("Cosmetic graph-editor X position. Defaults to 0."),
       y: z.number().optional().describe("Cosmetic graph-editor Y position. Defaults to 0."),
+      comment: z.string().optional().describe("Optional node comment explaining why this node exists."),
     },
   },
-  async ({ path, graphName, nodeType, eventName, functionName, className, variableName, targetClass, pure, macroName, x, y }) => {
+  async ({ path, graphName, nodeType, eventName, functionName, className, variableName, targetClass, pure, macroName, x, y, comment }) => {
     try {
       const result = await bridge.send<AddNodeResult>("add_node", {
         path,
@@ -274,6 +278,7 @@ server.registerTool(
         macroName,
         x,
         y,
+        comment,
       });
       return jsonResult(result);
     } catch (err) {
@@ -591,6 +596,86 @@ server.registerTool(
   async ({ functionName, className }) => {
     try {
       const result = await bridge.send<NodeCatalogEntry>("get_node_signature", { functionName, className });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_create_function",
+  {
+    title: "Create a function in a Blueprint",
+    description:
+      "Creates a new function graph on a Blueprint with typed inputs and outputs, and returns the graph name plus " +
+      "the entry (and result, if outputs exist) node ids so you can immediately add nodes inside it with " +
+      "unreal_add_node targeting the new graphName. Wire logic from the entry node's output pins to the result " +
+      "node's input pins. Call the function from other graphs via unreal_add_node CallFunction with functionName " +
+      "set to this name and no className. Type strings are the same compact descriptors unreal_add_variable uses " +
+      '("bool", "int", "float", "string", "vector", "object:<Class>", ...).',
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      functionName: z.string().describe('Name for the new function, e.g. "HandleDamage". Fails if a graph with this name exists.'),
+      inputs: z
+        .array(z.object({ name: z.string(), type: z.string() }))
+        .optional()
+        .describe('Function input parameters, e.g. [{"name":"Amount","type":"float"}].'),
+      outputs: z
+        .array(z.object({ name: z.string(), type: z.string() }))
+        .optional()
+        .describe('Function return values, e.g. [{"name":"bDied","type":"bool"}].'),
+    },
+  },
+  async ({ path, functionName, inputs, outputs }) => {
+    try {
+      const result = await bridge.send<CreateFunctionResult>("create_function", { path, functionName, inputs, outputs });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_organize_graph",
+  {
+    title: "Organize a Blueprint graph: comments and layout",
+    description:
+      "Graph-organization actions, so generated graphs read like a careful human built them:\n" +
+      '  - "set_node_comment": nodeId + comment. Sets/clears the comment bubble on one node.\n' +
+      '  - "add_comment_box": text + x/y/width/height. Adds a comment box; place it so it visually groups related ' +
+      "nodes (boxes render behind nodes covering their area).\n" +
+      '  - "move_node": nodeId + x/y. Repositions a node.\n' +
+      "Use comment boxes to group each logical section of a graph and node comments to explain non-obvious choices. " +
+      "Positions are cosmetic to the compiler but matter to the human who opens the graph next.",
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      graphName: z.string().describe("Graph to organize."),
+      action: z.enum(["set_node_comment", "add_comment_box", "move_node"]),
+      nodeId: z.string().optional().describe("Required for set_node_comment and move_node."),
+      comment: z.string().optional().describe("set_node_comment: the comment text (empty string clears it)."),
+      text: z.string().optional().describe("add_comment_box: the box's title text."),
+      x: z.number().optional().describe("Position X (add_comment_box, move_node)."),
+      y: z.number().optional().describe("Position Y (add_comment_box, move_node)."),
+      width: z.number().optional().describe("add_comment_box: box width. Defaults to 400."),
+      height: z.number().optional().describe("add_comment_box: box height. Defaults to 300."),
+    },
+  },
+  async ({ path, graphName, action, nodeId, comment, text, x, y, width, height }) => {
+    try {
+      const result = await bridge.send<OrganizeGraphResult>("organize_graph", {
+        path,
+        graphName,
+        action,
+        nodeId,
+        comment,
+        text,
+        x,
+        y,
+        width,
+        height,
+      });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

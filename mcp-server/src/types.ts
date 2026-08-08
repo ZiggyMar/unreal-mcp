@@ -205,6 +205,23 @@ export interface NodeSuggestion {
   className: string;
 }
 
+export interface CreateFunctionResult {
+  graphName: string;
+  entryNodeId: string;
+  resultNodeId?: string;
+  inputCount: number;
+  outputCount: number;
+}
+
+/** Shape varies by action; all carry the affected node's id. */
+export interface OrganizeGraphResult {
+  id: string;
+  comment?: string;
+  text?: string;
+  x?: number;
+  y?: number;
+}
+
 export interface FolderBreakdown {
   folder: string;
   blueprintCount: number;
