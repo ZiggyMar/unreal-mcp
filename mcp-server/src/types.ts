@@ -205,6 +205,14 @@ export interface NodeSuggestion {
   className: string;
 }
 
+export interface BuildGraphResult {
+  /** Caller-chosen ref -> created node info. */
+  nodes: Record<string, AddNodeResult>;
+  connectionsMade: number;
+  pinDefaultsSet: number;
+  compile?: CompileBlueprintResult;
+}
+
 export interface CreateFunctionResult {
   graphName: string;
   entryNodeId: string;

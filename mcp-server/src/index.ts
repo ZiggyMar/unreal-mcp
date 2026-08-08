@@ -8,6 +8,7 @@ import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import type {
   AddNodeResult,
   AddVariableResult,
+  BuildGraphResult,
   CompileBlueprintResult,
   ConnectPinsResult,
   CreateBlueprintResult,
@@ -596,6 +597,72 @@ server.registerTool(
   async ({ functionName, className }) => {
     try {
       const result = await bridge.send<NodeCatalogEntry>("get_node_signature", { functionName, className });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_build_graph",
+  {
+    title: "Build a piece of graph in one atomic call",
+    description:
+      "The preferred way to author Blueprint logic: many nodes, connections, and pin defaults in ONE call, inside one " +
+      "editor transaction. If any step fails, the entire batch rolls back and the graph is exactly as it was, so you " +
+      "retry the whole call with the fix instead of reasoning about partial state. The response maps each of your " +
+      "refs to its created node id, and the Blueprint is compiled at the end by default (compile: false to skip).\n\n" +
+      "nodes: same fields as unreal_add_node plus a required short 'ref' you choose (no dots). " +
+      'connections: {from, to} strings as "ref.pinName", e.g. {"from":"ev.then","to":"branch.execute"}. You can also ' +
+      "use an existing node's id in place of a ref to extend a graph you read earlier. " +
+      "pinDefaults: {node, pin, value}.\n\n" +
+      "Prefer this over individual unreal_add_node/unreal_connect_pins calls whenever placing more than one node: a " +
+      "10-node graph costs 1 round trip instead of ~25, and a human can undo the whole feature with one Ctrl+Z. " +
+      "Errors name the failing ref or index and include available pin names or didYouMean suggestions.",
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      graphName: z.string().describe('Graph to build in, e.g. "EventGraph" or a function graph name.'),
+      nodes: z
+        .array(
+          z.object({
+            ref: z.string().describe("Your short handle for this node, unique in the batch, no dots."),
+            nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro"]),
+            eventName: z.string().optional(),
+            functionName: z.string().optional(),
+            className: z.string().optional(),
+            variableName: z.string().optional(),
+            targetClass: z.string().optional(),
+            pure: z.boolean().optional(),
+            macroName: z.string().optional(),
+            x: z.number().optional(),
+            y: z.number().optional(),
+            comment: z.string().optional(),
+          })
+        )
+        .optional()
+        .describe("Nodes to create, in order. Same per-type params as unreal_add_node."),
+      connections: z
+        .array(z.object({ from: z.string(), to: z.string() }))
+        .optional()
+        .describe('Wires, each "ref.pinName" -> "ref.pinName". Existing node ids also work as the ref part.'),
+      pinDefaults: z
+        .array(z.object({ node: z.string(), pin: z.string(), value: z.string() }))
+        .optional()
+        .describe("Literal defaults to set on unconnected input pins."),
+      compile: z.boolean().optional().describe("Compile the Blueprint after building. Defaults to true."),
+    },
+  },
+  async ({ path, graphName, nodes, connections, pinDefaults, compile }) => {
+    try {
+      const result = await bridge.send<BuildGraphResult>("build_graph", {
+        path,
+        graphName,
+        nodes,
+        connections,
+        pinDefaults,
+        compile,
+      });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

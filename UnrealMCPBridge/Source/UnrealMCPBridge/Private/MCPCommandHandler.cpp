@@ -400,6 +400,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleOrganizeGraph(Params);
 	}
+	else if (Cmd == TEXT("build_graph"))
+	{
+		Response = HandleBuildGraph(Params);
+	}
 	else
 	{
 		Response = MakeErrorResponse(FString::Printf(TEXT("unknown_cmd: %s"), *Cmd));
@@ -755,11 +759,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Path, GraphName, NodeType;
+	FString Path, GraphName;
 	if (!Params.IsValid() ||
 		!Params->TryGetStringField(TEXT("path"), Path) ||
-		!Params->TryGetStringField(TEXT("graphName"), GraphName) ||
-		!Params->TryGetStringField(TEXT("nodeType"), NodeType))
+		!Params->TryGetStringField(TEXT("graphName"), GraphName))
 	{
 		return MakeErrorResponse(TEXT("missing_param: path, graphName and nodeType are required"));
 	}
@@ -776,6 +779,19 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	if (!Graph)
 	{
 		return MakeErrorResponse(GraphError);
+	}
+
+	return AddNodeCore(Blueprint, Graph, Params, /*bOpenTransaction=*/true);
+}
+
+// The type-dispatching core of add_node, shared with build_graph. When the caller already
+// holds a transaction (the batch path), bOpenTransaction is false so this does not nest one.
+TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, UEdGraph* Graph, const TSharedPtr<FJsonObject>& Params, bool bOpenTransaction)
+{
+	FString NodeType;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("nodeType"), NodeType))
+	{
+		return MakeErrorResponse(TEXT("missing_param: nodeType is required"));
 	}
 
 	double PosX = 0.0;
@@ -1032,8 +1048,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 	// Everything above this point is validation that can bail out; nothing has been
 	// mutated yet, so the transaction opens here and never wraps a no-op.
 	// Modify() must be called inside the transaction and before the change, since that
-	// is what snapshots the prior state into the undo buffer.
-	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddNode", "MCP: Add Node"));
+	// is what snapshots the prior state into the undo buffer. The batch path opens one
+	// transaction around the whole batch instead, so it can cancel the lot atomically.
+	TUniquePtr<FScopedTransaction> Transaction;
+	if (bOpenTransaction)
+	{
+		Transaction = MakeUnique<FScopedTransaction>(NSLOCTEXT("UnrealMCPBridge", "MCPAddNode", "MCP: Add Node"));
+	}
 	Graph->Modify();
 	Blueprint->Modify();
 
@@ -1844,5 +1865,330 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr
 
 	return MakeErrorResponse(FString::Printf(
 		TEXT("unknown_action: %s (expected set_node_comment, add_comment_box, move_node)"), *Action));
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, GraphName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("graphName"), GraphName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and graphName are required"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+	FString GraphError;
+	UEdGraph* Graph = FindGraphByName(Blueprint, GraphName, GraphError);
+	if (!Graph)
+	{
+		return MakeErrorResponse(GraphError);
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* NodeSpecs = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Connections = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* PinDefaults = nullptr;
+	Params->TryGetArrayField(TEXT("nodes"), NodeSpecs);
+	Params->TryGetArrayField(TEXT("connections"), Connections);
+	Params->TryGetArrayField(TEXT("pinDefaults"), PinDefaults);
+	if ((!NodeSpecs || NodeSpecs->Num() == 0) && (!Connections || Connections->Num() == 0) && (!PinDefaults || PinDefaults->Num() == 0))
+	{
+		return MakeErrorResponse(TEXT("empty_batch: provide at least one of nodes, connections, pinDefaults"));
+	}
+
+	TSharedRef<FJsonObject> NodesOut = MakeShared<FJsonObject>();
+	int32 ConnectionsMade = 0;
+	int32 DefaultsSet = 0;
+
+	// The whole batch is atomic: any failure restores the graph to exactly its pre-call
+	// state. A model that gets step 7 of 9 wrong retries the whole batch instead of
+	// reasoning about which half survived, and a human gets the entire authored feature
+	// as a single Ctrl+Z entry.
+	//
+	// Atomicity is implemented by hand rather than via FScopedTransaction::Cancel,
+	// because (verified against EditorTransaction.cpp) Cancel only discards the undo
+	// RECORD; it does not revert the mutations. So: snapshot which nodes pre-existed,
+	// track links made and defaults changed, and on failure restore defaults, break the
+	// links, and remove every node not in the snapshot (which also catches conversion
+	// nodes the schema may have inserted), then cancel the now-empty transaction record.
+	{
+		FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPBuildGraph", "MCP: Build Graph"));
+		Graph->Modify();
+		Blueprint->Modify();
+
+		TSet<UEdGraphNode*> PreexistingNodes;
+		for (UEdGraphNode* Existing : Graph->Nodes)
+		{
+			PreexistingNodes.Add(Existing);
+		}
+		TArray<TPair<UEdGraphPin*, UEdGraphPin*>> MadeLinks;
+		struct FSavedDefault
+		{
+			UEdGraphPin* Pin;
+			FString OldValue;
+		};
+		TArray<FSavedDefault> SavedDefaults;
+
+		auto RollbackBatch = [&]()
+		{
+			for (int32 i = SavedDefaults.Num() - 1; i >= 0; --i)
+			{
+				SavedDefaults[i].Pin->DefaultValue = SavedDefaults[i].OldValue;
+			}
+			for (const TPair<UEdGraphPin*, UEdGraphPin*>& Link : MadeLinks)
+			{
+				if (Link.Key && Link.Value)
+				{
+					Link.Key->BreakLinkTo(Link.Value);
+				}
+			}
+			TArray<UEdGraphNode*> NodesSnapshot = Graph->Nodes;
+			for (UEdGraphNode* Node : NodesSnapshot)
+			{
+				if (Node && !PreexistingNodes.Contains(Node))
+				{
+					Node->BreakAllNodeLinks();
+					FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile=*/true);
+				}
+			}
+			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+			// The mutations are reverted by hand above; Cancel only discards the empty
+			// undo record so no "MCP: Build Graph" entry lingers in the history.
+			Transaction.Cancel();
+		};
+
+		TMap<FString, UEdGraphNode*> RefMap;
+
+		if (NodeSpecs)
+		{
+			for (int32 i = 0; i < NodeSpecs->Num(); ++i)
+			{
+				const TSharedPtr<FJsonObject>* SpecObj = nullptr;
+				FString Ref;
+				if (!(*NodeSpecs)[i].IsValid() || !(*NodeSpecs)[i]->TryGetObject(SpecObj) ||
+					!(*SpecObj)->TryGetStringField(TEXT("ref"), Ref) || Ref.IsEmpty())
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("bad_node_spec at index %d: each node needs a non-empty ref"), i));
+				}
+				if (Ref.Contains(TEXT(".")) || RefMap.Contains(Ref))
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("bad_ref: '%s' (refs must be unique and contain no dots)"), *Ref));
+				}
+
+				TSharedRef<FJsonObject> NodeResponse = AddNodeCore(Blueprint, Graph, *SpecObj, /*bOpenTransaction=*/false);
+				if (!NodeResponse->GetBoolField(TEXT("ok")))
+				{
+					// Cancel first, then surface which step failed plus any didYouMean the
+					// inner error carried, so the retry can be correct on the first try.
+					RollbackBatch();
+					TSharedRef<FJsonObject> Failed = MakeErrorResponse(FString::Printf(
+						TEXT("node_failed at ref '%s': %s"), *Ref, *NodeResponse->GetStringField(TEXT("error"))));
+					Failed->SetStringField(TEXT("failedRef"), Ref);
+					const TArray<TSharedPtr<FJsonValue>>* Suggestions = nullptr;
+					if (NodeResponse->TryGetArrayField(TEXT("didYouMean"), Suggestions))
+					{
+						Failed->SetArrayField(TEXT("didYouMean"), *Suggestions);
+					}
+					return Failed;
+				}
+
+				const TSharedPtr<FJsonObject> NodeResult = NodeResponse->GetObjectField(TEXT("result"));
+				FString NodeIdErr;
+				UEdGraphNode* Node = FindNodeById(Graph, NodeResult->GetStringField(TEXT("id")), NodeIdErr);
+				if (!Node)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("internal: created node not found for ref '%s'"), *Ref));
+				}
+				RefMap.Add(Ref, Node);
+				NodesOut->SetObjectField(Ref, NodeResult);
+			}
+		}
+
+		// Resolves "ref" (from this batch) or a node id (GUID / legacy) for nodes that
+		// already existed, so a batch can extend a graph, not only start one.
+		auto ResolveToken = [&RefMap, Graph](const FString& Token, FString& OutError) -> UEdGraphNode*
+		{
+			if (UEdGraphNode* const* Found = RefMap.Find(Token))
+			{
+				return *Found;
+			}
+			return FindNodeById(Graph, Token, OutError);
+		};
+
+		auto DescribePins = [](const UEdGraphNode* Node, EEdGraphPinDirection Direction) -> FString
+		{
+			TArray<FString> Names;
+			for (const UEdGraphPin* Pin : Node->Pins)
+			{
+				if (Pin && Pin->Direction == Direction)
+				{
+					Names.Add(Pin->PinName.ToString());
+				}
+			}
+			return FString::Join(Names, TEXT(", "));
+		};
+
+		if (Connections)
+		{
+			for (int32 i = 0; i < Connections->Num(); ++i)
+			{
+				const TSharedPtr<FJsonObject>* ConnObj = nullptr;
+				FString From, To;
+				if (!(*Connections)[i].IsValid() || !(*Connections)[i]->TryGetObject(ConnObj) ||
+					!(*ConnObj)->TryGetStringField(TEXT("from"), From) ||
+					!(*ConnObj)->TryGetStringField(TEXT("to"), To))
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("bad_connection at index %d: needs {from, to} as \"ref.pinName\""), i));
+				}
+
+				int32 FromDot, ToDot;
+				if (!From.FindChar(TEXT('.'), FromDot) || !To.FindChar(TEXT('.'), ToDot))
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("bad_connection at index %d: '%s' -> '%s' (format is \"ref.pinName\")"), i, *From, *To));
+				}
+
+				FString TokenErr;
+				UEdGraphNode* SourceNode = ResolveToken(From.Left(FromDot), TokenErr);
+				if (!SourceNode)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("connection %d: source %s"), i, *TokenErr));
+				}
+				UEdGraphNode* TargetNode = ResolveToken(To.Left(ToDot), TokenErr);
+				if (!TargetNode)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("connection %d: target %s"), i, *TokenErr));
+				}
+
+				const FString FromPinName = From.Mid(FromDot + 1);
+				const FString ToPinName = To.Mid(ToDot + 1);
+				UEdGraphPin* SourcePin = SourceNode->FindPin(FName(*FromPinName), EGPD_Output);
+				if (!SourcePin)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(
+						TEXT("connection %d: output pin '%s' not found (available: %s)"),
+						i, *FromPinName, *DescribePins(SourceNode, EGPD_Output)));
+				}
+				UEdGraphPin* TargetPin = TargetNode->FindPin(FName(*ToPinName), EGPD_Input);
+				if (!TargetPin)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(
+						TEXT("connection %d: input pin '%s' not found (available: %s)"),
+						i, *ToPinName, *DescribePins(TargetNode, EGPD_Input)));
+				}
+
+				SourceNode->Modify();
+				TargetNode->Modify();
+				const UEdGraphSchema* Schema = Graph->GetSchema();
+				const FPinConnectionResponse ConnectResponse = Schema->CanCreateConnection(SourcePin, TargetPin);
+				if (ConnectResponse.Response == CONNECT_RESPONSE_DISALLOW)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("connection %d incompatible_pins: %s"), i, *ConnectResponse.Message.ToString()));
+				}
+				if (!Schema->TryCreateConnection(SourcePin, TargetPin))
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("connection %d: connect_failed"), i));
+				}
+				MadeLinks.Add(TPair<UEdGraphPin*, UEdGraphPin*>(SourcePin, TargetPin));
+				++ConnectionsMade;
+			}
+		}
+
+		if (PinDefaults)
+		{
+			for (int32 i = 0; i < PinDefaults->Num(); ++i)
+			{
+				const TSharedPtr<FJsonObject>* DefObj = nullptr;
+				FString NodeToken, PinName, Value;
+				if (!(*PinDefaults)[i].IsValid() || !(*PinDefaults)[i]->TryGetObject(DefObj) ||
+					!(*DefObj)->TryGetStringField(TEXT("node"), NodeToken) ||
+					!(*DefObj)->TryGetStringField(TEXT("pin"), PinName) ||
+					!(*DefObj)->TryGetStringField(TEXT("value"), Value))
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("bad_pin_default at index %d: needs {node, pin, value}"), i));
+				}
+
+				FString TokenErr;
+				UEdGraphNode* Node = ResolveToken(NodeToken, TokenErr);
+				if (!Node)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("pinDefault %d: %s"), i, *TokenErr));
+				}
+				UEdGraphPin* Pin = Node->FindPin(FName(*PinName), EGPD_Input);
+				if (!Pin)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(
+						TEXT("pinDefault %d: input pin '%s' not found (available: %s)"),
+						i, *PinName, *DescribePins(Node, EGPD_Input)));
+				}
+				if (Pin->LinkedTo.Num() > 0)
+				{
+					RollbackBatch();
+					return MakeErrorResponse(FString::Printf(TEXT("pinDefault %d: pin_is_connected: %s"), i, *PinName));
+				}
+				Node->Modify();
+				SavedDefaults.Add({ Pin, Pin->DefaultValue });
+				Pin->DefaultValue = Value;
+				Node->PinDefaultValueChanged(Pin);
+				++DefaultsSet;
+			}
+		}
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetObjectField(TEXT("nodes"), NodesOut);
+	Result->SetNumberField(TEXT("connectionsMade"), ConnectionsMade);
+	Result->SetNumberField(TEXT("pinDefaultsSet"), DefaultsSet);
+
+	// Compile by default: the workflow rule is compile-after-every-batch anyway, so doing
+	// it here saves the caller a round trip. Opt out with compile=false.
+	bool bCompile = true;
+	Params->TryGetBoolField(TEXT("compile"), bCompile);
+	if (bCompile)
+	{
+		FCompilerResultsLog CompileResults;
+		FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &CompileResults);
+
+		TSharedRef<FJsonObject> CompileObj = MakeShared<FJsonObject>();
+		CompileObj->SetNumberField(TEXT("errorCount"), CompileResults.NumErrors);
+		CompileObj->SetNumberField(TEXT("warningCount"), CompileResults.NumWarnings);
+		CompileObj->SetBoolField(TEXT("success"), CompileResults.NumErrors == 0);
+		if (CompileResults.NumErrors > 0 || CompileResults.NumWarnings > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> Messages;
+			for (const TSharedRef<FTokenizedMessage>& Message : CompileResults.Messages)
+			{
+				TSharedRef<FJsonObject> MsgObj = MakeShared<FJsonObject>();
+				MsgObj->SetStringField(TEXT("severity"),
+					Message->GetSeverity() == EMessageSeverity::Error ? TEXT("error") : TEXT("warning"));
+				MsgObj->SetStringField(TEXT("text"), Message->ToText().ToString());
+				Messages.Add(MakeShared<FJsonValueObject>(MsgObj));
+			}
+			CompileObj->SetArrayField(TEXT("messages"), Messages);
+		}
+		Result->SetObjectField(TEXT("compile"), CompileObj);
+	}
+
+	return MakeOkResponse(Result);
 }
 

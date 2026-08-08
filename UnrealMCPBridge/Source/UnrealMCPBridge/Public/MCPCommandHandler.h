@@ -62,6 +62,14 @@ private:
 	static TSharedRef<FJsonObject> HandleCreateFunction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleOrganizeGraph(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Batch: many nodes/wires/defaults in one atomic transaction ---
+	static TSharedRef<FJsonObject> HandleBuildGraph(const TSharedPtr<FJsonObject>& Params);
+
+	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
+	// must already hold a transaction and have decided how failures roll back.
+	static TSharedRef<FJsonObject> AddNodeCore(class UBlueprint* Blueprint, class UEdGraph* Graph,
+		const TSharedPtr<FJsonObject>& Params, bool bOpenTransaction);
+
 	// --- Shared lookup helpers ---
 
 	// Loads a Blueprint asset given a package/object path (e.g. "/Game/Blueprints/BP_Foo.BP_Foo").
