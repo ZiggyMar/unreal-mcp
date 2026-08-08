@@ -13,10 +13,10 @@ expects and what the engine's own headers model throughout the codebase:
   (`FMCPProjectIndex`), `U` for `UObject`-derived classes, `T` for templates (`TArray`, `TMap`,
   `TUniquePtr`, `TSharedPtr`), `E` for enums, `b` prefix for booleans (`bBuilt`,
   `bAssetRegistryStillScanning`). Local variables and function parameters are also `PascalCase`
-  (this is Epic's convention, not a typo) — `PascalCase` for everything except member fields with
+  (this is Epic's convention, not a typo): `PascalCase` for everything except member fields with
   no prefix, which don't exist here since every field either has a type prefix or is private.
-- **Braces**: Allman style — opening brace on its own line, for functions, classes, and control
-  flow alike:
+- **Braces**: Allman style, with the opening brace on its own line, for functions, classes, and
+  control flow alike:
   ```cpp
   if (!Blueprint)
   {
@@ -28,18 +28,18 @@ expects and what the engine's own headers model throughout the codebase:
 - **Headers**: `#pragma once`, not include guards. Forward-declare where possible (see
   `MCPTcpServer.h`'s `class FSocket;` etc) instead of including headers a `.h` doesn't need.
 - **Error handling**: commands return `bool` with an `FString& OutError` output parameter rather
-  than throwing or asserting — every command path in `MCPCommandHandler.cpp` reports failures back
+  than throwing or asserting. Every command path in `MCPCommandHandler.cpp` reports failures back
   as a structured JSON error (`{"ok": false, "error": "..."}`) instead of crashing the editor.
   Never use engine `check()`/`ensure()` on data that comes from an MCP request; those are for
   programmer errors, not malformed input from a client.
 - **Comments**: `/** ... */` Doxygen-style block comments on classes and non-obvious public
   methods, explaining *why* something exists or a non-obvious constraint (see `MCPProjectIndex.h`'s
   class comment). Single-line `//` comments inline only when the *why* isn't obvious from the code
-  itself — not restating what the next line does. No em dashes in comments; use a period, comma, or
+  itself, not restating what the next line does. No em dashes in comments; use a period, comma, or
   colon instead, whichever reads most naturally. No emoji.
 - **Response builders**: use the shared `MakeOkResponse` / `MakeErrorResponse` helpers rather than
   building `FJsonObject`s inline, and avoid short generic helper names (`MakeError`, `Check`,
-  `Verify`, etc.) in files that transitively include Core headers — this collided with UE's own
+  `Verify`, etc.) in files that transitively include Core headers. This collided with UE's own
   `Templates/ValueOrError.h` once already (see `docs/M1_STATUS.md`).
 - **Threading**: everything in this plugin runs on the game thread by design (the TCP server ticks
   via `FTSTicker`, AssetRegistry delegates fire on the game thread) specifically so command
@@ -62,15 +62,16 @@ expects and what the engine's own headers model throughout the codebase:
   design rationale when it isn't obvious from the code alone. Same em-dash/emoji rules as C++.
 - **Error handling**: bridge-facing calls throw `Error` with a message that tells the *user* what
   to check (see `bridgeClient.ts`'s `ECONNREFUSED` message) rather than a bare stack trace. MCP
-  tool handlers catch and convert to `errorResult(err)` — a thrown error should never escape a
+  tool handlers catch and convert to `errorResult(err)`. A thrown error should never escape a
   tool call and crash the server.
 
 ## Documentation (`*.md`)
 
 - No em dashes (—). Use a period, comma, colon, or parentheses instead, whichever reads most
-  naturally for that sentence.
+  naturally for that sentence. (The character above is the rule naming itself, and is the one
+  place in the repo it is allowed to appear. A sweep that finds any other instance should fix it.)
 - No emoji, anywhere, including status docs and commit messages.
-- Arrows (`→`) are fine for flow/sequence notation (`list → summary → detail`) — that's a
+- Arrows (`→`) are fine for flow/sequence notation (`list → summary → detail`). That's a
   deliberate technical-writing convention, not decorative.
 - Headings: sentence case, not Title Case (`## What's different about this one`, not
   `## What's Different About This One`).
@@ -94,5 +95,5 @@ shows what changed). No em dashes, no emoji.
 - Command names in the bridge protocol are `snake_case` (`get_project_overview`); MCP tool names
   are `unreal_`-prefixed `snake_case` (`unreal_get_project_overview`); C++ handler methods are
   `PascalCase` (`HandleGetProjectOverview`). This three-way mapping is consistent throughout
-  `MCPCommandHandler.cpp` and `index.ts` — keep it that way for any new command.
+  `MCPCommandHandler.cpp` and `index.ts`, so keep it that way for any new command.
 
