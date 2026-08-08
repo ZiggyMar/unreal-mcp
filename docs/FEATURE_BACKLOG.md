@@ -80,10 +80,11 @@ guidance worth shipping to the calling agent anyway.
 Added 2026-08-08 at the owner's request to surface things not yet targeted. Ordered by how hard
 they block the "AI does everything a coder does" goal, crossed with token savings.
 
-1. **Batch graph op.** One command that takes a list of nodes, wires, and pin defaults and builds
-   them in a single transaction. Today a 10-node graph costs ~25 round trips; batching cuts that
-   to 1, which is the single biggest token/latency saver available. Also makes one Ctrl+Z undo an
-   entire authored feature.
+1. **Batch graph op. (DONE)** `build_graph` ships: nodes with caller refs, "ref.pin" connections,
+   pin defaults, compile-by-default, one call. Atomicity is real and hand-implemented, since
+   `FScopedTransaction::Cancel` turns out to discard only the undo record, not the mutations
+   (verified against engine source after the live suite caught orphaned nodes). A failed batch
+   leaves the graph byte-for-byte unchanged.
 2. **Class defaults (CDO) editing.** Set any property on a Blueprint's class defaults
    (`bReplicates`, movement speeds, a mesh reference). Without it, half of what a designer tweaks
    per-Blueprint is unreachable.
