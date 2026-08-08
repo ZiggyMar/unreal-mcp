@@ -9,7 +9,11 @@ verification is recorded inline so a future reader can check it rather than trus
 
 ## Part 1: findings from this pass
 
-### 1. Stable node identity via `NodeGuid` (highest priority, closer to a defect than a feature)
+### 1. Stable node identity via `NodeGuid` (DONE)
+
+**Shipped.** Node ids are now `NodeGuid`, legacy `"n<index>"` ids are still accepted for one
+release but never returned, and `remove_node` captures the id before deletion rather than
+dereferencing a freed node. The original writeup follows for context.
 
 **Today:** node ids are `"n<index>"`, a raw index into `UEdGraph::Nodes` at read time.
 `mcp-server/README.md` and `docs/M2_STATUS.md` both document the consequence: ids do not survive an

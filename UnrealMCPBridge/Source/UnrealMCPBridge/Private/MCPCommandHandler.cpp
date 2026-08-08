@@ -48,11 +48,16 @@ namespace
 		return Response;
 	}
 
-	// Stable-ish node id: index within the graph's Nodes array, as a string.
-	// Sufficient for a single-session read/detail/edit round trip; not persisted.
-	FString MakeNodeId(int32 Index)
+	// Node id: the node's own FGuid. UEdGraphNode::NodeGuid is a UPROPERTY, so it is
+	// serialized with the asset, and Epic's stated purpose for it is uniquely identifying
+	// a node. That makes it stable across editor restarts and, critically, unaffected by
+	// removing other nodes in the same graph. The previous scheme was the node's index
+	// into UEdGraph::Nodes, which silently invalidated every later id on any removal.
+	FString MakeNodeId(const UEdGraphNode* Node)
 	{
-		return FString::Printf(TEXT("n%d"), Index);
+		return (Node && Node->NodeGuid.IsValid())
+			? Node->NodeGuid.ToString(EGuidFormats::Digits)
+			: FString(TEXT("?"));
 	}
 
 	// Saves a Blueprint's package to disk in place. Used by create_blueprint (when
@@ -111,17 +116,42 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 
 UEdGraphNode* FMCPCommandHandler::FindNodeById(UEdGraph* Graph, const FString& NodeId, FString& OutError)
 {
-	int32 NodeIndex = INDEX_NONE;
-	if (NodeId.StartsWith(TEXT("n")))
+	if (!Graph)
 	{
-		LexFromString(NodeIndex, *NodeId.Mid(1));
+		OutError = TEXT("null_graph");
+		return nullptr;
 	}
-	if (!Graph->Nodes.IsValidIndex(NodeIndex))
+
+	// Current form: the node's persistent GUID.
+	FGuid ParsedGuid;
+	if (FGuid::ParseExact(NodeId, EGuidFormats::Digits, ParsedGuid))
 	{
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (Node && Node->NodeGuid == ParsedGuid)
+			{
+				return Node;
+			}
+		}
 		OutError = FString::Printf(TEXT("node_not_found: %s"), *NodeId);
 		return nullptr;
 	}
-	return Graph->Nodes[NodeIndex];
+
+	// Legacy form ("n<index>"), still accepted for one release so callers holding ids
+	// issued by an older build keep working. Indices shift on removal, which is exactly
+	// why ids moved to GUIDs; do not emit this form for anything new.
+	if (NodeId.StartsWith(TEXT("n")))
+	{
+		int32 NodeIndex = INDEX_NONE;
+		LexFromString(NodeIndex, *NodeId.Mid(1));
+		if (Graph->Nodes.IsValidIndex(NodeIndex))
+		{
+			return Graph->Nodes[NodeIndex];
+		}
+	}
+
+	OutError = FString::Printf(TEXT("node_not_found: %s"), *NodeId);
+	return nullptr;
 }
 
 UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString& OutError)
@@ -507,7 +537,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		}
 
 		TSharedRef<FJsonObject> NodeEntry = MakeShared<FJsonObject>();
-		NodeEntry->SetStringField(TEXT("id"), MakeNodeId(i));
+		NodeEntry->SetStringField(TEXT("id"), MakeNodeId(Node));
 		NodeEntry->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 		NodeEntry->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
 
@@ -530,9 +560,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 				{
 					continue;
 				}
-				int32 LinkedIndex = TargetGraph->Nodes.IndexOfByKey(Linked->GetOwningNode());
 				TSharedRef<FJsonObject> LinkEntry = MakeShared<FJsonObject>();
-				LinkEntry->SetStringField(TEXT("node"), LinkedIndex != INDEX_NONE ? MakeNodeId(LinkedIndex) : TEXT("?"));
+				LinkEntry->SetStringField(TEXT("node"), MakeNodeId(Linked->GetOwningNode()));
 				LinkEntry->SetStringField(TEXT("pin"), Linked->PinName.ToString());
 				Links.Add(MakeShared<FJsonValueObject>(LinkEntry));
 			}
@@ -583,7 +612,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	}
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("id"), NodeId);
+	// Echo the canonical GUID rather than whatever form the caller passed, so a caller
+	// still using a legacy "n<index>" id gets the stable one back and migrates naturally.
+	Result->SetStringField(TEXT("id"), MakeNodeId(Node));
 	Result->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 	Result->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 	Result->SetStringField(TEXT("comment"), Node->NodeComment);
@@ -614,9 +645,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 			{
 				continue;
 			}
-			int32 LinkedIndex = TargetGraph->Nodes.IndexOfByKey(Linked->GetOwningNode());
 			TSharedRef<FJsonObject> LinkEntry = MakeShared<FJsonObject>();
-			LinkEntry->SetStringField(TEXT("node"), LinkedIndex != INDEX_NONE ? MakeNodeId(LinkedIndex) : TEXT("?"));
+			LinkEntry->SetStringField(TEXT("node"), MakeNodeId(Linked->GetOwningNode()));
 			LinkEntry->SetStringField(TEXT("pin"), Linked->PinName.ToString());
 			Links.Add(MakeShared<FJsonValueObject>(LinkEntry));
 		}
@@ -770,9 +800,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 			UK2Node_Event* ExistingEvent = Cast<UK2Node_Event>(ExistingNode);
 			if (ExistingEvent && ExistingEvent->bOverrideFunction && ExistingEvent->EventReference.GetMemberName() == FName(*EventName))
 			{
-				const int32 ExistingIndex = Graph->Nodes.IndexOfByKey(ExistingEvent);
 				TSharedRef<FJsonObject> ExistingResult = MakeShared<FJsonObject>();
-				ExistingResult->SetStringField(TEXT("id"), ExistingIndex != INDEX_NONE ? MakeNodeId(ExistingIndex) : TEXT("?"));
+				ExistingResult->SetStringField(TEXT("id"), MakeNodeId(ExistingEvent));
 				ExistingResult->SetStringField(TEXT("type"), ExistingEvent->GetClass()->GetName());
 				ExistingResult->SetStringField(TEXT("title"), ExistingEvent->GetNodeTitle(ENodeTitleType::ListView).ToString());
 				ExistingResult->SetBoolField(TEXT("alreadyExisted"), true);
@@ -899,10 +928,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
-	const int32 NewIndex = Graph->Nodes.IndexOfByKey(NewNode);
-
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("id"), NewIndex != INDEX_NONE ? MakeNodeId(NewIndex) : TEXT("?"));
+	Result->SetStringField(TEXT("id"), MakeNodeId(NewNode));
 	Result->SetStringField(TEXT("type"), NewNode->GetClass()->GetName());
 	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
 	return MakeOkResponse(Result);
@@ -1073,7 +1100,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 		return MakeErrorResponse(NodeError);
 	}
 
+	// Capture both before RemoveNode, since Node is not safe to dereference afterwards.
 	const FString RemovedType = Node->GetClass()->GetName();
+	const FString RemovedId = MakeNodeId(Node);
 	Node->BreakAllNodeLinks();
 	FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile=*/true);
 
@@ -1081,7 +1110,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveNode(const TSharedPtr<FJ
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("removed"), true);
-	Result->SetStringField(TEXT("id"), NodeId);
+	Result->SetStringField(TEXT("id"), RemovedId);
 	Result->SetStringField(TEXT("type"), RemovedType);
 	return MakeOkResponse(Result);
 }
