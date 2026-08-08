@@ -41,23 +41,37 @@ This is being built and verified in public, milestone by milestone. Each milesto
 - [Milestone 1: read-only Blueprint introspection](docs/M1_STATUS.md): compiles and runs against a real UE 5.8 install; MCP protocol verified end-to-end.
 - [Milestone 2: create/edit Blueprint graphs](docs/M2_STATUS.md): create Blueprints, add nodes, connect pins, add variables, compile with structured error reporting.
 - [Milestone 3: persistent project index, search, references](docs/M3_STATUS.md): incrementally-updated index (AssetRegistry-backed, disk-cached), `search_project`, `find_references`, `get_project_overview`, optional local-model enrichment for search results.
+- [Milestone 4: UE 5.6 support](docs/UE56_STATUS.md): live-verified on 5.6, 21 of 21 checks passing, and released. The plugin source needs zero changes between the two engine versions.
 
-All three milestones are build-verified, protocol-verified, **and now live-verified**: see
-[docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) for a real session against a real ~20-Blueprint
-project: reads returning correct real data, a full create/wire/compile/save write round-trip, and
-confirmation that the incremental project index actually stays fresh without restarting the editor
-(M3's core claim). That session also caught and fixed a real bug (`add_node` duplicating an
-already-present override-event node) that no amount of compiling or protocol testing would have
-surfaced. Still outstanding: UE 5.6 hasn't been live-tested yet (5.8 only so far), and a handful of
-less-common commands (`add_variable`, `remove_node`, `CustomEvent`/`VariableGet`/`VariableSet` nodes)
-haven't been exercised live.
+All four milestones are build-verified, protocol-verified, **and live-verified on both engine
+versions**. See [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) for the 5.8 session against a
+real ~20-Blueprint project and [docs/UE56_STATUS.md](docs/UE56_STATUS.md) for the 5.6 one: reads
+returning correct real data, a full create/wire/compile/save write round-trip, and confirmation that
+the incremental project index actually stays fresh without restarting the editor (M3's core claim).
+
+Both live sessions earned their keep by catching a real bug that no amount of compiling or protocol
+testing would have surfaced. On 5.8 it was `add_node` duplicating an already-present override-event
+node. On 5.6 it was the `.uplugin` hard-pinning `EngineVersion` to `5.8.0`: every build check passed
+because UnrealBuildTool ignores that field, but the runtime plugin loader honors it, so the editor
+stopped on a modal incompatibility dialog and the bridge never started.
+
+Still outstanding: a few less-common commands (`remove_node`, and the
+`CustomEvent`/`VariableGet`/`VariableSet` node types) have not been exercised in a live editor yet.
 
 ## Quickstart (3-Step Installation)
 
 Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
 
 ### 1. Install the Unreal Plugin
-Copy the `UnrealMCPBridge` plugin folder to your Unreal project's `Plugins/` directory:
+
+**Easiest path**: download the prebuilt plugin for your engine version and unzip it into your
+project's `Plugins/UnrealMCPBridge/` folder, so you never compile it yourself:
+
+- [v0.1.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.8) for UE 5.8
+- [v0.1.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.6) for UE 5.6
+
+Or build it yourself by copying the `UnrealMCPBridge` plugin folder to your Unreal project's
+`Plugins/` directory:
 
 ```bash
 # macOS / Linux
