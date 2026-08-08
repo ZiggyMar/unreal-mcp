@@ -167,6 +167,44 @@ export interface FindReferencesResult {
   dependsOnCount: number;
 }
 
+/** One parameter or return value of a Blueprint-callable function, from engine reflection. */
+export interface NodeSignatureParam {
+  name: string;
+  type: string;
+  direction: "in" | "out" | "return";
+  defaultValue?: string;
+}
+
+/**
+ * One entry in the node catalog. Search hits omit `params` and carry `paramCount`
+ * instead; unreal_get_node_signature returns the full `params` list.
+ */
+export interface NodeCatalogEntry {
+  functionName: string;
+  displayName: string;
+  className: string;
+  classPath: string;
+  pure: boolean;
+  static: boolean;
+  category?: string;
+  tooltip?: string;
+  paramCount?: number;
+  params?: NodeSignatureParam[];
+}
+
+export interface FindNodeResult {
+  query: string;
+  hits: NodeCatalogEntry[];
+  hitCount: number;
+  catalogSize: number;
+}
+
+/** A near-miss returned alongside a not-found error, so the caller can self-correct. */
+export interface NodeSuggestion {
+  functionName: string;
+  className: string;
+}
+
 export interface FolderBreakdown {
   folder: string;
   blueprintCount: number;

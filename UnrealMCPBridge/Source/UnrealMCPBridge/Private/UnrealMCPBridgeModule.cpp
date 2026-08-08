@@ -1,6 +1,7 @@
 #include "UnrealMCPBridgeModule.h"
 #include "MCPTcpServer.h"
 #include "MCPProjectIndex.h"
+#include "MCPNodeCatalog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPBridgeModule, Log, All);
 
@@ -12,6 +13,10 @@ void FUnrealMCPBridgeModule::StartupModule()
 	// expensive full scan/load-every-blueprint work to the first search_project /
 	// get_project_overview call (see FMCPProjectIndex::EnsureBuilt).
 	FMCPProjectIndex::Initialize();
+
+	// Same deferral rationale: allocating the singleton is free, and the reflection walk
+	// that actually fills it waits for the first find_node / get_node_signature call.
+	FMCPNodeCatalog::Initialize();
 
 	TcpServer = MakeShared<FMCPTcpServer>();
 	if (!TcpServer->Start(GMCPBridgePort))
@@ -28,6 +33,7 @@ void FUnrealMCPBridgeModule::ShutdownModule()
 		TcpServer.Reset();
 	}
 
+	FMCPNodeCatalog::Shutdown();
 	FMCPProjectIndex::Shutdown();
 }
 

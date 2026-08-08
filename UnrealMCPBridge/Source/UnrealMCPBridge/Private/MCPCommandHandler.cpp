@@ -1,5 +1,6 @@
 #include "MCPCommandHandler.h"
 #include "MCPProjectIndex.h"
+#include "MCPNodeCatalog.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -344,6 +345,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("get_project_overview"))
 	{
 		Response = HandleGetProjectOverview(Params);
+	}
+	else if (Cmd == TEXT("find_node"))
+	{
+		Response = HandleFindNode(Params);
+	}
+	else if (Cmd == TEXT("get_node_signature"))
+	{
+		Response = HandleGetNodeSignature(Params);
 	}
 	else
 	{
@@ -815,8 +824,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddNode(const TSharedPtr<FJson
 		UFunction* Function = OwnerClass ? OwnerClass->FindFunctionByName(FName(*FunctionName)) : nullptr;
 		if (!Function)
 		{
-			return MakeErrorResponse(FString::Printf(TEXT("function_not_found: %s on %s"),
+			// A close-but-wrong function name is the most common way a caller fails here, and
+			// a bare not-found gives it nothing to act on. Answer with near-misses from the
+			// reflection catalog so the failure is self-correcting without the caller having
+			// had to call find_node first.
+			TSharedRef<FJsonObject> NotFound = MakeErrorResponse(FString::Printf(
+				TEXT("function_not_found: %s on %s"),
 				*FunctionName, OwnerClass ? *OwnerClass->GetName() : TEXT("(no class)")));
+
+			FMCPNodeCatalog& Catalog = FMCPNodeCatalog::Get();
+			Catalog.EnsureBuilt();
+			TArray<TSharedPtr<FJsonValue>> Suggestions = Catalog.SuggestSimilar(FunctionName, 5);
+			if (Suggestions.Num() > 0)
+			{
+				NotFound->SetArrayField(TEXT("didYouMean"), Suggestions);
+			}
+			return NotFound;
 		}
 
 		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
@@ -1336,5 +1359,70 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetProjectOverview(const TShar
 	FMCPProjectIndex::Get().EnsureBuilt();
 	TSharedRef<FJsonObject> Result = FMCPProjectIndex::Get().GetOverview();
 	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindNode(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Query;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
+	{
+		return MakeErrorResponse(TEXT("missing_param: query is required"));
+	}
+
+	int32 MaxResults = 20;
+	double MaxResultsRaw = 0.0;
+	if (Params->TryGetNumberField(TEXT("maxResults"), MaxResultsRaw))
+	{
+		MaxResults = static_cast<int32>(MaxResultsRaw);
+	}
+	MaxResults = FMath::Clamp(MaxResults, 1, 100);
+
+	FMCPNodeCatalog& Catalog = FMCPNodeCatalog::Get();
+	Catalog.EnsureBuilt();
+
+	TArray<TSharedPtr<FJsonValue>> Hits = Catalog.Search(Query, MaxResults);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("query"), Query);
+	Result->SetArrayField(TEXT("hits"), Hits);
+	Result->SetNumberField(TEXT("hitCount"), Hits.Num());
+	// Reports the catalog size rather than ever returning the catalog itself. It runs to
+	// tens of thousands of entries, so dumping it would defeat the point of this project.
+	Result->SetNumberField(TEXT("catalogSize"), Catalog.GetFunctionCount());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetNodeSignature(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FunctionName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("functionName"), FunctionName) || FunctionName.IsEmpty())
+	{
+		return MakeErrorResponse(TEXT("missing_param: functionName is required"));
+	}
+
+	FString ClassName;
+	Params->TryGetStringField(TEXT("className"), ClassName);
+
+	FMCPNodeCatalog& Catalog = FMCPNodeCatalog::Get();
+	Catalog.EnsureBuilt();
+
+	TSharedPtr<FJsonObject> Signature = Catalog.FindSignature(FunctionName, ClassName);
+	if (!Signature.IsValid())
+	{
+		const FString ClassSuffix = ClassName.IsEmpty()
+			? FString()
+			: FString::Printf(TEXT(" on %s"), *ClassName);
+		TSharedRef<FJsonObject> NotFound = MakeErrorResponse(FString::Printf(
+			TEXT("node_signature_not_found: %s%s"), *FunctionName, *ClassSuffix));
+
+		TArray<TSharedPtr<FJsonValue>> Suggestions = Catalog.SuggestSimilar(FunctionName, 5);
+		if (Suggestions.Num() > 0)
+		{
+			NotFound->SetArrayField(TEXT("didYouMean"), Suggestions);
+		}
+		return NotFound;
+	}
+
+	return MakeOkResponse(Signature);
 }
 
