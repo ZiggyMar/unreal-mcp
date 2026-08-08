@@ -78,6 +78,28 @@ cost one failed call to discover:
 - **Comment boxes carry the narrative; node comments carry the why.** Fill both. A box whose
   text is just "Comment" is worse than no box.
 
+## Multiplayer judgment (learned the hard way)
+
+- **Never attach a player-controlled Character to another to carry it.** The victim's own client
+  keeps predicting and sending moves, so the attachment fights corrections: the held player faces
+  its own control rotation, rubber-bands, and server-side launches get swallowed into net snaps.
+  Three fix rounds failed before the architecture changed.
+- **The carry pattern that works**: make the capture/release events **Multicast reliable** so
+  every machine, including the victim's own client, mirrors the state locally (disable its
+  CharacterMovement locally, toggle collision locally). Hold-follow runs on the victim's own
+  Tick on every machine (snap to the captor's hold point and rotation), which makes rotation
+  follow with zero replication lag. `LaunchCharacter` inside the multicast means the victim's
+  client predicts its own launch, so it tracks the aim without correction snaps.
+- **Aim from the camera, not the character.** "Launch where I'm looking" means a line trace from
+  the camera to find the looked-at point, then a velocity from the victim TOWARD that point,
+  ideally distance-scaled. Launching along control-rotation-forward is parallel to the camera ray
+  but offset, and feels wrong exactly at short range.
+- **Traces execute.** `LineTraceSingle` and friends have exec pins; wired as if pure, the compiler
+  prunes them and the hit is silently default.
+- **Deleting a CustomEvent does not free its name until the Blueprint compiles.** Recreating an
+  event with the same name before compiling yields `Name_0` and breaks every caller. Delete,
+  compile, then recreate.
+
 ## Performance judgment (Blueprint cost is real)
 
 - **`GetAllActorsOfClass` is not free**, and neither is anything else that scans the world. Never
