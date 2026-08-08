@@ -41,8 +41,14 @@ reliably knows UE's exact node names, pin names, and function signatures.
   5.6 and 15,775 on 5.8, built in about 0.1s. Backs `find_node` and `get_node_signature`, and makes
   `add_node` return `didYouMean` near-misses instead of a bare `function_not_found`. Live-verified
   39/39 on 5.6 and 40/40 on 5.8. See [docs/M5_STATUS.md](docs/M5_STATUS.md).
-- **Releases published**: [v0.1.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.8)
-  and [v0.1.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.1.0-ue5.6).
+- **Persistent node ids, undo transactions, and control-flow nodes.** Node ids are the node's
+  serialized `NodeGuid` (removals no longer invalidate other ids); every write runs inside a named
+  editor transaction so a human can Ctrl+Z the agent's work; and `add_node` places `Branch`,
+  `Sequence`, `Cast`, and standard-library macros, verified by building and compiling a real
+  conditional graph through the bridge alone. Live-verified on both engines.
+- **Releases published**: [v0.2.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.2.0-ue5.8)
+  and [v0.2.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.2.0-ue5.6)
+  (v0.1.0 releases remain available).
 - **Competitive survey** of 9 other Unreal MCP projects, including which of their ideas are worth
   adopting. See [docs/COMPETITIVE_LANDSCAPE.md](docs/COMPETITIVE_LANDSCAPE.md).
 
