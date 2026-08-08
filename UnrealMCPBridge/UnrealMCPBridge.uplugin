@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Unreal MCP Bridge",
+	"Description": "Editor-only TCP bridge exposing read-only Blueprint/project introspection commands for the Unreal MCP (Model Context Protocol) server.",
+	"Category": "Editor",
+	"CreatedBy": "Unreal MCP Project",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"EngineVersion": "5.8.0",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "UnrealMCPBridge",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		}
+	]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "unreal-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server exposing read-only Unreal Engine Blueprint introspection tools, backed by the UnrealMCPBridge editor plugin over a local TCP socket.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "unreal-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

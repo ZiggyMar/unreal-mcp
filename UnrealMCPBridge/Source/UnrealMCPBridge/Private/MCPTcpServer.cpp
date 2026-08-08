@@ -1,0 +1,175 @@
+#include "MCPTcpServer.h"
+#include "MCPCommandHandler.h"
+
+#include "Sockets.h"
+#include "SocketSubsystem.h"
+#include "Common/TcpListener.h"
+#include "Common/TcpSocketBuilder.h"
+#include "Interfaces/IPv4/IPv4Address.h"
+#include "Interfaces/IPv4/IPv4Endpoint.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogMCPBridge, Log, All);
+
+/** Per-connection state: raw socket + a line-buffering receive buffer. */
+class FMCPClientConnection
+{
+public:
+	explicit FMCPClientConnection(FSocket* InSocket)
+		: Socket(InSocket)
+	{
+	}
+
+	~FMCPClientConnection()
+	{
+		if (Socket)
+		{
+			Socket->Close();
+			ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);
+			Socket = nullptr;
+		}
+	}
+
+	bool IsConnected() const
+	{
+		return Socket != nullptr && Socket->GetConnectionState() == SCS_Connected;
+	}
+
+	FSocket* Socket = nullptr;
+	FString RecvBuffer;
+};
+
+FMCPTcpServer::FMCPTcpServer() = default;
+
+FMCPTcpServer::~FMCPTcpServer()
+{
+	Stop();
+}
+
+bool FMCPTcpServer::Start(int32 Port)
+{
+	if (Listener.IsValid())
+	{
+		return true;
+	}
+
+	ListenPort = Port;
+
+	// Bind to loopback only — this bridge must never be reachable off-machine.
+	FIPv4Endpoint Endpoint(FIPv4Address(127, 0, 0, 1), static_cast<uint16>(Port));
+
+	Listener = MakeUnique<FTcpListener>(Endpoint);
+	Listener->OnConnectionAccepted().BindRaw(this, &FMCPTcpServer::HandleConnectionAccepted);
+
+	if (!Listener->IsActive())
+	{
+		UE_LOG(LogMCPBridge, Error, TEXT("UnrealMCPBridge: failed to bind TCP listener on 127.0.0.1:%d"), Port);
+		Listener.Reset();
+		return false;
+	}
+
+	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FMCPTcpServer::Tick));
+
+	UE_LOG(LogMCPBridge, Log, TEXT("UnrealMCPBridge: listening on 127.0.0.1:%d"), Port);
+	return true;
+}
+
+void FMCPTcpServer::Stop()
+{
+	if (TickHandle.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+		TickHandle.Reset();
+	}
+
+	Clients.Empty();
+	Listener.Reset();
+}
+
+bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint)
+{
+	// Only ever accept loopback connections.
+	if (Endpoint.Address != FIPv4Address(127, 0, 0, 1))
+	{
+		return false;
+	}
+
+	NewSocket->SetNonBlocking(true);
+	Clients.Add(MakeShared<FMCPClientConnection>(NewSocket));
+	UE_LOG(LogMCPBridge, Verbose, TEXT("UnrealMCPBridge: client connected from %s"), *Endpoint.ToString());
+	return true;
+}
+
+bool FMCPTcpServer::Tick(float DeltaTime)
+{
+	for (int32 i = Clients.Num() - 1; i >= 0; --i)
+	{
+		FMCPClientConnection& Client = *Clients[i];
+		if (!Client.IsConnected())
+		{
+			Clients.RemoveAt(i);
+			continue;
+		}
+		ProcessClientSocket(Client);
+	}
+	return true; // keep ticking
+}
+
+void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
+{
+	uint32 PendingSize = 0;
+	while (Client.Socket->HasPendingData(PendingSize) && PendingSize > 0)
+	{
+		TArray<uint8> Buffer;
+		Buffer.SetNumUninitialized(FMath::Min(PendingSize, 8192u));
+
+		int32 BytesRead = 0;
+		if (!Client.Socket->Recv(Buffer.GetData(), Buffer.Num(), BytesRead) || BytesRead <= 0)
+		{
+			break;
+		}
+
+		FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Buffer.GetData()), BytesRead);
+		Client.RecvBuffer.AppendChars(Converter.Get(), Converter.Length());
+	}
+
+	// Process complete newline-terminated requests.
+	int32 NewlineIndex;
+	while (Client.RecvBuffer.FindChar(TEXT('\n'), NewlineIndex))
+	{
+		FString Line = Client.RecvBuffer.Left(NewlineIndex);
+		Client.RecvBuffer.RightChopInline(NewlineIndex + 1);
+		Line.TrimStartAndEndInline();
+		if (Line.IsEmpty())
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> RequestObj;
+		TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Line);
+		TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
+
+		if (FJsonSerializer::Deserialize(Reader, RequestObj) && RequestObj.IsValid())
+		{
+			Response = FMCPCommandHandler::Dispatch(RequestObj.ToSharedRef());
+		}
+		else
+		{
+			Response->SetBoolField(TEXT("ok"), false);
+			Response->SetStringField(TEXT("error"), TEXT("invalid_json"));
+		}
+
+		FString OutStr;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutStr);
+		FJsonSerializer::Serialize(Response, Writer);
+		OutStr.AppendChar(TEXT('\n'));
+
+		FTCHARToUTF8 UTF8Str(*OutStr);
+		int32 BytesSent = 0;
+		Client.Socket->Send(reinterpret_cast<const uint8*>(UTF8Str.Get()), UTF8Str.Length(), BytesSent);
+	}
+}

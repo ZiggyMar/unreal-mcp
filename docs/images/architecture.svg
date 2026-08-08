@@ -1,0 +1,61 @@
+<svg viewBox="0 0 960 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="460" fill="#ffffff"/>
+
+  <!-- Claude / MCP client -->
+  <rect x="30" y="170" width="180" height="100" rx="10" fill="#eef2ff" stroke="#4f5fd6" stroke-width="1.5"/>
+  <text x="120" y="212" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">Claude</text>
+  <text x="120" y="232" text-anchor="middle" font-size="12" fill="#4b5563">MCP client</text>
+  <text x="120" y="250" text-anchor="middle" font-size="11" fill="#6b7280">Claude Code / Desktop</text>
+
+  <!-- arrow 1 -->
+  <line x1="210" y1="220" x2="278" y2="220" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="244" y="210" text-anchor="middle" font-size="10" fill="#6b7280">MCP / stdio</text>
+
+  <!-- mcp-server -->
+  <rect x="280" y="150" width="200" height="140" rx="10" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="380" y="185" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">mcp-server</text>
+  <text x="380" y="204" text-anchor="middle" font-size="12" fill="#4b5563">Node / TypeScript</text>
+  <text x="380" y="228" text-anchor="middle" font-size="11" fill="#6b7280">tiered reads</text>
+  <text x="380" y="245" text-anchor="middle" font-size="11" fill="#6b7280">diff-based edits</text>
+  <text x="380" y="262" text-anchor="middle" font-size="11" fill="#6b7280">optional local-model</text>
+  <text x="380" y="277" text-anchor="middle" font-size="11" fill="#6b7280">enrichment hook</text>
+
+  <!-- arrow 2 -->
+  <line x1="480" y1="220" x2="548" y2="220" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="514" y="210" text-anchor="middle" font-size="10" fill="#6b7280">TCP :8765</text>
+  <text x="514" y="245" text-anchor="middle" font-size="10" fill="#6b7280">JSON</text>
+
+  <!-- UnrealMCPBridge -->
+  <rect x="550" y="150" width="210" height="140" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="655" y="185" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">UnrealMCPBridge</text>
+  <text x="655" y="204" text-anchor="middle" font-size="12" fill="#4b5563">C++ editor plugin</text>
+  <text x="655" y="228" text-anchor="middle" font-size="11" fill="#6b7280">Kismet2 / EdGraph /</text>
+  <text x="655" y="245" text-anchor="middle" font-size="11" fill="#6b7280">AssetRegistry APIs</text>
+  <text x="655" y="269" text-anchor="middle" font-size="11" fill="#6b7280">stock launcher build —</text>
+  <text x="655" y="284" text-anchor="middle" font-size="11" fill="#6b7280">no engine source needed</text>
+
+  <!-- arrow 3 -->
+  <line x1="760" y1="220" x2="828" y2="220" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Unreal Editor -->
+  <rect x="830" y="160" width="120" height="120" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="890" y="200" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">Unreal</text>
+  <text x="890" y="218" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">Editor</text>
+  <text x="890" y="242" text-anchor="middle" font-size="10" fill="#6b7280">5.6 / 5.8</text>
+
+  <!-- Persistent index, below the bridge -->
+  <rect x="550" y="330" width="210" height="80" rx="10" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 3"/>
+  <text x="655" y="358" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2328">Persistent index</text>
+  <text x="655" y="376" text-anchor="middle" font-size="11" fill="#6b7280">incremental via AssetRegistry</text>
+  <text x="655" y="393" text-anchor="middle" font-size="11" fill="#6b7280">delegates, cached to disk</text>
+  <line x1="655" y1="290" x2="655" y2="330" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+
+  <!-- caption -->
+  <text x="480" y="430" text-anchor="middle" font-size="11" fill="#9ca3af">Claude never receives raw engine JSON — every hop compacts the response before it reaches the model.</text>
+</svg>

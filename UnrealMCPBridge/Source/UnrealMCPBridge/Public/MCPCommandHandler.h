@@ -1,0 +1,77 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Dom/JsonObject.h"
+#include "EdGraph/EdGraphPin.h"
+
+/**
+ * Dispatches a single decoded JSON-RPC-style request to the appropriate
+ * Blueprint introspection or edit command and returns a JSON response object.
+ *
+ * Request shape:  { "id": <any>, "cmd": "<name>", "params": { ... } }
+ * Response shape: { "id": <any>, "ok": true, "result": { ... } }
+ *              or { "id": <any>, "ok": false, "error": "<message>" }
+ *
+ * Milestone 1 commands (read-only): ping, list_blueprints, list_blueprint_graphs,
+ * read_blueprint_graph_summary, read_blueprint_node_detail.
+ *
+ * Milestone 2 commands (write/edit): create_blueprint, add_node, connect_pins,
+ * set_pin_default_value, remove_node, add_variable, compile_blueprint, save_blueprint.
+ *
+ * Milestone 3 commands (project-wide index): search_project, find_references,
+ * get_project_overview. Backed by FMCPProjectIndex (see MCPProjectIndex.h), not by
+ * enumerating/loading assets ad hoc on every call.
+ *
+ * All handlers run on the game thread (FMCPTcpServer ticks via FTSTicker), so they
+ * may call directly into Editor/Kismet2/AssetRegistry/EdGraph APIs with no thread
+ * marshaling.
+ */
+class FMCPCommandHandler
+{
+public:
+	static TSharedRef<FJsonObject> Dispatch(const TSharedRef<FJsonObject>& Request);
+
+private:
+	// --- Milestone 1: read-only ---
+	static TSharedRef<FJsonObject> HandlePing(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListBlueprints(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListBlueprintGraphs(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleReadBlueprintNodeDetail(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Milestone 2: write/edit ---
+	static TSharedRef<FJsonObject> HandleCreateBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleAddNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleConnectPins(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetPinDefaultValue(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleRemoveNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleAddVariable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSaveBlueprint(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Milestone 3: project-wide index ---
+	static TSharedRef<FJsonObject> HandleSearchProject(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleFindReferences(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleGetProjectOverview(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Shared lookup helpers ---
+
+	// Loads a Blueprint asset given a package/object path (e.g. "/Game/Blueprints/BP_Foo.BP_Foo").
+	static class UBlueprint* LoadBlueprintByPath(const FString& Path, FString& OutError);
+
+	// Finds one of a Blueprint's graphs (event graph, function, macro, ...) by name.
+	static class UEdGraph* FindGraphByName(class UBlueprint* Blueprint, const FString& GraphName, FString& OutError);
+
+	// Resolves a node id (as produced by read_blueprint_graph_summary / add_node, "n<index>")
+	// back to a node within a specific graph. Not stable across editor sessions or edits.
+	static class UEdGraphNode* FindNodeById(class UEdGraph* Graph, const FString& NodeId, FString& OutError);
+
+	// Resolves a class by short name ("Actor", "Pawn") or full path ("/Script/Engine.Actor",
+	// "/Game/BP_Base.BP_Base_C"). Tries A-/U- native prefixes for short names.
+	static UClass* ResolveClassByName(const FString& ClassName, FString& OutError);
+
+	// Parses a compact type descriptor (see add_variable / set_pin_default_value docs in
+	// mcp-server) into an FEdGraphPinType: bool, byte, int, int64, float, double, string,
+	// name, text, vector, rotator, transform, object:<Class>, class:<Class>.
+	static bool ResolvePinType(const FString& TypeStr, struct FEdGraphPinType& OutType, FString& OutError);
+};
