@@ -107,6 +107,30 @@ they block the "AI does everything a coder does" goal, crossed with token saving
 10. **Event didYouMean.** `add_node`'s `event_function_not_found` should list the parent class's
     overridable events the way function lookups already suggest near-misses.
 
+## Part 1c: from the owner's vacuum-challenge review (2026-08-08)
+
+1. **Enhanced Input support.** The challenge used legacy action/axis mappings because they needed
+   the least new tooling; that is the wrong default for UE5-era projects. Needed: create
+   InputAction and InputMappingContext assets, an EnhancedInputAction event node type, and an
+   AddMappingContext convenience. Rule until then: in an existing project, detect and conform to
+   whatever input system the project already uses.
+2. **Blueprint lint command.** Server-side detection of the antipatterns any general model
+   produces because it thinks engine calls are free: GetAllActorsOfClass (or other world scans)
+   driven by Tick, casts inside hot loops, missing authority checks around server-only mutations,
+   unconsumed pure nodes. The owner's friend put it best: "AI seems to think GetAllActorsOfClass
+   is nearly free." Rides on data the reads already expose.
+3. **Engine patterns cheat sheet ("what does the engine offer").** A curated, searchable map from
+   need to engine facility: tabular game data -> Data Tables, designer-tuned curves -> Curve
+   Tables, persistent state -> SaveGame, decoupling -> interfaces/dispatchers/tags, shop-style
+   systems -> Data Table + struct rows, and so on. It must GUIDE, not GATE: the model consults it
+   before architecting but is never told "it's not in the sheet, so don't." Pairs with the
+   competitive-survey docs-index idea and the M5 palette remainder.
+4. **PIE input automation.** The challenge's runtime proof booted a 2-player session and checked
+   for errors, but nobody pressed F; simulating input in PIE would close that gap.
+5. **Spawn-complete pattern in the workflow doc.** For cache-once designs, fire an event once all
+   expected players have spawned (GameMode PostLogin count), query once, cache. Avoids both the
+   per-tick scan and the first-tick race where clients have not spawned yet.
+
 ## Part 2: carried from the competitive survey
 
 Full rationale for each is in [COMPETITIVE_LANDSCAPE.md](COMPETITIVE_LANDSCAPE.md). Listed here so
