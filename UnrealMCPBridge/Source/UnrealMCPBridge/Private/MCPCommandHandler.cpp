@@ -451,6 +451,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandlePieStatus(Params);
 	}
+	else if (Cmd == TEXT("refresh_blueprint"))
+	{
+		Response = HandleRefreshBlueprint(Params);
+	}
 	else if (Cmd == TEXT("open_level"))
 	{
 		Response = HandleOpenLevel(Params);
@@ -2701,6 +2705,63 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandlePieStatus(const TSharedPtr<FJs
 {
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("running"), GEditor && GEditor->PlayWorld != nullptr);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRefreshBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	// This is the "right-click > Refresh Nodes" fix a human applies after a C++ change:
+	// every node re-reads its backing function/struct/pin signature, dropping pins that
+	// no longer exist and picking up new ones. It clears the whole "in use pin no longer
+	// exists, please refresh node" error family that a signature change leaves behind.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRefreshBlueprint", "MCP: Refresh Blueprint"));
+	Blueprint->Modify();
+	FBlueprintEditorUtils::RefreshAllNodes(Blueprint);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Blueprint->GetPathName());
+	Result->SetBoolField(TEXT("refreshed"), true);
+
+	// Recompile by default and report the before/after so a caller can see the effect.
+	bool bCompile = true;
+	Params->TryGetBoolField(TEXT("compile"), bCompile);
+	if (bCompile)
+	{
+		FCompilerResultsLog CompileResults;
+		FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &CompileResults);
+		TSharedRef<FJsonObject> CompileObj = MakeShared<FJsonObject>();
+		CompileObj->SetNumberField(TEXT("errorCount"), CompileResults.NumErrors);
+		CompileObj->SetNumberField(TEXT("warningCount"), CompileResults.NumWarnings);
+		CompileObj->SetBoolField(TEXT("success"), CompileResults.NumErrors == 0);
+		if (CompileResults.NumErrors > 0 || CompileResults.NumWarnings > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> Messages;
+			for (const TSharedRef<FTokenizedMessage>& Message : CompileResults.Messages)
+			{
+				TSharedRef<FJsonObject> MsgObj = MakeShared<FJsonObject>();
+				MsgObj->SetStringField(TEXT("severity"),
+					Message->GetSeverity() == EMessageSeverity::Error ? TEXT("error") : TEXT("warning"));
+				MsgObj->SetStringField(TEXT("text"), Message->ToText().ToString());
+				Messages.Add(MakeShared<FJsonValueObject>(MsgObj));
+			}
+			CompileObj->SetArrayField(TEXT("messages"), Messages);
+		}
+		Result->SetObjectField(TEXT("compile"), CompileObj);
+	}
+
 	return MakeOkResponse(Result);
 }
 

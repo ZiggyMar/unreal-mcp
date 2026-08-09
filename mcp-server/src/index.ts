@@ -671,6 +671,32 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_refresh_blueprint",
+  {
+    title: "Refresh a Blueprint's nodes after a C++ change",
+    description:
+      "The 'right-click > Refresh Nodes' repair. Every node re-reads its backing function/struct/pin signature, " +
+      "dropping pins that no longer exist and picking up renamed ones. This is the fix for the whole family of errors " +
+      "a C++ signature change leaves behind ('in use pin X no longer exists, please refresh node', 'break <unknown " +
+      "struct>', missing-function-from-known-class). It does NOT fix genuinely-deleted classes (NULL parent class, " +
+      "invalid cast target) which need a CoreRedirect or deletion instead. Recompiles by default and reports the " +
+      "before/after error count so you can see what cleared.",
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/UI/W_Healthbar.W_Healthbar".'),
+      compile: z.boolean().optional().describe("Recompile after refreshing. Defaults to true."),
+    },
+  },
+  async ({ path, compile }) => {
+    try {
+      const result = await bridge.send("refresh_blueprint", { path, compile });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
   "unreal_create_function",
   {
     title: "Create a function in a Blueprint",

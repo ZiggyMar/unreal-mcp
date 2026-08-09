@@ -79,6 +79,9 @@ private:
 	static TSharedRef<FJsonObject> HandleSpawnActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSaveLevel(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Brownfield repair: refresh nodes after a C++ change ---
+	static TSharedRef<FJsonObject> HandleRefreshBlueprint(const TSharedPtr<FJsonObject>& Params);
+
 	// --- Components and class defaults (challenge tooling, part B) ---
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListComponents(const TSharedPtr<FJsonObject>& Params);
