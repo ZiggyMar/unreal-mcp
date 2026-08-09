@@ -82,6 +82,9 @@ private:
 	// --- Brownfield repair: refresh nodes after a C++ change ---
 	static TSharedRef<FJsonObject> HandleRefreshBlueprint(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Asset management: delete with reference safety ---
+	static TSharedRef<FJsonObject> HandleDeleteAsset(const TSharedPtr<FJsonObject>& Params);
+
 	// --- Components and class defaults (challenge tooling, part B) ---
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListComponents(const TSharedPtr<FJsonObject>& Params);

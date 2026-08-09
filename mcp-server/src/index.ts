@@ -671,6 +671,32 @@ server.registerTool(
 );
 
 server.registerTool(
+  "unreal_delete_asset",
+  {
+    title: "Delete one or more assets, with reference safety",
+    description:
+      "Deletes assets by path. Pass a single path, or paths[] to delete a whole cluster at once (members that " +
+      "reference each other delete cleanly together). By default, if any asset OUTSIDE the delete set still " +
+      "references what you're deleting, the call is BLOCKED and returns the blocking referencers, so you never " +
+      "silently orphan live content. Pass force:true to delete anyway (breaks those outside references to None). " +
+      "Use this to remove dead template debris after confirming it is unreferenced by live content.",
+    inputSchema: {
+      path: z.string().optional().describe("Single asset object path to delete."),
+      paths: z.array(z.string()).optional().describe("Multiple asset object paths to delete together."),
+      force: z.boolean().optional().describe("Delete even if outside-set references exist. Defaults to false (blocks and reports)."),
+    },
+  },
+  async ({ path, paths, force }) => {
+    try {
+      const result = await bridge.send("delete_asset", { path, paths, force });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
   "unreal_refresh_blueprint",
   {
     title: "Refresh a Blueprint's nodes after a C++ change",

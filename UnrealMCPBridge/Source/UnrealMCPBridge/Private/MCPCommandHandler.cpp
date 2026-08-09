@@ -43,6 +43,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
+#include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
@@ -454,6 +455,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("refresh_blueprint"))
 	{
 		Response = HandleRefreshBlueprint(Params);
+	}
+	else if (Cmd == TEXT("delete_asset"))
+	{
+		Response = HandleDeleteAsset(Params);
 	}
 	else if (Cmd == TEXT("open_level"))
 	{
@@ -2762,6 +2767,98 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRefreshBlueprint(const TShared
 		Result->SetObjectField(TEXT("compile"), CompileObj);
 	}
 
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<FJsonObject>& Params)
+{
+	// Accepts either a single path or an array, so a whole dead cluster deletes at once
+	// (its members reference each other, and force-delete breaks those intra-set links).
+	TArray<FString> Paths;
+	FString SinglePath;
+	if (Params.IsValid() && Params->TryGetStringField(TEXT("path"), SinglePath))
+	{
+		Paths.Add(SinglePath);
+	}
+	const TArray<TSharedPtr<FJsonValue>>* PathArray = nullptr;
+	if (Params.IsValid() && Params->TryGetArrayField(TEXT("paths"), PathArray))
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *PathArray)
+		{
+			FString P;
+			if (Entry.IsValid() && Entry->TryGetString(P))
+			{
+				Paths.Add(P);
+			}
+		}
+	}
+	if (Paths.Num() == 0)
+	{
+		return MakeErrorResponse(TEXT("missing_param: path or paths[] is required"));
+	}
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	// Safety report: what OUTSIDE this delete set still references each asset. force=true
+	// deletes anyway (breaking those references to None); without force, an outside
+	// referencer blocks the delete so the caller cannot silently orphan live content.
+	bool bForce = false;
+	if (Params.IsValid())
+	{
+		Params->TryGetBoolField(TEXT("force"), bForce);
+	}
+
+	TSet<FName> DeleteSet;
+	for (const FString& P : Paths)
+	{
+		DeleteSet.Add(FName(*FPackageName::ObjectPathToPackageName(P)));
+	}
+
+	TArray<FAssetData> ToDelete;
+	TArray<TSharedPtr<FJsonValue>> Blockers;
+	for (const FString& P : Paths)
+	{
+		const FSoftObjectPath ObjectPath(P);
+		FAssetData Asset = AssetRegistry.GetAssetByObjectPath(ObjectPath);
+		if (!Asset.IsValid())
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("asset_not_found: %s"), *P));
+		}
+		ToDelete.Add(Asset);
+
+		if (!bForce)
+		{
+			TArray<FName> Referencers;
+			AssetRegistry.GetReferencers(Asset.PackageName, Referencers);
+			for (const FName& Ref : Referencers)
+			{
+				const FString RefStr = Ref.ToString();
+				if (!DeleteSet.Contains(Ref) && !RefStr.StartsWith(TEXT("/Script/")))
+				{
+					TSharedRef<FJsonObject> B = MakeShared<FJsonObject>();
+					B->SetStringField(TEXT("asset"), P);
+					B->SetStringField(TEXT("referencedBy"), RefStr);
+					Blockers.Add(MakeShared<FJsonValueObject>(B));
+				}
+			}
+		}
+	}
+
+	if (Blockers.Num() > 0)
+	{
+		TSharedRef<FJsonObject> Blocked = MakeErrorResponse(
+			TEXT("delete_blocked: live assets outside the delete set still reference these. Pass force:true to delete anyway (breaks those references to None)."));
+		Blocked->SetArrayField(TEXT("blockers"), Blockers);
+		return Blocked;
+	}
+
+	const int32 Deleted = ObjectTools::DeleteAssets(ToDelete, /*bShowConfirmation=*/false);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("requested"), Paths.Num());
+	Result->SetNumberField(TEXT("deleted"), Deleted);
+	Result->SetBoolField(TEXT("forced"), bForce);
 	return MakeOkResponse(Result);
 }
 
