@@ -34,6 +34,8 @@ There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic s
 
 Full survey of the existing ecosystem (licenses, architectures, what each one does well) is in [docs/COMPETITIVE_LANDSCAPE.md](docs/COMPETITIVE_LANDSCAPE.md).
 
+There is also a companion document that starts from the other end: [docs/COMPLAINTS_SOLVED.md](docs/COMPLAINTS_SOLVED.md) collects the complaints people actually file about Unreal MCP servers, each with its source link, and states plainly whether this project solves it, partly solves it, or does not. The open rows are left open on purpose.
+
 ## Status
 
 This is being built and verified in public, milestone by milestone. Each milestone's status doc is written honestly, including what's compiled/tested versus what's still unverified:
