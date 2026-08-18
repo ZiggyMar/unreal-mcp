@@ -156,6 +156,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | Tool | Bridge command | Purpose |
 | --- | --- | --- |
 | `unreal_build_graph` | `build_graph` | Many nodes, wires, and pin defaults in one atomic call, with node `ref` names you choose. **Prefer this over individual `add_node`/`connect_pins` calls whenever placing more than one node.** |
+| `unreal_add_event_handler` | *(composed: `find_node` + `build_graph`)* | "When X happens, do these things" — the execution chain is wired for you, with no pin names, refs, or connections in the input. |
 | `unreal_create_function` | `create_function` | Create a function graph with typed inputs/outputs; returns the entry (and result) node ids to wire immediately. |
 | `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
 | `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |

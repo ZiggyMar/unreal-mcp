@@ -480,6 +480,36 @@ async function main() {
     return `${r.totalActors} actors remain`;
   });
 
+  await check("add_event_handler wires an event to a call with no pin names given", async () => {
+    const bp = `${ROOT}/BP_EventHandler`;
+    await freshBlueprint(bp, "BP_EventHandler");
+    try {
+      // The whole point: the caller names an event and a function, nothing else.
+      await bridge.send("build_graph", {
+        path: `${bp}.BP_EventHandler`,
+        graphName: "EventGraph",
+        nodes: [
+          { ref: "evt", nodeType: "Event", eventName: "ReceiveBeginPlay" },
+          { ref: "a0", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+        ],
+        connections: [{ from: "evt.done", to: "a0.execute" }],
+        pinDefaults: [{ node: "a0", pin: "InString", value: "hello" }],
+      });
+      const summary = await bridge.send("read_blueprint_graph_summary", {
+        path: `${bp}.BP_EventHandler`,
+        graphName: "EventGraph",
+      });
+      const text = JSON.stringify(summary);
+      if (!/BeginPlay/.test(text)) throw new Error("no BeginPlay node");
+      if (!/Print String/.test(text)) throw new Error("no Print String node");
+      if (!/linkedTo":\[\{/.test(text)) throw new Error("the nodes were placed but never connected");
+      // "done" and "InString" are both wrong; both must have been resolved rather than rejected.
+      return "wired via forgiving pin names ('done' -> 'then', 'InString' -> 'In String')";
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_EventHandler`], force: true }).catch(() => {});
+    }
+  });
+
   // --- claims audit -----------------------------------------------------------------------------
   // Several rows in docs/COMPLAINTS_SOLVED.md were written from reasoning rather than from running
   // anything. These check the load-bearing ones. A safety guarantee nobody has exercised is a

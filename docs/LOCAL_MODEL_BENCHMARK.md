@@ -93,6 +93,42 @@ from 115s to 22s.
 An empty pin list in an error message was fixed at the same time. `available: ` told a caller
 nothing; it now says the node has no pins of that kind at all, so the node reference is wrong.
 
+## What came next: the tool the benchmark asked for
+
+The graph failure was a tooling problem, not a model one. The model knows an event should lead to a
+print; it fails because `unreal_build_graph` asks it to get node refs, execution pin names, and a
+nested JSON shape all correct at once, and any one of them being wrong fails the whole call.
+
+So `unreal_add_event_handler` takes only the part a caller actually knows:
+
+```
+event "BeginPlay" -> [ PrintString("hello") ]
+```
+
+No pin names, no refs, no connection array — nothing in the input to get wrong. It places the
+event, places each call, chains the execution pins in order, applies parameter defaults, looks up
+each function's class in the live engine, and compiles. Verified end to end: BeginPlay and Print
+String placed, **wired**, compiled clean, in one call.
+
+## Two further findings, both uncomfortable
+
+**A tool nobody finds does not exist.** After adding it, the model kept reaching for
+`build_graph` anyway, because that is what it already knew and the task said "add graph logic". The
+fix was a one-line pointer *inside `build_graph`'s own description*, where the model was already
+looking. Building the better path is only half the work; the redirect has to be at the point of
+confusion.
+
+**Description length is a real cost at 7B, not a theoretical one.** The first version of that
+pointer was a paragraph, and the extra ~600 characters pushed the model into truncating its output
+mid-JSON — it went from working tool calls to none at all. Trimming it back to one sentence
+restored it. On a small model, shorter and sharper genuinely beats complete, and this is the
+concrete version of the context-bloat complaint the project had only measured in the abstract.
+
+**Run-to-run variance at 7B is high.** With temperature 0.1 and identical input, the same model
+sometimes drives the task correctly and sometimes replies "DONE" without calling anything. Any
+claim about a small model's success rate needs several runs behind it, and a single green run
+proves very little.
+
 ## Running it yourself
 
 ```bash
