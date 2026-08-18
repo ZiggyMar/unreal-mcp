@@ -1,7 +1,5 @@
 # unreal-mcp
 
-[![CI](https://github.com/ZiggyMar/unreal-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ZiggyMar/unreal-mcp/actions/workflows/ci.yml)
-
 ![Unreal MCP Hero Demo](docs/images/hero.gif)
 
 An MCP server that allows AI agents (Claude, Cursor) to directly control and manipulate Unreal Engine.
@@ -168,6 +166,12 @@ For more configuration options and details, see [`mcp-server/README.md`](mcp-ser
 
 
 ## What CI covers, and what it does not
+
+**Status: the workflow is committed but has never run.** GitHub refused to start it - *"the job was
+not started because your account is locked due to a billing issue"* - so no badge is shown here. A
+badge reading "failing" for a billing reason would say something false about the code. The workflow
+is structurally valid and the whole suite is verified to pass locally with no editor running, which
+is the same thing it does on a runner; that is a claim about local runs, not a CI result.
 
 The badge above covers the parts that need no Unreal install, run on a clean Linux machine with
 nothing preinstalled: build, typecheck, tool/bridge parity, documentation guards, profile token
