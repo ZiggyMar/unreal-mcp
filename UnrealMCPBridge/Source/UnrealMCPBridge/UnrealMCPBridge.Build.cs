@@ -31,7 +31,9 @@ public class UnrealMCPBridge : ModuleRules
 			"KismetCompiler",
 			"EditorSubsystem",
 			"Projects",
-			"MessageLog"
+			"MessageLog",
+			"UMG",
+			"UMGEditor"
 		});
 
 		bEnableExceptions = false;

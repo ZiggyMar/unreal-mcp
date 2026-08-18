@@ -43,6 +43,14 @@
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
+#include "WidgetBlueprint.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
+#include "Blueprint/WidgetTree.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/Widget.h"
+#include "Components/PanelWidget.h"
+#include "Components/PanelSlot.h"
+#include "Components/CanvasPanel.h"
 #include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -487,6 +495,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("set_class_default"))
 	{
 		Response = HandleSetClassDefault(Params);
+	}
+	else if (Cmd == TEXT("create_widget_blueprint"))
+	{
+		Response = HandleCreateWidgetBlueprint(Params);
+	}
+	else if (Cmd == TEXT("add_widget"))
+	{
+		Response = HandleAddWidget(Params);
+	}
+	else if (Cmd == TEXT("list_widgets"))
+	{
+		Response = HandleListWidgets(Params);
+	}
+	else if (Cmd == TEXT("set_widget_property"))
+	{
+		Response = HandleSetWidgetProperty(Params);
 	}
 	else
 	{
@@ -3298,3 +3322,416 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetClassDefault(const TSharedP
 	return Response;
 }
 
+// ---------------------------------------------------------------------------------------------
+// UMG / Widget Blueprints
+//
+// A game the user can see is mostly UI, and until now none of it was reachable: the bridge could
+// author gameplay Blueprints but not a single health bar, menu, or HUD. These four commands cover
+// the whole loop - create a Widget Blueprint, build its widget tree, read that tree back, and set
+// properties on any widget in it.
+//
+// Deliberately built on the pre-5.8 creation sequence rather than
+// FWidgetBlueprintOperationUtils::CreateWidgetBlueprint, which does exactly this but only exists
+// on 5.8. Using it would have compiled clean here and broken the 5.6 build, which is the project's
+// whole "one source, both engines" claim.
+// ---------------------------------------------------------------------------------------------
+
+/** Resolve a UWidget subclass by name, so callers can say "TextBlock" rather than "/Script/UMG.TextBlock". */
+UClass* FMCPCommandHandler::ResolveWidgetClass(const FString& ClassName, FString& OutError)
+{
+	UClass* Resolved = ResolveClassByName(ClassName, OutError);
+	if (!Resolved)
+	{
+		return nullptr;
+	}
+	if (!Resolved->IsChildOf(UWidget::StaticClass()))
+	{
+		OutError = FString::Printf(
+			TEXT("not_a_widget_class: %s is not a UWidget. Widget classes include TextBlock, Button, Image, ")
+			TEXT("ProgressBar, CanvasPanel, VerticalBox, HorizontalBox, Overlay, SizeBox, Border."),
+			*Resolved->GetName());
+		return nullptr;
+	}
+	if (Resolved->HasAnyClassFlags(CLASS_Abstract))
+	{
+		OutError = FString::Printf(TEXT("abstract_widget_class: %s cannot be instantiated"), *Resolved->GetName());
+		return nullptr;
+	}
+	return Resolved;
+}
+
+/** Load a Widget Blueprint, failing with a message that says what was found instead. */
+UWidgetBlueprint* FMCPCommandHandler::LoadWidgetBlueprint(const FString& Path, FString& OutError)
+{
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, OutError);
+	if (!Blueprint)
+	{
+		return nullptr;
+	}
+	UWidgetBlueprint* WidgetBlueprint = Cast<UWidgetBlueprint>(Blueprint);
+	if (!WidgetBlueprint)
+	{
+		OutError = FString::Printf(
+			TEXT("not_a_widget_blueprint: %s is a %s. Widget tools only work on Widget Blueprints; ")
+			TEXT("create one with create_widget_blueprint."),
+			*Path, *Blueprint->GetClass()->GetName());
+		return nullptr;
+	}
+	if (!WidgetBlueprint->WidgetTree)
+	{
+		OutError = TEXT("no_widget_tree: this Widget Blueprint has no widget tree, which usually means it failed to load fully");
+		return nullptr;
+	}
+	return WidgetBlueprint;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("packagePath"), PackagePath))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/UI/W_HealthBar"));
+	}
+
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
+	}
+
+	// Parent class: UserWidget unless the caller wants their own base.
+	UClass* ParentClass = UUserWidget::StaticClass();
+	FString ParentClassName;
+	if (Params->TryGetStringField(TEXT("parentClass"), ParentClassName) && !ParentClassName.IsEmpty())
+	{
+		FString ClassError;
+		UClass* Resolved = ResolveClassByName(ParentClassName, ClassError);
+		if (!Resolved)
+		{
+			return MakeErrorResponse(ClassError);
+		}
+		if (!Resolved->IsChildOf(UUserWidget::StaticClass()))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("bad_parent_class: %s does not derive from UserWidget"), *Resolved->GetName()));
+		}
+		ParentClass = Resolved;
+	}
+
+	// Root widget: CanvasPanel by default, which is what the editor's own "User Widget" gives you
+	// and the only root that supports free positioning.
+	UClass* RootClass = UCanvasPanel::StaticClass();
+	FString RootClassName;
+	if (Params->TryGetStringField(TEXT("rootWidget"), RootClassName) && !RootClassName.IsEmpty())
+	{
+		FString ClassError;
+		UClass* Resolved = ResolveWidgetClass(RootClassName, ClassError);
+		if (!Resolved)
+		{
+			return MakeErrorResponse(ClassError);
+		}
+		if (!Resolved->IsChildOf(UPanelWidget::StaticClass()))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("root_must_be_a_panel: %s cannot contain children, so nothing could be added to it. ")
+				TEXT("Use CanvasPanel, VerticalBox, HorizontalBox, Overlay, or another panel."),
+				*Resolved->GetName()));
+		}
+		RootClass = Resolved;
+	}
+
+	bool bSave = true;
+	if (Params->HasField(TEXT("save")))
+	{
+		bSave = Params->GetBoolField(TEXT("save"));
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+
+	const FScopedTransaction Transaction(
+		NSLOCTEXT("UnrealMCPBridge", "MCPCreateWidgetBP", "MCP: Create Widget Blueprint"));
+
+	UBlueprint* Created = FKismetEditorUtilities::CreateBlueprint(
+		ParentClass,
+		Package,
+		FName(*AssetName),
+		BPTYPE_Normal,
+		UWidgetBlueprint::StaticClass(),
+		UWidgetBlueprintGeneratedClass::StaticClass(),
+		FName("MCPBridge"));
+
+	UWidgetBlueprint* NewBlueprint = Cast<UWidgetBlueprint>(Created);
+	if (!NewBlueprint)
+	{
+		return MakeErrorResponse(TEXT("create_widget_blueprint_failed"));
+	}
+
+	if (!NewBlueprint->WidgetTree)
+	{
+		NewBlueprint->WidgetTree = NewObject<UWidgetTree>(NewBlueprint, TEXT("WidgetTree"), RF_Transactional);
+	}
+	if (!NewBlueprint->WidgetTree->RootWidget)
+	{
+		UWidget* Root = NewBlueprint->WidgetTree->ConstructWidget<UWidget>(RootClass);
+		NewBlueprint->WidgetTree->RootWidget = Root;
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(NewBlueprint);
+	FAssetRegistryModule::AssetCreated(NewBlueprint);
+	Package->MarkPackageDirty();
+
+	bool bSaved = false;
+	FString SaveError;
+	if (bSave)
+	{
+		bSaved = SaveBlueprintPackage(NewBlueprint, SaveError);
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetStringField(TEXT("parentClass"), ParentClass->GetName());
+	Result->SetStringField(TEXT("rootWidget"),
+		NewBlueprint->WidgetTree->RootWidget ? NewBlueprint->WidgetTree->RootWidget->GetName() : TEXT(""));
+	Result->SetStringField(TEXT("rootWidgetClass"), RootClass->GetName());
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	if (bSave && !bSaved)
+	{
+		Result->SetStringField(TEXT("saveError"), SaveError);
+	}
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, WidgetClassName, WidgetName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("widgetClass"), WidgetClassName) ||
+		!Params->TryGetStringField(TEXT("name"), WidgetName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, widgetClass, name are required"));
+	}
+
+	FString LoadError;
+	UWidgetBlueprint* Blueprint = LoadWidgetBlueprint(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	FString ClassError;
+	UClass* WidgetClass = ResolveWidgetClass(WidgetClassName, ClassError);
+	if (!WidgetClass)
+	{
+		return MakeErrorResponse(ClassError);
+	}
+
+	UWidgetTree* Tree = Blueprint->WidgetTree;
+	if (Tree->FindWidget(FName(*WidgetName)))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("widget_name_taken: %s already exists in this Widget Blueprint"), *WidgetName));
+	}
+
+	// Parent: an explicit panel, or the root. Naming the available panels in the error matters,
+	// because "parent not found" with no list is the point where a caller starts guessing.
+	UPanelWidget* Parent = nullptr;
+	FString ParentName;
+	if (Params->TryGetStringField(TEXT("parent"), ParentName) && !ParentName.IsEmpty())
+	{
+		UWidget* Found = Tree->FindWidget(FName(*ParentName));
+		if (!Found)
+		{
+			TArray<FString> Panels;
+			Tree->ForEachWidget([&Panels](UWidget* Widget)
+			{
+				if (Cast<UPanelWidget>(Widget))
+				{
+					Panels.Add(Widget->GetName());
+				}
+			});
+			return MakeErrorResponse(FString::Printf(TEXT("parent_not_found: %s (panels available: %s)"),
+				*ParentName, *FString::Join(Panels, TEXT(", "))));
+		}
+		Parent = Cast<UPanelWidget>(Found);
+		if (!Parent)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("parent_not_a_panel: %s is a %s, which cannot contain children"),
+				*ParentName, *Found->GetClass()->GetName()));
+		}
+	}
+	else
+	{
+		Parent = Cast<UPanelWidget>(Tree->RootWidget);
+		if (!Parent)
+		{
+			return MakeErrorResponse(TEXT("root_is_not_a_panel: pass an explicit parent, or recreate this Widget Blueprint with a panel root"));
+		}
+	}
+
+	if (!Parent->CanAddMoreChildren())
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("parent_full: %s already has its one allowed child (%s holds a single child). ")
+			TEXT("Put a CanvasPanel, VerticalBox, or Overlay inside it to hold more."),
+			*Parent->GetName(), *Parent->GetClass()->GetName()));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddWidget", "MCP: Add Widget"));
+	Blueprint->Modify();
+	Tree->Modify();
+
+	UWidget* NewWidget = Tree->ConstructWidget<UWidget>(WidgetClass, FName(*WidgetName));
+	if (!NewWidget)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("widget_construction_failed: %s"), *WidgetClass->GetName()));
+	}
+	UPanelSlot* Slot = Parent->AddChild(NewWidget);
+	if (!Slot)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("add_child_failed: %s would not accept a child of type %s"),
+			*Parent->GetName(), *WidgetClass->GetName()));
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("name"), NewWidget->GetName());
+	Result->SetStringField(TEXT("class"), WidgetClass->GetName());
+	Result->SetStringField(TEXT("parent"), Parent->GetName());
+	// The slot is where layout lives (position, size, alignment, padding), and its class differs
+	// per panel type, so the caller is told what it got rather than having to infer it.
+	Result->SetStringField(TEXT("slotClass"), Slot->GetClass()->GetName());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListWidgets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	FString LoadError;
+	UWidgetBlueprint* Blueprint = LoadWidgetBlueprint(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	UWidgetTree* Tree = Blueprint->WidgetTree;
+	TArray<TSharedPtr<FJsonValue>> Entries;
+
+	// Walk the tree depth-first so the response reads in hierarchy order, with a depth on each
+	// entry, rather than making the caller rebuild the shape from parent pointers.
+	TFunction<void(UWidget*, const FString&, int32)> Visit =
+		[&Entries, &Visit](UWidget* Widget, const FString& ParentName, int32 Depth)
+	{
+		if (!Widget)
+		{
+			return;
+		}
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Widget->GetName());
+		Entry->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
+		Entry->SetStringField(TEXT("parent"), ParentName);
+		Entry->SetNumberField(TEXT("depth"), Depth);
+		if (Widget->Slot)
+		{
+			Entry->SetStringField(TEXT("slotClass"), Widget->Slot->GetClass()->GetName());
+		}
+		const bool bIsPanel = Cast<UPanelWidget>(Widget) != nullptr;
+		Entry->SetBoolField(TEXT("isPanel"), bIsPanel);
+		Entries.Add(MakeShared<FJsonValueObject>(Entry));
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			const int32 ChildCount = Panel->GetChildrenCount();
+			for (int32 i = 0; i < ChildCount; ++i)
+			{
+				Visit(Panel->GetChildAt(i), Widget->GetName(), Depth + 1);
+			}
+		}
+	};
+	Visit(Tree->RootWidget, FString(), 0);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("root"), Tree->RootWidget ? Tree->RootWidget->GetName() : TEXT(""));
+	Result->SetArrayField(TEXT("widgets"), Entries);
+	Result->SetNumberField(TEXT("count"), Entries.Num());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, WidgetName, PropertyName, Value;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("widget"), WidgetName) ||
+		!Params->TryGetStringField(TEXT("property"), PropertyName) ||
+		!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, widget, property, value are required"));
+	}
+
+	FString LoadError;
+	UWidgetBlueprint* Blueprint = LoadWidgetBlueprint(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	UWidget* Widget = Blueprint->WidgetTree->FindWidget(FName(*WidgetName));
+	if (!Widget)
+	{
+		TArray<FString> Available;
+		Blueprint->WidgetTree->ForEachWidget([&Available](UWidget* Each)
+		{
+			if (Each)
+			{
+				Available.Add(Each->GetName());
+			}
+		});
+		return MakeErrorResponse(FString::Printf(TEXT("widget_not_found: %s (available: %s)"),
+			*WidgetName, *FString::Join(Available, TEXT(", "))));
+	}
+
+	// Layout lives on the slot, not the widget, and that split is the single most confusing thing
+	// about UMG for anyone (or any model) meeting it for the first time. So both are addressable
+	// here, and the error below says which one to use.
+	bool bOnSlot = false;
+	Params->TryGetBoolField(TEXT("onSlot"), bOnSlot);
+
+	UObject* Target = Widget;
+	if (bOnSlot)
+	{
+		if (!Widget->Slot)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("no_slot: %s is the root widget, which has no slot. Position and size on the root are ")
+				TEXT("controlled by whatever displays it, not by the widget itself."), *WidgetName));
+		}
+		Target = Widget->Slot;
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetWidgetProp", "MCP: Set Widget Property"));
+	Blueprint->Modify();
+	Widget->Modify();
+
+	TSharedRef<FJsonObject> Response = SetPropertyFromString(
+		Target, PropertyName, Value, &MakeOkResponse, &MakeErrorResponse);
+	if (Response->GetBoolField(TEXT("ok")))
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	}
+	return Response;
+}

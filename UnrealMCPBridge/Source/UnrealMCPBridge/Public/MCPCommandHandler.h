@@ -89,6 +89,10 @@ private:
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListComponents(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetComponentProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleAddWidget(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListWidgets(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetWidgetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
@@ -111,6 +115,14 @@ private:
 	// Resolves a class by short name ("Actor", "Pawn") or full path ("/Script/Engine.Actor",
 	// "/Game/BP_Base.BP_Base_C"). Tries A-/U- native prefixes for short names.
 	static UClass* ResolveClassByName(const FString& ClassName, FString& OutError);
+
+	// Resolves a UWidget subclass by name, rejecting non-widget and abstract classes with a
+	// message that lists the widget classes a caller most likely wanted.
+	static UClass* ResolveWidgetClass(const FString& ClassName, FString& OutError);
+
+	// Loads a Widget Blueprint specifically, failing with what was found instead when the path
+	// points at an ordinary Blueprint.
+	static class UWidgetBlueprint* LoadWidgetBlueprint(const FString& Path, FString& OutError);
 
 	// Parses a compact type descriptor (see add_variable / set_pin_default_value docs in
 	// mcp-server) into an FEdGraphPinType: bool, byte, int, int64, float, double, string,
