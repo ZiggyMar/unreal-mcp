@@ -69,7 +69,7 @@ This is the single largest category. Most people who try an Unreal MCP server ne
 | # | Complaint | Source | Status | What this project does |
 | --- | --- | --- | --- | --- |
 | E1 | The model invents node names, function names, and pin names that do not exist. | Universal; the most common cause of a failed edit | **Solved** | `unreal_find_node` and `unreal_get_node_signature` read the running engine's real Blueprint-callable surface via reflection (12,402 functions on 5.6, 15,775 on 5.8). Answers are correct for the engine version actually open, not recalled from training. |
-| E2 | Wrong function name produces a cryptic engine error and a dead end. | Same | **Solved** | `unreal_add_node` returns `didYouMean` near-misses from the catalog. The mistake is recoverable in one step. |
+| E2 | Wrong function name produces a cryptic engine error and a dead end. | Same | **Solved** | `unreal_add_node` returns `didYouMean` near-misses from the catalog. Worth recording how this row was wrong for months: the plugin produced the suggestions correctly, and the MCP server's transport discarded every field of a failure except the message, so no model ever saw one. Found by auditing this row rather than trusting it. The transport now preserves all failure context, which also restores available-pin lists and blocking-referencer lists that were being dropped the same way. |
 | E7 | Self-hosted and smaller models (Qwen, DeepSeek, local Llama) can code but were never trained on Unreal, so they flail on engine specifics and are effectively unusable with these tools. | Raised by this project's owner; the standard objection to using local models for engine work | **Solved** | Two handbooks ship as MCP prompts, needing no configuration: `unreal_handbook` (mental model, class hierarchy, references, interfaces, type descriptors, multiplayer, performance, the specific traps) and `unreal_recipes` (complete verified builds of the systems people ask for). Every function name in the recipes is machine-checked against the running engine by `npm run verify:handbook`. |
 | E8 | Documentation aimed at models confidently names nodes that do not exist, and the models least able to notice are the ones relying on it. | Found in this repo: the first handbook draft had 7 wrong names out of 26 | **Solved** | `verify:handbook` asks the live catalog about every claim. It caught UE5's float-to-double math rename, `K2_GetActorLocation`, that Create Widget and runtime Spawn Actor are native nodes rather than functions, and that the `SpawnActorFromClass` in the catalog is editor-only and silently does nothing in a packaged game. |
 | E3 | The calling agent has to rediscover the right tool-call order every session. | Adopted from the competitive survey | **Solved** | [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) ships the working call order, the exec-pin sharp edges, and the compile-before-claiming-done rule. |
@@ -101,6 +101,24 @@ This is the single largest category. Most people who try an Unreal MCP server ne
 | G7 | No Material authoring. | Gap against [tumourlove/monolith](https://github.com/tumourlove/monolith) and specialised material servers | **Partly** | `create_material` builds a master material with BaseColor/Metallic/Roughness/Emissive exposed as **parameters** rather than constants, so it is instanceable from the moment it exists; `create_material_instance`, `set_material_parameter` and `list_material_parameters` cover the instancing workflow real projects use. Live-verified on 5.6. Still open: arbitrary material graph authoring (texture sampling, blends, custom expressions), which is a much larger surface. |
 | G8 | No Niagara / VFX authoring. | Same | **Partly** | Corrected after testing rather than assuming: *using* VFX works today. A `NiagaraComponent` can be added to any Blueprint and pointed at a system with `set_component_property`, and graphs can call `SpawnSystemAtLocation`, `SetAsset` and `Activate`. Recipe 8 covers it, with every name verified against the live engine. What is genuinely missing is **authoring a Niagara system from nothing**, which is a separate surface and rarely what someone with no coding experience needs. |
 | G9 | No Animation authoring (montages, blend spaces, state machines). | Same | **Partly** | Same correction: *using* animation works. A `SkeletalMeshComponent` can be added and given a mesh and an Anim Blueprint (`SetSkeletalMeshAsset`, `SetAnimInstanceClass`), and `PlayAnimMontage` drives it from a graph. Recipe 8 covers it. Authoring the animation assets themselves is still out of scope. Testing this also surfaced a rename trap now documented: the obvious `SetSkeletalMesh` exists on three unrelated editor classes and none is the component you have. |
+
+## Auditing the claims in this document
+
+Rows here are only worth as much as their evidence. Several were written from reasoning about the
+code rather than from running it, so `npm run verify:live` now includes an audit section that
+exercises the load-bearing ones against a real editor.
+
+The first audit found that **E2 had been false since it was written**. The plugin generated its
+`didYouMean` suggestions perfectly; the MCP server's transport read only the `error` field off a
+failed response and threw the rest away, so the single most useful self-correction signal in the
+system had never once reached a model. Three separate documents claimed it worked.
+
+Two lessons kept, both cheap:
+
+- A claim nobody has exercised is a claim, not a guarantee. The audit section exists so these rows
+  cannot quietly drift from the code again.
+- The bug was not in the feature. It was in the seam between two components that were each correct
+  on their own. Those are the ones reasoning does not catch.
 
 ## Checking before building
 

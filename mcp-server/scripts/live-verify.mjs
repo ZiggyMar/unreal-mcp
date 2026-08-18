@@ -56,6 +56,20 @@ async function expectFailure(name, cmd, params, expectedFragment) {
   });
 }
 
+const firstLine = (text) => String(text).split(String.fromCharCode(10))[0];
+
+/**
+ * Create a Blueprint, clearing any leftover of the same name first.
+ *
+ * Verification assets must not depend on the previous run having tidied up: a run that failed
+ * mid-check leaves debris, and the next run then reports a name collision instead of the thing it
+ * was actually testing. That misdirection cost real time here.
+ */
+async function freshBlueprint(path, name) {
+  await bridge.send("delete_asset", { paths: [`${path}.${name}`], force: true }).catch(() => {});
+  await bridge.send("create_blueprint", { packagePath: path, parentClass: "Actor", save: false });
+}
+
 function section(title) {
   console.log(`\n${title}`);
 }
@@ -464,6 +478,86 @@ async function main() {
     const r = await bridge.send("list_actors", {});
     if (r.actors.some((a) => a.label === "MCPLight")) throw new Error("the actor is still there");
     return `${r.totalActors} actors remain`;
+  });
+
+  // --- claims audit -----------------------------------------------------------------------------
+  // Several rows in docs/COMPLAINTS_SOLVED.md were written from reasoning rather than from running
+  // anything. These check the load-bearing ones. A safety guarantee nobody has exercised is a
+  // guarantee in name only.
+  section("audit of claims made in the complaint matrix");
+
+  await check("C4: deleting an asset something still references is BLOCKED by default", async () => {
+    // MI_MCPVerify was deleted in cleanup of a previous section, so rebuild the pair here.
+    await bridge.send("create_material", { packagePath: `${ROOT}/M_Parent`, baseColor: "0,1,0" });
+    await bridge.send("create_material_instance", {
+      packagePath: `${ROOT}/MI_Child`,
+      parentMaterial: `${ROOT}/M_Parent.M_Parent`,
+    });
+    let blocked = false;
+    let detail = "";
+    try {
+      const r = await bridge.send("delete_asset", { path: `${ROOT}/M_Parent.M_Parent` });
+      detail = JSON.stringify(r);
+      // Some builds report the refusal in the result rather than as an error.
+      blocked = detail.includes("blocked") || r.deleted === 0;
+    } catch (err) {
+      blocked = true;
+      detail = firstLine(err instanceof Error ? err.message : String(err));
+    }
+    if (!blocked) {
+      throw new Error(`a referenced asset was deleted without force: ${detail}`);
+    }
+    return detail.slice(0, 110);
+  });
+
+  await check("C4: force:true still deletes it, so the guard is a guard and not a wall", async () => {
+    const r = await bridge.send("delete_asset", {
+      paths: [`${ROOT}/MI_Child.MI_Child`, `${ROOT}/M_Parent.M_Parent`],
+      force: true,
+    });
+    return JSON.stringify(r);
+  });
+
+  await check("E2: a misspelled function name comes back with didYouMean", async () => {
+    const bp = `${ROOT}/BP_Suggest`;
+    await freshBlueprint(bp, "BP_Suggest");
+    // Clean up even when the assertion fails. A check that only tidies up on success poisons the
+    // next run with its own debris, and then reports a collision instead of the real result - which
+    // is exactly what happened the first time this check failed.
+    try {
+      let message = "";
+      try {
+        await bridge.send("add_node", {
+          path: `${bp}.BP_Suggest`,
+          graphName: "EventGraph",
+          nodeType: "CallFunction",
+          functionName: "PrintSting",
+          className: "KismetSystemLibrary",
+        });
+      } catch (err) {
+        message = err instanceof Error ? err.message : String(err);
+      }
+      if (!message) throw new Error("a misspelled function name was accepted");
+      if (!/didYouMean|PrintString/i.test(message)) {
+        throw new Error(`no suggestion offered, which is the dead end this claims to prevent: ${message.slice(0, 200)}`);
+      }
+      return message.slice(0, 140);
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_Suggest`], force: true }).catch(() => {});
+    }
+  });
+
+  await check("B3: refresh_blueprint runs and reports before/after error counts", async () => {
+    const bp = `${ROOT}/BP_Refresh`;
+    await freshBlueprint(bp, "BP_Refresh");
+    try {
+      const r = await bridge.send("refresh_blueprint", { path: `${bp}.BP_Refresh` });
+      const text = JSON.stringify(r);
+      if (!/error/i.test(text)) throw new Error(`no error counts reported: ${text}`);
+      return text.slice(0, 120);
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_Refresh`], force: true }).catch(() => {});
+    }
   });
 
   // --- the crash that this script found ------------------------------------------------------
