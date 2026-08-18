@@ -232,6 +232,44 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+### Handbooks, for models that were never trained on Unreal
+
+A capable local model - Qwen, DeepSeek, anything you host yourself - can write logic perfectly
+well. What it lacks is Unreal's vocabulary: the class hierarchy, exec wires versus data pins, how
+to get a reference to another actor, and the dozen traps that each cost a failed call to discover.
+That is a gap a document can close, and it is the difference between a self-hosted model being
+unusable here and being genuinely useful.
+
+Three guides ship as MCP prompts, so any client can pull them in with no configuration, and they
+cost nothing until asked for:
+
+| Prompt | What it carries |
+| --- | --- |
+| `unreal_handbook` | The mental model, class hierarchy, references and casting, interfaces, type descriptors, multiplayer in one page, performance judgment, the traps |
+| `unreal_recipes` | Complete builds: health via interface, interaction, pickups, HUD binding, timers instead of Tick, spawning, save/load |
+| `unreal_workflow` | The tool-call order, and the rule that compiling is not done |
+
+#### The recipes are machine-verified against the engine
+
+`npm run verify:handbook` reads the node names out of the recipe tables and asks the **running
+engine** whether each one exists on the class it claims.
+
+This is not ceremony. Its first run **rejected 7 of 26 names** in a document written by a model that
+knows Unreal reasonably well:
+
+- UE5 renamed the float math nodes: `Subtract_FloatFloat` is really `Subtract_DoubleDouble`
+- `GetActorLocation` is really `K2_GetActorLocation`
+- **Create Widget and runtime Spawn Actor from Class are not functions at all.** They are native
+  `K2Node`s, so `find_node` will never return them however hard you search
+- `SpawnActorFromClass` *does* exist in the catalog - on `EditorActorSubsystem` and
+  `EditorLevelLibrary`, both **editor-only**. Taking that hit at face value produces a Blueprint
+  that works in the editor and does nothing in a packaged game
+
+Every one of those would have been followed confidently by exactly the models least able to notice.
+The recipes now carry a table of the nodes that are *not* functions, because "find_node returned
+nothing" is otherwise a dead end rather than a signal. The check runs against whichever engine
+version is open, so it cannot rot as the engine changes.
+
 ### Working on a project that already exists
 
 The hardest thing about a real project is not writing new logic. It is that one Blueprint is wired
@@ -427,7 +465,7 @@ report, which costs more than a missed finding.
 ### Tool profiles: paying only for what you use
 
 Tool definitions are paid for on every request, before the user's message is read. The full set is
-50 tools and roughly 15.4k tokens of standing cost. On a 200k-context model that is noise; on an 8k
+56 tools and roughly 17.7k tokens of standing cost. On a 200k-context model that is noise; on an 8k
 or 32k local model it is the difference between usable and unusable.
 
 The obvious fix is to write shorter descriptions. That was measured and rejected: tool descriptions
@@ -438,9 +476,9 @@ problem.**
 
 | `UNREAL_MCP_PROFILE` | Starts at | Reaches |
 | --- | --- | --- |
-| `full` (default) | 50 tools, ~15.4k tokens | everything, immediately |
-| `lazy` | 18 tools, ~5.7k tokens (**63% less**) | everything, on request |
-| `core` | 18 tools, ~5.7k tokens | only those 18, permanently |
+| `full` (default) | 56 tools, ~17.7k tokens | everything, immediately |
+| `lazy` | 20 tools, ~6.6k tokens (**63% less**) | everything, on request |
+| `core` | 20 tools, ~6.6k tokens | only those 20, permanently |
 
 **`lazy` is the one to reach for.** Every tool is registered with its full schema, but the optional
 groups start switched off. When the model needs one it calls `unreal_enable_tools`, the group
