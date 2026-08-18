@@ -3773,6 +3773,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("path"), Blueprint->GetPathName());
+	// The parent class comes back with the variables because it is the same question: whether a
+	// piece of state is in the right place depends entirely on what is holding it. Score on a
+	// Character is a bug that only shows up the first time someone dies; score on a PlayerState is
+	// correct. Without this the reviewer cannot tell those apart.
+	Result->SetStringField(TEXT("parentClass"),
+		Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : TEXT("None"));
 	Result->SetNumberField(TEXT("count"), Variables.Num());
 	Result->SetArrayField(TEXT("variables"), Variables);
 	return MakeOkResponse(Result);

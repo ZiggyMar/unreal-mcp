@@ -75,6 +75,126 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityR
   const commentBoxes = allNodes.filter(isComment);
   const findings: Finding[] = [];
 
+  // --- What runs every frame -------------------------------------------------------------------
+  //
+  // The checks below are the difference between a graph that works and one a team can live with,
+  // and they are the ones a model is least likely to get right on its own. Each is named in the
+  // handbook's performance section; each was seen in a real eight-month-old project on the first
+  // afternoon anyone looked.
+  //
+  // All of them ask the same question - "does this run every frame?" - so reachability from Tick is
+  // computed once here rather than three times below.
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const execTargets = (node: LayoutNode): LayoutNode[] => {
+    const out: LayoutNode[] = [];
+    for (const pin of node.connectedPins ?? []) {
+      if (pin.direction !== "out") continue;
+      for (const link of pin.linkedTo ?? []) {
+        // Execution enters through a pin called execute/exec/then; a data link is not flow.
+        if (!/^(execute|exec|then|in)$/i.test(link.pin)) continue;
+        const target = byId.get(link.node);
+        if (target) out.push(target);
+      }
+    }
+    return out;
+  };
+
+  const tickEvent = nodes.find((node) => isEventNode(node) && /\bTick\b/i.test(node.title ?? ""));
+  const runsEveryFrame = new Set<string>();
+  if (tickEvent) {
+    const queue = [tickEvent];
+    while (queue.length > 0) {
+      const current = queue.pop();
+      if (!current || runsEveryFrame.has(current.id)) continue;
+      runsEveryFrame.add(current.id);
+      queue.push(...execTargets(current));
+    }
+    runsEveryFrame.delete(tickEvent.id);
+  }
+
+  const inTick = (node: LayoutNode) => runsEveryFrame.has(node.id);
+  const titleOf = (node: LayoutNode) => node.title ?? "";
+
+  // --- Walking the level, repeatedly. ---
+  // GetAllActorsOfClass iterates every actor in the level. Once at BeginPlay is ordinary; once per
+  // frame is the single most common cause of a Blueprint project losing its framerate for reasons
+  // nobody can find.
+  const actorSweeps = nodes.filter((node) => /GetAllActorsOf/i.test(titleOf(node)));
+  const sweepsInTick = actorSweeps.filter(inTick);
+  if (sweepsInTick.length > 0) {
+    findings.push({
+      check: "level-sweep-every-frame",
+      severity: "error",
+      message: `${sweepsInTick.length} Get All Actors Of Class call(s) run every frame from Event Tick.`,
+      fix:
+        "This walks every actor in the level, 60+ times a second. Do it once on BeginPlay and store the " +
+        "result in a variable, or replace it with an overlap event, a dispatcher, or a list the actors " +
+        "add themselves to when they spawn.",
+      nodeIds: sweepsInTick.map((node) => node.id),
+    });
+  } else if (actorSweeps.length > 0 && nodes.some((node) => /Set Timer/i.test(titleOf(node)))) {
+    // A timer is not Tick, but it repeats, and a level sweep on a repeating path costs the same
+    // thing slightly less often. This is where the real project's cost actually was: a timer
+    // started a scan event, and the scan walked every actor in the level.
+    //
+    // Phrased as a question rather than an accusation, and only info, because proving the timer
+    // drives THIS chain needs the timer's function-name pin value - which a graph summary
+    // deliberately omits. Saying "these two things are here, check whether they are connected" is
+    // honest; asserting it would be a guess dressed as a finding.
+    findings.push({
+      check: "level-sweep-maybe-repeating",
+      severity: "info",
+      message:
+        `This graph both sets a timer and calls Get All Actors Of Class ${actorSweeps.length} time(s).`,
+      fix:
+        "If the timer drives the chain that sweeps, the whole level is being walked on every tick of " +
+        "that timer. Gather the actors once and store them, or have actors register themselves as " +
+        "they spawn, and keep the timer for the cheap part.",
+      nodeIds: actorSweeps.map((node) => node.id),
+    });
+  } else if (actorSweeps.length > 2) {
+    findings.push({
+      check: "level-sweep-repeated",
+      severity: "info",
+      message: `${actorSweeps.length} Get All Actors Of Class calls in one graph.`,
+      fix:
+        "Each one walks the whole level. If they are looking for the same thing, do it once and store " +
+        "the result; if they run on a timer, consider having the actors register themselves instead.",
+      nodeIds: actorSweeps.map((node) => node.id),
+    });
+  }
+
+  // --- Casting every frame instead of once. ---
+  const castsInTick = nodes.filter((node) => /^K2Node_DynamicCast/.test(node.type) && inTick(node));
+  if (castsInTick.length > 0) {
+    findings.push({
+      check: "cast-every-frame",
+      severity: "warning",
+      message: `${castsInTick.length} cast(s) run every frame from Event Tick.`,
+      fix:
+        "A cast is not free and the answer does not change. Cast once on BeginPlay, store the result in " +
+        "a variable of that type, and read the variable here. If the target can change, cast when it " +
+        "changes rather than when it is used.",
+      nodeIds: castsInTick.map((node) => node.id),
+    });
+  }
+
+  // --- Spawning and destroying every frame. ---
+  const spawnsInTick = nodes.filter(
+    (node) => /(SpawnActor|Spawn Actor|DestroyActor|Destroy Actor)/i.test(titleOf(node)) && inTick(node)
+  );
+  if (spawnsInTick.length > 0) {
+    findings.push({
+      check: "spawn-every-frame",
+      severity: "error",
+      message: `${spawnsInTick.length} spawn/destroy call(s) run every frame from Event Tick.`,
+      fix:
+        "Creating and destroying actors every frame is the most expensive thing a Blueprint can do. " +
+        "Spawn on the event that actually causes it, or keep a pool of actors and reuse them.",
+      nodeIds: spawnsInTick.map((node) => node.id),
+    });
+  }
+
   // --- Dead nodes: wired to nothing, doing nothing, but shipped anyway. ---
   const dead = nodes.filter((node) => !hasAnyConnection(node));
   if (dead.length > 0 && nodes.length > 1) {

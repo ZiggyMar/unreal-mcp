@@ -187,7 +187,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_delete_actor` | `delete_actor` | Remove one placed actor from the open level. |
 | `unreal_save_level` | `save_level` | Save the open Level. Spawned actors live only in memory until this runs. |
 | `unreal_add_component` | `add_component` | Add a component to a Blueprint's hierarchy (mesh, collision, camera, spring arm, audio), optionally under a parent component. |
-| `unreal_list_variables` | `list_variables` | Read a Blueprint's variables with types, defaults and per-instance editability. A direct read, so it cannot lag. |
+| `unreal_list_variables` | `list_variables` | Read a Blueprint's variables and its parent class, with types, defaults and per-instance editability. A direct read, so it cannot lag. |
 | `unreal_list_components` | `list_components` | Read the component hierarchy, including components inherited from a parent class. |
 | `unreal_set_component_property` | `set_component_property` | Set one property on a component template. Fails loudly on an asset path that does not resolve, instead of silently setting `None`. |
 | `unreal_set_class_default` | `set_class_default` | Set a Class Defaults (CDO) property. This is how replication gets turned on: `bReplicates`, `NetUpdateFrequency`, `bAlwaysRelevant`. |

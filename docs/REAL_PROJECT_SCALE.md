@@ -190,6 +190,58 @@ engine, different project size, different node titles. Comparing across them mea
 environment, not the change. Every number above was re-taken on the 5.6 project that every prior
 number came from.
 
+## Making "AAA" a check rather than an opinion
+
+The handbook has a table saying where state belongs and a section on what runs every frame. A table
+is advice, and this project has now measured three times that **a weak model does not act on
+advice**. So the advice became checks, which work for every model including the ones nobody can
+fine-tune.
+
+Five new findings, all computed from reads that were already happening:
+
+| Check | Severity | Why |
+| --- | --- | --- |
+| `level-sweep-every-frame` | error | `Get All Actors Of Class` reachable from Tick walks every actor in the level 60+ times a second |
+| `spawn-every-frame` | error | spawning or destroying actors per frame is the most expensive thing a Blueprint can do |
+| `cast-every-frame` | warning | a cast is not free and the answer does not change |
+| `level-sweep-maybe-repeating` | info | a timer and a level sweep in the same graph |
+| `state-outlives-owner` | warning | a score, name, team or progression living on a Pawn, which is destroyed on death |
+
+The last one is the judgment question: **a pawn is destroyed and recreated when the player dies, so
+anything that must outlive the body does not belong on the body.** Score on a Character reads as
+correct until the first respawn, weeks after it was written, in a place nobody associates with the
+cause. It needed the parent class, which `list_variables` now returns alongside the variables -
+they are the same question, since whether state is in the right place depends entirely on what is
+holding it.
+
+### What it found on the real project, and what it correctly did not
+
+Run against `BP_VacuumPlayer`:
+
+```
+[info] level-sweep-maybe-repeating: This graph both sets a timer and calls
+       Get All Actors Of Class 1 time(s).
+```
+
+That is the real cost in that Blueprint, and `explain_graph` had already shown the shape of it:
+`Set Timer by Function Name` starting a scan, and the scan walking every actor.
+
+Just as important is what stayed quiet. The per-frame checks did **not** fire, because the sweep is
+not reachable from Tick - it is on a timer. And `state-outlives-owner` found nothing, because that
+Blueprint's variables (`bVacuumOn`, `CapturedVictim`, `bIsCaptured`, `CapturedBy`) all genuinely
+belong on the body. **No false positives on real code**, which matters more than the finding: a
+report that cries wolf teaches a caller to ignore all of it.
+
+### Saying what cannot be proven
+
+`level-sweep-maybe-repeating` is phrased as a question and rated `info` on purpose. Proving the
+timer drives *that particular* chain needs the timer's function-name pin value, and a graph summary
+deliberately omits pin values - that omission is what makes it cheap. So the check reports that both
+things are present and asks the reader to check the link, rather than asserting one it cannot see.
+
+An unproven link must not outrank a real defect, and a guess dressed as a finding is worse than
+silence.
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,
