@@ -552,6 +552,25 @@ async function main() {
     }
   });
 
+  await check("asset_status answers writability before any work is done", async () => {
+    const bp = `${ROOT}/BP_Status`;
+    await freshBlueprint(bp, "BP_Status");
+    try {
+      // Unsaved: nothing can be blocking a write, and that must not read as a problem.
+      const unsaved = await bridge.send("asset_status", { path: `${bp}.BP_Status` });
+      if (unsaved.writable !== true) throw new Error(`an unsaved asset should be writable: ${JSON.stringify(unsaved)}`);
+
+      await bridge.send("save_blueprint", { path: `${bp}.BP_Status` });
+      const saved = await bridge.send("asset_status", { path: `${bp}.BP_Status` });
+      if (saved.existsOnDisk !== true) throw new Error("a saved asset should exist on disk");
+      if (saved.writable !== true) throw new Error(`a saved, unlocked asset should be writable: ${JSON.stringify(saved)}`);
+      if (!saved.reason) throw new Error("every answer should say why, not just yes or no");
+      return `${saved.writable ? "writable" : "blocked"}: ${saved.reason.slice(0, 80)}`;
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_Status`], force: true }).catch(() => {});
+    }
+  });
+
   // --- claims audit -----------------------------------------------------------------------------
   // Several rows in docs/COMPLAINTS_SOLVED.md were written from reasoning rather than from running
   // anything. These check the load-bearing ones. A safety guarantee nobody has exercised is a

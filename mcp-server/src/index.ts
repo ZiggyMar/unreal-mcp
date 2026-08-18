@@ -205,7 +205,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_stop_pie",
     "unreal_pie_status",
   ],
-  maintenance: ["unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint"],
 };
 
 const GROUP_SUMMARY: Record<string, string> = {
@@ -2479,6 +2479,33 @@ register(
         handlers,
         save,
       });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_asset_status",
+  {
+    title: "Can this asset actually be written?",
+    description:
+      "Reports whether an asset can be saved, and if not, why - **before** you spend a sequence of edits on it. " +
+      "On a team project a Blueprint is a binary asset that cannot be merged, so it is locked by whoever checked it " +
+      "out, and without this the failure only surfaces at save time, after the work is done. " +
+      "**Check this before editing anything in a project that uses source control.** If it comes back not writable, " +
+      "say so to the user and offer to work on something else: \"BP_Door is checked out by alice, so I cannot save " +
+      "changes to it\" is a far better answer than a pile of edits that cannot be written. " +
+      "Deliberately a separate call rather than a check inside every write, because querying source control can hit " +
+      "the network and paying that per node placement would slow the common case to protect the rare one.",
+    inputSchema: {
+      path: z.string().describe('Asset path, e.g. "/Game/Blueprints/BP_Door.BP_Door".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("asset_status", { path });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

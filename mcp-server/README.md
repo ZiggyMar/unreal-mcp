@@ -728,6 +728,13 @@ Saving now checks first:
 - **checked out by someone else** — refused, and the message says why two people cannot safely edit
   one Blueprint
 
+`unreal_asset_status` answers the same question **before** the work: whether an asset is writable,
+and if not, who holds it. On a source-controlled project that turns a wasted session into one
+sentence — *"BP_Door is checked out by alice, so I cannot save changes to it; shall I work on
+something else?"* It is a separate call rather than a check inside every write, because querying
+source control can hit the network and paying that per node placement would slow the common case to
+protect the rare one.
+
 `unreal_ping` reports whether source control is enabled and connected, and `unreal_doctor` warns
 when it is enabled but disconnected — before the work, rather than after the failed save.
 
