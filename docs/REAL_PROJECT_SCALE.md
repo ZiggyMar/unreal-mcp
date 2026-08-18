@@ -531,3 +531,25 @@ not treating as an entry point. Until that was fixed, every widget Blueprint in 
 as almost entirely dead, and the live path could not be told from the abandoned one. The check was
 not possible before the bug in the reader was found, and the bug in the reader was only found by
 reading a real menu and not believing the answer.
+
+## Two bugs in the reader, both found by reading a real project
+
+Neither was found by a test, because both needed a graph drawn by somebody who was not thinking
+about this tool at all.
+
+**A button's `On Clicked` is a `K2Node_ComponentBoundEvent`,** and the entry-point list did not
+include those. Every widget Blueprint in every project therefore read as almost entirely dead: the
+handlers were "not reached by any event chain", and the whole menu hanging off them went with them.
+
+**A reroute node is a wire, not a node.** `K2Node_Knot` - the dot you get from double-clicking a
+wire, which is how anyone tidies a large graph - has pins named `InputPin` and `OutputPin`. Those
+match no execution name, so a chain that passed through one stopped dead and everything downstream
+was reported as dead logic. The tidier the Blueprint, the more of it disappeared. It surfaced on a
+firewall Blueprint whose multicast health event read as "nothing wired to it" - it had eight nodes
+after it, behind a wire routed around a comment box.
+
+That one was load-bearing for honesty, not just for completeness. The whole value of saying a node
+is dead is that somebody might delete it. Execution flow is now followed in one place,
+`src/execFlow.ts`, shared by the graph reader, the quality checks and the authority guard - three
+copies of the same traversal had the same hole, and a guard that rewires the wrong node because it
+mistook a wire for a predecessor is the quiet kind of broken.

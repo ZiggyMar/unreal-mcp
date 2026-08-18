@@ -16,6 +16,7 @@
  * whole report, which is worse than a missed finding.
  */
 
+import { execTargets as followExec } from "./execFlow.js";
 import type { LayoutNode } from "./layout.js";
 import { groupIntoChains, isEventNode } from "./layout.js";
 
@@ -85,19 +86,9 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityR
   // All of them ask the same question - "does this run every frame?" - so reachability from Tick is
   // computed once here rather than three times below.
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const execTargets = (node: LayoutNode): LayoutNode[] => {
-    const out: LayoutNode[] = [];
-    for (const pin of node.connectedPins ?? []) {
-      if (pin.direction !== "out") continue;
-      for (const link of pin.linkedTo ?? []) {
-        // Execution enters through a pin called execute/exec/then; a data link is not flow.
-        if (!/^(execute|exec|then|in)$/i.test(link.pin)) continue;
-        const target = byId.get(link.node);
-        if (target) out.push(target);
-      }
-    }
-    return out;
-  };
+  // Shared with the graph reader, so "does this run every frame" cannot answer differently from
+  // "what runs here" - and so reroute nodes are stepped over in both.
+  const execTargets = (node: LayoutNode): LayoutNode[] => followExec(node, byId);
 
   const tickEvent = nodes.find((node) => isEventNode(node) && /\bTick\b/i.test(node.title ?? ""));
   const runsEveryFrame = new Set<string>();

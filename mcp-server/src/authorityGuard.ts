@@ -32,6 +32,7 @@
  */
 
 import type { BridgeLike } from "./autoLayout.js";
+import { execSources, EXEC_INPUT as EXEC_INPUT_PIN, execTargets } from "./execFlow.js";
 
 export interface AuthorityGuardOptions {
   /** Report what would change without changing it. */
@@ -66,7 +67,7 @@ interface SummaryNode {
   connectedPins?: Array<{ pin: string; direction: string; linkedTo?: Array<{ node: string; pin: string }> }>;
 }
 
-const EXEC_INPUT = /^(execute|exec|in|then)$/i;
+const EXEC_INPUT = EXEC_INPUT_PIN;
 
 export async function guardWithAuthority(
   bridge: BridgeLike,
@@ -94,17 +95,11 @@ export async function guardWithAuthority(
 
   // Who currently runs into it. An exec output pin can only have one link, so rerouting these is
   // what actually moves the target behind the guard.
-  const rerouted: Array<{ fromNode: string; fromPin: string }> = [];
-  for (const node of nodes) {
-    for (const pin of node.connectedPins ?? []) {
-      if (pin.direction !== "out") continue;
-      for (const link of pin.linkedTo ?? []) {
-        if (link.node !== target.id) continue;
-        if (!EXEC_INPUT.test(link.pin)) continue;
-        rerouted.push({ fromNode: node.id, fromPin: pin.pin });
-      }
-    }
-  }
+  //
+  // Reroute nodes count as wire, not as a predecessor: rewiring the knot would leave the real
+  // source pointing at a guard it never reaches, which is the quiet kind of broken.
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const rerouted = execSources(target.id, nodes, byId);
 
   const result: AuthorityGuardResult = {
     path,
@@ -199,19 +194,13 @@ export async function guardWithAuthority(
   // Look, rather than assume. The whole risk of an editing tool is reporting a success it did not
   // check.
   const after = await bridge.send<{ nodes: SummaryNode[] }>("read_blueprint_graph_summary", { path, graphName });
-  const branchAfter = (after.nodes ?? []).find((n) => n.id === branchId);
-  const reachesTarget = (branchAfter?.connectedPins ?? []).some(
-    (pin) => pin.direction === "out" && (pin.linkedTo ?? []).some((l) => l.node === target.id)
-  );
-  const stillDirect = (after.nodes ?? []).some(
-    (n) =>
-      n.id !== branchId &&
-      (n.connectedPins ?? []).some(
-        (pin) =>
-          pin.direction === "out" &&
-          (pin.linkedTo ?? []).some((l) => l.node === target.id && EXEC_INPUT.test(l.pin))
-      )
-  );
+  const afterNodes = after.nodes ?? [];
+  const afterById = new Map(afterNodes.map((n) => [n.id, n]));
+  const branchAfter = afterById.get(branchId);
+  const reachesTarget = branchAfter
+    ? execTargets(branchAfter, afterById).some((n) => n.id === target.id)
+    : false;
+  const stillDirect = execSources(target.id, afterNodes, afterById).some((s) => s.fromNode !== branchId);
   result.verified = reachesTarget && !stillDirect;
 
   const errorNote = result.introducedErrors

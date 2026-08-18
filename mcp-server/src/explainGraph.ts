@@ -1,3 +1,5 @@
+import { execTargets } from "./execFlow.js";
+
 /**
  * Turn a graph into a paragraph.
  *
@@ -68,7 +70,7 @@ export interface GraphExplanation {
  * rather than trying to enumerate every possible exec OUTPUT name, keeps this correct for node
  * types nobody has thought of yet: latent nodes, macros, and anything a plugin adds.
  */
-const EXEC_INPUT = new Set(["execute", "exec", "in", "then"]);
+
 
 /** Nodes that begin a chain. Everything else is somewhere in the middle of one. */
 const ENTRY_TYPES = [
@@ -99,24 +101,20 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
   // Comment boxes are layout, not behaviour. They matter to a human reading the graph and not at
-  // all to a description of what it does.
-  const behavioural = nodes.filter((node) => node.type !== "EdGraphNode_Comment");
+  // all to a description of what it does. Reroute nodes are the same: a knot is a wire somebody
+  // bent around a comment box, and listing "Reroute Node (x7)" under possible dead logic is noise
+  // at the top of exactly the list that is supposed to be signal.
+  const behavioural = nodes.filter(
+    (node) => node.type !== "EdGraphNode_Comment" && node.type !== "K2Node_Knot"
+  );
 
   const entries = behavioural.filter((node) => ENTRY_TYPES.includes(node.type));
   const visited = new Set<string>();
 
-  const nextFrom = (node: SummaryNode): SummaryNode[] => {
-    const out: SummaryNode[] = [];
-    for (const pin of node.connectedPins ?? []) {
-      if (pin.direction !== "out") continue;
-      for (const link of pin.linkedTo ?? []) {
-        if (!EXEC_INPUT.has(link.pin.toLowerCase())) continue;
-        const target = byId.get(link.node);
-        if (target && target.type !== "EdGraphNode_Comment") out.push(target);
-      }
-    }
-    return out;
-  };
+  // Reroute nodes are stepped over by execTargets: they are wires, not behaviour, and treating them
+  // as nodes truncated every chain drawn by somebody who tidies their graphs.
+  const nextFrom = (node: SummaryNode): SummaryNode[] =>
+    execTargets(node, byId).filter((target) => target.type !== "EdGraphNode_Comment");
 
   const chains: ExplainedChain[] = [];
   for (const entry of entries) {
