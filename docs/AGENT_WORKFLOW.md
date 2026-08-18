@@ -124,6 +124,10 @@ cost one failed call to discover:
   outputs are `then`/`else`. Sequence outputs are `then_0`/`then_1`. **Macro nodes (ForEachLoop,
   WhileLoop, ...) use `Exec` with a capital E** as their input. When unsure, read the node's
   detail; its pins are ground truth.
+- **The project index updates asynchronously.** An asset you just created is normally searchable
+  immediately, but a search issued in the same breath as the create can miss it, and after heavy
+  asset churn it can take a second or two. You do not need to search for something you just made -
+  the create call returned its path - but if you do, retry briefly before concluding it is absent.
 - **`set_pin_default_value` refuses connected pins** (`pin_is_connected`). Disconnect first, or
   reconsider which pin you meant.
 - **Variables must exist before `VariableGet`/`VariableSet` nodes reference them**, via
