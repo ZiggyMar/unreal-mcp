@@ -1,0 +1,134 @@
+#!/usr/bin/env node
+// Documentation guard.
+//
+// Every other check in this repo watches the code: tool parity, unit tests, live verification, the
+// crash sweep. None of them look at prose, and that gap has already cost something real - a slice
+// replacement between two headings silently deleted 67 lines of README (the live-verification and
+// crash-sweep sections) and every automated check still passed. It surfaced only by luck, when a
+// later edit anchored on a heading that no longer existed.
+//
+// Docs are not decoration in this project. A capability nobody can find is unshipped, and a
+// document that claims a tool exists when it does not is worse than silence, because someone will
+// act on it. So the same standard applies to prose as to code: if it can rot silently, guard it.
+//
+// Checks:
+//   1. every registered tool is documented in mcp-server/README.md
+//   2. every tool the docs mention actually exists
+//   3. required README sections are present (catches deletion, which is the failure that happened)
+//   4. the complaint matrix uses only its declared statuses
+//   5. the complaint matrix does not reference tools that do not exist
+//
+// Run: npm run check:docs  (also part of npm test)
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(here, "..", "..");
+
+const serverSrc = readFileSync(join(here, "..", "src", "index.ts"), "utf8");
+const serverReadme = readFileSync(join(here, "..", "README.md"), "utf8");
+const complaints = readFileSync(join(repoRoot, "docs", "COMPLAINTS_SOLVED.md"), "utf8");
+const workflow = readFileSync(join(repoRoot, "docs", "AGENT_WORKFLOW.md"), "utf8");
+
+const problems = [];
+
+// --- 1. every tool is documented -------------------------------------------------------------
+const registered = [...serverSrc.matchAll(/register\(\s*"(unreal_[a-z0-9_]+)"/g)].map((m) => m[1]);
+const undocumented = registered.filter((name) => !serverReadme.includes(name));
+if (undocumented.length > 0) {
+  problems.push(
+    `${undocumented.length} tool(s) are registered but appear nowhere in mcp-server/README.md, so nobody can ` +
+      `find them:\n` +
+      undocumented.map((n) => `    - ${n}`).join("\n")
+  );
+}
+
+// --- 2. the docs do not promise tools that do not exist ----------------------------------------
+// Prompts are not tools, but they share the naming convention, so they must be declared here or
+// the phantom-tool check flags them.
+const promptNames = [...serverSrc.matchAll(/registerPrompt\(\s*"([a-z0-9_]+)"/g)].map((m) => m[1]);
+const known = new Set([...registered, ...promptNames.map((n) => (n.startsWith("unreal_") ? n : `unreal_${n}`))]);
+const mentionedIn = (text, label) => {
+  const mentioned = new Set([...text.matchAll(/`?(unreal_[a-z0-9_]+)`?/g)].map((m) => m[1]));
+  const phantom = [...mentioned].filter((name) => !known.has(name));
+  if (phantom.length > 0) {
+    problems.push(
+      `${label} references ${phantom.length} tool(s) that do not exist. Someone will try to call these:\n` +
+        phantom.map((n) => `    - ${n}`).join("\n")
+    );
+  }
+};
+mentionedIn(serverReadme, "mcp-server/README.md");
+mentionedIn(complaints, "docs/COMPLAINTS_SOLVED.md");
+mentionedIn(workflow, "docs/AGENT_WORKFLOW.md");
+
+// --- 3. required sections still exist ----------------------------------------------------------
+// Listed explicitly because deletion is the failure that actually happened, and a missing section
+// leaves no trace for any other check to notice.
+const REQUIRED_README_SECTIONS = [
+  "## Tools exposed",
+  "### Graph authoring and organization",
+  "### Scene, actors, components, project settings, and runtime",
+  "### Structs and enums",
+  "### UMG",
+  "### Readable graphs are produced, not requested",
+  "### When something is wrong",
+  "### The quality gate",
+  "### Knowing what the agent touched",
+  "### Tool profiles",
+  "### Live verification",
+  "### Crash sweep",
+  "### Tool parity is enforced, not assumed",
+  "### Documentation is guarded too",
+  "## Recommended agent workflow",
+];
+const missingSections = REQUIRED_README_SECTIONS.filter((heading) => !serverReadme.includes(heading));
+if (missingSections.length > 0) {
+  problems.push(
+    `${missingSections.length} required README section(s) are gone. If this was deliberate, remove them from ` +
+      `REQUIRED_README_SECTIONS in this script; if it was not, restore them from git:\n` +
+      missingSections.map((h) => `    - ${h}`).join("\n")
+  );
+}
+
+const REQUIRED_WORKFLOW_SECTIONS = ["## The golden path for building a feature", "## Honesty rules"];
+const missingWorkflow = REQUIRED_WORKFLOW_SECTIONS.filter((heading) => !workflow.includes(heading));
+if (missingWorkflow.length > 0) {
+  problems.push(`docs/AGENT_WORKFLOW.md is missing: ${missingWorkflow.join(", ")}`);
+}
+
+// --- 4. the complaint matrix uses its declared statuses -----------------------------------------
+// "Solved (by design)" means the architecture makes the complaint impossible; "Solved (optional)"
+// means solved when a documented opt-in is configured. Both are honest, both are declared.
+const ALLOWED_STATUSES = [
+  "**Solved**",
+  "**Solved (by design)**",
+  "**Solved (optional)**",
+  "**Partly**",
+  "**Open**",
+];
+const rows = complaints.split("\n").filter((line) => /^\|\s*[A-Z]\d+\s*\|/.test(line));
+if (rows.length < 20) {
+  problems.push(`docs/COMPLAINTS_SOLVED.md has only ${rows.length} complaint rows; it looks truncated.`);
+}
+for (const row of rows) {
+  const id = row.match(/^\|\s*([A-Z]\d+)\s*\|/)?.[1] ?? "?";
+  if (!ALLOWED_STATUSES.some((status) => row.includes(status))) {
+    problems.push(`complaint row ${id} has no recognised status (expected one of ${ALLOWED_STATUSES.join(", ")}).`);
+  }
+}
+
+// --- report ------------------------------------------------------------------------------------
+if (problems.length === 0) {
+  console.log(
+    `docs ok: ${registered.length} tools documented, ${rows.length} complaint rows, ` +
+      `${REQUIRED_README_SECTIONS.length} required sections present`
+  );
+  process.exit(0);
+}
+
+console.error(`\ndocumentation check failed (${problems.length} problem(s)):\n`);
+for (const problem of problems) console.error(`  - ${problem}\n`);
+process.exit(1);
