@@ -18,11 +18,69 @@
 import type { BridgeLike } from "./autoLayout.js";
 import type { FindReferencesResult, ListBlueprintsResult, SearchProjectResult } from "./types.js";
 
+/**
+ * Collapse a node's reasons into a sentence.
+ *
+ * Measured on a real project: mapping the vacuum system produced 3,396 tokens, and one asset alone
+ * carried twenty-four reasons - sixteen of them "has variable <name> matching vacuum". That is the
+ * same disease `explainGraph` was built to cure: a payload that is mostly repetition of its own
+ * field names, priced per call, in front of a model that has to hold all of it at once.
+ *
+ * The individual reasons are kept in `reasons` for anything that wants them. This is what a reader
+ * actually needs: what matched, how much of it, and what this asset talks to.
+ */
+function summariseReasons(reasons: string[]): string {
+  const functions: string[] = [];
+  const variables: string[] = [];
+  const uses: string[] = [];
+  const usedBy: string[] = [];
+  let nameMatch = false;
+
+  for (const reason of reasons) {
+    let match = /^has function "([^"]+)"/.exec(reason);
+    if (match) {
+      functions.push(match[1]);
+      continue;
+    }
+    match = /^has variable "([^"]+)"/.exec(reason);
+    if (match) {
+      variables.push(match[1]);
+      continue;
+    }
+    match = /^uses (.+)$/.exec(reason);
+    if (match) {
+      uses.push(match[1]);
+      continue;
+    }
+    match = /^used by (.+)$/.exec(reason);
+    if (match) {
+      usedBy.push(match[1]);
+      continue;
+    }
+    if (/^name matches/.test(reason)) nameMatch = true;
+  }
+
+  // Name a few examples rather than all of them: three is enough to recognise the thing, and the
+  // count carries the rest.
+  const some = (items: string[]) =>
+    items.length <= 3 ? items.join(", ") : `${items.slice(0, 3).join(", ")} and ${items.length - 3} more`;
+
+  const parts: string[] = [];
+  if (nameMatch) parts.push("named for it");
+  if (functions.length > 0) parts.push(`${functions.length} matching function(s): ${some(functions)}`);
+  if (variables.length > 0) parts.push(`${variables.length} matching variable(s): ${some(variables)}`);
+  if (uses.length > 0) parts.push(`uses ${some(uses)}`);
+  if (usedBy.length > 0) parts.push(`used by ${some(usedBy)}`);
+  return parts.join("; ");
+}
+
 export interface SystemNode {
   path: string;
   name: string;
   /** Why this asset is in the map. The model should not have to guess. */
   reasons: string[];
+  /** The same thing in one sentence. Most callers want only this. */
+  summary?: string;
   /** How many other assets in this map reference it. High means "core to the system". */
   referencedByInSystem: number;
   /** How many assets anywhere reference it. High means "changing it is risky". */
@@ -48,6 +106,11 @@ export interface SystemMap {
   readingOrder: string[];
   /** Assets that lots of things depend on: changing these has blast radius. */
   highRisk: string[];
+  /**
+   * The whole map as prose. For a system of any size this is the only part worth reading, and it
+   * is a fraction of the structured form - the same trade `explainGraph` makes for a graph.
+   */
+  text?: string;
   notes: string[];
   truncated: boolean;
 }
@@ -232,6 +295,20 @@ export async function mapSystem(
     );
   }
 
+  for (const asset of assets) {
+    asset.summary = summariseReasons(asset.reasons);
+  }
+
+  const lines: string[] = [];
+  lines.push(`"${query}" spans ${assets.length} asset(s).`);
+  for (const asset of assets.slice(0, 12)) {
+    const risk = asset.referencedByTotal >= HIGH_RISK_REFERENCERS ? ` [${asset.referencedByTotal} referencers - changing it has reach]` : "";
+    lines.push(`- ${asset.name}${asset.parentClass ? ` (${asset.parentClass.replace(/['"]/g, "")})` : ""}: ${asset.summary}${risk}`);
+  }
+  if (assets.length > 12) lines.push(`...and ${assets.length - 12} more.`);
+  if (readingOrder.length > 0) lines.push(`Read in this order: ${readingOrder.map((r) => r.split(" - ")[0]).join(" -> ")}.`);
+  for (const note of notes) lines.push(note);
+
   return {
     query,
     assets,
@@ -240,6 +317,7 @@ export async function mapSystem(
     readingOrder,
     highRisk,
     notes,
+    text: lines.join("\n"),
     truncated: nodes.size >= maxAssets || Boolean(search.truncated),
   };
 }

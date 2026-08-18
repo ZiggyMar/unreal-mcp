@@ -206,3 +206,65 @@ test("no graph is ever read: the map must stay cheap", async () => {
   );
   assert.deepEqual(expensive, [], "the map is what you consult BEFORE deciding what to read");
 });
+
+test("many similar reasons collapse into one sentence", async () => {
+  // Measured on a real project: one asset carried twenty-four reasons, sixteen of them
+  // "has variable <name> matching vacuum". That is the payload being mostly repetition of its own
+  // field names, priced per call.
+  const hit = (kind, name) => ({ path: "/Game/BP_Vacuum", name, kind });
+  const bridge = fakeBridge({
+    search_project: () => ({
+      hits: [
+        { path: "/Game/BP_Vacuum", name: "BP_Vacuum", kind: "blueprint" },
+        hit("function", "VacuumObjects"),
+        hit("function", "VacuumPush"),
+        hit("function", "GetVacuumable"),
+        hit("function", "VacuumTick"),
+        hit("variable", "VacuumTimer"),
+        hit("variable", "BaseVacuumStrength"),
+        hit("variable", "VacuumAngle"),
+        hit("variable", "VacuumSize"),
+        hit("variable", "VacuumSpeed"),
+      ],
+    }),
+  });
+  const map = await mapSystem(bridge, "vacuum");
+  const node = map.assets.find((a) => a.name === "BP_Vacuum");
+  assert.ok(node, "the asset was not mapped");
+  assert.ok(node.summary, `no summary produced from ${JSON.stringify(node.reasons)}`);
+  // Named examples plus a count, rather than one line per match.
+  assert.match(node.summary, /4 matching function\(s\)/);
+  assert.match(node.summary, /5 matching variable\(s\)/);
+  assert.match(node.summary, /and \d+ more/);
+  assert.ok(
+    node.summary.length < JSON.stringify(node.reasons).length,
+    "the summary is not smaller than the reasons it replaces"
+  );
+});
+
+test("the prose form is dramatically cheaper than the structure", async () => {
+  const bridge = fakeBridge({
+    search_project: () => ({
+      hits: Array.from({ length: 10 }, (_, i) => ({
+        path: `/Game/BP_Thing${i}`,
+        name: `BP_Thing${i}`,
+        kind: "blueprint",
+      })),
+    }),
+  });
+  const map = await mapSystem(bridge, "thing");
+  assert.ok(map.text, "no text form");
+  const ratio = JSON.stringify(map).length / map.text.length;
+  assert.ok(ratio > 2, `expected the prose to be much smaller, got ${ratio.toFixed(1)}x`);
+});
+
+test("the prose names the assets and how to read them", async () => {
+  const bridge = fakeBridge({
+    search_project: () => ({
+      hits: [{ path: "/Game/BP_Core", name: "BP_Core", kind: "blueprint" }],
+    }),
+  });
+  const map = await mapSystem(bridge, "core");
+  assert.match(map.text, /BP_Core/);
+  assert.match(map.text, /asset\(s\)/);
+});

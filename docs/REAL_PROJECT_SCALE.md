@@ -338,6 +338,55 @@ to know that a review tool exists.
 Measured as not making things worse, which for an addition to every write is the bar that matters:
 all four benchmark tasks still pass at the same call counts.
 
+## "One Blueprint is wired to five others" — measured
+
+`map_system` exists for the hardest thing about a real project, and it had never been run against
+one. Pointed at the real game with the single word `vacuum`, it took **868ms** and returned the
+actual architecture:
+
+```
+"vacuum" spans 25 asset(s).
+- BP_Player (BP_BaseCharacter_C): 3 matching variable(s): BP Vacuum, BaseVacuumStrength,
+    VacuumStrengthModifier; uses C_Vacuumable, BPI_Vacuumable, BP_BaseCharacter
+    [5 referencers - changing it has reach]
+- BP_Vacuum (Actor): named for it; 4 matching function(s): VacuumObjects,
+    OnRep_VacuumStrengthModifier, GetVacuumableObject and 1 more; 11 matching variable(s);
+    uses C_Vacuumable, BPI_Vacuumable, BPI_VacuumRegistry and 1 more; used by ... and 1 more
+- BPI_Vacuumable (Interface): named for it; 4 matching function(s): VacuumTick, Vacuumed,
+    NotVacuumed and 1 more; used by C_Vacuumable, BP_Player
+- BPI_VacuumRegistry (Interface): named for it; used by C_Vacuumable
+- C_Vacuumable (ActorComponent): named for it; 2 matching function(s): AddVacuum, RemoveVacuum
+- ABP_NewPlayer (AnimInstance): 2 matching variable(s): isVacuumingObject, isVacuumDragged
+Read in this order: BP_Player -> BP_Vacuum -> BPI_Vacuumable -> BPI_VacuumRegistry -> ...
+Changing 1 of these affects assets outside this system.
+```
+
+Nobody named a Blueprint. It found the component, both interfaces, the animation blueprint, and the
+base character — and said which one to read first and which one is dangerous to change.
+
+### It had the same disease as the graph reader
+
+The first run cost **3,396 tokens**, and one asset alone carried twenty-four reasons — sixteen of
+them `has variable <name> matching vacuum`. The same payload-is-mostly-repetition problem
+`explain_graph` was built for.
+
+Reasons now collapse into a sentence per asset — named examples plus a count — and the map returns
+a prose form. **4,370 tokens becomes 523: 8.4x.** The tool returns the prose by default and takes
+`detail: true` for exact paths and the reference graph, because the structured form is not more
+accurate, it is the same facts with the field names repeated once per asset.
+
+That is the second time this exact trade has paid off, which makes it a rule rather than a trick:
+
+> A structured payload aimed at a model is mostly its own field names. State what it means, and
+> keep the structure behind a flag for the caller that genuinely needs it.
+
+### One thing this caught about the process
+
+The live suite failed on 5.8 with `add_variable did not report the parent class` — a change made and
+built for 5.6 only. Nothing was broken; the binary was simply older than the test. Worth recording
+because it is the third time the same lesson has come back in a different costume: **a build is not
+a run, and two engines means two runs.**
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,

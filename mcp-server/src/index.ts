@@ -2410,12 +2410,32 @@ register(
       query: z.string().describe('The concept, in the project\'s own words, e.g. "health", "inventory", "vacuum". Try one word first; narrow only if the map is truncated.'),
       maxAssets: z.number().optional().describe("Cap on assets in the map. Defaults to 25. Raise it if the map reports being truncated."),
       depth: z.number().optional().describe("How many reference hops to follow out from the matches. Defaults to 2, which is usually the whole system. 1 is tighter, 3 tends to pull in the entire project."),
+      detail: z
+        .boolean()
+        .optional()
+        .describe("Return the full per-asset structure and edge list as well. Roughly 8x the tokens; only worth it if you need exact paths or the reference graph."),
     },
   },
-  async ({ query, maxAssets, depth }) => {
+  async ({ query, maxAssets, depth, detail }) => {
     try {
       const result = await mapSystem(bridge, query, { maxAssets, depth });
-      return jsonResult(result);
+
+      // The prose form is the answer by default, and the structure is opt-in.
+      //
+      // Measured on a real project: mapping its vacuum system is 4,370 tokens as structure and 523
+      // as prose - the same 8x that made `explain_graph` worth having. The structured form is not
+      // more accurate, it is the same facts with the field names repeated once per asset, and a
+      // caller that needs exact paths can ask for it.
+      if (detail) return jsonResult(result);
+      return jsonResult({
+        query: result.query,
+        assetCount: result.assets.length,
+        text: result.text,
+        readingOrder: result.readingOrder,
+        highRisk: result.highRisk,
+        truncated: result.truncated,
+        note: "Pass detail:true for exact asset paths and the reference graph.",
+      });
     } catch (err) {
       return errorResult(err);
     }
