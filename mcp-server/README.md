@@ -249,26 +249,35 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
-### Tested with a local 7B, not just asserted
+### Tested with a local 7B, and the result is not flattering
 
 "Works with any model" is claimed by everything in this space and demonstrated by none of it.
 `npm run bench:local` drives this server with a local model through a real agent loop against a
-live editor, and checks the result against the project rather than the transcript.
+live editor, checks the outcome against the project rather than the transcript, and runs the task
+five times because one run proves nothing.
 
-With `qwen2.5-coder:7b` on an RTX 3060 that is also running the editor:
+With `qwen2.5-coder:7b` on an RTX 3060 that is also running the editor: **0/5 on a four-step task.**
 
-- **asset-level tasks pass** - create a Blueprint, add a typed variable, compile, save - including
-  recovering from a name collision by reading the error and renaming, unprompted
-- **graph wiring fails** at this size; the model places nodes but does not reliably connect them
-- **zero malformed arguments and zero invented tool names**, across every run
-- **~16 tok/s**, which is the number that matters because the editor is sharing the GPU
-- **not one call arrived through the structured tool-calling API** - this model emits tool calls as
-  JSON in the message body, so any client driving a small local model has to parse that
+The failure is specific and worth knowing. It fails on none of the things tool design controls:
 
-The benchmark immediately earned itself: it found the model reissuing one failing call **eleven
-times** because a pin was named `done` instead of `then`. The error already named the right pin,
-which turns out not to be the same thing as being actionable. Pin resolution now accepts a
-near-miss and reports the correction. Full write-up in
+- **zero malformed arguments, zero invented tool names**, every run
+- correct asset paths, correct parameter names
+- it recovers from a name collision by reading the error and renaming, unprompted
+
+What it cannot do is **track multi-step progress**. It completes step one, declares the whole task
+DONE, and when told specifically what is still missing it repeats its first successful call rather
+than moving on. That survives precise feedback, which is the one thing more tooling cannot fix.
+
+So the honest boundary is: this server removes the failure modes that are its to remove, and a 7B
+still needs either one step per turn or a larger model. Two measurements worth keeping alongside
+that: **~20 tok/s** with the editor sharing the GPU, and **not one call arrived through the
+structured tool-calling API** — this model emits tool calls as JSON in the message body, so any
+client driving a small local model has to parse that.
+
+The benchmark has already paid for itself twice over: it found the model reissuing one failing call
+**eleven times** because a pin was named `done` instead of `then` (fixed — pin resolution now
+accepts near-misses), and it caught this document's own earlier claim that the task PASSED, which
+was a single lucky run. Full write-up in
 [../docs/LOCAL_MODEL_BENCHMARK.md](../docs/LOCAL_MODEL_BENCHMARK.md).
 
 ### Handbooks, for models that were never trained on Unreal

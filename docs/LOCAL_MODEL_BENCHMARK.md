@@ -19,28 +19,43 @@ transcript**.
 
 ## Results
 
-**Task 1 — create a Blueprint, add a float variable, compile, save: PASSED.**
+Run five times each, because a single run proves nothing. `--runs 5` reports the pass rate and the
+run-by-run pattern.
+
+**Task 1 — create a Blueprint, add a float variable, compile, save: 0/5.**
+
+The first version of this document reported this task as PASSED on the strength of **one** run. It
+is not reproducible. Five runs, same model, same temperature, same prompt: `FFFFF`. The single
+green run was luck, and reporting it was the mistake the variance warning further down was already
+warning about.
+
+What actually happens is consistent and more interesting than a bare failure:
 
 ```
-[0] unreal_create_blueprint(...)  -> ERR package_already_exists: /Game/Bench/BP_BenchTarget
-[1] unreal_create_blueprint(...)  -> ok  BP_BenchTarget_1
-[2] unreal_add_variable(...)      -> ok  { "added": true, "name": "Health", "type": "float" }
-[3] unreal_compile_blueprint(...) -> ok  { "errorCount": 0, "success": true }
-[4] unreal_save_blueprint(...)    -> ok  { "saved": true }
-TASK COMPLETED
+[0] unreal_create_blueprint(...)  -> ok
+[1] model says: DONE                              <- after one of four steps
+[2] unreal_create_blueprint(...)  -> ERR package_already_exists
+[3] unreal_create_blueprint(BP_BenchTarget_New)   -> ok
+[4] model says: DONE
 ```
 
-Step 0 to 1 is the part worth noticing. The model hit a name collision, **read the error, and
-recovered by renaming, unprompted**. That is the self-correction the error-message design exists
-for, demonstrated by a 7B rather than assumed.
+The model completes step one, declares the whole task finished, and when told specifically what is
+still missing ("the Health variable was never added") it **creates another Blueprint** rather than
+adding the variable. It fixates on the first tool it used successfully.
 
-**Task 2 — wire an event to a Print String in a graph: FAILED.**
+This survives being told exactly what to do next. The harness re-checks the project on every "DONE"
+and feeds back the precise gap — the same thing `unreal_review_blueprint` exists to provide — and
+the model still does not switch tools.
 
-The model creates the Blueprint and places nodes, but cannot reliably connect an event to a
-function call in one atomic call. It splits the work across calls and ends with
-`connectionsMade: 0`.
+**Task 2 — wire an event to a Print String: 0/5.** Same shape.
 
-That is an honest boundary: **at 7B, asset-level work is reliable and graph wiring is not.**
+**The honest conclusion: `qwen2.5-coder:7b` cannot sustain a four-step task through this server, and
+no amount of tool design fixes that.** It is not failing on schemas, names, or engine specifics —
+it is failing to track multi-step progress. The tooling removed every failure mode it could; what
+is left is model capability.
+
+That is useful to know precisely because it is a boundary the tooling cannot move, and it says what
+to target: single-step-per-turn use, or a larger model.
 
 ## Measurements
 
