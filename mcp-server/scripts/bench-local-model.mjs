@@ -43,6 +43,10 @@ const withScheme = /^https?:\/\//.test(rawHost) ? rawHost : `http://${rawHost}`;
 // 0.0.0.0 means "listen everywhere"; as a destination it is not routable, so talk to loopback.
 const OLLAMA = withScheme.replace("//0.0.0.0", "//127.0.0.1");
 const TASK_NAME = valueOf("--task", "health");
+// Context size decides which models fit on a given GPU, so it has to be a knob rather than a
+// constant: a 14B loads on a 12 GB card at 8k and fails at 16k.
+const NUM_CTX = Number(valueOf("--ctx", "16384"));
+const PROFILE = valueOf("--profile", "lazy");
 const RUNS = Number(valueOf("--runs", "1"));
 // Runs are isolated by clearing /Game/Bench first rather than by renaming. Without isolation, run
 // two trips over run one's leftovers and the benchmark measures its own debris instead of the
@@ -150,7 +154,7 @@ async function clearBench() {
 function startServer() {
   const child = spawn(process.execPath, [serverPath], {
     // "lazy" is the profile a small-context model should use, so benchmark what we recommend.
-    env: { ...process.env, UNREAL_MCP_PROFILE: "lazy", UNREAL_MCP_MODE: "standard" },
+    env: { ...process.env, UNREAL_MCP_PROFILE: PROFILE, UNREAL_MCP_MODE: "standard" },
     stdio: ["pipe", "pipe", "pipe"],
   });
   let buffer = "";
@@ -191,30 +195,79 @@ function startServer() {
 
 // --- the model ----------------------------------------------------------------------------------
 
+/**
+ * Whether this model accepts the tool-calling API at all.
+ *
+ * Plenty of local models have no tool template and reject the request outright - the user's own 27B
+ * does. That is not a reason to give up on them: the harness already recovers tool calls from
+ * message text, so the tools can simply be described in the prompt instead. Falling back rather
+ * than failing is also what a real user of such a model has to do.
+ */
+let toolApiSupported = true;
+
+/** A compact prompt-side description of the tools, for models with no tool template. */
+function describeToolsForPrompt(tools) {
+  const lines = tools.map((t) => {
+    const required = t.function.parameters?.required ?? [];
+    const props = Object.keys(t.function.parameters?.properties ?? {});
+    const shown = [...new Set([...required, ...props])].slice(0, 6);
+    // First sentence only: the full descriptions would swamp a small context.
+    const summary = (t.function.description ?? "").split(". ")[0].slice(0, 130);
+    return `- ${t.function.name}(${shown.join(", ")}): ${summary}`;
+  });
+  return (
+    "You have these tools. To call one, reply with ONLY a JSON object of the form " +
+    '{"name": "<tool>", "arguments": {...}} and nothing else.' +
+    String.fromCharCode(10) +
+    lines.join(String.fromCharCode(10))
+  );
+}
+
 async function askModel(messages, tools) {
   const started = Date.now();
-  const response = await fetch(`${OLLAMA}/api/chat`, {
+  const body = {
+    model: MODEL,
+    messages,
+    stream: false,
+    options: { temperature: 0.1, num_ctx: NUM_CTX },
+  };
+  if (toolApiSupported) body.tools = tools;
+
+  let response = await fetch(`${OLLAMA}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      tools,
-      stream: false,
-      options: { temperature: 0.1, num_ctx: 16384 },
-    }),
+    body: JSON.stringify(body),
   });
+
   if (!response.ok) {
-    throw new Error(`ollama returned ${response.status}: ${(await response.text()).slice(0, 200)}`);
+    const errorText = await response.text();
+    if (/does not support tools/i.test(errorText) && toolApiSupported) {
+      // Retry with the tools described in the prompt instead of passed as an API field.
+      console.log("  (this model has no tool template; describing tools in the prompt instead)");
+      toolApiSupported = false;
+      delete body.tools;
+      body.messages = [
+        { role: "system", content: describeToolsForPrompt(tools) },
+        ...messages.filter((m) => m.role !== "system" || !String(m.content).startsWith("You have these tools")),
+      ];
+      response = await fetch(`${OLLAMA}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+    if (!response.ok) {
+      throw new Error(`ollama returned ${response.status}: ${errorText.slice(0, 200)}`);
+    }
   }
-  const body = await response.json();
+  const reply = await response.json();
   const elapsedMs = Date.now() - started;
   return {
-    message: body.message ?? {},
+    message: reply.message ?? {},
     elapsedMs,
     // Ollama reports these in nanoseconds when available.
-    evalCount: body.eval_count ?? 0,
-    evalDurationMs: body.eval_duration ? body.eval_duration / 1e6 : elapsedMs,
+    evalCount: reply.eval_count ?? 0,
+    evalDurationMs: reply.eval_duration ? reply.eval_duration / 1e6 : elapsedMs,
   };
 }
 
@@ -310,7 +363,7 @@ async function main() {
     process.exit(2);
   }
 
-  console.log(`model: ${MODEL}`);
+  console.log(`model: ${MODEL} (profile ${PROFILE}, context ${NUM_CTX})`);
   console.log(`task:  ${task.request}`);
   console.log("");
 

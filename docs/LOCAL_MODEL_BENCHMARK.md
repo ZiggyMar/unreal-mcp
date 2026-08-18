@@ -57,6 +57,33 @@ is left is model capability.
 That is useful to know precisely because it is a boundary the tooling cannot move, and it says what
 to target: single-step-per-turn use, or a larger model.
 
+## Which model tier actually works
+
+Three models, on the same 12 GB card:
+
+| Model | Loads? | Speed | Four-step task |
+| --- | --- | --- | --- |
+| `qwen2.5-coder:7b` (4.7 GB) | yes, at 16k context | ~20 tok/s | **0/5** |
+| `qwen2.5-coder:14b` (9.0 GB) | **only at ≤8k context** | ~10 tok/s | **0/2** |
+| `qwen3.8-27b` (16 GB) | **no tool template at all** | — | cannot be driven |
+
+Three separate findings, each actionable:
+
+**A 14B is capped by context, not just by size.** It loads at 4096 and 8192 and fails outright at
+16384 on a 12 GB card. That matters enormously here, because the `lazy` profile is ~8.8k tokens of
+tool definitions *by itself* — the tool list alone would consume the entire budget a 14B has
+available. **Tool payload size does not merely cost tokens; it decides which models you can run at
+all.** That measurement is what the `minimal` profile (10 tools, ~3.1k tokens) exists for.
+
+**The 27B has no tool template**, so Ollama rejects the request outright: `does not support tools`.
+The harness falls back to describing tools in the prompt, which is what a user of such a model has
+to do, but it is worth checking before choosing a model.
+
+**Doubling the parameters did not fix the failure.** The 14B fails in exactly the same way as the
+7B, at half the speed. This is not a model-size problem at this scale: both complete step one,
+declare the task finished, and repeat their first successful call. The tier that reliably drives
+these tools is a frontier model, and saying so is more useful than implying a local model will do.
+
 ## Measurements
 
 | | |
