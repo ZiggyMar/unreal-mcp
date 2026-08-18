@@ -177,3 +177,25 @@ test("every tool is reachable: none is stranded outside core and every group", a
   assert.equal(everythingOn.length, full.length);
   assert.ok(lazyStart.length < full.length);
 });
+
+test("the workflow guide is served as a prompt, in every profile", async () => {
+  for (const profile of ["full", "lazy", "core"]) {
+    const messages = await callServer(profile, [
+      { jsonrpc: "2.0", id: 2, method: "prompts/list" },
+      { jsonrpc: "2.0", id: 3, method: "prompts/get", params: { name: "unreal_workflow" } },
+    ]);
+
+    const listed = messages.find((m) => m.id === 2)?.result?.prompts ?? [];
+    assert.ok(
+      listed.some((p) => p.name === "unreal_workflow"),
+      `${profile} does not offer the workflow prompt`
+    );
+
+    const text = messages.find((m) => m.id === 3)?.result?.messages?.[0]?.content?.text ?? "";
+    // The fallback string exists so a missing file degrades instead of breaking; if we are
+    // serving it, the real guide did not ship next to the server, which is worth failing on.
+    assert.ok(text.length > 5000, `${profile} served only ${text.length} chars: the guide did not load`);
+    assert.ok(text.includes("unreal_review_blueprint"), "the guide must carry the review gate");
+    assert.ok(text.includes("unreal_doctor"), "the guide must carry the doctor step");
+  }
+});

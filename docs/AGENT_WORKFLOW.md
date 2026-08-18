@@ -7,27 +7,68 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
 
 ## The golden path for building a feature
 
+0. **If anything is not working, `unreal_doctor` first.** One call checks reachability, plugin
+   version, editor responsiveness, index state, node catalog, and whether PIE is running, each with
+   its remedy. Do this before concluding a tool is broken, and relay the remedy to the user in plain
+   language: most of these are things only they can fix, in the editor.
+
 1. **Orient once, cheaply.** `unreal_get_project_overview` first. It costs one index lookup and
    tells you the project's shape: how many Blueprints, in which folders, derived from what.
+
 2. **Find, don't enumerate.** `unreal_search_project` to locate the Blueprints, functions, and
    variables relevant to the request. Never list everything and read through it.
+
 3. **Read tiered, narrow as you go.** `unreal_list_blueprint_graphs` for a Blueprint you will
-   touch, `unreal_read_blueprint_summary` for the one graph that matters,
-   `unreal_read_node_detail` only for nodes you will wire into. Do not pull full graphs you do
-   not need; that cost is exactly what this server exists to avoid.
-4. **Check reality before writing.** For any function call you are not certain about,
-   `unreal_find_node` (search by intent) then `unreal_get_node_signature` (exact pins). Guessing
-   Unreal's API surface from memory is the single most common cause of a failed edit. If you do
-   guess and miss, the error's `didYouMean` list is there to correct you in one step; use it
-   rather than retrying blind.
-5. **Write in small batches.** `unreal_add_node` / `unreal_connect_pins` /
-   `unreal_set_pin_default_value` for one coherent piece of logic at a time. Node ids returned by
-   `unreal_add_node` are persistent GUIDs; hold onto them instead of re-reading the graph.
-6. **Compile after every batch.** `unreal_compile_blueprint`, always, before telling the user
-   anything is done. A graph can look structurally fine and still fail to compile. Zero errors is
-   the definition of done for a batch, not "the calls returned ok".
-7. **Save when a unit of work is complete.** `unreal_save_blueprint`. Edits live only in editor
-   memory until saved.
+   touch, then `unreal_read_blueprint_summary` for the one graph that matters. Do not pull full
+   graphs you do not need; that cost is exactly what this server exists to avoid.
+
+4. **Check reality before writing.** For any function you are not certain about, `unreal_find_node`
+   (search by intent) then `unreal_get_node_signature` (exact pins). Guessing Unreal's API surface
+   from memory is the single most common cause of a failed edit. For any *asset* path, the same
+   applies: `unreal_list_assets` rather than inventing a path. If you guess and miss, the error's
+   `didYouMean` list corrects you in one step; use it rather than retrying blind.
+
+5. **Model the data before the logic.** If the feature has more than a few related values, make a
+   struct (`unreal_create_struct`); if a value is a state or a kind, make an enum
+   (`unreal_create_enum`). Six loose variables and an integer standing for "Idle/Chasing/Attacking"
+   are how a project becomes unmaintainable, and a zero-experience user will never refactor it
+   later. Use them with `struct:<Name>` and `enum:<Name>` wherever a type string is taken.
+
+6. **Write whole graphs, not single nodes.** `unreal_build_graph` places every node, wire, and pin
+   default in ONE atomic call inside one transaction. A ten-node graph is one round trip instead of
+   about twenty-five, a failure rolls the whole thing back rather than leaving half a feature, and a
+   human can undo the entire feature with one Ctrl+Z. **Do not pass `x`/`y`.** The graph is laid out
+   for you automatically: columns left to right, crossings minimised, exec chains straightened.
+
+7. **Compile, and mean it.** `unreal_build_graph` compiles by default. Zero errors is the
+   definition of done for a batch, not "the calls returned ok".
+
+8. **Review before you claim it works.** `unreal_review_blueprint`. Compiling only proves the graph
+   is *valid*: dead nodes, an unhandled `Cast Failed` path, leftover `Print String`, variables still
+   called `NewVar`, and heavy per-frame Tick work all compile perfectly and are all things a
+   reviewer would reject. The report gives you each finding, its fix, the node ids, and a single
+   `nextAction`. **Act on it rather than reporting it.** If you skip this you are grading your own
+   homework.
+
+9. **Make it read well.** `unreal_auto_layout_graph` also wraps each execution chain in a comment
+   box titled after its event, so a human opening the graph sees labelled sections instead of a
+   field of nodes. It is idempotent and safe on graphs you did not author.
+
+10. **Prove it runs, if you can.** Compiling proves validity; running proves behaviour.
+    `unreal_start_pie` (with `numPlayers` > 1 to exercise replication), poll `unreal_pie_status`
+    because PIE starts on the next tick, and `unreal_stop_pie` when done. Always stop PIE before
+    editing further: writes during PIE apply to the editor world, not the running one, so they look
+    like they did nothing.
+
+11. **Save.** `unreal_save_blueprint`, and `unreal_save_level` for actors you placed. Edits live
+    only in editor memory until saved.
+
+### If a tool you need is not in your tool list
+
+The server may be running the `lazy` profile, which starts with the authoring path above and keeps
+the rest switched off until asked. Call `unreal_enable_tools` with the groups you need - `ui`,
+`data`, `scene`, `edit`, `maintenance` - in one call rather than discovering them one at a time.
+Everything in the golden path is always available without enabling anything.
 
 ## Sharp edges that remain
 
@@ -62,8 +103,9 @@ cost one failed call to discover:
 - **`CallFunction` needs `className` for static library functions.** `PrintString` lives on
   `/Script/Engine.KismetSystemLibrary`, not on your Blueprint. `unreal_find_node` gives you the
   right `className` so you never guess.
-- **Position nodes as you place them.** `x`/`y` cost nothing and are cosmetic to the compiler,
-  but a human will open this graph later. Lay nodes left to right in execution order.
+- **Do not hand-position nodes.** This used to be advice; it is now counter-productive.
+  `unreal_build_graph` lays the graph out after building it, so any `x`/`y` you pass is discarded.
+  Spend the effort on naming and on comment boxes instead, which no algorithm can infer.
 
 ## Working in a real project (not a scratch one)
 
@@ -77,6 +119,24 @@ cost one failed call to discover:
   will land on top of theirs.
 - **Comment boxes carry the narrative; node comments carry the why.** Fill both. A box whose
   text is just "Comment" is worse than no box.
+
+## Building UI (UMG has two traps, and everyone hits both)
+
+- **A Button holds exactly one child.** To put a label on a button: add the `Button`, then add a
+  `TextBlock` with `parent` set to the button. A second child is refused with `parent_full`.
+- **Layout lives on the slot, not the widget.** Position, size, padding, alignment, anchors and
+  ZOrder are set with `unreal_set_widget_property` and `onSlot: true`. `unreal_add_widget` tells you
+  which slot class you got, because it differs per parent panel and determines which layout
+  properties exist at all.
+- **Anchor things that should survive a resolution change.** A HUD element pinned to a corner
+  should be anchored to that corner, not placed at fixed coordinates. This is most of the
+  difference between UI that looks professional and UI that falls apart on someone else's monitor.
+- **Choose the root panel for the job.** `CanvasPanel` (the default) allows free positioning;
+  `VerticalBox`/`HorizontalBox` lay themselves out, which is far easier to keep tidy than absolute
+  coordinates when the content is a list or a row.
+- **A widget that is never added to the viewport is invisible.** This is the most common reason UI
+  work appears to have done nothing. Creating the Widget Blueprint is half the job; a Create Widget
+  plus Add to Viewport chain in a gameplay Blueprint is the other half.
 
 ## Multiplayer judgment (learned the hard way)
 
@@ -131,11 +191,18 @@ cost one failed call to discover:
   functions you will actually place.
 - If the user runs a local Ollama model, the server enriches search hits with one-line summaries
   for free; nothing needs to change in how you call the tools.
+- If your tool list looks short, the server is on the `lazy` profile and is deferring groups rather
+  than lacking them. Enabling a group you turn out not to need costs only its definitions, so ask
+  for everything the job plausibly needs in one `unreal_enable_tools` call.
 
 ## Honesty rules
 
 - Never report a feature as built until `unreal_compile_blueprint` returned zero errors on every
-  Blueprint you touched.
+  Blueprint you touched **and** `unreal_review_blueprint` has nothing left worth acting on. "It
+  compiles" is not "it is good", and the review exists precisely so that distinction is not left to
+  your own judgement.
+- If the review still has findings you chose not to fix, say which and why. Silently leaving them
+  and reporting success is the failure mode the review was built to prevent.
 - If a call fails, say what failed and what you did about it. The error strings here are designed
   to be actionable (`didYouMean`, available-macro lists, schema explanations for rejected pin
   connections); act on them, then report.
