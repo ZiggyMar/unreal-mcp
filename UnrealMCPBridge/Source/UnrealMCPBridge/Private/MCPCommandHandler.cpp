@@ -1187,10 +1187,23 @@ static bool ValidateNewAssetPath(const FString& PackagePath, FString& OutError)
 	// later call against it failed with blueprint_not_found. Measured, not imagined - a 7B did
 	// exactly this and then alternated between the two failing calls until the step limit.
 	//
-	// A folder on disk at that exact path is unambiguous evidence of the mistake: you cannot mean
-	// to create an asset AT a directory, only inside one.
+	// A folder at that exact path is unambiguous evidence of the mistake: you cannot mean to create
+	// an asset AT a directory, only inside one.
+	//
+	// Both the disk and the asset registry are consulted, and it took a real project to find out
+	// why. A directory only appears on disk once something in it has been SAVED, so on a project
+	// where the folder existed only in memory this check silently did not fire - an asset was
+	// created at the folder's own path, and every later operation that treated that path as a
+	// folder broke. The registry knows about paths that have no files yet; the filesystem knows
+	// about paths from projects that were never opened. Neither alone is enough.
 	const FString DirectoryOnDisk = FPackageName::LongPackageNameToFilename(PackagePath);
-	if (IFileManager::Get().DirectoryExists(*DirectoryOnDisk))
+	bool bIsFolder = IFileManager::Get().DirectoryExists(*DirectoryOnDisk);
+	if (!bIsFolder)
+	{
+		const IAssetRegistry* Registry = IAssetRegistry::Get();
+		bIsFolder = Registry && Registry->PathExists(PackagePath);
+	}
+	if (bIsFolder)
 	{
 		OutError = FString::Printf(
 			TEXT("path_is_a_folder: '%s' is an existing folder, not an asset path. The asset name is missing - ")

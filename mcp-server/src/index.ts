@@ -15,6 +15,7 @@ import { cleanupBlueprint } from "./cleanup.js";
 import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
+import { explainGraph } from "./explainGraph.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -135,6 +136,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_list_blueprints",
   "unreal_list_blueprint_graphs",
   "unreal_read_blueprint_summary",
+  "unreal_explain_graph",
   "unreal_find_node",
   "unreal_get_node_signature",
   // unreal_create_blueprint is deliberately ABSENT, exactly as it is from `minimal`.
@@ -395,6 +397,36 @@ register(
     try {
       const result = await bridge.send<ListBlueprintGraphsResult>("list_blueprint_graphs", { path });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_explain_graph",
+  {
+    title: "What does this graph actually do?",
+    description:
+      "**Read this before reading a graph node by node.** Returns each entry point and the ordered chain of things " +
+      "it does, in plain text. " +
+      "A real 104-node EventGraph costs ~8,800 tokens as a node-and-pin structure and about a tenth of that as an " +
+      "explanation, so this is usually the only read you need - and on a small model it is the difference between " +
+      "the graph fitting in context and not. " +
+      "Deliberately lossy: it names what happens, not exact pins or node ids. When you need those, call " +
+      "unreal_read_blueprint_summary for the one chain you are changing.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      graphName: z.string().optional().describe('Graph to explain. Defaults to "EventGraph".'),
+    },
+  },
+  async ({ path, graphName }) => {
+    try {
+      const summary = await bridge.send("read_blueprint_graph_summary", {
+        path,
+        graphName: graphName ?? "EventGraph",
+      });
+      return jsonResult(explainGraph(summary as never));
     } catch (err) {
       return errorResult(err);
     }

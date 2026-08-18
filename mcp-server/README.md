@@ -44,6 +44,7 @@ npm start
 | `unreal_ping` | `ping` | Liveness check for the editor bridge. |
 | `unreal_list_blueprints` | `list_blueprints` | Project-wide (or path-scoped) list of Blueprint assets: name, path, parent class. |
 | `unreal_list_blueprint_graphs` | `list_blueprint_graphs` | Graph names + node counts for one Blueprint. |
+| `unreal_explain_graph` | *(composite)* | What a graph actually does, in plain text. ~10x cheaper than reading it node by node. |
 | `unreal_read_blueprint_summary` | `read_blueprint_graph_summary` | Compact per-node summary of one graph: id, type, title, connected pins only (no position/cosmetic metadata). |
 | `unreal_read_node_detail` | `read_blueprint_node_detail` | Full pin/property detail for exactly one node by id. |
 

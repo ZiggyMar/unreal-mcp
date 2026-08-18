@@ -156,6 +156,71 @@ Blueprint execution cost is real but it is almost never the node count. It is:
 If something must be per-frame, ask whether it can run every 0.2s on a timer instead. Usually it
 can, and nobody can tell.
 
+## 8b. Where state belongs, and doing the work once
+
+This is the decision that separates a Blueprint that works from one a team can live with, and it is
+the one a model is least likely to get right by instinct. Ask two questions in order.
+
+**1. How long must it live?**
+
+| It must survive... | Put it in |
+| --- | --- |
+| the whole session, across level loads | **GameInstance** (or a `GameInstanceSubsystem`) |
+| one level, visible to every player | **GameState** |
+| one level, server-authoritative rules | **GameMode** |
+| one player, visible to other players (name, score, team) | **PlayerState** |
+| one player, local only (input, camera, UI ownership) | **PlayerController** |
+| the pawn's own body (health while alive, movement) | **Pawn / Character** |
+
+The trap: a pawn is destroyed on death and respawn. **Anything that must outlive the body does not
+belong on the body.** Score on a Character is a bug that only appears the first time someone dies.
+
+**2. How often does it change?**
+
+If the answer is "once", fetch it once. The pattern:
+
+- Fetch on `BeginPlay` (or on the subsystem's init), store it in a variable, and read the variable
+  everywhere else.
+- Never re-fetch per frame, per tick, or per widget refresh.
+
+Worked example — an online display name, the case that catches everyone:
+
+> A name comes from the online subsystem, which is a *call*, and it does not change during play.
+> Fetch it **once** into the GameInstance (or read it from the PlayerState, which replicates it for
+> free), store it, and have every nametag widget read the stored value. Fetching it per widget, per
+> tick, is the same answer computed hundreds of times.
+
+The general rule, which applies far beyond names:
+
+> **Anything that does not change should be read once and stored. Anything that changes rarely
+> should be pushed when it changes, not polled.** Polling is what Tick is for, and Tick is what you
+> are trying to avoid.
+
+For "push when it changes": a replicated variable's `OnRep` callback, a dispatcher/delegate, or a
+Blueprint Interface call. All three cost nothing when nothing happens.
+
+## 8c. What "AAA" means for a Blueprint
+
+Not visual polish — that is art. For Blueprints it means **someone else can extend this in six
+months without being afraid of it.** Concretely:
+
+- **One Blueprint, one job.** If it does inventory *and* combat *and* UI, it will be edited by three
+  people and merged by none.
+- **State lives where it belongs** (8b). This is the single most expensive thing to retrofit.
+- **No logic in Tick that does not need to be there.** See section 8.
+- **Talk through interfaces, not casts,** whenever the other side might be more than one class.
+  A cast hard-wires two Blueprints together; an interface does not (section 5).
+- **Named things, not `NewVar_3`.** A variable's name is documentation that cannot go stale.
+- **Grouped and commented.** Related nodes inside a comment box with a sentence saying *why*. The
+  what is visible in the nodes; the why is not, and the why is what a reader needs.
+- **Fails safely.** A null check before a cast result is used; a valid check before a reference is
+  followed. The question to ask of every branch is "what happens the first time this is empty?"
+- **Nothing left half-wired.** An unconnected exec pin is a feature that silently does nothing.
+
+`unreal_review_blueprint` checks the mechanical half of this list and scores it. The judgment half —
+one job, state in the right place, interface versus cast — is why this section exists in writing:
+a small model cannot derive it, but it can follow it.
+
 ## 9. The traps that cost one failed call each
 
 These are specific, and they are why an untrained model flails:

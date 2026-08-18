@@ -190,6 +190,22 @@ async function main() {
     return `still prints "${pin.defaultValue}" after a later edit`;
   });
 
+  await check("explain_graph describes a graph far more cheaply than reading it", async () => {
+    // The measured reason this tool exists: a real 104-node EventGraph costs ~8,800 tokens as
+    // structure, which is more than a small model's entire context.
+    const summary = await bridge.send("read_blueprint_graph_summary", {
+      path: `${brownPath}.BP_MCPBrownfield`,
+      graphName: "EventGraph",
+    });
+    const { explainGraph } = await import("../dist/explainGraph.js");
+    const explained = explainGraph(summary);
+    if (!/BeginPlay/.test(explained.text)) throw new Error(`no BeginPlay chain: ${explained.text}`);
+    // Print\s*String, not "Print String": 5.6 spaces this title and 5.8 does not.
+    if (!/Print\s*String/.test(explained.text)) throw new Error("the chain does not name what it calls");
+    const ratio = JSON.stringify(summary).length / explained.text.length;
+    return `${explained.chains.length} chain(s), ${ratio.toFixed(1)}x smaller than the structure`;
+  });
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -682,7 +698,7 @@ async function main() {
       });
       const text = JSON.stringify(summary);
       if (!/BeginPlay/.test(text)) throw new Error("no BeginPlay node");
-      if (!/Print String/.test(text)) throw new Error("no Print String node");
+      if (!/Print\s*String/.test(text)) throw new Error("no Print String node");
       if (!/linkedTo":\[\{/.test(text)) throw new Error("the nodes were placed but never connected");
       // "done" and "InString" are both wrong; both must have been resolved rather than rejected.
       return "wired via forgiving pin names ('done' -> 'then', 'InString' -> 'In String')";
