@@ -19,82 +19,44 @@ transcript**.
 
 ## Results
 
-Run five times each, because a single run proves nothing. `--runs 5` reports the pass rate and the
-run-by-run pattern.
+A local 7B builds working Blueprints reliably, once the tools are shaped for it.
 
-**Task 1 — create a Blueprint, add a float variable, compile, save: 0/5.**
+| Task | Before | After |
+| --- | --- | --- |
+| Create a Blueprint, add a typed variable, compile, save | **0/5** | **5/5** (10/10 across two sets) |
+| Create a Blueprint and wire BeginPlay to a Print String | **0/5** | **5/5** |
 
-The first version of this document reported this task as PASSED on the strength of **one** run. It
-is not reproducible. Five runs, same model, same temperature, same prompt: `FFFFF`. The single
-green run was luck, and reporting it was the mistake the variance warning further down was already
-warning about.
+Same model, same hardware, same prompts. The graph task had never passed once.
 
-What actually happens is consistent and more interesting than a bare failure:
+### The three changes, in order of how much they mattered
 
-```
-[0] unreal_create_blueprint(...)  -> ok
-[1] model says: DONE                              <- after one of four steps
-[2] unreal_create_blueprint(...)  -> ERR package_already_exists
-[3] unreal_create_blueprint(BP_BenchTarget_New)   -> ok
-[4] model says: DONE
-```
+**1. Removing the worse path.** This was the decisive one, and it is the smallest. The `minimal`
+profile offered both `unreal_create_blueprint` (which makes an *empty* Blueprint) and
+`unreal_scaffold_blueprint` (which makes a complete one). The model reliably chose the familiar
+one, created an empty asset, and declared the task finished — which is precisely the measured
+failure. Dropping `create_blueprint` from that profile took the task from 2/5 to **5/5**.
 
-The model completes step one, declares the whole task finished, and when told specifically what is
-still missing ("the Health variable was never added") it **creates another Blueprint** rather than
-adding the variable. It fixates on the first tool it used successfully.
+> A profile built for weak models should contain the **best path for each job, not every path.**
+> Offering a worse-but-familiar option is offering a way to fail.
 
-This survives being told exactly what to do next. The harness re-checks the project on every "DONE"
-and feeds back the precise gap — the same thing `unreal_review_blueprint` exists to provide — and
-the model still does not switch tools.
+**2. One call instead of four.** `unreal_scaffold_blueprint` builds the Blueprint, its variables,
+its components and its event handlers in one call, in the right order — state before behaviour, a
+single compile at the end, then layout, review and save. A model that cannot hold a plan across
+turns does not need to. This took 0/5 to 2/5.
 
-**Task 2 — wire an event to a Print String: 0/5.** Same shape.
+**3. A pointer from where the model was already looking.** Adding the scaffold changed nothing
+until a one-line note went at the top of `create_blueprint`'s own description. That happened twice
+in this benchmark — the same was true of `add_event_handler` — which makes it a pattern rather than
+an anecdote: **a better path that is not advertised at the point of confusion does not get taken.**
 
-**The honest conclusion: `qwen2.5-coder:7b` cannot sustain a four-step task through this server, and
-no amount of tool design fixes that.** It is not failing on schemas, names, or engine specifics —
-it is failing to track multi-step progress. The tooling removed every failure mode it could; what
-is left is model capability.
+### What this does and does not show
 
-That is useful to know precisely because it is a boundary the tooling cannot move, and it says what
-to target: single-step-per-turn use, or a larger model.
+It shows a 7B on a consumer GPU can build correct, compiled, laid-out Blueprints through this
+server, at ~20 tok/s, with zero malformed arguments and zero invented tool names.
 
-## Making one call do the whole job: 0/5 to 2/5
-
-The failure above is not fixable from inside a tool: a small model cannot hold a plan across turns.
-But it can be made irrelevant. If the problem is "cannot reliably make four calls in sequence", the
-answer is a call that does all four.
-
-`unreal_scaffold_blueprint` takes a whole Blueprint — parent class, variables, components, event
-handlers — and builds it in the right order: state before behaviour, one compile at the end, then
-layout, review, and save. A model that manages exactly one successful tool call now finishes a
-whole feature.
-
-**Result: 0/5 became 2/5** on the same task, same model, same hardware.
-
-Two things were needed, and only one of them was the tool:
-
-**The tool.** Collapsing four steps into one removes the thing the model is bad at.
-
-**A pointer from where the model was already looking.** Adding the tool changed nothing at first —
-the model kept calling `unreal_create_blueprint`, because that is what it knew. The fix was one
-line at the top of `create_blueprint`'s own description: *if you also need variables, components,
-or event logic, use `unreal_scaffold_blueprint` instead*. That is the second time in this benchmark
-that a better path went unused until it was advertised at the point of confusion, which makes it a
-pattern rather than an anecdote.
-
-2/5 is honest progress, not success. The model still sometimes creates an empty Blueprint and
-declares victory. But it is the first movement on this number, and it came from changing the shape
-of the work rather than from a better prompt.
-
-### A real behaviour worth knowing: deleted names stay taken
-
-While measuring this, runs started failing with `asset_name_in_use` on names that had definitely
-been deleted. The package is gone from disk, but **the editor's undo buffer still holds a reference
-to the object**, so garbage collection cannot reclaim the name until the editor restarts.
-
-That is correct engine behaviour, and the bridge reports it accurately rather than crashing (the
-alternative — creating over a resident object — asserts and closes the editor). It is worth knowing
-because delete-then-recreate-the-same-name is an ordinary thing to want, and the answer is either a
-different name or an editor restart.
+It does not show that a 7B can design a system. Both tasks are single features with a clear
+description. The earlier finding still stands: a small model cannot hold a plan across turns. What
+changed is that it no longer has to.
 
 ## Which model tier actually works
 

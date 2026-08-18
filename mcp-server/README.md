@@ -250,43 +250,38 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
-### Tested with a local 7B, and the result is not flattering
+### Tested with a local 7B: 0/5 to 5/5
 
 "Works with any model" is claimed by everything in this space and demonstrated by none of it.
 `npm run bench:local` drives this server with a local model through a real agent loop against a
-live editor, checks the outcome against the project rather than the transcript, and runs the task
-five times because one run proves nothing.
+live editor, checks the outcome against the project rather than the transcript, and repeats each
+task five times because one run proves nothing.
 
-With `qwen2.5-coder:7b` on an RTX 3060 that is also running the editor: **0/5 on a four-step task.**
+With `qwen2.5-coder:7b` on an RTX 3060 that is also running the editor:
 
-The failure is specific and worth knowing. It fails on none of the things tool design controls:
+| Task | Before | After |
+| --- | --- | --- |
+| Blueprint + typed variable + compile + save | **0/5** | **5/5** (10/10 over two sets) |
+| Blueprint + BeginPlay wired to Print String | **0/5** | **5/5** |
 
-- **zero malformed arguments, zero invented tool names**, every run
-- correct asset paths, correct parameter names
-- it recovers from a name collision by reading the error and renaming, unprompted
+At ~20 tok/s, with zero malformed arguments and zero invented tool names throughout.
 
-What it cannot do is **track multi-step progress**. It completes step one, declares the whole task
-DONE, and when told specifically what is still missing it repeats its first successful call rather
-than moving on. That survives precise feedback, which is the one thing more tooling cannot fix.
+**The decisive change was removing a tool, not adding one.** The `minimal` profile offered both
+`unreal_create_blueprint` (empty Blueprint) and `unreal_scaffold_blueprint` (complete one). The
+model reliably picked the familiar one, made an empty asset, and declared the task done — exactly
+the measured failure. Dropping `create_blueprint` from that profile took it from 2/5 to 5/5.
 
-So the honest boundary is: this server removes the failure modes that are its to remove, and a 7B
-still needs either one step per turn or a larger model. Two measurements worth keeping alongside
-that: **~20 tok/s** with the editor sharing the GPU, and **not one call arrived through the
-structured tool-calling API** — this model emits tool calls as JSON in the message body, so any
-client driving a small local model has to parse that.
+> A profile built for weak models should contain the **best path for each job, not every path.**
+> Offering a worse-but-familiar option is offering a way to fail.
 
-**What the benchmark then produced.** Since the failure is that a small model cannot hold a plan
-across turns, `unreal_scaffold_blueprint` stops requiring one: a whole Blueprint — variables,
-components, event handlers — in a single call, built in the right order. That moved the same model
-on the same task from **0/5 to 2/5**. Two things were needed and only one was the tool: adding it
-changed nothing until a one-line pointer was put at the top of `unreal_create_blueprint`'s
-description, where the model was already looking. That is the second time a better path went unused
-until advertised at the point of confusion.
+The other two changes: `unreal_scaffold_blueprint` collapses four calls into one, in the right
+order, so a model that cannot hold a plan across turns does not need to (0/5 to 2/5). And a
+one-line pointer at the top of `create_blueprint`'s description, because the scaffold went unused
+until it was advertised where the model was already looking — the second time that happened here,
+which makes it a pattern.
 
-The benchmark has already paid for itself twice over: it found the model reissuing one failing call
-**eleven times** because a pin was named `done` instead of `then` (fixed — pin resolution now
-accepts near-misses), and it caught this document's own earlier claim that the task PASSED, which
-was a single lucky run. Full write-up in
+Scope, honestly: these are single features with clear descriptions, not system design. A small
+model still cannot hold a plan across turns. It no longer has to. Full write-up in
 [../docs/LOCAL_MODEL_BENCHMARK.md](../docs/LOCAL_MODEL_BENCHMARK.md).
 
 ### Handbooks, for models that were never trained on Unreal

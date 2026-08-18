@@ -233,7 +233,11 @@ const MINIMAL_PROFILE_TOOLS = new Set([
   "unreal_enable_tools",
   "unreal_list_blueprints",
   "unreal_find_node",
-  "unreal_create_blueprint",
+  // Deliberately NOT unreal_create_blueprint. It makes an EMPTY Blueprint, and the measured
+  // failure of a small model is exactly that: it creates the empty asset, declares the task done,
+  // and never adds anything. scaffold_blueprint does everything create does and more, so offering
+  // both here only offers a way to fail. A profile built for weak models should contain the best
+  // path for each job, not every path.
   "unreal_scaffold_blueprint",
   "unreal_add_variable",
   "unreal_add_event_handler",
