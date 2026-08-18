@@ -74,6 +74,7 @@ const REQUIRED_README_SECTIONS = [
   "### Structs and enums",
   "### UMG",
   "### Handbooks, for models that were never trained on Unreal",
+  "### Acting like a colleague, not a code generator",
   "### Working on a project that already exists",
   "### Materials",
   "### Readable graphs are produced, not requested",

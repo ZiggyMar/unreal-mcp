@@ -37,7 +37,7 @@ const aliases = new Map([
 // Tools implemented in the MCP server by composing several bridge commands, rather than mapping
 // to one. These are deliberate: they belong on the client side because they need no engine access
 // beyond the commands that already exist.
-const compositeTools = new Set(["auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system"]);
+const compositeTools = new Set(["auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature"]);
 
 const covered = new Set();
 for (const tool of registeredTools) {
