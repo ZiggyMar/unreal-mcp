@@ -140,18 +140,19 @@ BP_terminal              Interacted
 ```
 
 Read those chains rather than the class names. A PlayerController and a GameState both exist on
-clients, so casting to the GameMode **from their BeginPlay** fails on every client. 
-does it from **Tick**, so it fails every frame, on every client, forever.
+clients, so casting to the GameMode **from their BeginPlay** fails on every client.
+`BP_ShopComponent` does it from **Tick**, so it fails every frame, on every client, forever.
 
-The same pass removed a false positive, which matters more than finding one more bug. 
-casts to its GameMode from  - a server RPC, where that cast is entirely
-correct. Two refinements fixed it:
+The same pass removed a false positive, which matters more than finding one more bug.
+`PC_Lobby` casts to its GameMode from `CE_Server_FinishedCutscene` - a server RPC, where that
+cast is entirely correct. Two refinements fixed it, and both DETECT a guard rather than assume
+its absence:
 
-- The server-event convention is anchored at a word start rather than the string start, because real
-  projects prefix their events ().  still does not match: the prefix has to
-  end at an underscore.
-- A chain starting at a server event is treated as server-guarded, exactly like one behind
-  .
+- The server-event convention is anchored at a word start rather than the string start, because
+  real projects prefix their custom events (`CE_Server_...`). `Observer` still does not match:
+  the prefix has to end at an underscore, and there is a test for exactly that.
+- A chain starting at a server event counts as server-guarded, the same way one behind
+  `Switch Has Authority` does.
 
 Twelve findings, each naming its chain, and the one that was wrong is gone. A check that cries wolf
 once is a check people stop reading.
