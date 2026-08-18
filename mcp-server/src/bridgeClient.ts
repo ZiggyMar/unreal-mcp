@@ -214,7 +214,17 @@ export class UnrealBridgeClient {
         try {
           const parsed = JSON.parse(line) as BridgeResponse<T>;
           if (!parsed.ok) {
-            fail(new Error(parsed.error ?? `UnrealMCPBridge returned an error for '${cmd}'`));
+            // Keep every field the bridge attached to the failure, not just the message.
+            //
+            // The plugin answers a wrong function name with a didYouMean list of near-misses, a
+            // wrong pin with the pins that do exist, and a blocked delete with the referencers
+            // holding it. All of that was being thrown away here, because only `error` was read -
+            // so the single most useful self-correction signal in the whole system had never once
+            // reached a model. Found by testing a claim this project had been making in three
+            // separate documents.
+            const { ok: _ok, error: _error, id: _id, result: _result, ...context } = parsed as unknown as Record<string, unknown>;
+            const extras = Object.keys(context).length > 0 ? ` ${JSON.stringify(context)}` : "";
+            fail(new Error(`${parsed.error ?? `UnrealMCPBridge returned an error for '${cmd}'`}${extras}`));
             return;
           }
           succeed(parsed.result as T);
