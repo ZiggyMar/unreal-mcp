@@ -1344,6 +1344,131 @@ register(
   }
 );
 
+register(
+  "unreal_create_widget_blueprint",
+  {
+    title: "Create a UMG Widget Blueprint",
+    description:
+      "Creates a Widget Blueprint: the asset behind every health bar, menu, HUD, and inventory screen. It is given " +
+      "a CanvasPanel root by default, which is the only root that supports free positioning of children. Choose a " +
+      "different root when the layout is inherently stacked (VerticalBox, HorizontalBox) or layered (Overlay), " +
+      "because a box that lays itself out is far easier to keep tidy than absolute coordinates.\n\n" +
+      "Then: unreal_add_widget to build the tree, unreal_set_widget_property to style it, and " +
+      "unreal_compile_blueprint. To actually show it on screen, add a Create Widget + Add to Viewport chain in a " +
+      "gameplay Blueprint with unreal_build_graph. A Widget Blueprint that is never added to the viewport is " +
+      "invisible, which is the most common reason UI work appears to have done nothing.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/UI/W_HealthBar". Prefix widget assets with W_ by convention.'),
+      parentClass: z.string().optional().describe('Parent class. Defaults to UserWidget. Pass your own UserWidget-derived class or Blueprint path to inherit from it.'),
+      rootWidget: z
+        .string()
+        .optional()
+        .describe('Root panel class: "CanvasPanel" (default, free positioning), "VerticalBox", "HorizontalBox", "Overlay", "SizeBox". Must be a panel.'),
+      save: z.boolean().optional().describe("Save to disk immediately. Defaults to true."),
+    },
+  },
+  async ({ packagePath, parentClass, rootWidget, save }) => {
+    try {
+      const result = await bridge.send("create_widget_blueprint", { packagePath, parentClass, rootWidget, save });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_add_widget",
+  {
+    title: "Add a widget to a Widget Blueprint",
+    description:
+      "Adds one widget to a Widget Blueprint's tree, under the root or under a named panel. Common classes: " +
+      "TextBlock, Button, Image, ProgressBar (health/mana bars), Border, SizeBox, Spacer, EditableTextBox, " +
+      "CheckBox, Slider, ScrollBox, and the panels CanvasPanel, VerticalBox, HorizontalBox, Overlay, GridPanel.\n\n" +
+      "Two things about UMG that are worth knowing before you start guessing:\n" +
+      "  - A Button holds exactly ONE child. To put a label on a button, add the Button, then add a TextBlock with " +
+      "parent set to the button. Adding a second child to a Button fails with parent_full.\n" +
+      "  - Layout (position, size, alignment, padding, anchors) lives on the SLOT, not the widget. Set it with " +
+      "unreal_set_widget_property and onSlot: true. The response tells you the slot class you got, which is what " +
+      "determines the available layout properties.\n" +
+      "Call unreal_list_widgets first if you need the exact name of an existing parent.",
+    inputSchema: {
+      path: z.string().describe('Widget Blueprint path, e.g. "/Game/UI/W_HealthBar.W_HealthBar".'),
+      widgetClass: z.string().describe('Widget class, e.g. "TextBlock", "Button", "ProgressBar", "Image", "VerticalBox".'),
+      name: z.string().describe('Name for this widget, e.g. "HealthText". This is how you reference it in every other call, and how a human finds it in the Designer.'),
+      parent: z.string().optional().describe("Name of an existing panel widget to add this under. Defaults to the root."),
+    },
+  },
+  async ({ path, widgetClass, name, parent }) => {
+    try {
+      const result = await bridge.send("add_widget", { path, widgetClass, name, parent });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_widgets",
+  {
+    title: "Read a Widget Blueprint's widget tree",
+    description:
+      "Returns the whole widget hierarchy in depth-first order: each widget's name, class, parent, depth, slot " +
+      "class, and whether it can hold children. Call this before unreal_add_widget (to pick a valid parent) or " +
+      "unreal_set_widget_property (to get an exact name), instead of guessing. The slot class on each entry tells " +
+      "you which layout properties that widget actually has, which differs per parent panel type.",
+    inputSchema: {
+      path: z.string().describe('Widget Blueprint path, e.g. "/Game/UI/W_HealthBar.W_HealthBar".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("list_widgets", { path });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_widget_property",
+  {
+    title: "Set a property on a widget or its layout slot",
+    description:
+      "Sets one property on a widget, or on its layout slot when onSlot is true. This is where UI stops looking " +
+      "programmer-art and starts looking designed, so it is worth spending calls on.\n\n" +
+      "On the widget: TextBlock Text and ColorAndOpacity, ProgressBar Percent and FillColorAndOpacity, Image " +
+      "Brush, Button BackgroundColor, any widget's Visibility, RenderTransform, or ToolTipText.\n" +
+      "On the slot (onSlot: true): CanvasPanelSlot has LayoutData (offsets plus anchors), ZOrder, and " +
+      "bAutoSize; box slots have Padding, HorizontalAlignment, VerticalAlignment, and Size. Anchors are what make " +
+      "UI survive a different screen resolution, so a HUD element pinned to a corner should be anchored to that " +
+      "corner rather than placed at fixed coordinates.\n\n" +
+      "Values are strings coerced to the property's real type; structs use UE literal syntax such as " +
+      '"(R=1,G=0,B=0,A=1)". An asset path that does not resolve fails loudly instead of silently setting None. ' +
+      "Get exact widget names from unreal_list_widgets.",
+    inputSchema: {
+      path: z.string().describe('Widget Blueprint path, e.g. "/Game/UI/W_HealthBar.W_HealthBar".'),
+      widget: z.string().describe("Widget name, exactly as returned by unreal_list_widgets."),
+      property: z.string().describe('Property name, e.g. "Text", "Percent", "ColorAndOpacity", "Padding", "ZOrder".'),
+      value: z.string().describe('Value as a string: "Health", "0.75", "(R=1,G=0,B=0,A=1)", "(Left=8,Top=8,Right=8,Bottom=8)".'),
+      onSlot: z
+        .boolean()
+        .optional()
+        .describe("Set the property on the widget's layout slot instead of the widget itself. Use for position, size, padding, alignment, anchors, ZOrder. Defaults to false."),
+    },
+  },
+  async ({ path, widget, property, value, onSlot }) => {
+    try {
+      const result = await bridge.send("set_widget_property", { path, widget, property, value, onSlot });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
 async function main() {
   // `unreal-mcp-server --doctor` runs the same diagnosis from a terminal, with no MCP client
   // involved. When the complaint is "my AI tool cannot see Unreal", removing the AI tool from the

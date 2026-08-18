@@ -189,6 +189,35 @@ give it a body, configure its class defaults, bind input to it, and actually run
 Compiling proves a Blueprint is valid. Running it is the only thing that proves it works, which is
 what `start_pie` is for.
 
+### UMG: the UI half
+
+A game the user can see is mostly UI, and none of it used to be reachable through this bridge.
+
+| Tool | Bridge command | Purpose |
+| --- | --- | --- |
+| `unreal_create_widget_blueprint` | `create_widget_blueprint` | Create a Widget Blueprint with a chosen root panel (CanvasPanel by default). |
+| `unreal_add_widget` | `add_widget` | Add a widget under the root or a named panel: TextBlock, Button, Image, ProgressBar, boxes, overlays. |
+| `unreal_list_widgets` | `list_widgets` | The whole widget tree in depth-first order, with each widget's class, parent, depth, and slot class. |
+| `unreal_set_widget_property` | `set_widget_property` | Set a property on a widget, or on its layout slot with `onSlot: true`. |
+
+Two things about UMG trip up everyone meeting it for the first time, model or human, so the tools
+name both rather than letting you discover them by failure:
+
+- **A Button holds exactly one child.** To label a button you add the Button, then add a TextBlock
+  with `parent` set to the button. A second child fails with `parent_full`, and the error says so.
+- **Layout lives on the slot, not the widget.** Position, size, padding, alignment, anchors and
+  ZOrder are slot properties, reached with `onSlot: true`. `unreal_add_widget` returns the slot
+  class you actually got, because it differs per parent panel and determines which layout
+  properties exist.
+
+Anchors are the difference between a HUD that survives a resolution change and one that does not,
+so a corner-pinned element should be anchored to that corner rather than placed at fixed
+coordinates.
+
+One note the tools repeat because it is the most common way UI work appears to have done nothing:
+a Widget Blueprint that is never added to the viewport is invisible. Creating the widget is only
+half the job; a Create Widget + Add to Viewport chain in a gameplay Blueprint is the other half.
+
 ### Readable graphs are produced, not requested
 
 `unreal_build_graph` auto-lays-out the graph it just built, by default. You do not pass `x`/`y`.
@@ -283,7 +312,7 @@ report, which costs more than a missed finding.
 ### Tool profiles, for small-context models
 
 Tool definitions are paid for on every request, before the user's message is read. The full set is
-39 tools and roughly 11.8k tokens of standing cost. On a 200k-context model that is noise; on an
+44 tools and roughly 13.7k tokens of standing cost. On a 200k-context model that is noise; on an
 8k or 32k local model it is the difference between usable and unusable.
 
 The instructive descriptions are not the thing to cut, because they are why a weaker model
@@ -293,7 +322,7 @@ succeeds at all. So rather than making every user's tools worse, set:
 UNREAL_MCP_PROFILE=core
 ```
 
-which exposes 16 tools for about 5.0k tokens, a 58% reduction, and still keeps a straight line
+which exposes 17 tools for about 5.3k tokens, a 61% reduction, and still keeps a straight line
 through the whole job: orient, search, read, find the exact node, create the Blueprint, add
 variables and functions, build the graph, compile, lay out, review, save. What it drops is the
 single-node editing tools (`unreal_build_graph` does that job in one call), the level / actor /
