@@ -128,6 +128,48 @@ const TASKS = {
       await clearBench();
     },
   },
+
+  /**
+   * Harder: a component with a property, plus TWO handlers. This is the shape of a real small
+   * feature, and it is where scaffold_blueprint either earns its keep or does not.
+   */
+  feature: {
+    name: () => `BP_BenchFeature${currentRunId}`,
+    request: () =>
+      `In the Unreal project, create a Blueprint called BP_BenchFeature${currentRunId} in /Game/Bench based on ` +
+      "Actor. Give it a SphereComponent named Trigger with SphereRadius 150, a float variable called Health with " +
+      'default 100, and two event handlers: on BeginPlay print "ready", and on ActorBeginOverlap print "touched". ' +
+      "Compile and save it.",
+    async verify() {
+      const name = `BP_BenchFeature${currentRunId}`;
+      const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
+      if (!listed.includes(name)) return { done: false, why: `${name} does not exist` };
+
+      const components = await probeCall("list_components", { path: `/Game/Bench/${name}.${name}` });
+      if (!components.includes("Trigger")) return { done: false, why: "no Trigger component" };
+
+      const summary = await probeCall("read_blueprint_graph_summary", {
+        path: `/Game/Bench/${name}.${name}`,
+        graphName: "EventGraph",
+      });
+      if (!/BeginPlay/i.test(summary)) return { done: false, why: "no BeginPlay handler" };
+      if (!/Overlap/i.test(summary)) return { done: false, why: "BeginPlay exists but no overlap handler" };
+      const prints = (summary.match(/Print String/g) ?? []).length;
+      if (prints < 2) return { done: false, why: `only ${prints} Print String node(s); both handlers should print` };
+      if (!/linkedTo":\[\{/.test(summary)) return { done: false, why: "nodes exist but nothing is wired" };
+
+      // A variable too, since the whole point is doing several kinds of thing in one go.
+      for (const delay of [0, 500, 1500]) {
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+        const search = await probeCall("search_project", { query: "Health" });
+        if (search.includes(name)) return { done: true, why: "component, variable and both handlers present and wired" };
+      }
+      return { done: false, why: "everything but the Health variable" };
+    },
+    async cleanup() {
+      await clearBench();
+    },
+  },
 };
 
 /**
