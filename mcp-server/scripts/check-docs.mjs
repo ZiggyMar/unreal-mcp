@@ -73,7 +73,7 @@ const REQUIRED_README_SECTIONS = [
   "### Scene, actors, components, project settings, and runtime",
   "### Structs and enums",
   "### UMG",
-  "### Tested with a local 7B, not just asserted",
+  "### Tested with a local 7B",
   "### Handbooks, for models that were never trained on Unreal",
   "### Acting like a colleague, not a code generator",
   "### Working on a project that already exists",

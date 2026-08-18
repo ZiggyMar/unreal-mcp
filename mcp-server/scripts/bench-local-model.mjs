@@ -21,6 +21,7 @@
 // Requires: Ollama running, and an Unreal Editor open with the plugin.
 
 import { spawn } from "node:child_process";
+import { UnrealBridgeClient } from "../dist/bridgeClient.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -42,6 +43,10 @@ const withScheme = /^https?:\/\//.test(rawHost) ? rawHost : `http://${rawHost}`;
 // 0.0.0.0 means "listen everywhere"; as a destination it is not routable, so talk to loopback.
 const OLLAMA = withScheme.replace("//0.0.0.0", "//127.0.0.1");
 const TASK_NAME = valueOf("--task", "health");
+const RUNS = Number(valueOf("--runs", "1"));
+// Runs are isolated by clearing /Game/Bench first rather than by renaming. Without isolation, run
+// two trips over run one's leftovers and the benchmark measures its own debris instead of the
+// model - which is exactly what happened the first time this was run twice.
 
 /**
  * Tasks are chosen to be ordinary, not clever. If a cheap model cannot do these, the tooling has
@@ -53,33 +58,23 @@ const TASKS = {
       "In the Unreal project, create a Blueprint called BP_BenchTarget in /Game/Bench, based on Actor. " +
       "Give it a float variable called Health with a default of 100. Then compile it and save it.",
     // Checked against the project, not against what the model said it did.
-    async verify(callTool) {
-      const listed = await callTool("unreal_list_blueprints", { pathPrefix: "/Game/Bench" });
-      const text = JSON.stringify(listed);
-      if (!text.includes("BP_BenchTarget")) return { done: false, why: "BP_BenchTarget does not exist" };
-      const graphs = await callTool("unreal_list_blueprint_graphs", {
-        path: "/Game/Bench/BP_BenchTarget.BP_BenchTarget",
-      });
-      if (JSON.stringify(graphs).includes("error")) return { done: false, why: "the Blueprint cannot be read" };
+    async verify() {
+      const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
+      if (!listed.includes("BP_BenchTarget")) return { done: false, why: "BP_BenchTarget does not exist" };
       // The index updates asynchronously, so a search issued the instant a variable is added can
       // miss it. This project documents that caveat; the first version of this check ignored it
       // and reported the model had failed when it had not.
       for (const delay of [0, 500, 1000, 2000]) {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-        const search = await callTool("unreal_search_project", { query: "Health" });
-        if (JSON.stringify(search).includes("BP_BenchTarget")) {
+        const search = await probeCall("search_project", { query: "Health" });
+        if (search.includes("BP_BenchTarget")) {
           return { done: true, why: "Blueprint exists with a Health variable" };
         }
       }
       return { done: false, why: "Blueprint exists but the Health variable was never added" };
     },
-    async cleanup(callTool) {
-      // Models rename around a collision, so clean up the variants too rather than leaving debris
-      // that makes the next run start from a different state.
-      for (const suffix of ["", "_1", "_2"]) {
-        const name = `BP_BenchTarget${suffix}`;
-        await callTool("unreal_delete_asset", { paths: [`/Game/Bench/${name}.${name}`], force: true });
-      }
+    async cleanup() {
+      await clearBench();
     },
   },
 
@@ -92,15 +87,15 @@ const TASKS = {
       "In the Unreal project, create a Blueprint called BP_BenchGraph in /Game/Bench based on Actor. " +
       "Then add graph logic to its EventGraph so that when the game starts it prints the message " +
       '"hello" to the screen. Compile it when done.',
-    async verify(callTool) {
+    async verify() {
       // Models rename around a collision, so check whichever variant they actually made rather
       // than the name the task suggested. Judging the model on my own leftover debris would be
       // measuring the harness.
-      const listed = await callTool("unreal_list_blueprints", { pathPrefix: "/Game/Bench" });
+      const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
       const made = [...listed.matchAll(/"(BP_BenchGraph[0-9_]*)"/g)].map((m) => m[1]);
       if (made.length === 0) return { done: false, why: "no BP_BenchGraph was created" };
       const name = made[made.length - 1];
-      const summary = await callTool("unreal_read_blueprint_summary", {
+      const summary = await probeCall("read_blueprint_graph_summary", {
         path: `/Game/Bench/${name}.${name}`,
         graphName: "EventGraph",
       });
@@ -114,14 +109,41 @@ const TASKS = {
         ? { done: true, why: "BeginPlay wired to Print String" }
         : { done: false, why: "both nodes exist but nothing is connected" };
     },
-    async cleanup(callTool) {
-      const listed = await callTool("unreal_list_blueprints", { pathPrefix: "/Game/Bench" });
-      for (const name of [...listed.matchAll(/"(BP_BenchGraph[0-9_]*)"/g)].map((m) => m[1])) {
-        await callTool("unreal_delete_asset", { paths: [`/Game/Bench/${name}.${name}`], force: true });
-      }
+    async cleanup() {
+      await clearBench();
     },
   },
 };
+
+/**
+ * The harness talks to the bridge directly for its own housekeeping and checking.
+ *
+ * Going through the model's tool surface was a mistake that produced a FALSE PASS: delete_asset
+ * lives in the "maintenance" group, which the lazy profile does not enable, so every cleanup call
+ * silently did nothing, stale assets from earlier runs satisfied the verification, and five runs
+ * reported PASS having made zero tool calls. A benchmark that can report success for work nobody
+ * did is worse than no benchmark.
+ *
+ * Separating them also removes a confound: what the harness checks with is no longer part of what
+ * the model is being offered.
+ */
+const probe = new UnrealBridgeClient({});
+const probeCall = async (cmd, params) => {
+  try {
+    return JSON.stringify(await probe.send(cmd, params));
+  } catch (err) {
+    return `error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+};
+
+/** Delete everything under /Game/Bench, so a run starts from a known state. */
+async function clearBench() {
+  const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
+  const names = [...listed.matchAll(/"(BP_Bench[A-Za-z0-9_]*)"/g)].map((m) => m[1]);
+  for (const name of [...new Set(names)]) {
+    await probeCall("delete_asset", { paths: [`/Game/Bench/${name}.${name}`], force: true });
+  }
+}
 
 // --- MCP plumbing -------------------------------------------------------------------------------
 
@@ -218,12 +240,43 @@ function isFailure(resultText) {
  */
 function parseToolCallFromText(text, toolNames) {
   if (!text) return null;
+
+  // Walk the text and pull out every BALANCED {...} object.
+  //
+  // The previous version sliced from the first "{" to the last "}", which works only when the
+  // message is exactly one JSON object. Small models routinely emit an object followed by prose,
+  // or two objects in a row, and that span is then invalid JSON - so a perfectly good tool call
+  // was being discarded and the benchmark reported the model doing nothing. Measuring the harness
+  // instead of the model is the one thing a benchmark must never do.
   const candidates = [];
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) candidates.push(fenced[1]);
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(text.slice(firstBrace, lastBrace + 1));
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let j = i; j < text.length; j++) {
+      const ch = text[j];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === String.fromCharCode(92)) {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') inString = !inString;
+      if (inString) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          candidates.push(text.slice(i, j + 1));
+          i = j;
+          break;
+        }
+      }
+    }
+  }
 
   for (const candidate of candidates) {
     let parsed;
@@ -286,134 +339,162 @@ async function main() {
     return res.result?.content?.[0]?.text ?? JSON.stringify(res.error ?? {});
   };
 
-  const stats = {
-    steps: 0,
-    toolCalls: 0,
-    structuredCalls: 0,
-    textEmbeddedCalls: 0,
-    malformed: 0,
-    unknownTool: 0,
-    bridgeErrors: 0,
-    modelMs: 0,
-    evalTokens: 0,
-    evalMs: 0,
-  };
+  const runResults = [];
 
-  const messages = [
-    {
-      role: "system",
-      content:
-        "You control an Unreal Engine editor through the given tools. Use them; do not describe what you would " +
-        "do. Call one tool at a time and read its result before the next. Asset paths look like " +
-        '"/Game/Folder/BP_Name" and the object path adds the name again: "/Game/Folder/BP_Name.BP_Name". ' +
-        "When the task is complete, reply with the single word DONE.",
-    },
-    { role: "user", content: task.request },
-  ];
-
-  for (let step = 0; step < MAX_STEPS; step++) {
-    stats.steps++;
-    let reply;
-    try {
-      reply = await askModel(messages, tools);
-    } catch (err) {
-      console.log(`  model error: ${err instanceof Error ? err.message : err}`);
-      break;
+  for (let run = 1; run <= RUNS; run++) {
+    if (RUNS > 1) {
+      console.log(`--- run ${run} of ${RUNS} ---`);
     }
-    stats.modelMs += reply.elapsedMs;
-    stats.evalTokens += reply.evalCount;
-    stats.evalMs += reply.evalDurationMs;
+    // Start from a known state. A run that inherits the previous run's assets is measuring debris.
+    await clearBench();
 
-    let calls = reply.message.tool_calls ?? [];
-    if (calls.length > 0) {
-      stats.structuredCalls += calls.length;
-    } else {
-      // Small models very often emit a tool call as plain JSON in the message text instead of
-      // using the structured tool-calling API. Real clients cope with this, so the benchmark must
-      // too - otherwise it measures the model's output formatting rather than whether the tooling
-      // works. Counted separately, because "which models need this crutch" is useful to know.
-      const recovered = parseToolCallFromText(reply.message.content ?? "", toolNames);
-      if (recovered) {
-        stats.textEmbeddedCalls++;
-        calls = [recovered];
+    const stats = {
+      steps: 0,
+      toolCalls: 0,
+      structuredCalls: 0,
+      textEmbeddedCalls: 0,
+      malformed: 0,
+      unknownTool: 0,
+      bridgeErrors: 0,
+      modelMs: 0,
+      evalTokens: 0,
+      evalMs: 0,
+    };
+
+    const messages = [
+      {
+        role: "system",
+        content:
+          "You control an Unreal Engine editor through the given tools. Use them; do not describe what you would " +
+          "do. Call one tool at a time and read its result before the next. Asset paths look like " +
+          '"/Game/Folder/BP_Name" and the object path adds the name again: "/Game/Folder/BP_Name.BP_Name". ' +
+          "When the task is complete, reply with the single word DONE.",
+      },
+      { role: "user", content: task.request },
+    ];
+
+    for (let step = 0; step < MAX_STEPS; step++) {
+      stats.steps++;
+      let reply;
+      try {
+        reply = await askModel(messages, tools);
+      } catch (err) {
+        console.log(`  model error: ${err instanceof Error ? err.message : err}`);
+        break;
       }
-    }
+      stats.modelMs += reply.elapsedMs;
+      stats.evalTokens += reply.evalCount;
+      stats.evalMs += reply.evalDurationMs;
 
-    if (calls.length === 0) {
-      const text = (reply.message.content ?? "").trim();
-      console.log(`  [${step}] model says: ${text.slice(0, 120)}`);
-      messages.push({ role: "assistant", content: text });
-      if (/\bDONE\b/i.test(text)) break;
-      // Nudge once rather than looping on chat.
-      messages.push({ role: "user", content: "Use the tools to actually do it, or reply DONE if finished." });
-      continue;
-    }
-
-    messages.push(reply.message);
-    for (const call of calls) {
-      stats.toolCalls++;
-      const name = call.function?.name ?? "";
-      let argumentsObject = call.function?.arguments ?? {};
-      if (typeof argumentsObject === "string") {
-        try {
-          argumentsObject = JSON.parse(argumentsObject);
-        } catch {
-          stats.malformed++;
-          messages.push({ role: "tool", content: "Your arguments were not valid JSON. Send a JSON object." });
-          console.log(`  [${step}] ${name} <- malformed arguments`);
-          continue;
+      let calls = reply.message.tool_calls ?? [];
+      if (calls.length > 0) {
+        stats.structuredCalls += calls.length;
+      } else {
+        const recovered = parseToolCallFromText(reply.message.content ?? "", toolNames);
+        if (recovered) {
+          stats.textEmbeddedCalls++;
+          calls = [recovered];
         }
       }
 
-      if (!toolNames.has(name)) {
-        stats.unknownTool++;
-        console.log(`  [${step}] ${name} <- no such tool`);
+      if (calls.length === 0) {
+        const text = (reply.message.content ?? "").trim();
+        if (RUNS === 1) console.log(`  [${step}] model says: ${text.slice(0, 120)}`);
+        messages.push({ role: "assistant", content: text });
+
+        // Do not take "DONE" on trust. Check the project and, if the task is not finished, say
+        // exactly what is missing.
+        //
+        // The previous nudge just said "use the tools or reply DONE", and the model responded by
+        // repeating the call it had already made. A vague prod invites a repeat; a specific fact
+        // gives it somewhere to go. This is also what a real client does, and what this project
+        // ships unreal_review_blueprint for - a benchmark whose client blindly believes the model
+        // is measuring optimism.
+        if (/DONE/i.test(text)) {
+          const check = await task.verify();
+          if (check.done) break;
+          messages.push({
+            role: "user",
+            content: `Not finished: ${check.why}. Do that now with the tools, then reply DONE.`,
+          });
+          continue;
+        }
         messages.push({
-          role: "tool",
-          content: `There is no tool called "${name}". Available: ${[...toolNames].join(", ")}`,
+          role: "user",
+          content: "Call a tool to do the next step. Do not repeat a call that already succeeded.",
         });
         continue;
       }
 
-      const result = await callTool(name, argumentsObject);
-      // Detect a real failure, not the substring "error". A clean compile reports "errorCount": 0,
-      // which a naive check reads as a failure - the same mistake this project already made once
-      // in measure-cost.mjs, repeated here because the check was written from memory.
-      const failed = isFailure(result);
-      if (failed) stats.bridgeErrors++;
-      console.log(`  [${step}] ${name}(${JSON.stringify(argumentsObject).slice(0, 90)}) -> ${failed ? "ERR " : "ok  "}${result.slice(0, 100).replace(/\s+/g, " ")}`);
-      messages.push({ role: "tool", content: result.slice(0, 2000) });
+      messages.push(reply.message);
+      for (const call of calls) {
+        stats.toolCalls++;
+        const name = call.function?.name ?? "";
+        let argumentsObject = call.function?.arguments ?? {};
+        if (typeof argumentsObject === "string") {
+          try {
+            argumentsObject = JSON.parse(argumentsObject);
+          } catch {
+            stats.malformed++;
+            messages.push({ role: "tool", content: "Your arguments were not valid JSON. Send a JSON object." });
+            continue;
+          }
+        }
+
+        if (!toolNames.has(name)) {
+          stats.unknownTool++;
+          messages.push({
+            role: "tool",
+            content: `There is no tool called "${name}". Available: ${[...toolNames].join(", ")}`,
+          });
+          continue;
+        }
+
+        const result = await callTool(name, argumentsObject);
+        const failed = isFailure(result);
+        if (failed) stats.bridgeErrors++;
+        if (RUNS === 1) {
+          console.log(
+            `  [${step}] ${name}(${JSON.stringify(argumentsObject).slice(0, 90)}) -> ${failed ? "ERR " : "ok  "}${result.slice(0, 100).replace(/\s+/g, " ")}`
+          );
+        }
+        messages.push({ role: "tool", content: result.slice(0, 2000) });
+      }
     }
+
+    const verdict = await task.verify();
+    const tokensPerSecond = stats.evalMs > 0 ? (stats.evalTokens / stats.evalMs) * 1000 : 0;
+    runResults.push({ ...stats, done: verdict.done, why: verdict.why, tokensPerSecond });
+    console.log(
+      `  ${verdict.done ? "PASS" : "FAIL"} - ${verdict.why} ` +
+        `(${stats.toolCalls} calls, ${stats.bridgeErrors} errored, ${tokensPerSecond.toFixed(1)} tok/s)`
+    );
+    await task.cleanup();
   }
 
-  console.log("");
-  console.log("verifying against the project, not the transcript");
-  const verdict = await task.verify(callTool);
-  console.log(`  ${verdict.done ? "TASK COMPLETED" : "TASK NOT COMPLETED"}: ${verdict.why}`);
+  // --- aggregate --------------------------------------------------------------------------------
+  const passes = runResults.filter((r) => r.done).length;
+  const mean = (pick) => runResults.reduce((total, r) => total + pick(r), 0) / (runResults.length || 1);
 
-  const tokensPerSecond = stats.evalMs > 0 ? (stats.evalTokens / stats.evalMs) * 1000 : 0;
   console.log("");
-  console.log("measurements");
-  console.log(`  generation speed   ${tokensPerSecond.toFixed(1)} tok/s`);
-  console.log(`  model time         ${(stats.modelMs / 1000).toFixed(1)}s over ${stats.steps} steps`);
-  console.log(`  tool calls         ${stats.toolCalls}`);
-  console.log(`    via tool API     ${stats.structuredCalls}`);
-  console.log(`    recovered from text ${stats.textEmbeddedCalls}`);
-  console.log(`  malformed args     ${stats.malformed}`);
-  console.log(`  invented tools     ${stats.unknownTool}`);
-  console.log(`  calls that errored ${stats.bridgeErrors}`);
-
-  try {
-    await task.cleanup(callTool);
-    console.log("");
-    console.log("cleaned up");
-  } catch {
-    console.log("");
-    console.log("cleanup failed; remove /Game/Bench by hand");
+  console.log(`RESULT over ${runResults.length} run(s)`);
+  console.log(`  passed             ${passes}/${runResults.length}`);
+  console.log(`  generation speed   ${mean((r) => r.tokensPerSecond).toFixed(1)} tok/s mean`);
+  console.log(`  tool calls         ${mean((r) => r.toolCalls).toFixed(1)} mean`);
+  console.log(`    via tool API     ${mean((r) => r.structuredCalls).toFixed(1)}`);
+  console.log(`    from message text ${mean((r) => r.textEmbeddedCalls).toFixed(1)}`);
+  console.log(`  malformed args     ${mean((r) => r.malformed).toFixed(1)}`);
+  console.log(`  invented tools     ${mean((r) => r.unknownTool).toFixed(1)}`);
+  console.log(`  calls that errored ${mean((r) => r.bridgeErrors).toFixed(1)}`);
+  if (runResults.length > 1) {
+    // Variance matters more than the mean for a small model: a tool that works half the time is a
+    // different product from one that works reliably, and the mean hides which you have.
+    const spread = runResults.map((r) => (r.done ? "P" : "F")).join("");
+    console.log(`  run by run         ${spread}`);
   }
 
   server.child.kill();
-  process.exit(verdict.done ? 0 : 1);
+  process.exit(passes === runResults.length ? 0 : 1);
 }
 
 main().catch((err) => {
