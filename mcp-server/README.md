@@ -157,6 +157,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | --- | --- | --- |
 | `unreal_build_graph` | `build_graph` | Many nodes, wires, and pin defaults in one atomic call, with node `ref` names you choose. **Prefer this over individual `add_node`/`connect_pins` calls whenever placing more than one node.** |
 | `unreal_add_event_handler` | *(composed: `find_node` + `build_graph`)* | "When X happens, do these things" — the execution chain is wired for you, with no pin names, refs, or connections in the input. |
+| `unreal_scaffold_blueprint` | *(composed: create + variables + components + handlers + compile + layout + review + save)* | An entire Blueprint in one call, in the right order. |
 | `unreal_create_function` | `create_function` | Create a function graph with typed inputs/outputs; returns the entry (and result) node ids to wire immediately. |
 | `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
 | `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |
@@ -273,6 +274,14 @@ still needs either one step per turn or a larger model. Two measurements worth k
 that: **~20 tok/s** with the editor sharing the GPU, and **not one call arrived through the
 structured tool-calling API** — this model emits tool calls as JSON in the message body, so any
 client driving a small local model has to parse that.
+
+**What the benchmark then produced.** Since the failure is that a small model cannot hold a plan
+across turns, `unreal_scaffold_blueprint` stops requiring one: a whole Blueprint — variables,
+components, event handlers — in a single call, built in the right order. That moved the same model
+on the same task from **0/5 to 2/5**. Two things were needed and only one was the tool: adding it
+changed nothing until a one-line pointer was put at the top of `unreal_create_blueprint`'s
+description, where the model was already looking. That is the second time a better path went unused
+until advertised at the point of confusion.
 
 The benchmark has already paid for itself twice over: it found the model reissuing one failing call
 **eleven times** because a pin was named `done` instead of `then` (fixed — pin resolution now

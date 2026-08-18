@@ -13,6 +13,7 @@ import { mapSystem } from "./systemMap.js";
 import { planFeature } from "./planFeature.js";
 import { cleanupBlueprint } from "./cleanup.js";
 import { addEventHandler } from "./eventHandler.js";
+import { scaffoldBlueprint } from "./scaffold.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -136,6 +137,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_find_node",
   "unreal_get_node_signature",
   "unreal_create_blueprint",
+  "unreal_scaffold_blueprint",
   "unreal_create_function",
   "unreal_add_variable",
   "unreal_build_graph",
@@ -232,6 +234,7 @@ const MINIMAL_PROFILE_TOOLS = new Set([
   "unreal_list_blueprints",
   "unreal_find_node",
   "unreal_create_blueprint",
+  "unreal_scaffold_blueprint",
   "unreal_add_variable",
   "unreal_add_event_handler",
   "unreal_compile_blueprint",
@@ -435,7 +438,9 @@ register(
   {
     title: "Create a new Blueprint asset",
     description:
-      "Creates a new empty Blueprint asset at a given content path with a given parent class, and saves it to disk " +
+      "**If you also need variables, components, or event logic, use unreal_scaffold_blueprint instead** - it does all " +
+      "of that in one call, in the right order. " +
+      "Creates a new EMPTY Blueprint asset at a given content path with a given parent class, and saves it to disk " +
       "by default. Use this before unreal_add_node/unreal_add_variable to start building a new Blueprint from scratch. " +
       "Fails if an asset already exists at packagePath.",
     inputSchema: {
@@ -2392,6 +2397,84 @@ register(
   async ({ path, graphName, event, actions, compile }) => {
     try {
       const result = await addEventHandler(bridge, path, graphName ?? "EventGraph", event, actions, { compile });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_scaffold_blueprint",
+  {
+    title: "Build a whole Blueprint in one call",
+    description:
+      "**Build the entire thing in one call: the Blueprint, its variables, its components, and its event logic.** " +
+      "Reach for this first whenever you are creating something new. " +
+      "It exists because of a measurement: local 7B and 14B models both fail a four-step task the same way, " +
+      "completing step one, declaring the task done, and repeating their first successful call even when told what " +
+      "is missing. That is not fixable from inside a tool, so this stops requiring it - a model that manages one " +
+      "successful call now finishes a whole feature. " +
+      "The order is handled for you and matters: variables and components exist before any graph references them, " +
+      "handlers are built after, and the Blueprint is compiled once at the end rather than after every step. It is " +
+      "then laid out, reviewed, and saved. " +
+      "A step that fails is reported in `failures` and the rest still proceeds, because a partly built Blueprint " +
+      "you can see beats nothing at all. Everything here is also available as separate tools if you need finer " +
+      "control.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Blueprints/BP_Pickup".'),
+      parentClass: z.string().describe('Parent class: "Actor", "Pawn", "Character", "ActorComponent", or a Blueprint path.'),
+      variables: z
+        .array(
+          z.object({
+            name: z.string(),
+            type: z.string().describe('Compact type: "float", "int", "bool", "text", "object:Texture2D", "struct:S_Item", "enum:E_State".'),
+            defaultValue: z.string().optional(),
+          })
+        )
+        .optional()
+        .describe("Member variables. Added before any graph logic that might reference them."),
+      components: z
+        .array(
+          z.object({
+            componentClass: z.string().describe('e.g. "StaticMeshComponent", "SphereComponent", "AudioComponent", "NiagaraComponent".'),
+            name: z.string(),
+            parent: z.string().optional().describe("Attach under this component instead of the root."),
+            properties: z.record(z.string()).optional().describe('Properties to set, e.g. {"SphereRadius":"120"}.'),
+          })
+        )
+        .optional()
+        .describe("Components, with their properties set for you."),
+      handlers: z
+        .array(
+          z.object({
+            event: z.string().describe('"BeginPlay", "Tick", "ActorBeginOverlap", or any name for a Custom Event.'),
+            actions: z
+              .array(
+                z.object({
+                  function: z.string(),
+                  className: z.string().optional().describe("Looked up in the live engine when omitted."),
+                  params: z.record(z.string()).optional(),
+                })
+              )
+              .describe("What happens, in order. The execution chain is wired for you."),
+          })
+        )
+        .optional()
+        .describe("Event logic. No pin names, refs, or connections needed."),
+      save: z.boolean().optional().describe("Save at the end. Defaults to true."),
+    },
+  },
+  async ({ packagePath, parentClass, variables, components, handlers, save }) => {
+    try {
+      const result = await scaffoldBlueprint(bridge, {
+        packagePath,
+        parentClass,
+        variables,
+        components,
+        handlers,
+        save,
+      });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

@@ -57,6 +57,45 @@ is left is model capability.
 That is useful to know precisely because it is a boundary the tooling cannot move, and it says what
 to target: single-step-per-turn use, or a larger model.
 
+## Making one call do the whole job: 0/5 to 2/5
+
+The failure above is not fixable from inside a tool: a small model cannot hold a plan across turns.
+But it can be made irrelevant. If the problem is "cannot reliably make four calls in sequence", the
+answer is a call that does all four.
+
+`unreal_scaffold_blueprint` takes a whole Blueprint — parent class, variables, components, event
+handlers — and builds it in the right order: state before behaviour, one compile at the end, then
+layout, review, and save. A model that manages exactly one successful tool call now finishes a
+whole feature.
+
+**Result: 0/5 became 2/5** on the same task, same model, same hardware.
+
+Two things were needed, and only one of them was the tool:
+
+**The tool.** Collapsing four steps into one removes the thing the model is bad at.
+
+**A pointer from where the model was already looking.** Adding the tool changed nothing at first —
+the model kept calling `unreal_create_blueprint`, because that is what it knew. The fix was one
+line at the top of `create_blueprint`'s own description: *if you also need variables, components,
+or event logic, use `unreal_scaffold_blueprint` instead*. That is the second time in this benchmark
+that a better path went unused until it was advertised at the point of confusion, which makes it a
+pattern rather than an anecdote.
+
+2/5 is honest progress, not success. The model still sometimes creates an empty Blueprint and
+declares victory. But it is the first movement on this number, and it came from changing the shape
+of the work rather than from a better prompt.
+
+### A real behaviour worth knowing: deleted names stay taken
+
+While measuring this, runs started failing with `asset_name_in_use` on names that had definitely
+been deleted. The package is gone from disk, but **the editor's undo buffer still holds a reference
+to the object**, so garbage collection cannot reclaim the name until the editor restarts.
+
+That is correct engine behaviour, and the bridge reports it accurately rather than crashing (the
+alternative — creating over a resident object — asserts and closes the editor). It is worth knowing
+because delete-then-recreate-the-same-name is an ordinary thing to want, and the answer is either a
+different name or an editor restart.
+
 ## Which model tier actually works
 
 Three models, on the same 12 GB card:
