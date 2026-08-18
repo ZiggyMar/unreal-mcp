@@ -772,6 +772,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleProjectHealth(Params);
 	}
+	else if (Cmd == TEXT("asset_status"))
+	{
+		Response = HandleAssetStatus(Params);
+	}
 	else
 	{
 		Response = MakeErrorResponse(FString::Printf(TEXT("unknown_cmd: %s"), *Cmd));
@@ -5519,4 +5523,97 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleProjectHealth(const TSharedPtr
 	// Same as every other index-backed command: build it if this is the first query of the session.
 	FMCPProjectIndex::Get().EnsureBuilt();
 	return MakeOkResponse(FMCPProjectIndex::Get().GetHealthReport(MaxPerCategory));
+}
+
+
+/**
+ * Can this asset actually be written, and if not, why?
+ *
+ * Asked BEFORE the work rather than after. A Blueprint is a binary .uasset that cannot be merged,
+ * so on a team project it is locked by whoever checked it out, and the failure only surfaces at
+ * save time - after an agent has spent a whole sequence of edits on it. Finding out first turns a
+ * wasted session into one sentence: "BP_Door is checked out by alice, so I cannot save changes to
+ * it; do you want me to work on something else?"
+ *
+ * Deliberately a separate command rather than a check inside every write: querying source control
+ * can hit the network, and paying that on every node placement would make the common case slow to
+ * protect the uncommon one.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAssetStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	FString PackageName = Path;
+	int32 DotIndex;
+	if (PackageName.FindLastChar('.', DotIndex))
+	{
+		PackageName.LeftInline(DotIndex);
+	}
+
+	const FString FileName = FPackageName::LongPackageNameToFilename(
+		PackageName, FPackageName::GetAssetPackageExtension());
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("file"), FileName);
+
+	const bool bExistsOnDisk = FPaths::FileExists(FileName);
+	Result->SetBoolField(TEXT("existsOnDisk"), bExistsOnDisk);
+	if (!bExistsOnDisk)
+	{
+		// Unsaved but in memory is a normal state, not a problem.
+		Result->SetBoolField(TEXT("writable"), true);
+		Result->SetStringField(TEXT("reason"), TEXT("not yet saved to disk, so nothing can be blocking a write"));
+		return MakeOkResponse(Result);
+	}
+
+	const bool bReadOnly = IFileManager::Get().IsReadOnly(*FileName);
+	Result->SetBoolField(TEXT("readOnly"), bReadOnly);
+
+	if (!USourceControlHelpers::IsEnabled())
+	{
+		Result->SetBoolField(TEXT("writable"), !bReadOnly);
+		Result->SetStringField(TEXT("reason"), bReadOnly
+			? TEXT("the file is read-only and this project has no source control configured; check the file's "
+				"attributes")
+			: TEXT("writable; no source control on this project"));
+		return MakeOkResponse(Result);
+	}
+
+	Result->SetBoolField(TEXT("sourceControlled"), true);
+	if (!USourceControlHelpers::IsAvailable())
+	{
+		Result->SetBoolField(TEXT("writable"), !bReadOnly);
+		Result->SetStringField(TEXT("reason"),
+			TEXT("source control is configured but not connected, so a checkout cannot be obtained. Reconnect it "
+				"in the editor before making changes you intend to keep."));
+		return MakeOkResponse(Result);
+	}
+
+	// Two-argument form: 5.8 adds an optional cache flag that 5.6 does not have, and the defaults
+	// differ, so only the shared part of the signature is used.
+	const FSourceControlState State = USourceControlHelpers::QueryFileState(FileName, /*bSilent=*/true);
+	Result->SetBoolField(TEXT("checkedOutByMe"), State.bIsCheckedOut);
+	Result->SetBoolField(TEXT("checkedOutByOther"), State.bIsCheckedOutOther);
+	if (State.bIsCheckedOutOther)
+	{
+		Result->SetStringField(TEXT("checkedOutBy"), State.CheckedOutOther);
+		Result->SetBoolField(TEXT("writable"), false);
+		Result->SetStringField(TEXT("reason"), FString::Printf(
+			TEXT("checked out by %s. A Blueprint is a binary asset, so it cannot be merged afterwards - editing it "
+				"now means one of you loses the work. Ask them to check it in, or work on something else, and say "
+				"so rather than editing anyway."),
+			*State.CheckedOutOther));
+		return MakeOkResponse(Result);
+	}
+
+	Result->SetBoolField(TEXT("writable"), true);
+	Result->SetStringField(TEXT("reason"), State.bIsCheckedOut
+		? TEXT("checked out by you; saving will work")
+		: TEXT("not checked out, but it can be checked out automatically when saving"));
+	return MakeOkResponse(Result);
 }
