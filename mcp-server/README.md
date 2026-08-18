@@ -159,6 +159,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_create_function` | `create_function` | Create a function graph with typed inputs/outputs; returns the entry (and result) node ids to wire immediately. |
 | `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
 | `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |
+| `unreal_review_blueprint` | *(composed: `list_blueprint_graphs` + `read_blueprint_graph_summary`)* | The quality gate: dead nodes, unhandled cast failures, leftover debug prints, placeholder names, heavy Tick, unlabelled sections. Returns findings with fixes, a score, and one `nextAction`. |
 | `unreal_refresh_blueprint` | `refresh_blueprint` | The "right-click > Refresh Nodes" repair: every node re-reads its backing signature. The fix for the whole `in use pin no longer exists` family after a C++ change. |
 | `unreal_delete_asset` | `delete_asset` | Delete assets by path, **blocked by default** if anything outside the delete set still references them, with the blocking referencers reported. |
 
@@ -216,6 +217,56 @@ an overlap check asserted over every pair of placed nodes. `npm test` runs them.
 One honest limitation: each node move is its own editor transaction, because the layout is
 composed client-side from existing bridge commands. Undoing a layout therefore takes several
 Ctrl+Z presses rather than one. A batched move command in the plugin would fix it.
+
+### The quality gate: compiling is not the bar
+
+`unreal_review_blueprint` reports what a senior Unreal developer would flag in review, computed
+from one cheap read per graph:
+
+- **dead-node** - nodes wired to nothing, shipped anyway
+- **unhandled-cast-failure** - a Cast with its `Cast Failed` path unwired. Silent: the rest of the
+  chain simply never runs, and it is the hardest Blueprint bug for a beginner to diagnose
+- **debug-print-left-in** - `Print String` still in the graph
+- **placeholder-name** - variables still called `NewVar`, `Temp`, `Test`
+- **empty-event** - an event with nothing wired to it: an intention never finished
+- **tick-heavy** - real work running every frame
+- **graph-too-large** / **long-exec-chain** - should have been extracted into named functions
+- **unlabelled-sections** - more execution chains than comment boxes
+- **branch-dead-path** - a Branch with only one of True/False wired
+
+Each finding carries the concrete fix and the node ids to apply it to. The report includes a
+0-100 score and a single `nextAction` naming the one thing most worth doing next, because a caller
+handed ten equal priorities picks none of them.
+
+**`unreal_build_graph` attaches this review to its own result, unasked.** That is the point: the
+model most in need of the feedback is exactly the model that would never think to ask for it. A
+weak model does not usually fail from lack of capability, it fails because nothing ever objects to
+what it wrote, so it declares victory. Compilation is a very low bar to clear: a graph full of dead
+nodes, unhandled cast failures, and leftover debug prints compiles perfectly.
+
+Every check is deliberately conservative. A false positive teaches a model to distrust the whole
+report, which costs more than a missed finding.
+
+### Tool profiles, for small-context models
+
+Tool definitions are paid for on every request, before the user's message is read. The full set is
+39 tools and roughly 11.8k tokens of standing cost. On a 200k-context model that is noise; on an
+8k or 32k local model it is the difference between usable and unusable.
+
+The instructive descriptions are not the thing to cut, because they are why a weaker model
+succeeds at all. So rather than making every user's tools worse, set:
+
+```
+UNREAL_MCP_PROFILE=core
+```
+
+which exposes 16 tools for about 5.0k tokens, a 58% reduction, and still keeps a straight line
+through the whole job: orient, search, read, find the exact node, create the Blueprint, add
+variables and functions, build the graph, compile, lay out, review, save. What it drops is the
+single-node editing tools (`unreal_build_graph` does that job in one call), the level / actor /
+component / PIE surface, and the maintenance tools.
+
+The default is `full`. The active profile and tool count are printed to stderr on startup.
 
 ### Tool parity is enforced, not assumed
 

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
+import { reviewBlueprint } from "./review.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -44,6 +45,59 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
+/**
+ * Tool profile: which tools this server exposes.
+ *
+ * Tool definitions are paid for on every single request, before the user's message is even read.
+ * At 39 tools with descriptions written to actually teach a model the sequencing, that is roughly
+ * 11k tokens of standing cost. On a 200k-context model that is noise. On an 8k or 32k local model
+ * it is the difference between usable and unusable, and "works with any model" is the point.
+ *
+ * The instructive descriptions are NOT the thing to cut: they are why a weaker model succeeds at
+ * all. So instead of making every user's tools worse, a user on a small-context model can opt into
+ * a smaller set. "core" keeps a straight line through authoring a Blueprint feature and reviewing
+ * it, and drops the single-node editing tools (unreal_build_graph does that job in one call), the
+ * level/actor/component/PIE surface, and the maintenance tools.
+ *
+ * Set UNREAL_MCP_PROFILE=core to use it. The default is "full".
+ */
+const CORE_PROFILE_TOOLS = new Set([
+  "unreal_ping",
+  "unreal_get_project_overview",
+  "unreal_search_project",
+  "unreal_list_blueprints",
+  "unreal_list_blueprint_graphs",
+  "unreal_read_blueprint_summary",
+  "unreal_find_node",
+  "unreal_get_node_signature",
+  "unreal_create_blueprint",
+  "unreal_create_function",
+  "unreal_add_variable",
+  "unreal_build_graph",
+  "unreal_compile_blueprint",
+  "unreal_save_blueprint",
+  "unreal_auto_layout_graph",
+  "unreal_review_blueprint",
+]);
+
+const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
+const registeredToolNames: string[] = [];
+
+/**
+ * registerTool, gated by the active profile.
+ *
+ * Typed as the SDK's own registerTool so every call site keeps full inference on its zod schema
+ * and handler arguments; a skipped tool returns an inert handle rather than being special-cased
+ * at each of the 39 call sites.
+ */
+const register: typeof server.registerTool = ((name: string, config: never, handler: never) => {
+  if (PROFILE === "core" && !CORE_PROFILE_TOOLS.has(name)) {
+    return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
+  }
+  registeredToolNames.push(name);
+  return server.registerTool(name, config, handler);
+}) as typeof server.registerTool;
+
 function jsonResult(value: unknown) {
   return {
     content: [
@@ -68,7 +122,7 @@ function errorResult(err: unknown) {
   };
 }
 
-server.registerTool(
+register(
   "unreal_ping",
   {
     title: "Ping Unreal MCP Bridge",
@@ -87,7 +141,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_list_blueprints",
   {
     title: "List Unreal Blueprints",
@@ -112,7 +166,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_list_blueprint_graphs",
   {
     title: "List a Blueprint's graphs",
@@ -134,7 +188,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_read_blueprint_summary",
   {
     title: "Read a Blueprint graph summary",
@@ -160,7 +214,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_read_node_detail",
   {
     title: "Read full detail for one Blueprint node",
@@ -193,7 +247,7 @@ server.registerTool(
 // plus a call to the bridge. All the actual Blueprint-editing logic lives in the C++ plugin
 // (MCPCommandHandler.cpp). This file never touches engine state directly.
 
-server.registerTool(
+register(
   "unreal_create_blueprint",
   {
     title: "Create a new Blueprint asset",
@@ -227,7 +281,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_add_node",
   {
     title: "Add a node to a Blueprint graph",
@@ -293,7 +347,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_connect_pins",
   {
     title: "Connect two Blueprint node pins",
@@ -327,7 +381,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_set_pin_default_value",
   {
     title: "Set a literal default value on an unconnected input pin",
@@ -358,7 +412,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_remove_node",
   {
     title: "Remove a node from a Blueprint graph",
@@ -379,7 +433,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_add_variable",
   {
     title: "Add a member variable to a Blueprint",
@@ -413,7 +467,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_compile_blueprint",
   {
     title: "Compile a Blueprint and report errors/warnings",
@@ -437,7 +491,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_save_blueprint",
   {
     title: "Save a Blueprint's package to disk",
@@ -465,7 +519,7 @@ server.registerTool(
 // incrementally-updated index on the C++ side (FMCPProjectIndex), not a live re-scan per
 // call. See ../ARCHITECTURE.md and docs/M3_STATUS.md.
 
-server.registerTool(
+register(
   "unreal_get_project_overview",
   {
     title: "Get a cheap project-wide overview",
@@ -487,7 +541,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_search_project",
   {
     title: "Search the project-wide Blueprint index",
@@ -520,7 +574,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_find_references",
   {
     title: "Find what references, and is referenced by, an asset",
@@ -547,7 +601,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_find_node",
   {
     title: "Find the exact Blueprint node/function for an intent",
@@ -577,7 +631,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_get_node_signature",
   {
     title: "Get a Blueprint function's exact pins and parameter types",
@@ -609,7 +663,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_build_graph",
   {
     title: "Build a piece of graph in one atomic call",
@@ -684,7 +738,19 @@ server.registerTool(
       }
       try {
         const layout = await autoLayoutGraph(bridge, path, graphName, { addCommentBoxes: false });
-        return jsonResult({ ...result, layout: { nodesMoved: layout.nodesMoved, columns: layout.columns } });
+        // Review the graph we just built and hand the findings back unasked. A model that never
+        // calls unreal_review_blueprint is exactly the model that most needs to hear this.
+        const review = await reviewBlueprint(bridge, path, graphName);
+        return jsonResult({
+          ...result,
+          layout: { nodesMoved: layout.nodesMoved, columns: layout.columns },
+          review: {
+            score: review.score,
+            summary: review.summary,
+            nextAction: review.nextAction,
+            findings: review.graphs.flatMap((graph) => graph.findings),
+          },
+        });
       } catch (layoutErr) {
         return jsonResult({
           ...result,
@@ -697,7 +763,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_delete_asset",
   {
     title: "Delete one or more assets, with reference safety",
@@ -723,7 +789,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_refresh_blueprint",
   {
     title: "Refresh a Blueprint's nodes after a C++ change",
@@ -749,7 +815,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_create_function",
   {
     title: "Create a function in a Blueprint",
@@ -783,7 +849,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_organize_graph",
   {
     title: "Organize a Blueprint graph: comments and layout",
@@ -829,7 +895,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_list_assets",
   {
     title: "List project assets of a class",
@@ -856,7 +922,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_create_level",
   {
     title: "Create a new Level (World) asset",
@@ -880,7 +946,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_open_level",
   {
     title: "Open a Level in the editor",
@@ -902,7 +968,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_spawn_actor",
   {
     title: "Spawn an actor into the open level",
@@ -937,7 +1003,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_save_level",
   {
     title: "Save the open Level to disk",
@@ -956,7 +1022,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_add_component",
   {
     title: "Add a component to a Blueprint",
@@ -983,7 +1049,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_list_components",
   {
     title: "List a Blueprint's components",
@@ -1006,7 +1072,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_set_component_property",
   {
     title: "Set a property on a Blueprint component",
@@ -1034,7 +1100,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_set_class_default",
   {
     title: "Set a Blueprint class default (CDO property)",
@@ -1060,7 +1126,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_set_game_settings",
   {
     title: "Set project GameMode and startup maps",
@@ -1084,7 +1150,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_add_input_mapping",
   {
     title: "Add a project input mapping",
@@ -1111,7 +1177,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_start_pie",
   {
     title: "Start Play In Editor",
@@ -1136,7 +1202,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_stop_pie",
   {
     title: "Stop Play In Editor",
@@ -1156,7 +1222,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_pie_status",
   {
     title: "Check whether PIE is running",
@@ -1175,7 +1241,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+register(
   "unreal_auto_layout_graph",
   {
     title: "Auto-layout a graph and label its sections",
@@ -1221,10 +1287,44 @@ server.registerTool(
   }
 );
 
+register(
+  "unreal_review_blueprint",
+  {
+    title: "Review a Blueprint for the things a senior developer would flag",
+    description:
+      "The quality gate. Compiling only proves a graph is valid: a Blueprint full of dead nodes, unhandled cast " +
+      "failures, leftover Print String debug, placeholder variable names, and per-frame work in Event Tick compiles " +
+      "perfectly and is still not finished work. This reads the graphs and reports exactly those things, each with " +
+      "the concrete fix and the node ids to fix it on, plus a 0-100 score and a single `nextAction` naming the one " +
+      "thing most worth doing next.\n\n" +
+      "**Call this before you tell the user a feature is done, and act on what it says.** It costs one cheap read " +
+      "per graph, changes nothing, and it is the only feedback available on whether the work is actually good " +
+      "rather than merely valid. If you skip it you are grading your own homework.",
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      graphName: z.string().optional().describe("Review only this graph. Omit to review every graph in the Blueprint."),
+    },
+  },
+  async ({ path, graphName }) => {
+    try {
+      const result = await reviewBlueprint(bridge, path, graphName);
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}`);
+  console.error(
+    `unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}; ` +
+      `profile "${PROFILE}" with ${registeredToolNames.length} tools`
+  );
+  if (PROFILE !== "core" && PROFILE !== "full") {
+    console.error(`unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: core, full.`);
+  }
 }
 
 main().catch((err) => {
