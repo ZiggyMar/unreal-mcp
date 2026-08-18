@@ -143,6 +143,35 @@ export async function runDoctor(
     });
   }
 
+  // 2b. Source control, because it decides whether a save can succeed at all.
+  const scEnabled = (ping as PingResult & { sourceControlEnabled?: boolean }).sourceControlEnabled;
+  const scAvailable = (ping as PingResult & { sourceControlAvailable?: boolean }).sourceControlAvailable;
+  if (scEnabled === undefined) {
+    // An older plugin: not worth reporting as a problem.
+  } else if (!scEnabled) {
+    checks.push({
+      name: "source control",
+      status: "ok",
+      detail: "Not enabled for this project, so saving is never blocked by a checkout.",
+    });
+  } else if (scAvailable) {
+    checks.push({
+      name: "source control",
+      status: "ok",
+      detail: "Enabled and connected; files are checked out automatically when saving.",
+    });
+  } else {
+    checks.push({
+      name: "source control",
+      status: "warn",
+      detail: "Enabled for this project but not currently connected.",
+      remedy:
+        "Saves will fail on any file that is not already checked out, because an un-checked-out file is " +
+        "read-only on disk. Reconnect source control in the editor before making changes you intend to keep - " +
+        "edits stay live in the editor either way, but they cannot be written.",
+    });
+  }
+
   // 3. Is the editor responsive, or is it grinding?
   if (latencyMs > SLOW_PING_MS) {
     checks.push({

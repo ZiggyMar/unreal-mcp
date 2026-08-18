@@ -73,6 +73,8 @@
 #include "Engine/Texture.h"
 #include "EngineUtils.h"
 #include "Editor/Transactor.h"
+#include "SourceControlHelpers.h"
+#include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ObjectTools.h"
@@ -138,6 +140,38 @@ namespace
 
 		const FString PackageFileName = FPackageName::LongPackageNameToFilename(
 			Package->GetName(), FPackageName::GetAssetPackageExtension());
+
+		// Source control makes an un-checked-out file READ-ONLY on disk, and a Blueprint is a binary
+		// .uasset that cannot be text-merged, so this is the point where an agent quietly loses work
+		// on any real team project. Check the file out if we can, and refuse with an explanation if
+		// we cannot, rather than failing with "save_failed" and leaving the caller to guess.
+		if (FPaths::FileExists(PackageFileName) &&
+			IFileManager::Get().IsReadOnly(*PackageFileName))
+		{
+			if (USourceControlHelpers::IsEnabled() && USourceControlHelpers::IsAvailable())
+			{
+				if (!USourceControlHelpers::CheckOutFile(PackageFileName, /*bSilent=*/true))
+				{
+					OutError = FString::Printf(
+						TEXT("checkout_failed: '%s' is read-only and source control refused to check it out. ")
+						TEXT("Someone else most likely has it checked out - Blueprints are binary assets, so two ")
+						TEXT("people cannot edit one safely. Nothing was saved; the edits are still in the editor. ")
+						TEXT("Resolve the checkout, then save again."),
+						*PackageFileName);
+					return false;
+				}
+			}
+			else
+			{
+				OutError = FString::Printf(
+					TEXT("file_read_only: '%s' is read-only and source control is not available to check it out. ")
+					TEXT("This usually means the project is under Perforce or similar and the file is not checked ")
+					TEXT("out to you. Nothing was saved; the edits are still live in the editor, so check the file ")
+					TEXT("out and save again rather than redoing the work."),
+					*PackageFileName);
+				return false;
+			}
+		}
 
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
@@ -764,6 +798,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandlePing(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("project"), FApp::GetProjectName());
 	Result->SetStringField(TEXT("projectFile"), FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()));
 	Result->SetStringField(TEXT("engineVersion"), FEngineVersion::Current().ToString(EVersionComponent::Patch));
+	// Source control state, because it decides whether a save can succeed at all: an un-checked-out
+	// file is read-only, and a Blueprint is a binary asset nobody can merge afterwards.
+	Result->SetBoolField(TEXT("sourceControlEnabled"), USourceControlHelpers::IsEnabled());
+	Result->SetBoolField(TEXT("sourceControlAvailable"),
+		USourceControlHelpers::IsEnabled() && USourceControlHelpers::IsAvailable());
 	return MakeOkResponse(Result);
 }
 
