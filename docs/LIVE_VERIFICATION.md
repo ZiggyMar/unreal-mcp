@@ -123,3 +123,48 @@ It is not really about engine versions. It is the same rule the rest of this pro
 rediscovering: **a check that can be skipped by a person having a bad day is not a check.** The
 parity guard, the docs guard, the profile budget and this all exist for the same reason, and each
 was added after the thing it prevents had already happened at least once.
+
+## Behaving like a strict client
+
+Every measurement in this project has been taken through its own benchmark harness or through Claude
+Code. Both are lenient in ways a stricter client is not, and **every bug found by changing vantage
+point was invisible from the old one** - a real project instead of a scratch one, a stranger's clone
+instead of the working copy. The harness alone has been wrong four times in ways that looked exactly
+like product failures.
+
+So `npm run check:protocol` behaves like a client that forgives nothing. It needs no editor, because
+all of it is protocol rather than engine.
+
+It checks the handshake (`protocolVersion`, `serverInfo`, declared capabilities), every tool's name
+and schema, how failures come back, the prompts surface, and concurrency.
+
+### The one that would have hurt
+
+This server enables tools at runtime and sends `notifications/tools/list_changed`. **A client only
+re-reads the tool list if the server declared `capabilities.tools.listChanged`.** Undeclared, every
+lazily-enabled tool stays invisible and `unreal_enable_tools` silently does nothing - which is
+precisely the failure the benchmark harness had, arrived at from the other side.
+
+It turned out to be declared correctly. That is a guard now rather than a fix.
+
+### What it found: nothing
+
+Worth stating plainly, because a check that finds nothing is usually reported as if it had never
+been run. The handshake is correct, all 73 tool names and schemas are well-formed, wrongly-typed and
+missing arguments both come back as error *results* rather than JSON-RPC errors, all three prompts
+round-trip, and four concurrent requests each return matched to their own id.
+
+### Proving the checker is not vacuous
+
+A checker nobody has ever seen fail is a checker nobody should believe - and this project has already
+shipped one fixture that lied. So the server path is overridable, and the check was run against a
+deliberately broken copy with an 86-character tool name:
+
+```
+  - tool name is 86 characters, over the 64 limit: unreal_ping_with_a_deliberately_...
+```
+
+One problem, precisely the injected one, and nothing else. An earlier attempt at the same test put
+the broken copy outside the package, where it could not resolve `node_modules` and simply failed to
+start - which proved only that the checker notices a dead server. Worth the second attempt: the
+weaker version would have looked like success.
