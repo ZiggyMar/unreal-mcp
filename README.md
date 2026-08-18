@@ -67,7 +67,7 @@ every write is undoable with Ctrl+Z under a named "MCP:" transaction. Still outs
 covers `UFunction`-backed nodes; native `UK2Node` types are placed via the dedicated `nodeType`
 values rather than discovered through `unreal_find_node`.
 
-## Quickstart (3-Step Installation)
+## Quickstart (4-Step Installation)
 
 Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
 
