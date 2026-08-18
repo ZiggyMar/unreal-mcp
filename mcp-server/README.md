@@ -212,6 +212,10 @@ One distinction the tools state explicitly because it is the classic level-editi
 
 | Tool | Bridge command | Purpose |
 | --- | --- | --- |
+| `unreal_save_asset` | `save_asset` | Save any asset to disk - struct, enum, material, Data Table. Source-control aware. |
+| `unreal_create_data_table` | `create_data_table` | Create a Data Table backed by a struct. The data-driven route: item 200 is a row, not a rewire. |
+| `unreal_add_data_table_row` | `add_data_table_row` | Add one named row and set its values. Field names are checked before anything is written. |
+| `unreal_list_data_table_rows` | `list_data_table_rows` | Read rows with their values, paged, because a Data Table is the one asset built to get large. |
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
@@ -228,6 +232,33 @@ declare a variable of is decoration: `struct:<Name>` and `enum:<Name>`, accepted
 string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, and struct fields,
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
+
+### Data Tables: the reason structs are worth making
+
+A struct describes what one item *is*; a Data Table holds every item there is. That pairing is the
+standard way Unreal projects keep gameplay data out of Blueprints, and it is the difference between
+adding the two-hundredth item being a row and it being new graph work. The Blueprint that reads the
+table does not change when the data does.
+
+```
+create_struct   /Game/Data/S_Item      fields: DisplayName (text), Value (int), Icon (object:Texture2D)
+create_data_table /Game/Data/DT_Items  rowStruct: /Game/Data/S_Item
+add_data_table_row  DT_Items  "Potion"  {"DisplayName":"Health Potion","Value":"25"}
+```
+
+Three deliberate behaviours:
+
+**Field names are validated before the row is written.** A half-populated row is worse than a
+refusal, because it looks correct in the editor and only reveals itself as wrong during play. An
+unknown field name comes back with the list of real ones.
+
+**The stored row is read back, not echoed.** A value the engine coerced or rejected would otherwise
+be reported as though it had been stored exactly as sent — the same mistake `create_enum` made
+before it was caught.
+
+**Reads are paged, defaulting to 25 rows.** A Data Table is the one asset designed to get large, so
+returning nine hundred rows of item data would cost more context than the question that needed
+them. The total and the next offset come back with every page.
 
 `unreal_create_struct` validates every field type **before** creating the asset, so a typo in the
 fifth field fails cleanly instead of leaving a half-built struct in the project for someone to find

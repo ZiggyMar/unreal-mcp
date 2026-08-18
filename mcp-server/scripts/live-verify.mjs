@@ -115,6 +115,90 @@ async function main() {
     return names.join(", ");
   });
 
+  // --- Data Tables ---------------------------------------------------------------------------
+  section("data tables");
+  const tablePath = `${ROOT}/DT_MCPVerifyItems`;
+  await check("create_data_table backed by the struct just made", async () => {
+    const r = await bridge.send("create_data_table", { packagePath: tablePath, rowStruct: structPath });
+    // The row field names come back so a caller can add rows without a second lookup; if that
+    // stops working, a weak model has to guess field names, which is where rows go wrong.
+    if (!r.rowFields || r.rowFields.length < 3) {
+      throw new Error(`expected the row fields to be reported, got ${JSON.stringify(r.rowFields)}`);
+    }
+    return `${r.name} rows: ${r.rowFields.join(", ")}`;
+  });
+
+  await check("add_data_table_row stores the values it was given", async () => {
+    const r = await bridge.send("add_data_table_row", {
+      path: `${tablePath}.DT_MCPVerifyItems`,
+      rowName: "Potion",
+      values: { DisplayName: "Health Potion", Count: "25" },
+    });
+    if (r.rowCount !== 1) throw new Error(`expected 1 row, got ${r.rowCount}`);
+    // Read back, not echoed. This is the check that would have caught the create_enum bug.
+    if (!JSON.stringify(r.values).includes("25")) {
+      throw new Error(`the stored row does not contain the value that was set: ${JSON.stringify(r.values)}`);
+    }
+    if (r.fieldsNotSet) throw new Error(`fields were rejected: ${JSON.stringify(r.fieldsNotSet)}`);
+    return JSON.stringify(r.values);
+  });
+
+  await expectFailure(
+    "add_data_table_row refuses an unknown field instead of writing half a row",
+    "add_data_table_row",
+    { path: `${tablePath}.DT_MCPVerifyItems`, rowName: "Bad", values: { NotAField: "x" } },
+    "unknown_field"
+  );
+  await check("...and did not leave the rejected row behind", async () => {
+    const r = await bridge.send("list_data_table_rows", { path: `${tablePath}.DT_MCPVerifyItems` });
+    if (r.rowCount !== 1) throw new Error(`expected the table to still have 1 row, got ${r.rowCount}`);
+    return `${r.rowCount} row`;
+  });
+
+  await expectFailure(
+    "add_data_table_row refuses a duplicate row name with a specific error",
+    "add_data_table_row",
+    { path: `${tablePath}.DT_MCPVerifyItems`, rowName: "Potion" },
+    "row_already_exists"
+  );
+
+  await check("list_data_table_rows pages rather than returning everything", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await bridge.send("add_data_table_row", {
+        path: `${tablePath}.DT_MCPVerifyItems`,
+        rowName: `Filler${i}`,
+        values: { Count: String(i) },
+      });
+    }
+    const r = await bridge.send("list_data_table_rows", { path: `${tablePath}.DT_MCPVerifyItems`, limit: 2 });
+    if (r.rows.length !== 2) throw new Error(`limit ignored: got ${r.rows.length} rows`);
+    if (r.rowCount !== 6) throw new Error(`expected 6 rows total, got ${r.rowCount}`);
+    // A truncated list that does not say it is truncated is how a caller silently reasons about
+    // data that is not there.
+    if (r.nextOffset !== 2) throw new Error(`expected nextOffset 2, got ${r.nextOffset}`);
+    return `${r.rows.length} of ${r.rowCount}, next at ${r.nextOffset}`;
+  });
+
+  await check("save_asset persists a Data Table, which save_blueprint never could", async () => {
+    // Everything non-Blueprint this server creates was previously dirty-in-memory only: an agent
+    // would report the work finished and a crash would erase it.
+    const r = await bridge.send("save_asset", { path: `${tablePath}.DT_MCPVerifyItems` });
+    if (!r.saved) throw new Error("not saved");
+    return `${r.class} saved to disk`;
+  });
+
+  await check("save_asset works on a struct too", async () => {
+    const r = await bridge.send("save_asset", { path: `${structPath}.S_MCPVerifyItem` });
+    return `${r.class} saved`;
+  });
+
+  await expectFailure(
+    "create_data_table refuses a struct that cannot be a row",
+    "create_data_table",
+    { packagePath: `${ROOT}/DT_ShouldNotExist`, rowStruct: "Vector" },
+    "invalid_row_struct"
+  );
+
   await expectFailure(
     "add_struct_field rejects a native engine struct",
     "add_struct_field",
@@ -819,6 +903,7 @@ async function main() {
           `${bpPath}.BP_MCPVerify`,
           `${widgetPath}.W_MCPVerify`,
           `${structPath}.S_MCPVerifyItem`,
+          `${tablePath}.DT_MCPVerifyItems`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,
           `${instPath}.MI_MCPVerify`,
