@@ -93,6 +93,11 @@ private:
 	static TSharedRef<FJsonObject> HandleAddWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListWidgets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetWidgetProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCreateStruct(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleAddStructField(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListStructFields(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCreateEnum(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListEnumEntries(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
@@ -123,6 +128,13 @@ private:
 	// Loads a Widget Blueprint specifically, failing with what was found instead when the path
 	// points at an ordinary Blueprint.
 	static class UWidgetBlueprint* LoadWidgetBlueprint(const FString& Path, FString& OutError);
+
+	// Resolves a struct by short asset name, full path, or engine name. Covers both native
+	// engine structs and the project's own UUserDefinedStruct assets.
+	static UScriptStruct* ResolveStructByName(const FString& Name, FString& OutError);
+
+	// Resolves an enum the same way, for enum:<Name> variable types.
+	static UEnum* ResolveEnumByName(const FString& Name, FString& OutError);
 
 	// Parses a compact type descriptor (see add_variable / set_pin_default_value docs in
 	// mcp-server) into an FEdGraphPinType: bool, byte, int, int64, float, double, string,
