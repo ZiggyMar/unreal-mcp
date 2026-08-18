@@ -547,6 +547,29 @@ async function main() {
     }
   });
 
+  await check("C3: writes really do land in the editor's undo stack as named MCP transactions", async () => {
+    // Claimed since M2 and never checked from outside the process. A safety guarantee nobody has
+    // exercised is a guarantee in name only.
+    const bp = `${ROOT}/BP_Undo`;
+    await freshBlueprint(bp, "BP_Undo");
+    try {
+      await bridge.send("add_variable", { path: `${bp}.BP_Undo`, variableName: "AuditVar", type: "float" });
+      const history = await bridge.send("undo_history", { maxResults: 10 });
+      if (history.fromMCP < 1) {
+        throw new Error(
+          `no MCP transaction in the undo stack, so the Ctrl+Z claim is false: ${JSON.stringify(history.entries)}`
+        );
+      }
+      const top = history.entries[0];
+      if (!top.fromMCP) {
+        throw new Error(`the newest undo entry is not ours: ${JSON.stringify(top)}`);
+      }
+      return `${history.fromMCP} MCP entries, next Ctrl+Z reverses "${top.title}"`;
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_Undo`], force: true }).catch(() => {});
+    }
+  });
+
   await check("B3: refresh_blueprint runs and reports before/after error counts", async () => {
     const bp = `${ROOT}/BP_Refresh`;
     await freshBlueprint(bp, "BP_Refresh");

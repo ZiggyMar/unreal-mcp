@@ -19,7 +19,8 @@
     "fuzz:crash": "node scripts/fuzz-nodes.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "verify:handbook": "node scripts/verify-handbook.mjs",
-    "measure:cost": "node scripts/measure-cost.mjs"
+    "measure:cost": "node scripts/measure-cost.mjs",
+    "verify:restart": "node scripts/verify-restart.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
