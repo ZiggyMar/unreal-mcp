@@ -32,7 +32,11 @@ import type {
 const BRIDGE_HOST = process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1";
 const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
 
-const bridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT });
+// Left unset, each command gets a timeout sized to what it actually costs on the game thread
+// (see COMMAND_TIMEOUTS_MS in bridgeClient.ts). Set this only to force a single flat timeout.
+const TIMEOUT_OVERRIDE_MS = process.env.UNREAL_MCP_TIMEOUT_MS ? Number(process.env.UNREAL_MCP_TIMEOUT_MS) : undefined;
+
+const bridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT, timeoutMs: TIMEOUT_OVERRIDE_MS });
 
 const server = new McpServer({
   name: "unreal-mcp-server",
