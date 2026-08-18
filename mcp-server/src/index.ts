@@ -12,6 +12,7 @@ import { SessionJournal, isWrite } from "./journal.js";
 import { mapSystem } from "./systemMap.js";
 import { planFeature } from "./planFeature.js";
 import { cleanupBlueprint } from "./cleanup.js";
+import { addEventHandler } from "./eventHandler.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -138,6 +139,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_create_function",
   "unreal_add_variable",
   "unreal_build_graph",
+  "unreal_add_event_handler",
   "unreal_compile_blueprint",
   "unreal_save_blueprint",
   "unreal_auto_layout_graph",
@@ -822,7 +824,9 @@ register(
   {
     title: "Build a piece of graph in one atomic call",
     description:
-      "The preferred way to author Blueprint logic: many nodes, connections, and pin defaults in ONE call, inside one " +
+      "For a plain \"when X happens, do these in order\" chain, use unreal_add_event_handler instead: it wires the " +
+      "exec pins for you. Use this for branches, loops, and data wiring. " +
+      "The general way to author Blueprint logic: many nodes, connections, and pin defaults in ONE call, inside one " +
       "editor transaction. If any step fails, the entire batch rolls back and the graph is exactly as it was, so you " +
       "retry the whole call with the fix instead of reasoning about partial state. The response maps each of your " +
       "refs to its created node id, and the Blueprint is compiled at the end by default (compile: false to skip).\n\n" +
@@ -2320,6 +2324,48 @@ register(
     try {
       const report = await cleanupBlueprint(bridge, path, { removeDeadNodes, labelSections, dryRun });
       return jsonResult(report);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_add_event_handler",
+  {
+    title: "When this happens, do these things",
+    description:
+      "**The easiest way to make something happen, and the first thing to reach for.** Give an event and the calls " +
+      "that should follow, in order; the execution chain is wired for you, so you name no pins, refs, or " +
+      'connections. Events: "BeginPlay", "Tick", "ActorBeginOverlap" map to the engine ones; any other name makes a ' +
+      "Custom Event. A function's class is looked up in the live engine if you omit it, and one this engine does " +
+      "not have is refused before anything is built. Everything lands in one atomic call. " +
+      "For branches, loops, or wiring one node's output into another's input, use unreal_build_graph.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      graphName: z.string().optional().describe('Graph to build in. Defaults to "EventGraph".'),
+      event: z
+        .string()
+        .describe('The trigger: "BeginPlay", "Tick", "ActorBeginOverlap", or any other name to make a Custom Event.'),
+      actions: z
+        .array(
+          z.object({
+            function: z.string().describe('Function to call, e.g. "PrintString".'),
+            className: z.string().optional().describe('Owning class, e.g. "KismetSystemLibrary". Looked up if omitted.'),
+            params: z
+              .record(z.string())
+              .optional()
+              .describe('Input values by pin name, e.g. {"In String":"hello"}. Near-miss pin names are resolved for you.'),
+          })
+        )
+        .describe("What happens, in order. They are chained together for you."),
+      compile: z.boolean().optional().describe("Compile afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, graphName, event, actions, compile }) => {
+    try {
+      const result = await addEventHandler(bridge, path, graphName ?? "EventGraph", event, actions, { compile });
+      return jsonResult(result);
     } catch (err) {
       return errorResult(err);
     }
