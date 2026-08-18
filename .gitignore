@@ -24,3 +24,6 @@ Thumbs.db
 # Scratch
 *.tmp
 
+
+# crash-sweep resume state (per-machine, regenerated on every run)
+mcp-server/.fuzz/
