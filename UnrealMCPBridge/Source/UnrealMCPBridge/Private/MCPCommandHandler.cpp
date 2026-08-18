@@ -557,6 +557,19 @@ static bool CheckWritePathsAllowed(const FString& Cmd, const TSharedPtr<FJsonObj
 
 TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObject>& Request)
 {
+	// Token auth: if UNREAL_MCP_AUTH_TOKEN is set in the environment, reject any
+	// request whose "auth_token" field does not match it exactly.
+	const FString ExpectedToken = FPlatformMisc::GetEnvironmentVariable(TEXT("UNREAL_MCP_AUTH_TOKEN"));
+	if (!ExpectedToken.IsEmpty())
+	{
+		FString ProvidedToken;
+		Request->TryGetStringField(TEXT("auth_token"), ProvidedToken);
+		if (ProvidedToken != ExpectedToken)
+		{
+			return MakeErrorResponse(TEXT("unauthorized"));
+		}
+	}
+
 	const FString Cmd = Request->GetStringField(TEXT("cmd"));
 	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
 	TSharedPtr<FJsonObject> Params;
