@@ -248,6 +248,28 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+### Tested with a local 7B, not just asserted
+
+"Works with any model" is claimed by everything in this space and demonstrated by none of it.
+`npm run bench:local` drives this server with a local model through a real agent loop against a
+live editor, and checks the result against the project rather than the transcript.
+
+With `qwen2.5-coder:7b` on an RTX 3060 that is also running the editor:
+
+- **asset-level tasks pass** - create a Blueprint, add a typed variable, compile, save - including
+  recovering from a name collision by reading the error and renaming, unprompted
+- **graph wiring fails** at this size; the model places nodes but does not reliably connect them
+- **zero malformed arguments and zero invented tool names**, across every run
+- **~16 tok/s**, which is the number that matters because the editor is sharing the GPU
+- **not one call arrived through the structured tool-calling API** - this model emits tool calls as
+  JSON in the message body, so any client driving a small local model has to parse that
+
+The benchmark immediately earned itself: it found the model reissuing one failing call **eleven
+times** because a pin was named `done` instead of `then`. The error already named the right pin,
+which turns out not to be the same thing as being actionable. Pin resolution now accepts a
+near-miss and reports the correction. Full write-up in
+[../docs/LOCAL_MODEL_BENCHMARK.md](../docs/LOCAL_MODEL_BENCHMARK.md).
+
 ### Handbooks, for models that were never trained on Unreal
 
 A capable local model - Qwen, DeepSeek, anything you host yourself - can write logic perfectly
