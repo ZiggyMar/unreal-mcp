@@ -176,6 +176,9 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_create_level` | `create_level` | Create a Level (World) asset, optionally with a GameMode override. |
 | `unreal_open_level` | `open_level` | Load a Level into the editor world. Every actor tool acts on the currently open level. |
 | `unreal_spawn_actor` | `spawn_actor` | Place an actor with a transform and label; `StaticMeshActor` + `staticMesh` blocks out geometry in one call. |
+| `unreal_list_actors` | `list_actors` | Read the open level: every actor's label, class, location, and the Blueprint behind it, plus a per-class census. |
+| `unreal_set_actor_property` | `set_actor_property` | Override a property on one placed instance, without touching the Blueprint it came from. |
+| `unreal_delete_actor` | `delete_actor` | Remove one placed actor from the open level. |
 | `unreal_save_level` | `save_level` | Save the open Level. Spawned actors live only in memory until this runs. |
 | `unreal_add_component` | `add_component` | Add a component to a Blueprint's hierarchy (mesh, collision, camera, spring arm, audio), optionally under a parent component. |
 | `unreal_list_components` | `list_components` | Read the component hierarchy, including components inherited from a parent class. |
@@ -189,6 +192,16 @@ give it a body, configure its class defaults, bind input to it, and actually run
 
 Compiling proves a Blueprint is valid. Running it is the only thing that proves it works, which is
 what `start_pie` is for.
+
+**Reading a level matters as much as writing one.** Spawning into a level you have not read is how a
+project ends up with two PlayerStarts, a second directional light fighting the first, or a duplicate
+of something already there under another name — and on a level someone has spent months dressing,
+that is worse than doing nothing. `unreal_list_actors` also reports which actors are Blueprint
+instances, which is the fastest way to find the ones with logic worth reading.
+
+One distinction the tools state explicitly because it is the classic level-editing mistake:
+`unreal_set_actor_property` changes **one placed instance**; `unreal_set_class_default` changes
+**every instance**. The response says which one just happened.
 
 ### Structs and enums: the refactor a real project gets
 

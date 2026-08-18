@@ -183,6 +183,9 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_create_level",
     "unreal_open_level",
     "unreal_spawn_actor",
+    "unreal_list_actors",
+    "unreal_set_actor_property",
+    "unreal_delete_actor",
     "unreal_save_level",
     "unreal_add_component",
     "unreal_list_components",
@@ -2136,6 +2139,90 @@ register(
     try {
       const plan = await planFeature(bridge, request, { concepts });
       return jsonResult(plan);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_actors",
+  {
+    title: "Read what is already in the open level",
+    description:
+      "**Call this before changing anything in a level.** Returns every actor in the currently open level with its " +
+      "label, name, class, rounded location, and the Blueprint behind it where there is one, plus a per-class " +
+      "census so a large level is legible without listing all of it.\n\n" +
+      "Spawning into a level you have not read is how an agent ends up with two PlayerStarts, a second directional " +
+      "light fighting the first, or a duplicate of something that was already there under a different name. On a " +
+      "level someone has spent months dressing, that is worse than doing nothing.\n\n" +
+      "The `blueprint` field on an entry tells you which actors have logic behind them, and therefore which are " +
+      "worth reading with unreal_read_blueprint_summary next. Use classFilter to narrow a big level (it matches on " +
+      "the class name), and remember that this reads the OPEN level: call unreal_open_level first if you mean a " +
+      "different one.",
+    inputSchema: {
+      classFilter: z.string().optional().describe('Only return actors whose class name contains this, e.g. "Light", "PlayerStart", "BP_".'),
+      maxResults: z.number().optional().describe("Cap on actors returned. Defaults to 200. The per-class census always covers the whole level regardless."),
+    },
+  },
+  async ({ classFilter, maxResults }) => {
+    try {
+      const result = await bridge.send("list_actors", { classFilter, maxResults });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_actor_property",
+  {
+    title: "Set a property on one placed actor",
+    description:
+      "Overrides a property on a single actor instance in the open level, by its World Outliner label or its name. " +
+      "This is how a specific door gets a different open angle, one light gets a different colour, or one spawner " +
+      "gets a different enemy class, without touching the Blueprint they all come from.\n\n" +
+      "**This changes only that one instance.** To change every instance, use unreal_set_class_default on the " +
+      "Blueprint instead. Getting this backwards is the classic level-editing mistake, so the response states which " +
+      "one happened. Values follow the same string coercion as the other property tools, and an asset path that " +
+      "does not resolve fails rather than silently setting None.\n\n" +
+      "Changes live in memory until unreal_save_level.",
+    inputSchema: {
+      actor: z.string().describe("The actor's World Outliner label, or its internal name. Get exact values from unreal_list_actors."),
+      property: z.string().describe('Property name, e.g. "LightColor", "Intensity", "bHidden".'),
+      value: z.string().describe('Value as a string: "true", "3000.0", an asset path, or a struct literal like "(R=1,G=0,B=0,A=1)".'),
+    },
+  },
+  async ({ actor, property, value }) => {
+    try {
+      const result = await bridge.send("set_actor_property", { actor, property, value });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_delete_actor",
+  {
+    title: "Remove one actor from the open level",
+    description:
+      "Deletes a single placed actor from the currently open level, by label or name. Use it to remove template " +
+      "debris, a duplicate that should not have been spawned, or something the user has asked to take out.\n\n" +
+      "Read the level with unreal_list_actors first and be certain of the label: unlike unreal_delete_asset, which " +
+      "refuses when something still references the target, an actor in a level can be referenced by other actors " +
+      "in ways that are not checkable here. The removal is undoable in the editor and lives in memory until " +
+      "unreal_save_level, so a mistake is recoverable - but only if it is noticed.",
+    inputSchema: {
+      actor: z.string().describe("The actor's World Outliner label, or its internal name, exactly as unreal_list_actors reports it."),
+    },
+  },
+  async ({ actor }) => {
+    try {
+      const result = await bridge.send("delete_actor", { actor });
+      return jsonResult(result);
     } catch (err) {
       return errorResult(err);
     }

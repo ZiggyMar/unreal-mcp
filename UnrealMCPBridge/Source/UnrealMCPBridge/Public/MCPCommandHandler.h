@@ -102,6 +102,9 @@ private:
 	static TSharedRef<FJsonObject> HandleCreateMaterialInstance(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetMaterialParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListMaterialParameters(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListActors(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetActorProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleDeleteActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
