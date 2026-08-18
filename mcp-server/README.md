@@ -158,6 +158,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_build_graph` | `build_graph` | Many nodes, wires, and pin defaults in one atomic call, with node `ref` names you choose. **Prefer this over individual `add_node`/`connect_pins` calls whenever placing more than one node.** |
 | `unreal_create_function` | `create_function` | Create a function graph with typed inputs/outputs; returns the entry (and result) node ids to wire immediately. |
 | `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
+| `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |
 | `unreal_refresh_blueprint` | `refresh_blueprint` | The "right-click > Refresh Nodes" repair: every node re-reads its backing signature. The fix for the whole `in use pin no longer exists` family after a C++ change. |
 | `unreal_delete_asset` | `delete_asset` | Delete assets by path, **blocked by default** if anything outside the delete set still references them, with the blocking referencers reported. |
 
@@ -185,6 +186,36 @@ give it a body, configure its class defaults, bind input to it, and actually run
 
 Compiling proves a Blueprint is valid. Running it is the only thing that proves it works, which is
 what `start_pie` is for.
+
+### Readable graphs are produced, not requested
+
+`unreal_build_graph` auto-lays-out the graph it just built, by default. You do not pass `x`/`y`.
+
+This is deliberate, and it is the answer to the most common complaint about AI-authored
+Blueprints: that the output compiles but reads as spaghetti. Asking a model to emit good
+coordinates does not work reliably, because coordinate quality is exactly what a weaker model is
+worst at and never gets feedback on. So the tool does it instead:
+
+- Nodes are ranked into left-to-right columns, so every wire points forward. Cycles from loop
+  macros are handled by ignoring back edges, not by giving up.
+- Columns are ordered by barycentre sweeps, which removes most wire crossings.
+- Execution chains are straightened onto a single row, which is most of what "hand-built" looks
+  like in a Blueprint.
+- Whole chains are then pushed apart vertically so each event owns a horizontal band.
+
+`unreal_auto_layout_graph` runs the same pass on any existing graph, including ones this server
+did not author, and additionally wraps each execution chain in a comment box titled after its
+event. It is idempotent: a box whose title already exists is skipped, so running it twice does not
+stack duplicates.
+
+The layout engine (`src/layout.ts`) is a pure function over the graph summary with no engine
+dependency, so it is unit-tested directly: 21 tests covering left-to-right ranking, exec-chain
+straightening, branch fan-out, cycles, disconnected nodes, comment-box geometry, idempotency, and
+an overlap check asserted over every pair of placed nodes. `npm test` runs them.
+
+One honest limitation: each node move is its own editor transaction, because the layout is
+composed client-side from existing bridge commands. Undoing a layout therefore takes several
+Ctrl+Z presses rather than one. A batched move command in the plugin would fix it.
 
 ### Tool parity is enforced, not assumed
 
