@@ -570,6 +570,28 @@ async function main() {
     }
   });
 
+  await expectFailure(
+    "security: deleting engine content is refused",
+    "delete_asset",
+    { paths: ["/Engine/EngineResources/DefaultTexture.DefaultTexture"], force: true },
+    "write_outside_project"
+  );
+
+  await expectFailure(
+    "security: creating into /Engine is refused",
+    "create_blueprint",
+    { packagePath: "/Engine/MCPShouldNeverExist", parentClass: "Actor", save: false },
+    "write_outside_project"
+  );
+
+  await check("security: reading engine content still works", async () => {
+    // Reads must stay unrestricted: engine content is useful to read and harmless to read.
+    const r = await bridge.send("list_assets", { className: "Texture2D", pathPrefix: "/Engine", maxResults: 3 });
+    const count = (r.assets ?? r.results ?? []).length;
+    if (count === 0) throw new Error("engine reads appear to have been broken by the write guard");
+    return `${count} engine textures readable`;
+  });
+
   await check("C5: a bad asset path FAILS rather than silently setting None", async () => {
     // The claim that makes agent-authored Blueprints trustworthy: an invented path must not
     // quietly become None, because the Blueprint then compiles perfectly and does nothing.
@@ -612,6 +634,10 @@ async function main() {
     // M3's core claim: the index is kept fresh from AssetRegistry delegates rather than rescanned.
     // If it were stale, search would report that things do not exist moments after creating them,
     // which is worse than having no search at all.
+    // Warm the index first. It is built lazily, so the very first query after an editor start pays
+    // for the build, and a create issued before that has nothing to be added to yet. This is the
+    // same advice the workflow guide gives a caller: orient once, cheaply, before doing anything.
+    await bridge.send("get_project_overview", {});
     const unique = `BP_IndexFresh${Math.floor(Date.now() / 1000) % 100000}`;
     const bp = `${ROOT}/${unique}`;
     await bridge.send("create_blueprint", { packagePath: bp, parentClass: "Actor", save: false });
