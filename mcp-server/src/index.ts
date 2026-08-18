@@ -131,6 +131,12 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_organize_graph",
   ],
   ui: ["unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
+  materials: [
+    "unreal_create_material",
+    "unreal_create_material_instance",
+    "unreal_set_material_parameter",
+    "unreal_list_material_parameters",
+  ],
   data: [
     "unreal_create_struct",
     "unreal_add_struct_field",
@@ -160,6 +166,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
 const GROUP_SUMMARY: Record<string, string> = {
   edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
+  materials: "Materials and Material Instances: create them, parameterise them, override them",
   data: "Structs, Enums, and asset lookup",
   scene: "Levels, actors, components, class defaults, project settings, input mappings, Play In Editor",
   maintenance: "reference lookup, asset deletion, Refresh Nodes repair",
@@ -1723,7 +1730,7 @@ register(
       "exactly what was turned on, and re-calling is harmless.",
     inputSchema: {
       groups: z
-        .array(z.enum(["edit", "ui", "data", "scene", "maintenance"]))
+        .array(z.enum(["edit", "ui", "materials", "data", "scene", "maintenance"]))
         .describe('Groups to turn on, e.g. ["ui","data"].'),
     },
   },
@@ -1820,6 +1827,113 @@ register(
   async ({ detailed }) => {
     const summary = journal.summary();
     return jsonResult(detailed ? { ...summary, log: journal.all() } : summary);
+  }
+);
+
+register(
+  "unreal_create_material",
+  {
+    title: "Create a Material",
+    description:
+      "Creates a master Material with BaseColor, Metallic and Roughness (and optionally EmissiveColor) exposed as " +
+      "PARAMETERS rather than baked-in constants. That matters: a parameterised master material can be instanced, " +
+      "which is how a real project gets fifty variations without fifty material graphs, and it is what lets the " +
+      "look be adjusted later without rebuilding anything.\n\n" +
+      "Materials are most of what a player actually sees, so this is usually worth doing before fussing over " +
+      "geometry. Make the master once, then make cheap variations with unreal_create_material_instance and " +
+      "unreal_set_material_parameter. Assign a material to a mesh with unreal_set_component_property, or to a " +
+      "level actor via unreal_spawn_actor's mesh.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Materials/M_Metal". Prefix material assets with M_ by convention.'),
+      baseColor: z.string().optional().describe('Base colour as "R,G,B" or "R,G,B,A", each 0-1. Defaults to mid grey. Example: "1,0,0" for red.'),
+      metallic: z.number().optional().describe("0 for non-metal (plastic, wood, stone), 1 for bare metal. Values in between are rarely physically correct. Defaults to 0."),
+      roughness: z.number().optional().describe("0 is a mirror, 1 is completely matte. Most real surfaces sit between 0.2 and 0.8. Defaults to 0.5."),
+      emissiveColor: z.string().optional().describe('Optional glow colour as "R,G,B". Values above 1 glow brighter, e.g. "0,5,10" for a bright blue glow. Omit for non-glowing surfaces.'),
+    },
+  },
+  async ({ packagePath, baseColor, metallic, roughness, emissiveColor }) => {
+    try {
+      const result = await bridge.send("create_material", { packagePath, baseColor, metallic, roughness, emissiveColor });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_create_material_instance",
+  {
+    title: "Create a Material Instance from a parent material",
+    description:
+      "Creates a Material Instance: a cheap variation of a parent material that overrides some of its parameters " +
+      "and shares everything else. Making ten coloured variants of one master material is ten instances, not ten " +
+      "materials, and they cost almost nothing to add.\n\n" +
+      "Override parameters afterwards with unreal_set_material_parameter. If the parent has no parameters, the " +
+      "instance has nothing to override, which usually means the parent was built with constants instead of " +
+      "parameters.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Materials/MI_RedMetal". Prefix instances with MI_ by convention.'),
+      parentMaterial: z.string().describe('Full path of the parent, e.g. "/Game/Materials/M_Metal.M_Metal". A Material or another Material Instance.'),
+    },
+  },
+  async ({ packagePath, parentMaterial }) => {
+    try {
+      const result = await bridge.send("create_material_instance", { packagePath, parentMaterial });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_material_parameter",
+  {
+    title: "Override a parameter on a Material Instance",
+    description:
+      "Sets one parameter on a Material Instance. Pass exactly one of scalar, color, or texture, matching the " +
+      "parameter's kind. Parameters are overridden on an INSTANCE, never on the master material: that is the whole " +
+      "point of the split, and setting it on the master would change every instance at once.\n\n" +
+      "Call unreal_list_material_parameters first if you are unsure what a material exposes, rather than guessing " +
+      "names.",
+    inputSchema: {
+      path: z.string().describe('Material Instance path, e.g. "/Game/Materials/MI_RedMetal.MI_RedMetal".'),
+      parameter: z.string().describe('Parameter name, e.g. "BaseColor", "Roughness".'),
+      scalar: z.number().optional().describe("Value for a scalar parameter, e.g. 0.2 for Roughness."),
+      color: z.string().optional().describe('Value for a vector/colour parameter, as "R,G,B" or "R,G,B,A", each 0-1.'),
+      texture: z.string().optional().describe('Full path of a texture asset for a texture parameter. Verify it with unreal_list_assets className=Texture2D.'),
+    },
+  },
+  async ({ path, parameter, scalar, color, texture }) => {
+    try {
+      const result = await bridge.send("set_material_parameter", { path, parameter, scalar, color, texture });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_material_parameters",
+  {
+    title: "List a material's parameters",
+    description:
+      "Returns every scalar, colour, and texture parameter a Material or Material Instance exposes, with its kind, " +
+      "and whether the asset is an instance. Use it before unreal_set_material_parameter to get names and kinds " +
+      "right, and to check whether a material someone else authored is instanceable at all.",
+    inputSchema: {
+      path: z.string().describe('Material or Material Instance path, e.g. "/Game/Materials/M_Metal.M_Metal".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("list_material_parameters", { path });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
   }
 );
 

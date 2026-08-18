@@ -60,6 +60,14 @@
 // not, so the obvious include compiles on the older engine and fails on the newer one.
 #include "StructUtils/UserDefinedStruct.h"
 #include "Engine/UserDefinedEnum.h"
+#include "MaterialEditingLibrary.h"
+#include "Factories/MaterialFactoryNew.h"
+#include "Factories/MaterialInstanceConstantFactoryNew.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceConstant.h"
+#include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionScalarParameter.h"
+#include "Engine/Texture.h"
 #include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -570,6 +578,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("list_enum_entries"))
 	{
 		Response = HandleListEnumEntries(Params);
+	}
+	else if (Cmd == TEXT("create_material"))
+	{
+		Response = HandleCreateMaterial(Params);
+	}
+	else if (Cmd == TEXT("create_material_instance"))
+	{
+		Response = HandleCreateMaterialInstance(Params);
+	}
+	else if (Cmd == TEXT("set_material_parameter"))
+	{
+		Response = HandleSetMaterialParameter(Params);
+	}
+	else if (Cmd == TEXT("list_material_parameters"))
+	{
+		Response = HandleListMaterialParameters(Params);
 	}
 	else
 	{
@@ -4350,5 +4374,410 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListEnumEntries(const TSharedP
 	Result->SetStringField(TEXT("name"), Enum->GetName());
 	Result->SetBoolField(TEXT("editable"), Cast<UUserDefinedEnum>(Enum) != nullptr);
 	Result->SetArrayField(TEXT("entries"), Entries);
+	return MakeOkResponse(Result);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Materials
+//
+// Materials are most of what a player actually sees, so "looks AAA" is largely a materials
+// question, and until now the bridge could assign one but never make one.
+//
+// The shape here is deliberate. create_material builds a master material out of PARAMETER
+// expressions rather than constants, so it is instanceable from the moment it exists. That is how
+// real projects are built - one master material, many cheap instances varying colour and
+// roughness - and it is the difference between a project that can be art-directed later and one
+// where every variation means a new material graph. A caller who only wants "a red metal" still
+// gets it in one call; they just also get the door left open.
+//
+// One version trap, caught by checking both engines before writing:
+// UMaterialEditingLibrary::RecompileMaterial returns TArray<FString> on 5.8 and void on 5.6, so
+// its return value is never captured here.
+// ---------------------------------------------------------------------------------------------
+
+/** Parse "R,G,B" or "R,G,B,A" into a colour, so callers never have to spell FLinearColor. */
+static bool ParseLinearColor(const FString& Value, FLinearColor& OutColor, FString& OutError)
+{
+	TArray<FString> Parts;
+	Value.ParseIntoArray(Parts, TEXT(","), true);
+	if (Parts.Num() < 3 || Parts.Num() > 4)
+	{
+		OutError = FString::Printf(
+			TEXT("bad_color: '%s'. Use \"R,G,B\" or \"R,G,B,A\" with values 0-1, e.g. \"1,0,0\" for red."), *Value);
+		return false;
+	}
+	OutColor = FLinearColor(
+		FCString::Atof(*Parts[0].TrimStartAndEnd()),
+		FCString::Atof(*Parts[1].TrimStartAndEnd()),
+		FCString::Atof(*Parts[2].TrimStartAndEnd()),
+		Parts.Num() == 4 ? FCString::Atof(*Parts[3].TrimStartAndEnd()) : 1.0f);
+	return true;
+}
+
+/** Add a named scalar parameter and wire it to a material property. */
+static UMaterialExpressionScalarParameter* AddScalarParam(
+	UMaterial* Material, const FString& Name, float Default, EMaterialProperty Property, int32 PosY)
+{
+	UMaterialExpressionScalarParameter* Expression = Cast<UMaterialExpressionScalarParameter>(
+		UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -400, PosY));
+	if (!Expression)
+	{
+		return nullptr;
+	}
+	Expression->ParameterName = FName(*Name);
+	Expression->DefaultValue = Default;
+	UMaterialEditingLibrary::ConnectMaterialProperty(Expression, FString(), Property);
+	return Expression;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("packagePath"), PackagePath))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Materials/M_Metal"));
+	}
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
+	}
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
+	}
+
+	FLinearColor BaseColor(0.5f, 0.5f, 0.5f, 1.0f);
+	FString ColorString;
+	if (Params->TryGetStringField(TEXT("baseColor"), ColorString) && !ColorString.IsEmpty())
+	{
+		FString ColorError;
+		if (!ParseLinearColor(ColorString, BaseColor, ColorError))
+		{
+			return MakeErrorResponse(ColorError);
+		}
+	}
+	double Metallic = 0.0, Roughness = 0.5;
+	Params->TryGetNumberField(TEXT("metallic"), Metallic);
+	Params->TryGetNumberField(TEXT("roughness"), Roughness);
+
+	FLinearColor Emissive(0, 0, 0, 1);
+	FString EmissiveString;
+	const bool bHasEmissive = Params->TryGetStringField(TEXT("emissiveColor"), EmissiveString) && !EmissiveString.IsEmpty();
+	if (bHasEmissive)
+	{
+		FString ColorError;
+		if (!ParseLinearColor(EmissiveString, Emissive, ColorError))
+		{
+			return MakeErrorResponse(ColorError);
+		}
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	const FString PackageDir = FPackageName::GetLongPackagePath(PackagePath);
+	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateMaterial", "MCP: Create Material"));
+
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+	UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
+	UMaterial* Material = Cast<UMaterial>(
+		AssetTools.CreateAsset(AssetName, PackageDir, UMaterial::StaticClass(), Factory));
+	if (!Material)
+	{
+		return MakeErrorResponse(TEXT("create_material_failed"));
+	}
+
+	// Parameters, not constants: this is what makes the material instanceable, and instances are
+	// how a project gets fifty variations without fifty material graphs.
+	TArray<TSharedPtr<FJsonValue>> Parameters;
+	UMaterialExpressionVectorParameter* ColorExpression = Cast<UMaterialExpressionVectorParameter>(
+		UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -400, -200));
+	if (ColorExpression)
+	{
+		ColorExpression->ParameterName = TEXT("BaseColor");
+		ColorExpression->DefaultValue = BaseColor;
+		UMaterialEditingLibrary::ConnectMaterialProperty(ColorExpression, FString(), MP_BaseColor);
+		Parameters.Add(MakeShared<FJsonValueString>(TEXT("BaseColor (vector)")));
+	}
+	if (AddScalarParam(Material, TEXT("Metallic"), static_cast<float>(Metallic), MP_Metallic, -60))
+	{
+		Parameters.Add(MakeShared<FJsonValueString>(TEXT("Metallic (scalar)")));
+	}
+	if (AddScalarParam(Material, TEXT("Roughness"), static_cast<float>(Roughness), MP_Roughness, 60))
+	{
+		Parameters.Add(MakeShared<FJsonValueString>(TEXT("Roughness (scalar)")));
+	}
+	if (bHasEmissive)
+	{
+		UMaterialExpressionVectorParameter* EmissiveExpression = Cast<UMaterialExpressionVectorParameter>(
+			UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -400, 200));
+		if (EmissiveExpression)
+		{
+			EmissiveExpression->ParameterName = TEXT("EmissiveColor");
+			EmissiveExpression->DefaultValue = Emissive;
+			UMaterialEditingLibrary::ConnectMaterialProperty(EmissiveExpression, FString(), MP_EmissiveColor);
+			Parameters.Add(MakeShared<FJsonValueString>(TEXT("EmissiveColor (vector)")));
+		}
+	}
+
+	// Return value deliberately discarded: TArray<FString> on 5.8, void on 5.6.
+	UMaterialEditingLibrary::RecompileMaterial(Material);
+	Package->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Material->GetPathName());
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetArrayField(TEXT("parameters"), Parameters);
+	Result->SetStringField(TEXT("next"),
+		TEXT("Assign it with set_component_property (StaticMesh components take 'Material' via the component's "
+			"material slots), or make cheap variations with create_material_instance."));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateMaterialInstance(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath, ParentPath;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("packagePath"), PackagePath) ||
+		!Params->TryGetStringField(TEXT("parentMaterial"), ParentPath))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath and parentMaterial are required"));
+	}
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
+	}
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
+	}
+
+	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, *ParentPath);
+	if (!Parent)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("parent_material_not_found: %s. Pass a full path like /Game/Materials/M_Metal.M_Metal, and check ")
+			TEXT("it exists with list_assets className=Material."), *ParentPath));
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	const FString PackageDir = FPackageName::GetLongPackagePath(PackagePath);
+	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateMatInst", "MCP: Create Material Instance"));
+
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+	UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
+	Factory->InitialParent = Parent;
+	UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(
+		AssetTools.CreateAsset(AssetName, PackageDir, UMaterialInstanceConstant::StaticClass(), Factory));
+	if (!Instance)
+	{
+		return MakeErrorResponse(TEXT("create_material_instance_failed"));
+	}
+
+	Package->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Instance->GetPathName());
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetStringField(TEXT("parent"), Parent->GetPathName());
+	Result->SetStringField(TEXT("next"),
+		TEXT("Override any of the parent's parameters with set_material_parameter; list them with "
+			"list_material_parameters."));
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Does this material expose a parameter of this kind?
+ *
+ * Asked explicitly because UMaterialEditingLibrary's three setters cannot answer it. All of
+ * SetMaterialInstanceScalarParameterValue, ...VectorParameterValue and ...TextureParameterValue
+ * declare `bool bResult = false;`, never assign it, and return it - on both 5.6 and 5.8. They
+ * always report failure, including when they succeed.
+ *
+ * Trusting that bool produced the worst kind of wrong: the parameter WAS set on the asset, and the
+ * tool told the caller it had not been. Live verification caught it; nothing else would have.
+ */
+static bool MaterialHasParameter(UMaterialInstanceConstant* Instance, const FName& Name, const TCHAR* Kind)
+{
+	TArray<FMaterialParameterInfo> Infos;
+	TArray<FGuid> Guids;
+	if (FCString::Strcmp(Kind, TEXT("scalar")) == 0)
+	{
+		Instance->GetAllScalarParameterInfo(Infos, Guids);
+	}
+	else if (FCString::Strcmp(Kind, TEXT("color")) == 0)
+	{
+		Instance->GetAllVectorParameterInfo(Infos, Guids);
+	}
+	else
+	{
+		Instance->GetAllTextureParameterInfo(Infos, Guids);
+	}
+	for (const FMaterialParameterInfo& Info : Infos)
+	{
+		if (Info.Name == Name)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetMaterialParameter(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, ParameterName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("parameter"), ParameterName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and parameter are required"));
+	}
+
+	UMaterialInstanceConstant* Instance = LoadObject<UMaterialInstanceConstant>(nullptr, *Path);
+	if (!Instance)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("material_instance_not_found: %s. Parameters are overridden on an INSTANCE, not on the master ")
+			TEXT("material; make one with create_material_instance."), *Path));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetMatParam", "MCP: Set Material Parameter"));
+	Instance->Modify();
+
+	const FName Name(*ParameterName);
+	FString Applied;
+
+	double ScalarValue = 0;
+	FString ColorString, TexturePath;
+	if (Params->TryGetNumberField(TEXT("scalar"), ScalarValue))
+	{
+		if (!MaterialHasParameter(Instance, Name, TEXT("scalar")))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("parameter_not_found: '%s' is not a scalar parameter on this material. Use "
+					"list_material_parameters to see what exists."), *ParameterName));
+		}
+		UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, Name, static_cast<float>(ScalarValue));
+		Applied = FString::Printf(TEXT("scalar %f"), ScalarValue);
+	}
+	else if (Params->TryGetStringField(TEXT("color"), ColorString))
+	{
+		FLinearColor Color;
+		FString ColorError;
+		if (!ParseLinearColor(ColorString, Color, ColorError))
+		{
+			return MakeErrorResponse(ColorError);
+		}
+		if (!MaterialHasParameter(Instance, Name, TEXT("color")))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("parameter_not_found: '%s' is not a colour parameter on this material. Use "
+					"list_material_parameters to see what exists."), *ParameterName));
+		}
+		UMaterialEditingLibrary::SetMaterialInstanceVectorParameterValue(Instance, Name, Color);
+		Applied = FString::Printf(TEXT("color %s"), *Color.ToString());
+	}
+	else if (Params->TryGetStringField(TEXT("texture"), TexturePath))
+	{
+		UTexture* Texture = LoadObject<UTexture>(nullptr, *TexturePath);
+		if (!Texture)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("texture_not_found: %s. Check the path with list_assets className=Texture2D."), *TexturePath));
+		}
+		if (!MaterialHasParameter(Instance, Name, TEXT("texture")))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("parameter_not_found: '%s' is not a texture parameter on this material."), *ParameterName));
+		}
+		UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, Name, Texture);
+		Applied = FString::Printf(TEXT("texture %s"), *Texture->GetName());
+	}
+	else
+	{
+		return MakeErrorResponse(TEXT("missing_param: pass exactly one of scalar, color, or texture"));
+	}
+
+	UMaterialEditingLibrary::UpdateMaterialInstance(Instance);
+	Instance->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Instance->GetPathName());
+	Result->SetStringField(TEXT("parameter"), ParameterName);
+	Result->SetStringField(TEXT("applied"), Applied);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListMaterialParameters(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	UMaterialInterface* MaterialInterface = LoadObject<UMaterialInterface>(nullptr, *Path);
+	if (!MaterialInterface)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("material_not_found: %s. Pass a full path like /Game/Materials/M_Metal.M_Metal."), *Path));
+	}
+
+	auto CollectNames = [](const TArray<FMaterialParameterInfo>& Infos, const TCHAR* Kind,
+		TArray<TSharedPtr<FJsonValue>>& OutArray)
+	{
+		for (const FMaterialParameterInfo& Info : Infos)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Info.Name.ToString());
+			Entry->SetStringField(TEXT("kind"), Kind);
+			OutArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	};
+
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	TArray<FMaterialParameterInfo> Infos;
+	TArray<FGuid> Guids;
+
+	MaterialInterface->GetAllScalarParameterInfo(Infos, Guids);
+	CollectNames(Infos, TEXT("scalar"), Entries);
+	Infos.Reset();
+	Guids.Reset();
+
+	MaterialInterface->GetAllVectorParameterInfo(Infos, Guids);
+	CollectNames(Infos, TEXT("color"), Entries);
+	Infos.Reset();
+	Guids.Reset();
+
+	MaterialInterface->GetAllTextureParameterInfo(Infos, Guids);
+	CollectNames(Infos, TEXT("texture"), Entries);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), MaterialInterface->GetPathName());
+	Result->SetBoolField(TEXT("isInstance"), Cast<UMaterialInstanceConstant>(MaterialInterface) != nullptr);
+	Result->SetArrayField(TEXT("parameters"), Entries);
+	Result->SetNumberField(TEXT("count"), Entries.Num());
 	return MakeOkResponse(Result);
 }

@@ -289,6 +289,78 @@ async function main() {
     "not_a_widget_blueprint"
   );
 
+  // --- Materials ------------------------------------------------------------------------------
+  section("materials");
+  const matPath = `${ROOT}/M_MCPVerify`;
+  const instPath = `${ROOT}/MI_MCPVerify`;
+  await check("create_material with parameters, not constants", async () => {
+    const r = await bridge.send("create_material", {
+      packagePath: matPath,
+      baseColor: "1,0,0",
+      metallic: 1,
+      roughness: 0.2,
+      emissiveColor: "0,2,4",
+    });
+    if (!r.parameters || r.parameters.length !== 4) {
+      throw new Error(`expected 4 parameters, got ${JSON.stringify(r.parameters)}`);
+    }
+    return r.parameters.join(", ");
+  });
+
+  await check("list_material_parameters sees them on the master", async () => {
+    const r = await bridge.send("list_material_parameters", { path: `${matPath}.M_MCPVerify` });
+    const names = r.parameters.map((p) => p.name).sort();
+    // If the master were built from constants instead of parameters, this list would be empty and
+    // the whole instancing workflow would silently be impossible.
+    for (const expected of ["BaseColor", "EmissiveColor", "Metallic", "Roughness"]) {
+      if (!names.includes(expected)) throw new Error(`${expected} missing from ${names.join(", ")}`);
+    }
+    if (r.isInstance) throw new Error("a master material reported itself as an instance");
+    return names.join(", ");
+  });
+
+  await check("create_material_instance from that master", async () => {
+    const r = await bridge.send("create_material_instance", {
+      packagePath: instPath,
+      parentMaterial: `${matPath}.M_MCPVerify`,
+    });
+    return `${r.name} <- ${r.parent}`;
+  });
+
+  await check("the instance inherits the parent's parameters", async () => {
+    const r = await bridge.send("list_material_parameters", { path: `${instPath}.MI_MCPVerify` });
+    if (!r.isInstance) throw new Error("an instance reported itself as a master");
+    if (r.parameters.length !== 4) throw new Error(`expected 4 inherited parameters, got ${r.parameters.length}`);
+    return `${r.parameters.length} inherited`;
+  });
+
+  await check("set_material_parameter overrides a colour and a scalar", async () => {
+    await bridge.send("set_material_parameter", { path: `${instPath}.MI_MCPVerify`, parameter: "BaseColor", color: "0,0,1" });
+    const r = await bridge.send("set_material_parameter", { path: `${instPath}.MI_MCPVerify`, parameter: "Roughness", scalar: 0.9 });
+    return r.applied;
+  });
+
+  await expectFailure(
+    "a parameter that does not exist is refused, not silently ignored",
+    "set_material_parameter",
+    { path: `${instPath}.MI_MCPVerify`, parameter: "NoSuchParameter", scalar: 1 },
+    "parameter_not_found"
+  );
+
+  await expectFailure(
+    "setting a parameter on the MASTER is refused with an explanation",
+    "set_material_parameter",
+    { path: `${matPath}.M_MCPVerify`, parameter: "Roughness", scalar: 0.1 },
+    "material_instance_not_found"
+  );
+
+  await expectFailure(
+    "a malformed colour is refused",
+    "create_material",
+    { packagePath: `${ROOT}/M_Bad`, baseColor: "not-a-colour" },
+    "bad_color"
+  );
+
   // --- the crash that this script found ------------------------------------------------------
   section("create-after-delete (regression: this used to assert and close the editor)");
   const reusePath = `${ROOT}/BP_MCPReuse`;
@@ -322,6 +394,8 @@ async function main() {
           `${structPath}.S_MCPVerifyItem`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,
+          `${instPath}.MI_MCPVerify`,
+          `${matPath}.M_MCPVerify`,
         ],
         force: true,
       });

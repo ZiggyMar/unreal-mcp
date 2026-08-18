@@ -33,7 +33,8 @@ public class UnrealMCPBridge : ModuleRules
 			"Projects",
 			"MessageLog",
 			"UMG",
-			"UMGEditor"
+			"UMGEditor",
+			"MaterialEditor"
 		});
 
 		bEnableExceptions = false;

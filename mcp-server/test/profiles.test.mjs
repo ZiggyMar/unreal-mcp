@@ -165,12 +165,21 @@ test("the server tells the client the tool list changed", async () => {
 });
 
 test("every tool is reachable: none is stranded outside core and every group", async () => {
-  const full = toolsFrom(await callServer("full", [listRequest(2)]), 2);
+  const fullMessages = await callServer("full", [listRequest(2)]);
+  const full = toolsFrom(fullMessages, 2);
   const lazyStart = toolsFrom(await callServer("lazy", [listRequest(2)]), 2);
-  const everythingOn = toolsFrom(
-    await callServer("lazy", [enableRequest(3, ["edit", "ui", "data", "scene", "maintenance"]), listRequest(4)]),
-    4
-  );
+
+  // Read the groups off the tool's own schema rather than hardcoding them. A hardcoded list goes
+  // stale the moment a group is added, and then this test reports a stranded tool that is really
+  // just a group the test had not heard of - which is exactly what happened when "materials"
+  // was added.
+  const enableTool = fullMessages
+    .find((m) => m.id === 2)
+    .result.tools.find((t) => t.name === "unreal_enable_tools");
+  const groups = enableTool.inputSchema.properties.groups.items.enum;
+  assert.ok(groups.length >= 5, `expected several groups, got ${groups.join(", ")}`);
+
+  const everythingOn = toolsFrom(await callServer("lazy", [enableRequest(3, groups), listRequest(4)]), 4);
 
   const missing = full.filter((name) => !everythingOn.includes(name));
   assert.deepEqual(missing, [], `these tools are in no group and can never be enabled: ${missing.join(", ")}`);

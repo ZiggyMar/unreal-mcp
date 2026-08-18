@@ -232,6 +232,41 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+### Materials: most of what a player actually sees
+
+| Tool | Bridge command | Purpose |
+| --- | --- | --- |
+| `unreal_create_material` | `create_material` | Create a master Material with BaseColor, Metallic, Roughness (and optional Emissive) exposed as parameters. |
+| `unreal_create_material_instance` | `create_material_instance` | Create a cheap variation of a parent material. |
+| `unreal_set_material_parameter` | `set_material_parameter` | Override one scalar, colour, or texture parameter on an instance. |
+| `unreal_list_material_parameters` | `list_material_parameters` | Every parameter a material or instance exposes, with its kind. |
+
+`unreal_create_material` builds the master out of **parameter** expressions rather than baked-in
+constants. That is the difference between a project that can be art-directed later and one where
+every variation means another material graph: a parameterised master can be instanced, so fifty
+colour variants cost fifty instances rather than fifty materials.
+
+Colours are `"R,G,B"` or `"R,G,B,A"` with values 0-1, so `"1,0,0"` is red. Emissive values above 1
+glow brighter. Metallic is genuinely 0 or 1 for real surfaces; roughness is where the character
+lives, 0 being a mirror and 1 being completely matte.
+
+Parameters are overridden on an **instance**, never on the master. Setting them on the master would
+change every instance at once, which is the opposite of the point, so `unreal_set_material_parameter`
+refuses a master material and says why.
+
+A second engine trap, caught by live verification rather than by reading: all three of
+`UMaterialEditingLibrary`'s material-instance setters declare `bool bResult = false;`, never assign
+it, and return it. On both engines. They **always** report failure, including when they succeed.
+Trusting that bool meant the parameter was genuinely written to the asset while the caller was told
+it had not been, which is the worst shape a bug can take. Parameter existence is now checked
+against the material's own parameter list and the return value is ignored. An engine API's success
+flag is a claim, not evidence.
+
+One version trap, caught by checking both engines before writing rather than after:
+`UMaterialEditingLibrary::RecompileMaterial` returns `TArray<FString>` on 5.8 and `void` on 5.6, so
+capturing its return value would compile on one engine and fail on the other. It is called for
+effect only.
+
 ### UMG: the UI half
 
 A game the user can see is mostly UI, and none of it used to be reachable through this bridge.

@@ -98,6 +98,10 @@ private:
 	static TSharedRef<FJsonObject> HandleListStructFields(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateEnum(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListEnumEntries(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCreateMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleCreateMaterialInstance(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetMaterialParameter(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListMaterialParameters(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
