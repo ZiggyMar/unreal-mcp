@@ -214,3 +214,82 @@ test("the same target is reported once, not once per cast node", () => {
   );
   assert.equal(findings.length, 1);
 });
+
+test("the finding names the chain that reaches the cast", () => {
+  // "This Blueprint casts to a GameMode" is hard to act on. Naming the entry point tells you where
+  // to look, and whether the chain plausibly runs on a client at all - which is the real question.
+  const findings = findServerOnlyCasts(
+    [
+      node("e", "K2Node_CustomEvent", "KillPlayerClient", ["m"]),
+      node("m", "K2Node_CallFunction", "Disable Movement", ["c"]),
+      node("c", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].message, /reached from KillPlayerClient/);
+});
+
+test("a cast no entry point reaches is still reported, without inventing a chain", () => {
+  const findings = findServerOnlyCasts(
+    [node("c", "K2Node_DynamicCast", "Cast To GM_Gameplay", [])],
+    isGameMode,
+    false
+  );
+  assert.equal(findings.length, 1);
+  assert.ok(!/reached from/.test(findings[0].message));
+});
+
+test("a prefixed server event is still recognised as a server event", () => {
+  // Real projects prefix custom events. CE_Server_FinishedCutscene is a server event, and reading
+  // it as a client one produced a false positive on a real project.
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "CE_Server_FinishedCutscene", ["s"]),
+      node("s", "K2Node_VariableSet", "SET bReady", []),
+    ],
+    [{ name: "bReady", replicated: false }]
+  );
+  assert.ok(ids(findings).includes("server-writes-unreplicated"));
+});
+
+test("a name that merely contains 'server' is not treated as a server event", () => {
+  // "Observer" must not match, or the convention becomes noise.
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "ObserverUpdate", ["s"]),
+      node("s", "K2Node_VariableSet", "SET bReady", []),
+    ],
+    [{ name: "bReady", replicated: false }]
+  );
+  assert.deepEqual(findings, []);
+});
+
+test("a GameMode cast inside a server event chain is correct, not a bug", () => {
+  // A real project had CE_Server_FinishedCutscene casting to its GameMode, which is exactly right
+  // and was reported as a bug until the server event was recognised as a guard.
+  const findings = findServerOnlyCasts(
+    [
+      node("e", "K2Node_CustomEvent", "CE_Server_FinishedCutscene", ["c"]),
+      node("c", "K2Node_DynamicCast", "Cast To GM_Lobby", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.deepEqual(findings, []);
+});
+
+test("the same cast from a plain event is still a bug", () => {
+  // The guard must be the server event itself, not merely the presence of one somewhere.
+  const findings = findServerOnlyCasts(
+    [
+      node("e", "K2Node_Event", "Event BeginPlay", ["c"]),
+      node("c", "K2Node_DynamicCast", "Cast To GM_Lobby", []),
+      node("s", "K2Node_CustomEvent", "CE_Server_Something", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.equal(findings.length, 1);
+});

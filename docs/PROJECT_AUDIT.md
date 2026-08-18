@@ -125,6 +125,37 @@ set of measurements that differ in what they do but agree on how long they take 
 work. The fixed part is the clue.
 
 ## Casting to something that only exists on the server
+### Naming the chain, and not crying wolf
+
+"This Blueprint casts to a GameMode" is true and hard to act on. The finding now names the entry
+point that reaches the cast, which turns it into something you can open:
+
+```
+BP_Player                KillPlayer
+PC_Base                  Event BeginPlay
+GS_Gameplay              Event BeginPlay
+BP_ShopComponent         Event Begin Play, Event Tick
+BP_BaseEnemy             Event BeginPlay
+BP_terminal              Interacted
+```
+
+Read those chains rather than the class names. A PlayerController and a GameState both exist on
+clients, so casting to the GameMode **from their BeginPlay** fails on every client. 
+does it from **Tick**, so it fails every frame, on every client, forever.
+
+The same pass removed a false positive, which matters more than finding one more bug. 
+casts to its GameMode from  - a server RPC, where that cast is entirely
+correct. Two refinements fixed it:
+
+- The server-event convention is anchored at a word start rather than the string start, because real
+  projects prefix their events ().  still does not match: the prefix has to
+  end at an underscore.
+- A chain starting at a server event is treated as server-guarded, exactly like one behind
+  .
+
+Twelve findings, each naming its chain, and the one that was wrong is gone. A check that cries wolf
+once is a check people stop reading.
+
 
 The audit's highest-cost check now catches the class of bug found by hand earlier, generalised:
 

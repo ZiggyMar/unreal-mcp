@@ -42,9 +42,12 @@ export interface MpFinding {
 }
 
 /** Naming conventions that mean "this runs somewhere else". Unreal itself has no other marker. */
-const SERVER_EVENT = /^(server|sv)[_\s]/i;
-const MULTICAST_EVENT = /^(multicast|netmulticast|all)[_\s]/i;
-const CLIENT_EVENT = /^(client|owning)[_\s]/i;
+// Anchored at a word start rather than the string start, because real projects prefix their custom
+// events - CE_Server_FinishedCutscene is a server event, and reading it as a client one produced a
+// false positive on a real project. "Observer" is not matched: the prefix must end at an underscore.
+const SERVER_EVENT = /(^|_)(server|sv)[_\s]/i;
+const MULTICAST_EVENT = /(^|_)(multicast|netmulticast|all)[_\s]/i;
+const CLIENT_EVENT = /(^|_)(client|owning)[_\s]/i;
 
 const isCustomEvent = (node: MpNode) => /K2Node_CustomEvent/.test(node.type);
 
@@ -185,16 +188,49 @@ export function findServerOnlyCasts(
     return out;
   };
 
-  // Everything downstream of the Authority branch of a Switch Has Authority runs only on the
-  // server, so a cast in there is correct rather than broken.
+  // Two things mean "this only runs on the server", and a cast to a server-only class is correct
+  // under either. Both are DETECTED rather than assumed absent, which is the difference between a
+  // check people act on and one they learn to ignore.
+  //
+  //   1. Downstream of the Authority branch of a Switch Has Authority.
+  //   2. Downstream of a custom event named as a server RPC. A real project had
+  //      CE_Server_FinishedCutscene casting to its GameMode, which is entirely correct and was
+  //      reported as a bug until this existed.
   const serverGuarded = new Set<string>();
-  for (const node of nodes) {
-    if (!/Switch Has Authority|SwitchHasAuthority/i.test(node.title ?? "")) continue;
-    const queue = execTargets(node, /^authority$/i);
+  const markDownstream = (start: MpNode, pin?: RegExp) => {
+    const queue = execTargets(start, pin);
     while (queue.length > 0) {
       const current = queue.pop();
       if (!current || serverGuarded.has(current.id)) continue;
       serverGuarded.add(current.id);
+      queue.push(...execTargets(current));
+    }
+  };
+  for (const node of nodes) {
+    if (/Switch Has Authority|SwitchHasAuthority/i.test(node.title ?? "")) {
+      markDownstream(node, /^authority$/i);
+    } else if (isCustomEvent(node) && SERVER_EVENT.test(node.title ?? "")) {
+      markDownstream(node);
+    }
+  }
+
+  // Which entry points reach each node.
+  //
+  // "This Blueprint casts to a GameMode" is true and hard to act on. "The chain starting at
+  // KillPlayerClient casts to a GameMode" tells you where to look and, more usefully, whether the
+  // chain plausibly runs on a client at all - which is the whole question.
+  const ENTRY_TYPES = /K2Node_(Event|CustomEvent|Input[A-Za-z]*Event|FunctionEntry|Timeline)/;
+  const reachedBy = new Map<string, Set<string>>();
+  for (const entry of nodes.filter((node) => ENTRY_TYPES.test(node.type))) {
+    const seen = new Set<string>([entry.id]);
+    const queue = execTargets(entry);
+    while (queue.length > 0) {
+      const current = queue.pop();
+      if (!current || seen.has(current.id)) continue;
+      seen.add(current.id);
+      const entrySet = reachedBy.get(current.id) ?? new Set<string>();
+      entrySet.add((entry.title ?? "").trim() || entry.type);
+      reachedBy.set(current.id, entrySet);
       queue.push(...execTargets(current));
     }
   }
@@ -211,13 +247,19 @@ export function findServerOnlyCasts(
     if (alreadyReported.has(target)) continue;
     alreadyReported.add(target);
 
+    const entries = [...(reachedBy.get(node.id) ?? [])];
+    const from =
+      entries.length > 0
+        ? ` It is reached from ${entries.slice(0, 3).join(", ")}${entries.length > 3 ? ` and ${entries.length - 3} more` : ""}.`
+        : "";
+
     findings.push({
       check: "cast-to-server-only-class",
       severity: "warning",
       variable: target,
       message:
         `This casts to ${target}, which is a GameMode and therefore exists only on the server. ` +
-        `On every client the cast fails and nothing after it runs.`,
+        `On every client the cast fails and nothing after it runs.${from}`,
       fix:
         `Put whatever this needs on the GameState instead, which is replicated to clients, or guard ` +
         `the cast with Switch Has Authority if the work genuinely belongs on the server. It will look ` +
