@@ -1,0 +1,112 @@
+name: CI
+
+# Everything here has, until now, only ever been verified on one machine: mine. That machine has the
+# engines installed, the projects in place, a warm npm cache and whatever else accumulated while the
+# thing was being built. A green run there proves the code works *there*.
+#
+# This runs the parts that need no Unreal Editor on a clean Linux box with nothing installed, which
+# is the closest thing to "does this work for somebody else" that can be automated.
+#
+# What is deliberately NOT here: live-verify and the local-model benchmark. Both need a running
+# editor (and one needs a GPU), so they stay manual and their results stay in docs/. Pretending they
+# run in CI would make this badge mean less than it does.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: server (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      # The README promises Node 18+. Nothing had ever checked the lower end of that promise, so the
+      # matrix checks the version claimed and the current one. If 18 fails, the README is what is
+      # wrong, not the runner.
+      fail-fast: false
+      matrix:
+        node: ["18", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      # `npm ci` rather than `npm install`: it installs exactly the lockfile and fails if the
+      # lockfile and package.json disagree, which is a real thing to catch.
+      - name: Install
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build
+        working-directory: mcp-server
+        run: npm run build
+
+      # The whole guard set: typecheck, tool/bridge parity, documentation, profile token budgets,
+      # strict-client protocol conformance, and the unit tests. Every one of these exists because
+      # the thing it prevents had already happened at least once.
+      #
+      # No editor is reachable here, which is itself worth exercising: the suite has to pass with
+      # the bridge absent, and a check that silently needs an editor would fail here rather than
+      # quietly passing forever on the one machine that has one.
+      - name: Guards and tests
+        working-directory: mcp-server
+        run: npm test
+
+      # The two CLI entry points a new user touches first. They must work without an editor: doctor
+      # is what you run when nothing is working, so it failing when nothing is working would be
+      # precisely useless.
+      - name: doctor runs without an editor
+        working-directory: mcp-server
+        run: |
+          set +e
+          output=$(node dist/index.js --doctor 2>&1)
+          status=$?
+          echo "$output"
+          if [ $status -ne 1 ]; then
+            echo "::error::--doctor should exit 1 when the editor is unreachable, got $status"
+            exit 1
+          fi
+          echo "$output" | grep -qi "bridge reachable" || {
+            echo "::error::--doctor did not report on bridge reachability"
+            exit 1
+          }
+
+      - name: print-config produces valid JSON
+        working-directory: mcp-server
+        run: |
+          node dist/index.js --print-config | sed -n '/^{/,$p' > /tmp/config.json
+          node -e "
+            const c = JSON.parse(require('fs').readFileSync('/tmp/config.json', 'utf8'));
+            if (!c.mcpServers?.unreal?.command) { console.error('no unreal server entry'); process.exit(1); }
+            if (!c.mcpServers.unreal.args?.[0]?.endsWith('index.js')) { console.error('no server script'); process.exit(1); }
+            console.log('print-config ok:', c.mcpServers.unreal.args[0]);
+          "
+
+  plugin-sources:
+    name: plugin sources are self-consistent
+    runs-on: ubuntu-latest
+    # The C++ cannot be compiled without an Unreal install, and Epic does not ship one that can be
+    # fetched here. What CAN be checked is that every command the server calls exists in the bridge
+    # source and vice versa - which is exactly the class of bug that once left 14 bridge commands
+    # unreachable because no tool had been registered for them.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - working-directory: mcp-server
+        run: npm ci
+      - working-directory: mcp-server
+        run: npm run build
+      - name: Tool/bridge parity
+        working-directory: mcp-server
+        run: npm run check:parity

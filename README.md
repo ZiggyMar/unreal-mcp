@@ -1,5 +1,7 @@
 # unreal-mcp
 
+[![CI](https://github.com/ZiggyMar/unreal-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ZiggyMar/unreal-mcp/actions/workflows/ci.yml)
+
 ![Unreal MCP Hero Demo](docs/images/hero.gif)
 
 An MCP server that allows AI agents (Claude, Cursor) to directly control and manipulate Unreal Engine.
@@ -164,6 +166,23 @@ Once registered, open your project in the Unreal Editor and verify the connectio
 
 For more configuration options and details, see [`mcp-server/README.md`](mcp-server/README.md).
 
+
+## What CI covers, and what it does not
+
+The badge above covers the parts that need no Unreal install, run on a clean Linux machine with
+nothing preinstalled: build, typecheck, tool/bridge parity, documentation guards, profile token
+budgets, strict-client protocol conformance, and the unit tests - on the oldest Node the README
+promises and on the current one. It also checks that `--doctor` and `--print-config` behave
+correctly with **no editor running**, since that is exactly when someone reaches for them.
+
+It does **not** run live verification or the local-model benchmark. Those need a running editor, and
+one needs a GPU. Their results live in [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) and
+[docs/LOCAL_MODEL_BENCHMARK.md](docs/LOCAL_MODEL_BENCHMARK.md), and they are run by hand against both
+engine versions. Claiming them in CI would make the badge mean less than it does.
+
+The C++ plugin is not compiled in CI either, because Epic does not ship an engine that can be
+fetched there. `npm run build:engines` builds it against every configured engine locally and reports
+success only if every one of them actually built.
 
 ## Contributing
 
