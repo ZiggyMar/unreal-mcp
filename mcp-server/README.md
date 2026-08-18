@@ -400,6 +400,45 @@ Its first run found three real bugs that compiling could not have:
    reads are the enumerated list and everything else gets a generous default.
 3. **`create_blueprint` could hard-crash the editor.** See below.
 
+### Crash sweep: `npm run fuzz:crash`
+
+An assert or access violation inside the editor is not an error a caller can handle or retry. It
+is the editor gone, along with every unsaved change in the user's project. A wrong answer costs a
+retry; a crash costs them their work. So crashes get their own sweep, separate from correctness
+testing:
+
+```bash
+npm run fuzz:crash                 # with an editor open
+npm run fuzz:crash -- --limit 800  # place more of the catalog
+```
+
+Two passes, 477 attempts on the standard run:
+
+1. **Every node type the bridge places directly**, valid and invalid, plus **300 real functions
+   taken from the running engine's own catalog** and placed into a scratch graph.
+2. **Adversarial input on every create path**: empty, 512 characters, unicode, emoji, embedded
+   dots and slashes, `../..` traversal, quotes, `None`, a leading digit.
+
+A structured refusal counts as a **pass** - the tool said no instead of dying. Only a dead
+connection counts as a failure. Because a crash also ends the run, progress is written after every
+single attempt, so the sweep resumes past the input that killed the editor and names it in the
+report.
+
+Result on the current build: **364 accepted, 113 refused cleanly, 0 crashes**, including all 300
+catalog functions.
+
+The sweep found this, which is the second crash of the family and the reason the pass exists:
+
+```
+Assertion failed: false [UnrealNames.cpp:3278]
+FName's 1023 max length exceeded. Got 1039 characters excluding null-terminator
+```
+
+A 512-character asset name closed the editor. The doubling is the trap: the object path is
+`<package>.<name>`, so the name is counted twice and 512 sails past 1023. Every create path now
+validates the path first - length caps well below the engine's limit, `IsValidLongPackageName`,
+and `IsValidXName` - because there is no error to catch once `FName` asserts.
+
 ### The crash worth naming
 
 `FPackageName::DoesPackageExist` answers for the **disk**. `FKismetEditorUtilities::CreateBlueprint`

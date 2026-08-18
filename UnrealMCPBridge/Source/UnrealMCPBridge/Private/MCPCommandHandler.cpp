@@ -849,6 +849,74 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 // =============================== Milestone 2 ===============================
 
 /**
+ * Reject an asset path the engine would assert on, before touching the engine.
+ *
+ * Found by the crash sweep: a 512-character asset name closes the editor outright.
+ *
+ *   Assertion failed: false [UnrealNames.cpp:3278]
+ *   FName's 1023 max length exceeded. Got 1039 characters excluding null-terminator
+ *
+ * The doubling is the trap. A caller passes one long name, and the object path built from it is
+ * "<package>.<name>", so the name is counted twice and a 512-character name sails past 1023. There
+ * is no error to catch: FName asserts, and an assert in the editor is the editor gone along with
+ * the user's unsaved work.
+ *
+ * The caps below are far stricter than 1023 on purpose. Unreal itself recommends keeping content
+ * paths short for cooking, Windows still has filesystem path limits for the .uasset that lands on
+ * disk, and no real asset needs a hundred-character name. A tool refusing an absurd name costs a
+ * caller one retry; letting it through costs them the editor.
+ */
+static constexpr int32 MaxAssetNameLength = 100;
+static constexpr int32 MaxPackagePathLength = 200;
+
+static bool ValidateNewAssetPath(const FString& PackagePath, FString& OutError)
+{
+	if (PackagePath.IsEmpty())
+	{
+		OutError = TEXT("bad_package_path: packagePath is empty");
+		return false;
+	}
+	if (PackagePath.Len() > MaxPackagePathLength)
+	{
+		OutError = FString::Printf(
+			TEXT("package_path_too_long: %d characters, limit is %d. Long content paths break cooking and ")
+			TEXT("filesystem limits, and the engine asserts outright past its own FName limit."),
+			PackagePath.Len(), MaxPackagePathLength);
+		return false;
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	if (AssetName.IsEmpty())
+	{
+		OutError = FString::Printf(TEXT("bad_package_path: '%s' has no asset name after the last slash"), *PackagePath);
+		return false;
+	}
+	if (AssetName.Len() > MaxAssetNameLength)
+	{
+		OutError = FString::Printf(
+			TEXT("asset_name_too_long: '%s...' is %d characters, limit is %d. The object path repeats the name ")
+			TEXT("(package.name), so a long name counts twice toward the engine's hard 1023-character limit."),
+			*AssetName.Left(24), AssetName.Len(), MaxAssetNameLength);
+		return false;
+	}
+
+	FText Reason;
+	if (!FPackageName::IsValidLongPackageName(PackagePath, /*bIncludeReadOnlyRoots=*/false, &Reason))
+	{
+		OutError = FString::Printf(
+			TEXT("bad_package_path: '%s' is not a valid content path (%s). Use a /Game/... path, e.g. ")
+			TEXT("/Game/Blueprints/BP_Thing."), *PackagePath, *Reason.ToString());
+		return false;
+	}
+	if (!FName::IsValidXName(AssetName, INVALID_OBJECTNAME_CHARACTERS, &Reason))
+	{
+		OutError = FString::Printf(TEXT("bad_asset_name: '%s' (%s)"), *AssetName, *Reason.ToString());
+		return false;
+	}
+	return true;
+}
+
+/**
  * Refuse to create an asset whose name is already taken IN MEMORY.
  *
  * FPackageName::DoesPackageExist only answers for what is on disk. FKismetEditorUtilities::
@@ -897,6 +965,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		bSave = Params->GetBoolField(TEXT("save"));
 	}
 
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
+	}
 	if (FPackageName::DoesPackageExist(PackagePath))
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
@@ -2627,6 +2700,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateLevel(const TSharedPtr<F
 	{
 		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Maps/NewLevel"));
 	}
+	FString LevelPathError;
+	if (!ValidateNewAssetPath(PackagePath, LevelPathError))
+	{
+		return MakeErrorResponse(LevelPathError);
+	}
 
 	// Refuse an existing path BEFORE touching AssetTools: CreateAsset answers an existing
 	// asset with a modal overwrite dialog, which freezes the game thread and therefore
@@ -3490,6 +3568,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateWidgetBlueprint(const TS
 		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/UI/W_HealthBar"));
 	}
 
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
+	}
 	if (FPackageName::DoesPackageExist(PackagePath))
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
@@ -3974,6 +4057,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateStruct(const TSharedPtr<
 	{
 		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Data/S_ItemData"));
 	}
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
+	}
 	if (FPackageName::DoesPackageExist(PackagePath))
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
@@ -4151,6 +4239,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateEnum(const TSharedPtr<FJ
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("packagePath"), PackagePath))
 	{
 		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Data/E_WeaponType"));
+	}
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
 	}
 	if (FPackageName::DoesPackageExist(PackagePath))
 	{
