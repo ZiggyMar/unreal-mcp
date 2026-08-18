@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
+import { autoLayoutGraph } from "./autoLayout.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -655,9 +656,17 @@ server.registerTool(
         .optional()
         .describe("Literal defaults to set on unconnected input pins."),
       compile: z.boolean().optional().describe("Compile the Blueprint after building. Defaults to true."),
+      autoLayout: z
+        .boolean()
+        .optional()
+        .describe(
+          "Tidy the whole graph's node positions after building, so it reads left to right with straight exec " +
+            "chains and no overlaps. Defaults to TRUE, and you should almost always leave it on: you do not need to " +
+            "supply x/y at all. Pass false only if you set every x/y deliberately and want them preserved exactly."
+        ),
     },
   },
-  async ({ path, graphName, nodes, connections, pinDefaults, compile }) => {
+  async ({ path, graphName, nodes, connections, pinDefaults, compile, autoLayout }) => {
     try {
       const result = await bridge.send<BuildGraphResult>("build_graph", {
         path,
@@ -667,7 +676,21 @@ server.registerTool(
         pinDefaults,
         compile,
       });
-      return jsonResult(result);
+
+      // Layout is cosmetic and must never turn a successful build into a failed tool call, so a
+      // layout error is reported alongside the build result rather than thrown over it.
+      if (autoLayout === false) {
+        return jsonResult(result);
+      }
+      try {
+        const layout = await autoLayoutGraph(bridge, path, graphName, { addCommentBoxes: false });
+        return jsonResult({ ...result, layout: { nodesMoved: layout.nodesMoved, columns: layout.columns } });
+      } catch (layoutErr) {
+        return jsonResult({
+          ...result,
+          layoutError: layoutErr instanceof Error ? layoutErr.message : String(layoutErr),
+        });
+      }
     } catch (err) {
       return errorResult(err);
     }
@@ -1146,6 +1169,52 @@ server.registerTool(
     try {
       const result = await bridge.send("pie_status", {});
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_auto_layout_graph",
+  {
+    title: "Auto-layout a graph and label its sections",
+    description:
+      "Makes an existing graph read like a careful human built it, in one call, without you working out a single " +
+      "coordinate. Nodes are ranked into left-to-right columns so every wire points forward, ordered to minimise " +
+      "crossings, straightened so execution chains run along one row, and spaced so nothing overlaps. By default it " +
+      "then wraps each execution chain in a comment box titled after the event that starts it, so a reader sees " +
+      '"Event BeginPlay" as a labelled region instead of a float of nodes.\n\n' +
+      "Run this whenever you have finished a piece of work in a graph, including graphs you did not author: it is " +
+      "purely cosmetic, safe to run repeatedly (it will not stack duplicate comment boxes), and it is the difference " +
+      "between output that compiles and output someone is happy to inherit. unreal_build_graph already applies the " +
+      "positioning half automatically; call this to also get the comment boxes, or to tidy a graph built any other way.",
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      graphName: z.string().describe('Graph to lay out, e.g. "EventGraph" or a function graph name.'),
+      addCommentBoxes: z
+        .boolean()
+        .optional()
+        .describe(
+          "Wrap each execution chain in a comment box titled after its event. Defaults to true. A chain of fewer " +
+            "than two nodes is never boxed, and a box whose title already exists is skipped."
+        ),
+      columnGap: z.number().optional().describe("Horizontal gap between columns. Defaults to 120."),
+      rowGap: z.number().optional().describe("Vertical gap between nodes in a column. Defaults to 56."),
+      originX: z.number().optional().describe("X of the leftmost column. Defaults to 0."),
+      originY: z.number().optional().describe("Y of the top of the layout. Defaults to 0."),
+    },
+  },
+  async ({ path, graphName, addCommentBoxes, columnGap, rowGap, originX, originY }) => {
+    try {
+      const report = await autoLayoutGraph(bridge, path, graphName, {
+        addCommentBoxes,
+        columnGap,
+        rowGap,
+        originX,
+        originY,
+      });
+      return jsonResult(report);
     } catch (err) {
       return errorResult(err);
     }

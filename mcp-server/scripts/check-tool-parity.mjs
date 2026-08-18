@@ -34,8 +34,14 @@ const aliases = new Map([
   ["read_node_detail", "read_blueprint_node_detail"],
 ]);
 
+// Tools implemented in the MCP server by composing several bridge commands, rather than mapping
+// to one. These are deliberate: they belong on the client side because they need no engine access
+// beyond the commands that already exist.
+const compositeTools = new Set(["auto_layout_graph"]);
+
 const covered = new Set();
 for (const tool of registeredTools) {
+  if (compositeTools.has(tool)) continue;
   covered.add(aliases.get(tool) ?? tool);
 }
 
@@ -43,7 +49,10 @@ const unreachable = [...bridgeCommands].filter((cmd) => !covered.has(cmd)).sort(
 const dangling = [...covered].filter((cmd) => !bridgeCommands.has(cmd)).sort();
 
 if (unreachable.length === 0 && dangling.length === 0) {
-  console.log(`tool parity ok: ${bridgeCommands.size} bridge commands, ${registeredTools.size} MCP tools, all matched`);
+  console.log(
+    `tool parity ok: ${bridgeCommands.size} bridge commands, ${registeredTools.size} MCP tools ` +
+      `(${compositeTools.size} composite), all matched`
+  );
   process.exit(0);
 }
 
