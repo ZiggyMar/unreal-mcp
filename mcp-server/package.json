@@ -26,7 +26,8 @@
     "stress": "node scripts/stress-build.mjs",
     "build:engines": "node scripts/build-engines.mjs",
     "check:fresh": "node scripts/check-binary-fresh.mjs",
-    "check:protocol": "node scripts/check-protocol.mjs"
+    "check:protocol": "node scripts/check-protocol.mjs",
+    "audit": "node scripts/audit-project.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

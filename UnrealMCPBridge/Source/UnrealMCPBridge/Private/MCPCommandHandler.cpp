@@ -32,6 +32,7 @@
 #include "Factories/WorldFactory.h"
 #include "Engine/World.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/GameModeBase.h"
 #include "GameMapsSettings.h"
 #include "GameFramework/InputSettings.h"
 #include "Settings/LevelEditorPlaySettings.h"
@@ -700,6 +701,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("set_game_settings"))
 	{
 		Response = HandleSetGameSettings(Params);
+	}
+	else if (Cmd == TEXT("list_input_mappings"))
+	{
+		Response = HandleListInputMappings(Params);
+	}
+	else if (Cmd == TEXT("get_game_settings"))
+	{
+		Response = HandleGetGameSettings(Params);
 	}
 	else if (Cmd == TEXT("add_input_mapping"))
 	{
@@ -3269,6 +3278,88 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetGameSettings(const TSharedP
 	// Persists to DefaultEngine.ini so the change survives an editor restart.
 	Settings->TryUpdateDefaultConfigFile();
 	Result->SetBoolField(TEXT("saved"), true);
+	return MakeOkResponse(Result);
+}
+
+// Reading input and game settings, not only writing them.
+//
+// This server could add an input mapping and set a default GameMode, and could read back neither.
+// That asymmetry is invisible while an agent is building something from nothing - it knows what it
+// just wrote - and total the moment it inherits a project it did not build.
+//
+// It also makes the single most common "it doesn't work" unanswerable. An independent hands-on
+// review of Unreal MCP servers hit exactly that: the player could not move, and the reviewer noted
+// that a new user who can only say "it still doesn't work" would end up scrapping the project.
+// Movement not working is usually one of four mechanical facts - no mapping, no GameMode, the wrong
+// pawn, or a pawn with no input events - and three of those were unreadable.
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListInputMappings(const TSharedPtr<FJsonObject>& Params)
+{
+	const UInputSettings* InputSettings = UInputSettings::GetInputSettings();
+	if (!InputSettings)
+	{
+		return MakeErrorResponse(TEXT("input_settings_unavailable"));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Actions;
+	for (const FInputActionKeyMapping& Mapping : InputSettings->GetActionMappings())
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Mapping.ActionName.ToString());
+		Entry->SetStringField(TEXT("key"), Mapping.Key.ToString());
+		Actions.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Axes;
+	for (const FInputAxisKeyMapping& Mapping : InputSettings->GetAxisMappings())
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Mapping.AxisName.ToString());
+		Entry->SetStringField(TEXT("key"), Mapping.Key.ToString());
+		Entry->SetNumberField(TEXT("scale"), Mapping.Scale);
+		Axes.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("actionMappings"), Actions);
+	Result->SetArrayField(TEXT("axisMappings"), Axes);
+	Result->SetNumberField(TEXT("actionCount"), Actions.Num());
+	Result->SetNumberField(TEXT("axisCount"), Axes.Num());
+	// Enhanced Input keeps its mappings in Input Mapping Context assets rather than here, so an
+	// empty list is not proof that a project has no input - it is proof it has no LEGACY input.
+	// Saying so stops a caller concluding the wrong thing from an honest empty answer.
+	Result->SetStringField(
+		TEXT("note"),
+		TEXT("These are the legacy (project settings) input mappings. A project using Enhanced Input "
+			 "keeps its bindings in InputMappingContext and InputAction assets instead; find those with "
+			 "list_assets className=InputMappingContext."));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetGameSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("defaultGameMode"), UGameMapsSettings::GetGlobalDefaultGameMode());
+
+	Result->SetStringField(TEXT("gameDefaultMap"), UGameMapsSettings::GetGameDefaultMap());
+	// The editor startup map is deliberately absent: that setting is an enum choice (last opened,
+	// specific level, none) rather than a map name, so reporting it as one would be a small lie in
+	// a command whose whole job is answering "what is actually configured".
+
+	// The GameMode named in project settings can be overridden per level in World Settings, and a
+	// caller chasing "the wrong pawn spawns" needs to know that the answer here may not be the one
+	// that applies.
+	if (const UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr)
+	{
+		Result->SetStringField(TEXT("currentLevel"), World->GetMapName());
+		if (const AWorldSettings* WorldSettings = World->GetWorldSettings())
+		{
+			const UClass* OverrideClass = WorldSettings->DefaultGameMode.Get();
+			Result->SetStringField(
+				TEXT("levelGameModeOverride"),
+				OverrideClass ? OverrideClass->GetPathName() : TEXT("(none)"));
+		}
+	}
 	return MakeOkResponse(Result);
 }
 

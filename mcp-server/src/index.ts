@@ -211,7 +211,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_list_enum_entries",
     "unreal_list_assets",
   ],
-  scene: [
+  scene: ["unreal_list_input_mappings", "unreal_get_game_settings", 
     "unreal_create_level",
     "unreal_open_level",
     "unreal_spawn_actor",
@@ -1496,6 +1496,47 @@ register(
     try {
       const result = await bridge.send("set_game_settings", { defaultGameMode, editorStartupMap, gameDefaultMap });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_input_mappings",
+  {
+    title: "What input is bound, and to which key",
+    description:
+      "Reads the project's input mappings. **Start here when something will not respond to a key or a button** - " +
+      "the most common cause is that the binding simply is not there, and that is one call to rule out. " +
+      "Reports the legacy (project settings) mappings. A project on Enhanced Input keeps its bindings in " +
+      "InputMappingContext assets instead, and the result says so rather than letting an empty list read as " +
+      "'this project has no input'.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return jsonResult(await bridge.send("list_input_mappings", {}));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_get_game_settings",
+  {
+    title: "Which GameMode, which map",
+    description:
+      "Reads the project's default GameMode and default map, plus the level currently open and any GameMode " +
+      "override that level sets. " +
+      "**Reach for this when the wrong thing spawns, or nothing does.** A level's World Settings can override the " +
+      "project GameMode, so the answer in project settings is not always the one that applies - both are reported.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return jsonResult(await bridge.send("get_game_settings", {}));
     } catch (err) {
       return errorResult(err);
     }
