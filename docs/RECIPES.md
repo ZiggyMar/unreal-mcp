@@ -288,6 +288,44 @@ today through components.
 
 ---
 
+## 9. A nametag above every player, with the name fetched once
+
+The recipe that exercises every judgment call in section 8b of the handbook at the same time, which
+is why it is written out rather than left to instinct.
+
+**The shape**
+
+1. **A widget** (`unreal_scaffold_widget`) — a `UserWidget` whose root is a `SizeBox` or
+   `VerticalBox` containing one `TextBlock` called `NameText`. Give it one variable, `DisplayName`
+   (text), so the owner can set it from outside rather than the widget going looking.
+2. **A WidgetComponent on the pawn** (`unreal_add_component`, class `WidgetComponent`) attached
+   above the capsule. Set its `Space` to `World`, its `WidgetClass` to the widget above, and its
+   relative location to roughly the top of the mesh.
+3. **The name itself** — read from `PlayerState`, not from the pawn and not from the widget.
+
+**Why each of those, specifically**
+
+- The widget takes the name as a **variable rather than fetching it**. A widget that fetches is a
+  widget that fetches once per instance, per respawn, forever. A widget that is *told* is fetched
+  once by whoever owns the truth.
+- The name lives on **PlayerState** because it must survive the pawn dying, and because other
+  players need to see it. Both of those are the definition of PlayerState in the handbook table.
+  Putting it on the Character means every nametag is wrong for one frame after every respawn.
+- If the name comes from an online subsystem, read it **once** in the GameInstance at startup and
+  hand it to the PlayerState. Replication then delivers it to everyone for free.
+
+**Placement**
+
+Put the WidgetComponent's relative Z near the top of the capsule rather than guessing at the mesh:
+`Get Capsule Component` -> its half-height is the number you want, plus a small margin. A hardcoded
+Z that looks right on one character is wrong on the next one.
+
+**The check that matters**
+
+Play with two players. The nametag should be correct **immediately** after a respawn, and correct
+on the *other* player's screen, not just your own. If it is right locally and wrong remotely, the
+name is being read on the wrong side - see the multiplayer section of the handbook.
+
 ## Nodes that are not functions
 
 This is the trap that most reliably defeats a model with no Unreal training, and no amount of

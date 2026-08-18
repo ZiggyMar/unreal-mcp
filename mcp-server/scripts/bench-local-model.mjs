@@ -115,7 +115,8 @@ const TASKS = {
         graphName: "EventGraph",
       });
       const hasEvent = /BeginPlay/i.test(summary);
-      const hasPrint = /Print String/i.test(summary);
+      // 5.6 titles this node "Print String" and 5.8 titles it "PrintString".
+      const hasPrint = /Print\s*String/i.test(summary);
       if (!hasEvent) return { done: false, why: "no BeginPlay event in the graph" };
       if (!hasPrint) return { done: false, why: "BeginPlay exists but nothing prints" };
       // Wired, not merely present: two unconnected nodes are not a working graph.
@@ -291,7 +292,7 @@ const TASKS = {
       });
       if (!/BeginPlay/i.test(summary)) return { done: false, why: "no BeginPlay handler" };
       if (!/Overlap/i.test(summary)) return { done: false, why: "BeginPlay exists but no overlap handler" };
-      const prints = (summary.match(/Print String/g) ?? []).length;
+      const prints = (summary.match(/Print\s*String/g) ?? []).length;
       if (prints < 2) return { done: false, why: `only ${prints} Print String node(s); both handlers should print` };
       if (!/linkedTo":\[\{/.test(summary)) return { done: false, why: "nodes exist but nothing is wired" };
 
