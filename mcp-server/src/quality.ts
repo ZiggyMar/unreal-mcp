@@ -196,7 +196,19 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityR
   }
 
   // --- Dead nodes: wired to nothing, doing nothing, but shipped anyway. ---
-  const dead = nodes.filter((node) => !hasAnyConnection(node));
+  // Events are excluded, and the reason is the whole safety argument for automatic cleanup.
+  //
+  // An unconnected Event node satisfies "connected to nothing", but deleting one is not the same as
+  // deleting a stray expression. On a Blueprint whose PARENT is also a Blueprint, an empty override
+  // event suppresses the parent's implementation - so removing it restores parent behaviour, which
+  // is a behaviour change, which is exactly what cleanup promises never to do.
+  //
+  // Found on real code: cleanup reported "2 dead nodes will be removed" and, in the same result,
+  // "2 empty events - only you know which was intended". They were the same two nodes. The tool
+  // refused to decide and then decided anyway.
+  //
+  // They are still reported, by the empty-event check, which cleanup leaves alone.
+  const dead = nodes.filter((node) => !hasAnyConnection(node) && !isEventNode(node));
   if (dead.length > 0 && nodes.length > 1) {
     findings.push({
       check: "dead-node",

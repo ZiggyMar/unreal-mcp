@@ -202,3 +202,34 @@ test("an empty graph is not an error and is not scored down", () => {
   assert.deepEqual(report.findings, []);
   assert.equal(report.nodeCount, 0);
 });
+
+test("an unconnected event is not called a dead node", () => {
+  // Found on real code: cleanup said it would remove 2 dead nodes and, in the same result, that 2
+  // empty events were "only you know which was intended". They were the same two nodes.
+  //
+  // It matters beyond the contradiction: on a Blueprint whose parent is also a Blueprint, an empty
+  // override event suppresses the parent's implementation, so deleting it restores parent
+  // behaviour - a behaviour change, from the one tool that promises never to make one.
+  const report = reviewGraph("EventGraph", [
+    node("1", "K2Node_Event", "Event BeginPlay"),
+    node("2", "K2Node_Event", "Event ActorBeginOverlap"),
+  ]);
+  const deadNode = report.findings.find((f) => f.check === "dead-node");
+  assert.equal(deadNode, undefined, "an unconnected event was reported as a removable dead node");
+  assert.ok(
+    report.findings.some((f) => f.check === "empty-event"),
+    "the events should still be reported, as empty-event"
+  );
+});
+
+test("a genuinely stray node is still reported as dead", () => {
+  // The other half: excluding events must not neuter the check that made it worth having.
+  const report = reviewGraph("EventGraph", [
+    node("1", "K2Node_Event", "Event BeginPlay", [["then", "out", "2", "execute"]]),
+    node("2", "K2Node_CallFunction", "Print String", [["execute", "in", "1", "then"]]),
+    node("3", "K2Node_CallFunction", "Get Actor Location"),
+  ]);
+  const deadNode = report.findings.find((f) => f.check === "dead-node");
+  assert.ok(deadNode, "a stray non-event node was not reported");
+  assert.deepEqual(deadNode.nodeIds, ["3"]);
+});

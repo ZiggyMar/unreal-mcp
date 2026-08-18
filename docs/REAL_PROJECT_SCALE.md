@@ -387,6 +387,57 @@ built for 5.6 only. Nothing was broken; the binary was simply older than the tes
 because it is the third time the same lesson has come back in a different costume: **a build is not
 a run, and two engines means two runs.**
 
+## The tool that edits, pointed at real code
+
+`cleanup_blueprint` is the only tool here that changes a Blueprint on its own, and it was the last
+one never run against a real project. It is also the one where being wrong costs something: a false
+positive in a reviewer wastes tokens, a false positive in an editor destroys work.
+
+Its contract is explicit - **only changes that cannot alter what the Blueprint does**. A dry run
+against the real vacuum player broke that contract in its own output:
+
+```
+deadNodesRemoved: 2
+leftForYou:
+  - empty-event x2: "Either implement the event or remove it,
+                     and only you know which was intended."
+```
+
+Both entries were the same two nodes: an unconnected `Event BeginPlay` and `Event
+ActorBeginOverlap`. The tool declined to decide, and then decided.
+
+### Why deleting an empty event is not cosmetic
+
+An unconnected Event node satisfies "connected to nothing", but it is a declaration rather than a
+stray expression. On a Blueprint whose **parent is also a Blueprint**, an empty override event
+suppresses the parent's implementation - so removing it restores the parent behaviour. That is a
+behaviour change, from the one tool that promises never to make one.
+
+This is not hypothetical in this project: `BP_Player`'s parent is `BP_BaseCharacter`, a Blueprint.
+
+### The fix, upstream
+
+The `empty-event` check already reported these, so `dead-node` no longer claims them. One change
+fixes the double-report and the unsafe deletion together, and cleanup was already leaving
+`empty-event` alone.
+
+Re-run against the same real Blueprints, cleanup now proposes **zero** removals and defers both
+events.
+
+### Checking it was not simply neutered
+
+Excluding events could have turned a useful tool into a no-op, so the other half was verified live:
+a Blueprint with one wired Print String and one orphaned one.
+
+| | before | after |
+| --- | --- | --- |
+| CallFunction | 2 | **1** |
+| Event | 3 | **3** |
+| Comment | 0 | 1 |
+
+The stray call is gone, every event survived, and a labelled section was added. Both halves are now
+permanent checks - the live suite fails if cleanup ever removes an event node again.
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,

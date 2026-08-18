@@ -293,6 +293,45 @@ async function main() {
     return `Score flagged on ${scored.parentClass}, Health left alone`;
   });
 
+  await check("cleanup removes a stray node and does NOT remove empty events", async () => {
+    // Found on real code: cleanup reported it would remove 2 dead nodes while also saying 2 empty
+    // events were "only you know which was intended". They were the same two nodes. Deleting an
+    // empty override event is not cosmetic - on a Blueprint whose parent is also a Blueprint it
+    // suppresses the parent's implementation, so removing it CHANGES behaviour.
+    const { cleanupBlueprint } = await import("../dist/cleanup.js");
+    const probe = `${ROOT}/BP_MCPCleanProbe`;
+    const obj = `${probe}.BP_MCPCleanProbe`;
+    await bridge.send("create_blueprint", { packagePath: probe, parentClass: "Actor", save: false });
+    await bridge.send("build_graph", {
+      path: obj,
+      graphName: "EventGraph",
+      nodes: [
+        { ref: "e", nodeType: "Event", eventName: "ReceiveBeginPlay" },
+        { ref: "p", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+        { ref: "orphan", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+      ],
+      connections: [{ from: "e.then", to: "p.execute" }],
+    });
+    const countKinds = async () => {
+      const g = await bridge.send("read_blueprint_graph_summary", { path: obj, graphName: "EventGraph" });
+      return {
+        events: g.nodes.filter((n) => n.type === "K2Node_Event").length,
+        calls: g.nodes.filter((n) => n.type === "K2Node_CallFunction").length,
+      };
+    };
+    const before = await countKinds();
+    await cleanupBlueprint(bridge, obj, {});
+    const after = await countKinds();
+
+    if (after.calls !== before.calls - 1) {
+      throw new Error(`expected the stray call to be removed: ${before.calls} -> ${after.calls}`);
+    }
+    if (after.events !== before.events) {
+      throw new Error(`cleanup removed ${before.events - after.events} event node(s); events must be left alone`);
+    }
+    return `stray call removed, all ${after.events} events kept`;
+  });
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -1106,6 +1145,7 @@ async function main() {
           `${brownPath}.BP_MCPBrownfield`,
           `${ROOT}/BP_MCPNetProbe.BP_MCPNetProbe`,
           `${ROOT}/BP_MCPStateProbe.BP_MCPStateProbe`,
+          `${ROOT}/BP_MCPCleanProbe.BP_MCPCleanProbe`,
           `${tablePath}.DT_MCPVerifyItems`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,
