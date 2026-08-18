@@ -462,6 +462,43 @@ nodes, unhandled cast failures, and leftover debug prints compiles perfectly.
 Every check is deliberately conservative. A false positive teaches a model to distrust the whole
 report, which costs more than a missed finding.
 
+### Cost modes: how much to spend per build
+
+Building one system should not cost half a million tokens. The same feature written in C++ costs
+maybe twenty thousand, and the difference is not intelligence, it is that a Blueprint tool can be
+chatty in ways a text editor cannot.
+
+Set `UNREAL_MCP_MODE` to choose how much a build spends. Measured on a real 5-node build against a
+running editor, by `npm run measure:cost`:
+
+| Mode | Build response | vs max | What you get |
+| --- | --- | --- | --- |
+| `fast` | ~110 tokens | 14% | Correct, compiled, laid-out graphs. Minimal reporting. |
+| `standard` (default) | ~172 tokens | 21% | The above, plus a quality score and the single most important thing to fix next. |
+| `max` | ~808 tokens | 100% | The above, plus labelled comment boxes per execution chain, every review finding with its fix, and per-node detail. |
+
+**The floor never moves.** Every mode still places whole graphs atomically inside one transaction,
+lays them out so they read left to right with straight execution chains, compiles, and refuses to
+silently do the wrong thing. What changes between modes is the *polish and the paperwork* — never
+the correctness of what lands in the project.
+
+That distinction is the whole design, and there is a test asserting it: a mode that produced worse
+Blueprints to save tokens would be a trap, because the person choosing the cheap mode is usually
+the person least able to spot the difference.
+
+Two things worth knowing:
+
+- **`fast` says what it gave up.** Its description tells the model that the review is no longer
+  attached automatically and it must call `unreal_review_blueprint` itself before claiming a
+  feature is done. Cheap should be a choice, not a silent downgrade.
+- **`standard` keeps the score and one next action** — about thirty tokens. Dropping it would save
+  almost nothing and would remove the only unprompted quality feedback a weaker model ever gets.
+
+`unreal_doctor` reports the active mode and what it means, since it changes what every call costs.
+
+Combine with `UNREAL_MCP_PROFILE=lazy` for the cheapest useful setup: 20 tools (~6.6k tokens of
+standing cost instead of ~17.7k) and ~110-token build responses.
+
 ### Tool profiles: paying only for what you use
 
 Tool definitions are paid for on every request, before the user's message is read. The full set is

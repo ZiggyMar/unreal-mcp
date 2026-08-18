@@ -10,6 +10,7 @@ import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
 import { SessionJournal } from "./journal.js";
 import { mapSystem } from "./systemMap.js";
+import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -175,6 +176,10 @@ const GROUP_SUMMARY: Record<string, string> = {
 };
 
 const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
+
+// How much to spend per build. The floor never moves: every mode still builds atomically, lays the
+// graph out, and compiles. Modes trade polish and paperwork, never correctness.
+const { policy: MODE, warning: MODE_WARNING } = resolveMode(process.env.UNREAL_MCP_MODE);
 const registeredToolNames: string[] = [];
 const toolHandles = new Map<string, { enable(): void; disable(): void; enabled: boolean }>();
 
@@ -848,19 +853,44 @@ register(
         return jsonResult(result);
       }
       try {
-        const layout = await autoLayoutGraph(bridge, path, graphName, { addCommentBoxes: false });
+        // Layout happens in every mode. A graph nobody can read is not a cheaper graph.
+        const layout = await autoLayoutGraph(bridge, path, graphName, {
+          addCommentBoxes: MODE.commentBoxes,
+        });
+
+        // Trim the per-node echo unless asked for: the caller already knows what it sent, and the
+        // ref-to-id map is the only part it cannot reconstruct.
+        const buildPart = MODE.verboseBuildResult
+          ? result
+          : {
+              nodes: Object.fromEntries(Object.entries(result.nodes ?? {}).map(([ref, n]) => [ref, n.id])),
+              connectionsMade: result.connectionsMade,
+              pinDefaultsSet: result.pinDefaultsSet,
+              compile: result.compile,
+            };
+
+        if (MODE.attachReview === "none") {
+          return jsonResult({ ...buildPart, layout: { nodesMoved: layout.nodesMoved }, mode: MODE.mode });
+        }
+
         // Review the graph we just built and hand the findings back unasked. A model that never
         // calls unreal_review_blueprint is exactly the model that most needs to hear this.
         const review = await reviewBlueprint(bridge, path, graphName);
+        const reviewPart =
+          MODE.attachReview === "summary"
+            ? { score: review.score, nextAction: review.nextAction }
+            : {
+                score: review.score,
+                summary: review.summary,
+                nextAction: review.nextAction,
+                findings: review.graphs.flatMap((graph) => graph.findings).slice(0, MODE.maxFindings),
+              };
+
         return jsonResult({
-          ...result,
+          ...buildPart,
           layout: { nodesMoved: layout.nodesMoved, columns: layout.columns },
-          review: {
-            score: review.score,
-            summary: review.summary,
-            nextAction: review.nextAction,
-            findings: review.graphs.flatMap((graph) => graph.findings),
-          },
+          review: reviewPart,
+          mode: MODE.mode,
         });
       } catch (layoutErr) {
         return jsonResult({
@@ -1446,7 +1476,9 @@ register(
   async () => {
     try {
       const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
-      return jsonResult(report);
+      // Which mode is active changes what every build costs and how much feedback comes back
+      // unasked, so it belongs in the one call people run when something seems off.
+      return jsonResult({ ...report, mode: MODE.mode, modeMeans: MODE.description });
     } catch (err) {
       return errorResult(err);
     }
@@ -2064,8 +2096,12 @@ async function main() {
   await server.connect(transport);
   console.error(
     `unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}; ` +
-      `profile "${PROFILE}" with ${[...toolHandles.values()].filter((h) => h.enabled).length}/${registeredToolNames.length} tools enabled`
+      `profile "${PROFILE}" with ${[...toolHandles.values()].filter((h) => h.enabled).length}/${registeredToolNames.length} tools enabled; ` +
+      `mode "${MODE.mode}"`
   );
+  if (MODE_WARNING) {
+    console.error(`unreal-mcp-server: ${MODE_WARNING}`);
+  }
   if (PROFILE !== "core" && PROFILE !== "full" && PROFILE !== "lazy") {
     console.error(
       `unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: core, lazy, full.`

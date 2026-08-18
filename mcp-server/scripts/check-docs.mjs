@@ -80,6 +80,7 @@ const REQUIRED_README_SECTIONS = [
   "### When something is wrong",
   "### The quality gate",
   "### Knowing what the agent touched",
+  "### Cost modes",
   "### Tool profiles",
   "### Live verification",
   "### Crash sweep",

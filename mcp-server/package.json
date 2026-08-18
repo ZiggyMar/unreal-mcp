@@ -18,7 +18,8 @@
     "verify:live": "node scripts/live-verify.mjs",
     "fuzz:crash": "node scripts/fuzz-nodes.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "verify:handbook": "node scripts/verify-handbook.mjs"
+    "verify:handbook": "node scripts/verify-handbook.mjs",
+    "measure:cost": "node scripts/measure-cost.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
