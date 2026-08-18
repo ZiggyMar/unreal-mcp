@@ -2525,6 +2525,60 @@ async function main() {
     }
   }
 
+  // `--print-config` emits the exact JSON to paste into a client, with absolute paths already
+  // resolved.
+  //
+  // Client setup is its own category of failure, and it is entirely self-inflicted: a missing comma
+  // breaks the whole file, a relative path silently does not resolve, and on Windows a bare "node"
+  // may not be on the PATH the client uses. Every one of those produces the same symptom - the
+  // server never starts and the user has no idea why. None of it is interesting, and none of it
+  // should be typed by hand by someone whose actual goal is to make a game.
+  if (process.argv.includes("--print-config")) {
+    const entry = fileURLToPath(import.meta.url);
+    const clientIndex = process.argv.indexOf("--client");
+    const client = clientIndex >= 0 ? process.argv[clientIndex + 1] : "claude-desktop";
+    const isWindows = process.platform === "win32";
+    // Built from a char code: a literal backslash in a path string is the single most common
+    // thing to lose to an editor, a shell, or a copy-paste on the way here.
+    const BACKSLASH = String.fromCharCode(92);
+
+    // process.execPath is the node that is running THIS, so it is guaranteed to exist and to be
+    // the right one. "node" would depend on the client's PATH, which is the usual cause of a
+    // server that never starts.
+    const server = {
+      command: process.execPath,
+      args: [entry],
+      env: {
+        UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "lazy",
+        UNREAL_MCP_MODE: process.env.UNREAL_MCP_MODE ?? "standard",
+      },
+    };
+
+    const configs: Record<string, unknown> = {
+      "claude-desktop": { mcpServers: { unreal: server } },
+      cursor: { mcpServers: { unreal: server } },
+      "claude-code": { mcpServers: { unreal: server } },
+    };
+    const chosen = configs[client] ?? configs["claude-desktop"];
+
+    const where: Record<string, string> = {
+      "claude-desktop": isWindows
+        ? `%APPDATA%${BACKSLASH}Claude${BACKSLASH}claude_desktop_config.json`
+        : "~/Library/Application Support/Claude/claude_desktop_config.json",
+      cursor: isWindows ? `%USERPROFILE%${BACKSLASH}.cursor${BACKSLASH}mcp.json` : "~/.cursor/mcp.json",
+      "claude-code": "run: claude mcp add-json unreal '<the JSON below>'",
+    };
+
+    console.log(`# Paste this into: ${where[client] ?? where["claude-desktop"]}`);
+    console.log("#");
+    console.log("# Paths are absolute and already correct for this machine. If the file already has");
+    console.log('# an "mcpServers" block, add the "unreal" entry inside it rather than replacing it.');
+    console.log("# Then FULLY QUIT the client and reopen it - closing the window is not enough.");
+    console.log("");
+    console.log(JSON.stringify(chosen, null, 2));
+    process.exit(0);
+  }
+
   if (process.argv.includes("--doctor")) {
     const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT, expectedProject: EXPECT_PROJECT });
     console.log(formatDoctorReport(report));

@@ -232,3 +232,38 @@ test("all three guides are served as prompts, in every profile", async () => {
     assert.ok(text.includes("unreal_doctor"), "the guide must carry the doctor step");
   }
 });
+
+test("--print-config emits a usable client config with absolute paths", async () => {
+  // Hand-editing this JSON is its own category of failure: a missing comma breaks the file, a
+  // relative path silently does not resolve, and a bare "node" may not be on the client's PATH.
+  // None of that should be typed by someone whose goal is to make a game.
+  const { execFileSync } = await import("node:child_process");
+  const out = execFileSync(process.execPath, [serverPath, "--print-config"], { encoding: "utf8" });
+
+  const json = JSON.parse(out.slice(out.indexOf("{")));
+  const server = json.mcpServers?.unreal;
+  assert.ok(server, `no unreal server entry: ${out.slice(0, 200)}`);
+
+  // The node that printed this is guaranteed to exist and be the right one; "node" is not.
+  assert.equal(server.command, process.execPath);
+  assert.ok(server.args[0].endsWith("index.js"));
+  assert.ok(
+    server.args[0].includes(":") || server.args[0].startsWith("/"),
+    `the script path must be absolute, got ${server.args[0]}`
+  );
+  assert.ok(server.env.UNREAL_MCP_PROFILE, "a profile should be set rather than left to chance");
+
+  // The instructions must mention the step everyone misses.
+  assert.match(out, /FULLY QUIT/i);
+});
+
+test("--print-config supports the clients people actually use", async () => {
+  const { execFileSync } = await import("node:child_process");
+  for (const client of ["claude-desktop", "cursor", "claude-code"]) {
+    const out = execFileSync(process.execPath, [serverPath, "--print-config", "--client", client], {
+      encoding: "utf8",
+    });
+    assert.ok(JSON.parse(out.slice(out.indexOf("{"))).mcpServers?.unreal, `${client} produced no config`);
+    assert.match(out, /Paste this into|claude mcp add-json/);
+  }
+});

@@ -112,6 +112,30 @@ whether a PIE session is in the way. Every failed check comes with the remedy, s
 to guess which of six things is wrong. Exit code 1 means the editor could not be reached.
 
 ### 4. Register the Server
+
+**Do not hand-write the config.** Run this and paste what it prints:
+
+```bash
+node mcp-server/dist/index.js --print-config                      # Claude Desktop
+node mcp-server/dist/index.js --print-config --client cursor      # Cursor
+node mcp-server/dist/index.js --print-config --client claude-code # Claude Code
+```
+
+It emits the exact JSON for this machine, with absolute paths already resolved, and tells you which
+file it goes in.
+
+That exists because client setup is its own category of failure and all of it is self-inflicted: a
+missing comma breaks the whole file, a relative path silently does not resolve, and on Windows a
+bare `node` may not be on the PATH the client uses. Every one of those produces the same symptom —
+the server never starts, with no explanation. The printed config uses the absolute path of the Node
+that ran the command, so it cannot be the wrong one.
+
+Then **fully quit and reopen the client.** Closing the window is not enough, and it is the most
+common reason a correct config appears not to work.
+
+The old manual instructions follow, for reference:
+
+
 Connect the server to your MCP client using the absolute path to `mcp-server/dist/index.js`:
 
 **Claude Code:**
