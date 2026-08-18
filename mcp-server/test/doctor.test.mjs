@@ -6,7 +6,14 @@ import { runDoctor, formatDoctorReport } from "../dist/doctor.js";
 const CONN = { host: "127.0.0.1", port: 8765 };
 
 const HEALTHY = {
-  ping: { status: "ok", plugin: "UnrealMCPBridge", protocolVersion: 1 },
+  ping: {
+    status: "ok",
+    plugin: "UnrealMCPBridge",
+    protocolVersion: 1,
+    project: "MyGame",
+    projectFile: "A:/Projects/MyGame/MyGame.uproject",
+    engineVersion: "5.6.0",
+  },
   get_project_overview: {
     blueprintCount: 21,
     totalFunctions: 84,
@@ -66,7 +73,7 @@ test("an unreachable bridge reports not_connected and stops, keeping the client'
 
 test("an older plugin is diagnosed as older, and told what will break", async () => {
   const report = await runDoctor(
-    fakeBridge({ ping: { status: "ok", plugin: "UnrealMCPBridge", protocolVersion: 0 } }),
+    fakeBridge({ ping: { ...HEALTHY.ping, protocolVersion: 0 } }),
     CONN,
     clock()
   );
@@ -79,7 +86,7 @@ test("an older plugin is diagnosed as older, and told what will break", async ()
 
 test("a newer plugin is diagnosed the other way round", async () => {
   const report = await runDoctor(
-    fakeBridge({ ping: { status: "ok", plugin: "UnrealMCPBridge", protocolVersion: 9 } }),
+    fakeBridge({ ping: { ...HEALTHY.ping, protocolVersion: 9 } }),
     CONN,
     clock()
   );
@@ -175,4 +182,39 @@ test("the plain-text rendering marks each check and ends with the next action", 
   assert.match(text, /\[warn\]\s*play-in-editor/);
   assert.match(text, /^\s+Then retry\.$/m, "multi-line remedies stay indented under their check");
   assert.match(text, /Next: play-in-editor/);
+});
+
+test("the connected project is named, because only one editor can hold the port", async () => {
+  const report = await runDoctor(fakeBridge(), CONN, clock());
+  const which = check(report, "which project");
+  assert.equal(which.status, "ok");
+  assert.match(which.detail, /MyGame/);
+});
+
+test("a project mismatch FAILS loudly rather than warning", async () => {
+  // This is the "agent silently edited the wrong project" case. A warning would be read past.
+  const report = await runDoctor(fakeBridge(), { ...CONN, expectedProject: "OtherGame" }, clock());
+  const which = check(report, "which project");
+  assert.equal(which.status, "fail");
+  assert.match(which.remedy, /WRONG PROJECT/);
+  assert.match(which.remedy, /second editor/i);
+  assert.match(which.remedy, /Do not make any edits/);
+  assert.equal(report.verdict, "degraded");
+  assert.match(report.nextAction, /^which project:/);
+});
+
+test("a matching project passes, case-insensitively", async () => {
+  const report = await runDoctor(fakeBridge(), { ...CONN, expectedProject: "mygame" }, clock());
+  assert.equal(check(report, "which project").status, "ok");
+});
+
+test("a plugin too old to report its project is called out", async () => {
+  const report = await runDoctor(
+    fakeBridge({ ping: { status: "ok", plugin: "UnrealMCPBridge", protocolVersion: 1 } }),
+    CONN,
+    clock()
+  );
+  const which = check(report, "which project");
+  assert.equal(which.status, "warn");
+  assert.match(which.remedy, /Update the plugin/);
 });

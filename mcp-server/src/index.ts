@@ -8,7 +8,7 @@ import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
-import { SessionJournal } from "./journal.js";
+import { SessionJournal, isWrite } from "./journal.js";
 import { mapSystem } from "./systemMap.js";
 import { planFeature } from "./planFeature.js";
 import { allPolicies, resolveMode } from "./mode.js";
@@ -46,6 +46,11 @@ const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
 // (see COMMAND_TIMEOUTS_MS in bridgeClient.ts). Set this only to force a single flat timeout.
 const TIMEOUT_OVERRIDE_MS = process.env.UNREAL_MCP_TIMEOUT_MS ? Number(process.env.UNREAL_MCP_TIMEOUT_MS) : undefined;
 
+// Which project this session is allowed to touch. Only one editor can hold the bridge port, so
+// with two open, every call silently goes to whichever won. Setting this turns "silently edited the
+// wrong project" into a refusal on the first call.
+const EXPECT_PROJECT = process.env.UNREAL_MCP_EXPECT_PROJECT?.trim();
+
 const rawBridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT, timeoutMs: TIMEOUT_OVERRIDE_MS });
 const journal = new SessionJournal();
 
@@ -54,9 +59,33 @@ const journal = new SessionJournal();
  * Recording at each of the fifty call sites would be one forgotten line away from lying to the
  * user about what was touched, and a change log that is wrong is worse than none.
  */
+/**
+ * Confirm we are attached to the project the user meant, before the first write of the session.
+ *
+ * Checking only in unreal_doctor would not help: the failure is silent by nature, so it is found by
+ * someone noticing damage rather than by anyone thinking to run a diagnosis. The check costs one
+ * ping, once, and only when UNREAL_MCP_EXPECT_PROJECT is set.
+ */
+let projectChecked = false;
+async function assertExpectedProject(cmd: string): Promise<void> {
+  if (!EXPECT_PROJECT || projectChecked || !isWrite(cmd)) return;
+  const ping = await rawBridge.send<{ project?: string; projectFile?: string }>("ping", {});
+  if (ping.project && ping.project.toLowerCase() !== EXPECT_PROJECT.toLowerCase()) {
+    throw new Error(
+      `WRONG PROJECT: this bridge is attached to "${ping.project}"` +
+        `${ping.projectFile ? ` (${ping.projectFile})` : ""}, but UNREAL_MCP_EXPECT_PROJECT is "${EXPECT_PROJECT}". ` +
+        `Refusing to write. This normally means a second Unreal Editor is open: only one can hold port ` +
+        `${BRIDGE_PORT}, so every call goes to that one. Close the other editor, or run each on its own port ` +
+        `with -MCPBridgePort=<n> and UNREAL_MCP_BRIDGE_PORT. Nothing has been changed.`
+    );
+  }
+  projectChecked = true;
+}
+
 const bridge = {
   async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
     try {
+      await assertExpectedProject(cmd);
       const result = await rawBridge.send<T>(cmd, params);
       journal.record(cmd, params, true);
       return result;
@@ -1477,7 +1506,7 @@ register(
   },
   async () => {
     try {
-      const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
+      const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT, expectedProject: EXPECT_PROJECT });
       // Which mode is active changes what every build costs and how much feedback comes back
       // unasked, so it belongs in the one call people run when something seems off.
       return jsonResult({ ...report, mode: MODE.mode, modeMeans: MODE.description });
@@ -2126,7 +2155,7 @@ async function main() {
   }
 
   if (process.argv.includes("--doctor")) {
-    const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
+    const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT, expectedProject: EXPECT_PROJECT });
     console.log(formatDoctorReport(report));
     process.exit(report.verdict === "not_connected" ? 1 : 0);
   }

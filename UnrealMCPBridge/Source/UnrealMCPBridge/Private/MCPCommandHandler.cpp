@@ -83,6 +83,9 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
+#include "Misc/App.h"
+#include "Misc/Paths.h"
+#include "Misc/EngineVersion.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPCommandHandler, Log, All);
 
@@ -619,6 +622,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandlePing(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("status"), TEXT("ok"));
 	Result->SetStringField(TEXT("plugin"), TEXT("UnrealMCPBridge"));
 	Result->SetNumberField(TEXT("protocolVersion"), 1);
+	// WHICH project this is. With two editors open only one can hold the port, so a caller that
+	// never checks can spend a whole session editing the wrong project with no symptom at all.
+	Result->SetStringField(TEXT("project"), FApp::GetProjectName());
+	Result->SetStringField(TEXT("projectFile"), FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()));
+	Result->SetStringField(TEXT("engineVersion"), FEngineVersion::Current().ToString(EVersionComponent::Patch));
 	return MakeOkResponse(Result);
 }
 
