@@ -499,6 +499,7 @@ A game the user can see is mostly UI, and none of it used to be reachable throug
 
 | Tool | Bridge command | Purpose |
 | --- | --- | --- |
+| `unreal_scaffold_widget` | *(composite)* | Build a whole UI screen in one call: the Widget Blueprint and every element in it. |
 | `unreal_create_widget_blueprint` | `create_widget_blueprint` | Create a Widget Blueprint with a chosen root panel (CanvasPanel by default). |
 | `unreal_add_widget` | `add_widget` | Add a widget under the root or a named panel: TextBlock, Button, Image, ProgressBar, boxes, overlays. |
 | `unreal_list_widgets` | `list_widgets` | The whole widget tree in depth-first order, with each widget's class, parent, depth, and slot class. |

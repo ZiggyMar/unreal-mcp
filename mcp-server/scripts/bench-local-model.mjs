@@ -242,6 +242,34 @@ const TASKS = {
     },
   },
 
+  /**
+   * UMG, which is the half of the game the player actually looks at.
+   *
+   * Included because it is the clearest untested case of the pattern this suite already measured
+   * once: building a widget is create, then add, then add, then set, then compile, then save, and a
+   * small model reliably completes the first step and stops. There is no composite for UMG the way
+   * there is for Blueprints, so this measures whether that matters rather than assuming it.
+   */
+  widget: {
+    name: () => `WBP_BenchHUD${currentRunId}`,
+    request: () =>
+      `In the Unreal project, create a UMG widget Blueprint called WBP_BenchHUD${currentRunId} in /Game/Bench. ` +
+      'Put a TextBlock called ScoreLabel in it, and a Button called StartButton. Set the ScoreLabel text to "Score". ' +
+      "Then compile and save it.",
+    async verify() {
+      const name = `WBP_BenchHUD${currentRunId}`;
+      const path = `/Game/Bench/${name}.${name}`;
+      const widgets = await probeCall("list_widgets", { path });
+      if (widgets.startsWith("error:")) return { done: false, why: `${name} does not exist` };
+      if (!/"name":"ScoreLabel"/.test(widgets)) return { done: false, why: "no ScoreLabel TextBlock" };
+      if (!/"name":"StartButton"/.test(widgets)) return { done: false, why: "ScoreLabel exists but no StartButton" };
+      return { done: true, why: "widget exists with both a labelled TextBlock and a Button" };
+    },
+    async cleanup() {
+      await clearBench();
+    },
+  },
+
   feature: {
     name: () => `BP_BenchFeature${currentRunId}`,
     request: () =>
@@ -301,12 +329,31 @@ const probeCall = async (cmd, params) => {
   }
 };
 
-/** Delete everything under /Game/Bench, so a run starts from a known state. */
+/**
+ * Delete everything under /Game/Bench, so a run starts from a known state.
+ *
+ * Sweeps by asset class rather than by name prefix. The name-prefix version missed widget
+ * Blueprints entirely - "WBP_BenchHUD" does not start with "BP_Bench" - so they survived between
+ * runs and a later run could pass on an asset an earlier one had built.
+ */
 async function clearBench() {
+  const doomed = new Set();
+
   const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
-  const names = [...listed.matchAll(/"(BP_Bench[A-Za-z0-9_]*)"/g)].map((m) => m[1]);
-  for (const name of [...new Set(names)]) {
-    await probeCall("delete_asset", { paths: [`/Game/Bench/${name}.${name}`], force: true });
+  for (const match of listed.matchAll(/"([A-Za-z0-9_]*Bench[A-Za-z0-9_]*)"/g)) {
+    doomed.add(`/Game/Bench/${match[1]}.${match[1]}`);
+  }
+
+  // list_assets requires a class, so name the ones this suite can create.
+  for (const className of ["WidgetBlueprint", "Blueprint", "UserDefinedStruct", "UserDefinedEnum", "DataTable"]) {
+    const found = await probeCall("list_assets", { className, pathPrefix: "/Game/Bench" });
+    for (const match of found.matchAll(/"(\/Game\/Bench\/[A-Za-z0-9_]+)\.[A-Za-z0-9_]+"/g)) {
+      doomed.add(`${match[1]}.${match[1].slice(match[1].lastIndexOf("/") + 1)}`);
+    }
+  }
+
+  for (const path of doomed) {
+    await probeCall("delete_asset", { paths: [path], force: true });
   }
 }
 
@@ -688,6 +735,22 @@ async function main() {
         }
 
         const result = await callTool(name, argumentsObject);
+
+        // Re-list immediately after a tool-enabling call, the way a real client does when it gets
+        // notifications/tools/list_changed.
+        //
+        // This has to happen here rather than lazily on an unknown name, because the recovery path
+        // that reads tool calls out of message text filters against this same list before anything
+        // else sees the name - so a stale list makes a newly enabled tool invisible twice over.
+        // The effect was that the model worked out it needed the `ui` group, enabled it correctly,
+        // and then had every single follow-up call silently discarded. The lazy-loading feature
+        // worked; the client measuring it did not.
+        if (name === "unreal_enable_tools") {
+          const relisted = await server.request("tools/list", {});
+          const before = toolNames.size;
+          for (const tool of relisted?.result?.tools ?? []) toolNames.add(tool.name);
+          if (TRACE) console.log(`    ++ tools re-listed: ${before} -> ${toolNames.size}`);
+        }
         const failed = isFailure(result);
         if (failed) stats.bridgeErrors++;
         if (RUNS === 1) {

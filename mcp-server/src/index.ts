@@ -14,6 +14,7 @@ import { planFeature } from "./planFeature.js";
 import { cleanupBlueprint } from "./cleanup.js";
 import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
+import { scaffoldWidget } from "./scaffoldWidget.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -187,7 +188,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_remove_node",
     "unreal_organize_graph",
   ],
-  ui: ["unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
+  ui: ["unreal_scaffold_widget", "unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
   materials: [
     "unreal_create_material",
     "unreal_create_material_instance",
@@ -259,6 +260,8 @@ const MINIMAL_PROFILE_TOOLS = new Set([
   // both here only offers a way to fail. A profile built for weak models should contain the best
   // path for each job, not every path.
   "unreal_scaffold_blueprint",
+  // Without this, the smallest and most reliable profile cannot build a user interface at all.
+  "unreal_scaffold_widget",
   "unreal_add_variable",
   "unreal_add_event_handler",
   "unreal_compile_blueprint",
@@ -1606,6 +1609,42 @@ register(
 );
 
 register(
+  "unreal_scaffold_widget",
+  {
+    title: "Build a whole UI screen in one call",
+    description:
+      "**Build the entire widget in one call: the Widget Blueprint and every element inside it.** " +
+      "Reach for this first whenever you are creating UI. " +
+      "Widgets are added in the order given, so declare a panel before the things inside it. " +
+      "A step that fails is reported in `failures` and the rest still proceeds.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/UI/W_HUD". Prefix widget assets with W_ by convention.'),
+      parentClass: z.string().optional().describe("Parent class. Defaults to UserWidget."),
+      rootWidget: z.string().optional().describe('Root panel, e.g. "CanvasPanel" or "VerticalBox".'),
+      widgets: z
+        .array(
+          z.object({
+            widgetClass: z.string().describe('e.g. "TextBlock", "Button", "ProgressBar", "Image", "VerticalBox".'),
+            name: z.string(),
+            parent: z.string().optional().describe("Nest inside this panel instead of the root."),
+            properties: z.record(z.string()).optional().describe('Properties to set, e.g. {"Text":"Score"}.'),
+          })
+        )
+        .optional()
+        .describe("Everything on the screen, with its properties set for you."),
+      save: z.boolean().optional().describe("Save at the end. Defaults to true."),
+    },
+  },
+  async ({ packagePath, parentClass, rootWidget, widgets, save }) => {
+    try {
+      return jsonResult(await scaffoldWidget(bridge, { packagePath, parentClass, rootWidget, widgets, save }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_create_widget_blueprint",
   {
     title: "Create a UMG Widget Blueprint",
@@ -2555,19 +2594,18 @@ register(
   "unreal_scaffold_blueprint",
   {
     title: "Build a whole Blueprint in one call",
+    // The rationale for this tool - the measured four-step failure of small models - lives in
+    // src/scaffold.ts and docs/LOCAL_MODEL_BENCHMARK.md, deliberately not here. A description is
+    // paid on every request by every client; the reasoning behind it is paid once by a reader.
+    // This project measured ~600 extra characters pushing a 7B into truncating its output
+    // mid-JSON, so the budget is spent on what a caller needs in order to act.
     description:
       "**Build the entire thing in one call: the Blueprint, its variables, its components, and its event logic.** " +
       "Reach for this first whenever you are creating something new. " +
-      "It exists because of a measurement: local 7B and 14B models both fail a four-step task the same way, " +
-      "completing step one, declaring the task done, and repeating their first successful call even when told what " +
-      "is missing. That is not fixable from inside a tool, so this stops requiring it - a model that manages one " +
-      "successful call now finishes a whole feature. " +
-      "The order is handled for you and matters: variables and components exist before any graph references them, " +
-      "handlers are built after, and the Blueprint is compiled once at the end rather than after every step. It is " +
-      "then laid out, reviewed, and saved. " +
-      "A step that fails is reported in `failures` and the rest still proceeds, because a partly built Blueprint " +
-      "you can see beats nothing at all. Everything here is also available as separate tools if you need finer " +
-      "control.",
+      "The order is handled for you: variables and components exist before any graph references them, and the " +
+      "Blueprint is compiled once at the end, then laid out, reviewed and saved. " +
+      "A step that fails is reported in `failures` and the rest still proceeds. " +
+      "Everything here is also available as separate tools if you need finer control.",
     inputSchema: {
       packagePath: z.string().describe('Where to create it, e.g. "/Game/Blueprints/BP_Pickup".'),
       parentClass: z.string().describe('Parent class: "Actor", "Pawn", "Character", "ActorComponent", or a Blueprint path.'),
