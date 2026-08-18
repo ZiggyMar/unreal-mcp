@@ -232,6 +232,28 @@ async function main() {
     return finding.message.slice(0, 80);
   });
 
+  await check("misplaced state is flagged at the moment it is written, not only on review", async () => {
+    // review_blueprint checks this too, but review only speaks when it is called and a model that
+    // does not know to call it never hears any of it. The parent class rides along with the write,
+    // so this costs no extra round trip.
+    const { reviewStatePlacement } = await import("../dist/statePlacement.js");
+    const probe = `${ROOT}/BP_MCPStateProbe`;
+    const obj = `${probe}.BP_MCPStateProbe`;
+    await bridge.send("create_blueprint", { packagePath: probe, parentClass: "Character", save: false });
+
+    const scored = await bridge.send("add_variable", { path: obj, variableName: "Score", type: "int" });
+    if (!scored.parentClass) throw new Error("add_variable did not report the parent class");
+    const flagged = reviewStatePlacement(scored.parentClass, [{ name: "Score" }]);
+    if (flagged.length === 0) throw new Error("a score on a Character was not flagged");
+
+    // ...and the check that keeps it trustworthy: health belongs on the body.
+    const health = await bridge.send("add_variable", { path: obj, variableName: "Health", type: "float" });
+    if (reviewStatePlacement(health.parentClass, [{ name: "Health" }]).length > 0) {
+      throw new Error("Health was flagged; that false positive would discredit the whole report");
+    }
+    return `Score flagged on ${scored.parentClass}, Health left alone`;
+  });
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -1044,6 +1066,7 @@ async function main() {
           `${structPath}.S_MCPVerifyItem`,
           `${brownPath}.BP_MCPBrownfield`,
           `${ROOT}/BP_MCPNetProbe.BP_MCPNetProbe`,
+          `${ROOT}/BP_MCPStateProbe.BP_MCPStateProbe`,
           `${tablePath}.DT_MCPVerifyItems`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,

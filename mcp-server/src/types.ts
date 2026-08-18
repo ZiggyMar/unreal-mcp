@@ -110,6 +110,8 @@ export interface AddVariableResult {
   added: boolean;
   name: string;
   type: string;
+  /** The owning Blueprint's parent class, so the write can be judged without a second read. */
+  parentClass?: string;
 }
 
 export type CompileMessageSeverity = "error" | "warning" | "performance_warning" | "info";

@@ -2079,6 +2079,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	Result->SetBoolField(TEXT("added"), true);
 	Result->SetStringField(TEXT("name"), VariableName);
 	Result->SetStringField(TEXT("type"), TypeStr);
+	// The parent class rides along so the server side can judge whether this variable is in the
+	// right place without a second round trip. Whether state is misplaced depends entirely on what
+	// holds it: a score on a PlayerState is correct and the same score on a Character silently
+	// resets the first time somebody dies.
+	Result->SetStringField(TEXT("parentClass"),
+		Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : TEXT("None"));
 	return MakeOkResponse(Result);
 }
 

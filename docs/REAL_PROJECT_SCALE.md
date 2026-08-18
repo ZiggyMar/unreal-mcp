@@ -296,6 +296,48 @@ contain.
 than about one graph. They are kept separate from `graphs` because they are not about a graph, and
 filing them under an arbitrary one would be a lie.
 
+## Saying it where the decision was made
+
+Every check described above lives in `unreal_review_blueprint`, and review only speaks when it is
+called. A model that does not know it should call it never hears any of this — which is most of the
+point of having built it.
+
+So the findings now travel with the writes that cause them:
+
+- **`unreal_add_variable`** returns the misplaced-state warning with the write itself. The parent
+  class rides along in the bridge response, so there is **no extra round trip**, and nothing is
+  added at all when there is nothing to say.
+- **`unreal_scaffold_blueprint`** returns the Blueprint-level findings with its result, alongside
+  the score and next action it already reported.
+
+```
+add_variable Score (on a Character)
+  -> "Score" looks like a score, and it lives on Character, which is destroyed and
+     recreated when the player dies or respawns.
+     Fix: Move it to PlayerState.
+
+add_variable Health (on a Character)
+  -> (nothing)
+```
+
+Putting state in the wrong place is the most expensive thing in a Blueprint to retrofit, so the
+moment to mention it is the moment it happens, not whenever somebody later thinks to ask.
+
+### What this is not claimed to do
+
+**Its effect on a weak model is unmeasured, and probably small.** Two previous attempts to change a
+7B's behaviour by telling it things — a reworded verdict, then a general repeat notice — both
+measured as doing nothing, and there is no reason to assume this one is different.
+
+The justification is different, though, and worth separating from the hope. The previous two were
+trying to *stop* a behaviour by explanation. This one makes information **exist at all** in a
+transcript where it otherwise would not: a person reading back through what an agent did now sees
+the warning at the point of the mistake, and a stronger model has it in front of it without needing
+to know that a review tool exists.
+
+Measured as not making things worse, which for an addition to every write is the bar that matters:
+all four benchmark tasks still pass at the same call counts.
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,

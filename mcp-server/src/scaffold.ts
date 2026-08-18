@@ -58,7 +58,7 @@ export interface ScaffoldResult {
   componentsAdded: string[];
   handlersBuilt: string[];
   compiled?: unknown;
-  review?: { score: number; nextAction: string };
+  review?: { score: number; nextAction: string; blueprint?: string[] };
   saved: boolean;
   /** Steps that failed, with what went wrong. The rest still happened. */
   failures: Array<{ step: string; error: string }>;
@@ -171,6 +171,12 @@ export async function scaffoldBlueprint(bridge: BridgeLike, spec: ScaffoldSpec):
   try {
     const review = await reviewBlueprint(bridge, objectPath);
     result.review = { score: review.score, nextAction: review.nextAction };
+    // Findings about the Blueprint as a whole - misplaced state, a server write no client will
+    // see - travel with the build that created them. They are omitted entirely when there are
+    // none, so the common case costs nothing.
+    if (review.blueprint.length > 0) {
+      result.review.blueprint = review.blueprint.map((f) => `${f.message} ${f.fix}`);
+    }
   } catch (err) {
     result.failures.push({ step: "review", error: message(err) });
   }

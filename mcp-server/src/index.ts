@@ -17,6 +17,7 @@ import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { RepeatGuard } from "./repeatGuard.js";
+import { reviewStatePlacement } from "./statePlacement.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -748,6 +749,20 @@ register(
         category,
         defaultValue,
       });
+
+      // Say it here, where the decision was just made.
+      //
+      // unreal_review_blueprint checks this too, but review only speaks when it is called, and a
+      // model that does not know it should call it never hears any of this. Putting state in the
+      // wrong place is also the most expensive thing in a Blueprint to retrofit, so the moment to
+      // mention it is the moment it happens - not whenever somebody later thinks to ask.
+      //
+      // Free: the parent class comes back with the write, so there is no extra round trip, and
+      // nothing is added at all when there is nothing to say.
+      const misplaced = reviewStatePlacement(result.parentClass ?? "", [{ name: variableName }]);
+      if (misplaced.length > 0) {
+        return jsonResult({ ...result, warning: misplaced[0].message, fix: misplaced[0].fix });
+      }
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
