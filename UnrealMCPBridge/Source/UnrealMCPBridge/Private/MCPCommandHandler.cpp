@@ -734,6 +734,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleUndoHistory(Params);
 	}
+	else if (Cmd == TEXT("project_health"))
+	{
+		Response = HandleProjectHealth(Params);
+	}
 	else
 	{
 		Response = MakeErrorResponse(FString::Printf(TEXT("unknown_cmd: %s"), *Cmd));
@@ -5347,4 +5351,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleUndoHistory(const TSharedPtr<F
 		TEXT("Newest first: undoPosition 1 is what the next Ctrl+Z in the editor will reverse. Entries titled "
 			"\"MCP: ...\" were made by this bridge. Undo is performed by a human in the editor; this is a read."));
 	return MakeOkResponse(Result);
+}
+
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleProjectHealth(const TSharedPtr<FJsonObject>& Params)
+{
+	int32 MaxPerCategory = 10;
+	double MaxRaw = 0;
+	if (Params.IsValid() && Params->TryGetNumberField(TEXT("maxPerCategory"), MaxRaw))
+	{
+		MaxPerCategory = static_cast<int32>(MaxRaw);
+	}
+	// Same as every other index-backed command: build it if this is the first query of the session.
+	FMCPProjectIndex::Get().EnsureBuilt();
+	return MakeOkResponse(FMCPProjectIndex::Get().GetHealthReport(MaxPerCategory));
 }

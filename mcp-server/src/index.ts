@@ -127,6 +127,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_search_project",
   "unreal_map_system",
   "unreal_plan_feature",
+  "unreal_project_health",
   "unreal_list_blueprints",
   "unreal_list_blueprint_graphs",
   "unreal_read_blueprint_summary",
@@ -2250,6 +2251,39 @@ register(
   async ({ maxResults }) => {
     try {
       const result = await bridge.send("undo_history", { maxResults });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_project_health",
+  {
+    title: "Find where the project needs attention, without reading it",
+    description:
+      "Scans the whole project for the Blueprints most worth looking at: graphs too large to read at a glance, " +
+      "Blueprints that have grown into systems rather than classes, and cast-heavy Blueprints where an interface " +
+      "should have replaced the chain. " +
+      "unreal_review_blueprint answers \"is this one Blueprint good?\". Nobody asks that first. On a project someone " +
+      "has been building for months the real question is \"where is the damage?\", and answering it by reviewing " +
+      "every Blueprint in turn costs a read per asset. This costs none: it is computed from node-type histograms " +
+      "the project index already keeps. " +
+      "Use it to orient at the start of work on an unfamiliar project, or when a user asks what needs cleaning up. " +
+      "Then run unreal_review_blueprint on the specific Blueprints it names. " +
+      "Every finding says what it measured and every threshold explains itself, because these are places worth " +
+      "LOOKING at rather than defects. A large graph can be perfectly fine. Deliberately absent: per-frame Tick " +
+      "work, because the index stores node classes and cannot tell an Event Tick from an Event BeginPlay - " +
+      "guessing would produce confident false positives on the measure people most want to trust. " +
+      "unreal_review_blueprint reads real titles and reports that properly.",
+    inputSchema: {
+      maxPerCategory: z.number().optional().describe("How many offenders to list per category, worst first. Defaults to 10."),
+    },
+  },
+  async ({ maxPerCategory }) => {
+    try {
+      const result = await bridge.send("project_health", { maxPerCategory });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
