@@ -122,6 +122,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_doctor",
   "unreal_enable_tools",
   "unreal_session_changes",
+  "unreal_undo_history",
   "unreal_get_project_overview",
   "unreal_search_project",
   "unreal_map_system",
@@ -2222,6 +2223,33 @@ register(
   async ({ actor }) => {
     try {
       const result = await bridge.send("delete_actor", { actor });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_undo_history",
+  {
+    title: "What the editor can currently undo",
+    description:
+      "Reads the editor's real undo stack, newest first. Position 1 is what the next Ctrl+Z will reverse, and every " +
+      'entry says whether this bridge made it (they are titled "MCP: ..."). ' +
+      "Pair it with unreal_session_changes: that reports what this server believes it changed, this reports what the " +
+      "editor will actually give back. Show it to a user who is nervous about letting an agent edit their project, " +
+      "or before doing something you would want reversed. Being able to say \"the last four entries are mine and " +
+      "Ctrl+Z takes them back in order\" is worth more than any reassurance. " +
+      "This is a read. Undo itself is performed by a human in the editor, deliberately: an agent that can silently " +
+      "undo its own work can also silently undo yours.",
+    inputSchema: {
+      maxResults: z.number().optional().describe("How many entries to return, newest first. Defaults to 20."),
+    },
+  },
+  async ({ maxResults }) => {
+    try {
+      const result = await bridge.send("undo_history", { maxResults });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

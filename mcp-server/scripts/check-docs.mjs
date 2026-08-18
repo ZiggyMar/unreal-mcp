@@ -107,10 +107,17 @@ if (missingWorkflow.length > 0) {
 }
 
 // --- 4. the complaint matrix uses its declared statuses -----------------------------------------
-// "Solved (by design)" means the architecture makes the complaint impossible; "Solved (optional)"
-// means solved when a documented opt-in is configured. Both are honest, both are declared.
+// The statuses this matrix is allowed to use, each meaning something different:
+//   Solved            fixed in this repo
+//   Solved (verified) fixed AND mechanically exercised against a real editor, not just reasoned
+//                     about. Reserved for claims a script re-checks, because an unexercised
+//                     safety guarantee has already turned out to be false once here.
+//   Solved (by design) the architecture makes the complaint impossible
+//   Solved (optional) solved when a documented opt-in is configured
+//   Partly / Open     reduced, or still true
 const ALLOWED_STATUSES = [
   "**Solved**",
+  "**Solved (verified)**",
   "**Solved (by design)**",
   "**Solved (optional)**",
   "**Partly**",

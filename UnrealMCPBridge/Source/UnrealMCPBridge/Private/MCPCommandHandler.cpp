@@ -72,6 +72,7 @@
 #include "SceneTypes.h"
 #include "Engine/Texture.h"
 #include "EngineUtils.h"
+#include "Editor/Transactor.h"
 #include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -613,6 +614,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("delete_actor"))
 	{
 		Response = HandleDeleteActor(Params);
+	}
+	else if (Cmd == TEXT("undo_history"))
+	{
+		Response = HandleUndoHistory(Params);
 	}
 	else
 	{
@@ -5145,5 +5150,72 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteActor(const TSharedPtr<F
 	Result->SetStringField(TEXT("class"), ClassName);
 	Result->SetStringField(TEXT("note"),
 		TEXT("Removed from the level in memory only. Call save_level to persist, or Ctrl+Z in the editor to undo."));
+	return MakeOkResponse(Result);
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// The editor's real undo stack
+//
+// This project has claimed since M2 that every write is wrapped in a named editor transaction, so
+// a human can Ctrl+Z anything an agent did. Nobody had ever checked that claim from outside the
+// process, and a safety guarantee nobody has exercised is a guarantee in name only.
+//
+// Reading the transaction buffer settles it mechanically, and is worth having on its own: paired
+// with session_changes (what the server thinks it changed) it answers the question a nervous user
+// actually asks, which is "what can I take back, and in what order?"
+// ---------------------------------------------------------------------------------------------
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleUndoHistory(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor || !GEditor->Trans)
+	{
+		return MakeErrorResponse(TEXT("no_transaction_buffer: the editor has no undo buffer available"));
+	}
+
+	int32 MaxResults = 20;
+	double MaxRaw = 0;
+	if (Params.IsValid() && Params->TryGetNumberField(TEXT("maxResults"), MaxRaw))
+	{
+		MaxResults = FMath::Clamp(static_cast<int32>(MaxRaw), 1, 200);
+	}
+
+	UTransactor* Transactor = GEditor->Trans;
+	const int32 QueueLength = Transactor->GetQueueLength();
+	// Entries already undone sit at the end of the queue; they are redo, not undo.
+	const int32 UndoCount = Transactor->GetUndoCount();
+
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	int32 MCPEntries = 0;
+	for (int32 Index = QueueLength - UndoCount - 1; Index >= 0 && Entries.Num() < MaxResults; --Index)
+	{
+		const FTransaction* Transaction = Transactor->GetTransaction(Index);
+		if (!Transaction)
+		{
+			continue;
+		}
+		const FString Title = Transaction->GetTitle().ToString();
+		const bool bFromMCP = Title.StartsWith(TEXT("MCP:"));
+		if (bFromMCP)
+		{
+			MCPEntries++;
+		}
+
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		// Position 1 is the next Ctrl+Z, which is the only ordering a user cares about.
+		Entry->SetNumberField(TEXT("undoPosition"), Entries.Num() + 1);
+		Entry->SetStringField(TEXT("title"), Title);
+		Entry->SetBoolField(TEXT("fromMCP"), bFromMCP);
+		Entries.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("queueLength"), QueueLength);
+	Result->SetNumberField(TEXT("undoableNow"), FMath::Max(0, QueueLength - UndoCount));
+	Result->SetNumberField(TEXT("redoableNow"), UndoCount);
+	Result->SetNumberField(TEXT("fromMCP"), MCPEntries);
+	Result->SetArrayField(TEXT("entries"), Entries);
+	Result->SetStringField(TEXT("note"),
+		TEXT("Newest first: undoPosition 1 is what the next Ctrl+Z in the editor will reverse. Entries titled "
+			"\"MCP: ...\" were made by this bridge. Undo is performed by a human in the editor; this is a read."));
 	return MakeOkResponse(Result);
 }
