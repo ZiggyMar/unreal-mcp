@@ -49,6 +49,8 @@ export interface ExplainedChain {
   steps: string[];
   /** True when the chain was cut short because it loops or branches beyond the step budget. */
   truncated: boolean;
+  /** Every node this chain touched, so shared chains can be detected. */
+  nodeIds: string[];
 }
 
 export interface GraphExplanation {
@@ -135,7 +137,7 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
       frontier = next;
     }
 
-    chains.push({ entry: clean(entry.title), steps, truncated });
+    chains.push({ entry: clean(entry.title), steps, truncated, nodeIds: [...seenInChain] });
   }
 
   // Anything never reached is either dead logic or a pure data node feeding something else. Both
@@ -150,6 +152,29 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
     .sort((a, b) => b[1] - a[1])
     .map(([title, count]) => (count > 1 ? `${title} (x${count})` : title));
 
+  // Entry points that converge on the same nodes.
+  //
+  // This is the single most useful thing a description can add that a node list cannot, and it was
+  // added after it caught a mistake in the making: a real Blueprint had Event Begin Play and Event
+  // Tick running into ONE shared caching chain, so the obvious fix - delete the part that only makes
+  // sense on the server - would have silently broken BeginPlay as well.
+  //
+  // Two chains printed one after another look independent. Saying they are not is cheap here and
+  // expensive to discover by hand.
+  const reachCount = new Map<string, number>();
+  for (const chain of chains) {
+    for (const id of chain.nodeIds) reachCount.set(id, (reachCount.get(id) ?? 0) + 1);
+  }
+  const sharedWith = new Map<string, string[]>();
+  for (const chain of chains) {
+    const shared = chain.nodeIds.filter((id) => (reachCount.get(id) ?? 0) > 1);
+    if (shared.length === 0) continue;
+    const others = chains
+      .filter((other) => other !== chain && other.nodeIds.some((id) => shared.includes(id)))
+      .map((other) => other.entry);
+    if (others.length > 0) sharedWith.set(chain.entry, others);
+  }
+
   const lines: string[] = [];
   lines.push(`${summary.graphName ?? "Graph"}: ${nodes.length} nodes, ${chains.length} entry point(s).`);
   for (const chain of chains) {
@@ -160,6 +185,17 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
     lines.push(
       `- ${chain.entry} -> ${chain.steps.join(" -> ")}${chain.truncated ? " -> ...(more)" : ""}`
     );
+  }
+  // Reported once per pair rather than once per chain, so two entry points sharing a chain produce
+  // one sentence and not two.
+  const alreadySaid = new Set<string>();
+  for (const [entry, others] of sharedWith) {
+    for (const other of others) {
+      const key = [entry, other].sort().join(" | ");
+      if (alreadySaid.has(key)) continue;
+      alreadySaid.add(key);
+      lines.push(`Note: ${entry} and ${other} run into the same nodes - changing one changes both.`);
+    }
   }
   if (unreachable.length > 0) {
     // Capped: a long tail of pure data nodes is normal and listing all of it would undo the point

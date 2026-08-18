@@ -130,3 +130,41 @@ test("the explanation is dramatically smaller than the structure it came from", 
   const ratio = JSON.stringify(source).length / explained.text.length;
   assert.ok(ratio > 5, `expected a large reduction, got ${ratio.toFixed(1)}x`);
 });
+
+test("two entry points running into the same nodes are called out", () => {
+  // This caught a mistake in the making. A real Blueprint had Event Begin Play and Event Tick
+  // running into ONE shared caching chain, so deleting the part that only makes sense on the
+  // server would have silently broken BeginPlay too. Printed one after another the chains look
+  // independent; they are not.
+  const result = explainGraph(
+    graph([
+      node("b", "K2Node_Event", "Event BeginPlay", [["shared"]]),
+      node("t", "K2Node_Event", "Event Tick", [["shared"]]),
+      node("shared", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+    ])
+  );
+  assert.match(result.text, /Event BeginPlay and Event Tick run into the same nodes/);
+});
+
+test("independent chains are not described as shared", () => {
+  const result = explainGraph(
+    graph([
+      node("b", "K2Node_Event", "Event BeginPlay", [["x"]]),
+      node("x", "K2Node_CallFunction", "Do A"),
+      node("t", "K2Node_Event", "Event Tick", [["y"]]),
+      node("y", "K2Node_CallFunction", "Do B"),
+    ])
+  );
+  assert.ok(!/run into the same nodes/.test(result.text));
+});
+
+test("a shared chain is mentioned once, not once per entry", () => {
+  const result = explainGraph(
+    graph([
+      node("b", "K2Node_Event", "Event BeginPlay", [["shared"]]),
+      node("t", "K2Node_Event", "Event Tick", [["shared"]]),
+      node("shared", "K2Node_CallFunction", "Cache Refs", []),
+    ])
+  );
+  assert.equal((result.text.match(/run into the same nodes/g) ?? []).length, 1);
+});
