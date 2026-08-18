@@ -9,6 +9,7 @@ import { autoLayoutGraph } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
 import { SessionJournal } from "./journal.js";
+import { mapSystem } from "./systemMap.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,6 +93,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_session_changes",
   "unreal_get_project_overview",
   "unreal_search_project",
+  "unreal_map_system",
   "unreal_list_blueprints",
   "unreal_list_blueprint_graphs",
   "unreal_read_blueprint_summary",
@@ -1947,6 +1949,44 @@ register(
   async ({ path }) => {
     try {
       const result = await bridge.send("list_material_parameters", { path });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_map_system",
+  {
+    title: "Map an existing system across the Blueprints it spans",
+    description:
+      "**Call this FIRST on any request that touches an existing project, before reading a single graph.**\n\n" +
+      "Give it a concept (\"health\", \"inventory\", \"door\", \"save\") and it returns the assets that make up that " +
+      "system, how they reference each other, which ones are risky to change, and the order to read them in. It is " +
+      "built entirely from the project index and the asset dependency graph, so mapping a twenty-asset system costs " +
+      "a fraction of reading one large Blueprint.\n\n" +
+      "This exists because of the single hardest thing about working on a real project: one Blueprint is wired to " +
+      "five others, and no amount of describing it in prose conveys that. Without the map, the usual failure is to " +
+      "read the first matching asset, assume it is the whole system, and edit it - which is how a working project " +
+      "gets broken.\n\n" +
+      "Use it for three things:\n" +
+      "  1. **Before building anything**, to find out whether the system already exists. If it does, extend it " +
+      "instead of adding a second one, and tell the user what you found.\n" +
+      "  2. **Before editing**, to see what else depends on what you are about to change. `highRisk` lists assets " +
+      "with referencers outside the system: changing those is a project-wide event.\n" +
+      "  3. **To decide what to read**, using `readingOrder`, which puts the most depended-on assets first because " +
+      "they define the contracts the rest obey.\n\n" +
+      "An empty result is informative: it means the system genuinely is not there, or is named something else.",
+    inputSchema: {
+      query: z.string().describe('The concept, in the project\'s own words, e.g. "health", "inventory", "vacuum". Try one word first; narrow only if the map is truncated.'),
+      maxAssets: z.number().optional().describe("Cap on assets in the map. Defaults to 25. Raise it if the map reports being truncated."),
+      depth: z.number().optional().describe("How many reference hops to follow out from the matches. Defaults to 2, which is usually the whole system. 1 is tighter, 3 tends to pull in the entire project."),
+    },
+  },
+  async ({ query, maxAssets, depth }) => {
+    try {
+      const result = await mapSystem(bridge, query, { maxAssets, depth });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

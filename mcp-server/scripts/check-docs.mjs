@@ -73,6 +73,7 @@ const REQUIRED_README_SECTIONS = [
   "### Scene, actors, components, project settings, and runtime",
   "### Structs and enums",
   "### UMG",
+  "### Working on a project that already exists",
   "### Materials",
   "### Readable graphs are produced, not requested",
   "### When something is wrong",

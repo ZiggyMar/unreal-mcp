@@ -232,6 +232,37 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+### Working on a project that already exists
+
+The hardest thing about a real project is not writing new logic. It is that one Blueprint is wired
+to five others and there is no way to convey that to a model. Describing it in prose does not work.
+Reading assets one at a time makes the model rebuild the shape by hand, expensively, and the usual
+failure is that it reads the first matching asset, assumes it is the whole system, and edits it.
+That is how an agent breaks an eight-month-old project.
+
+`unreal_map_system` answers it directly. Give it a concept and it returns:
+
+- **assets** in the system, most central first, each saying *why* it is there ("has variable Health
+  matching 'health'", "uses BP_Player")
+- **edges**, so the shape is explicit rather than inferred
+- **highRisk**: assets with referencers *outside* the system, where a change is a project-wide event
+- **readingOrder**: the most depended-on assets first, because they define the contracts the rest
+  obey. Reading a leaf first means re-reading it once the shared type finally appears.
+
+It is built from the project index and the asset dependency graph and **never opens a graph**, so
+mapping a twenty-asset system costs a fraction of reading one large Blueprint. That is the point:
+it is what you consult *before* deciding what to read. A test asserts no graph read ever happens.
+
+Three uses, in order of how much trouble they save:
+
+1. **Before building**, to find out whether the system already exists. If it does, extend it rather
+   than adding a second one - and say so.
+2. **Before editing**, to see the blast radius.
+3. **To decide what to read at all.**
+
+An empty result is informative rather than a failure: the system genuinely is not there, or is
+named something else, and the response says so.
+
 ### Materials: most of what a player actually sees
 
 | Tool | Bridge command | Purpose |
