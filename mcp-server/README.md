@@ -151,6 +151,52 @@ unset, unreachable, slow, or errors, search results are returned exactly as they
 without enrichment. This is designed to never be a hard dependency. See
 `src/enrichment.ts` for the implementation.
 
+### Graph authoring and organization
+
+| Tool | Bridge command | Purpose |
+| --- | --- | --- |
+| `unreal_build_graph` | `build_graph` | Many nodes, wires, and pin defaults in one atomic call, with node `ref` names you choose. **Prefer this over individual `add_node`/`connect_pins` calls whenever placing more than one node.** |
+| `unreal_create_function` | `create_function` | Create a function graph with typed inputs/outputs; returns the entry (and result) node ids to wire immediately. |
+| `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
+| `unreal_refresh_blueprint` | `refresh_blueprint` | The "right-click > Refresh Nodes" repair: every node re-reads its backing signature. The fix for the whole `in use pin no longer exists` family after a C++ change. |
+| `unreal_delete_asset` | `delete_asset` | Delete assets by path, **blocked by default** if anything outside the delete set still references them, with the blocking referencers reported. |
+
+### Scene, actors, components, project settings, and runtime
+
+A Blueprint that compiles is not a game. These are the tools that put the Blueprint into a world,
+give it a body, configure its class defaults, bind input to it, and actually run it.
+
+| Tool | Bridge command | Purpose |
+| --- | --- | --- |
+| `unreal_list_assets` | `list_assets` | AssetRegistry query by class and path, so asset paths are looked up rather than guessed. |
+| `unreal_create_level` | `create_level` | Create a Level (World) asset, optionally with a GameMode override. |
+| `unreal_open_level` | `open_level` | Load a Level into the editor world. Every actor tool acts on the currently open level. |
+| `unreal_spawn_actor` | `spawn_actor` | Place an actor with a transform and label; `StaticMeshActor` + `staticMesh` blocks out geometry in one call. |
+| `unreal_save_level` | `save_level` | Save the open Level. Spawned actors live only in memory until this runs. |
+| `unreal_add_component` | `add_component` | Add a component to a Blueprint's hierarchy (mesh, collision, camera, spring arm, audio), optionally under a parent component. |
+| `unreal_list_components` | `list_components` | Read the component hierarchy, including components inherited from a parent class. |
+| `unreal_set_component_property` | `set_component_property` | Set one property on a component template. Fails loudly on an asset path that does not resolve, instead of silently setting `None`. |
+| `unreal_set_class_default` | `set_class_default` | Set a Class Defaults (CDO) property. This is how replication gets turned on: `bReplicates`, `NetUpdateFrequency`, `bAlwaysRelevant`. |
+| `unreal_set_game_settings` | `set_game_settings` | Project `UGameMapsSettings`: default GameMode, editor startup map, packaged-game default map. Persisted to config. |
+| `unreal_add_input_mapping` | `add_input_mapping` | Add an action or axis mapping and save it to config, so `InputAction`/`InputAxis` event nodes have something real behind them. |
+| `unreal_start_pie` | `start_pie` | Start Play In Editor, including multi-client sessions (`numPlayers`, `listenServer`) to exercise replication. |
+| `unreal_pie_status` | `pie_status` | Whether a PIE session is currently running. PIE starts on the next editor tick, so poll this. |
+| `unreal_stop_pie` | `stop_pie` | End the PIE session. Always stop PIE before editing further. |
+
+Compiling proves a Blueprint is valid. Running it is the only thing that proves it works, which is
+what `start_pie` is for.
+
+### Tool parity is enforced, not assumed
+
+Every command the C++ bridge dispatches must have a matching MCP tool, and every MCP tool must
+call a command the bridge actually implements. `npm run check:parity` (which `npm run build` and
+`npm test` both run) parses both sides and fails the build otherwise.
+
+This check exists because the gap it catches really happened: the bridge shipped 37 commands while
+the server exposed 23, so levels, actors, components, class defaults, input mappings, and PIE were
+implemented, live-verified, documented, and **unreachable by any AI client**. Nothing failed
+loudly, because nothing was checking.
+
 ## Configuration
 
 Environment variables (all optional):
@@ -216,10 +262,10 @@ sharp edges, and the compile-before-claiming-done rule, and it measurably reduce
   still accepted for one release for backward compatibility, but are never returned.
 - `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
   directly on the target Blueprint, not variables inherited from a parent Blueprint.
-- No diff-based/transactional edit model yet. Each write tool is a single independent
-  op (per `../ARCHITECTURE.md`'s plan). If you need several nodes wired together, call
-  `unreal_add_node` for each, then `unreal_connect_pins` for each link, then
-  `unreal_compile_blueprint` once at the end.
+- Every write runs inside a named editor transaction (`MCP: Add Node`, ...), so a human
+  working alongside the agent can Ctrl+Z it. For multi-node work, prefer
+  `unreal_build_graph`: it places nodes, wires them, and sets pin defaults in one atomic
+  call rather than a chain of independent ops.
 - No auth/encryption on the bridge socket. It only binds to loopback, which is the
   intended security boundary.
 - The project index (`unreal_search_project` / `unreal_get_project_overview`) only
