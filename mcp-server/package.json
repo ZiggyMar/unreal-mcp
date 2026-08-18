@@ -8,15 +8,16 @@
     "unreal-mcp-server": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run check:parity",
+    "build": "tsc -p tsconfig.json && npm run check:parity && npm run check:docs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node dist/index.js",
     "dev": "tsc -p tsconfig.json --watch",
     "check:parity": "node scripts/check-tool-parity.mjs",
-    "test": "npm run typecheck && npm run check:parity && npm run test:unit",
+    "test": "npm run typecheck && npm run check:parity && npm run check:docs && npm run test:unit",
     "test:unit": "node --test \"test/*.test.mjs\"",
     "verify:live": "node scripts/live-verify.mjs",
-    "fuzz:crash": "node scripts/fuzz-nodes.mjs"
+    "fuzz:crash": "node scripts/fuzz-nodes.mjs",
+    "check:docs": "node scripts/check-docs.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

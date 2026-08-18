@@ -512,6 +512,23 @@ and the exact create-delete-create sequence is a regression check that also asse
 still answering afterwards. A tool that can crash the editor from a plain input mistake is worse
 than one missing the feature.
 
+### Documentation is guarded too
+
+`npm run check:docs` (part of `npm run build` and `npm test`) checks that:
+
+- every registered tool is documented here, because a capability nobody can find is unshipped
+- every tool the docs mention actually exists, because a document promising a tool that is not
+  there is worse than silence: someone will act on it
+- the required sections still exist
+- every complaint-matrix row carries one of its declared statuses
+
+The third check exists because the failure already happened. A slice replacement between two
+headings silently deleted the live-verification and crash-sweep sections, 67 lines, and every
+automated check still passed: parity, unit tests, live verification, the crash sweep, none of them
+look at prose. It surfaced by luck, when a later edit anchored on a heading that no longer existed.
+
+The guard was verified by reproducing that exact deletion and confirming it fails.
+
 ### Tool parity is enforced, not assumed
 
 Every command the C++ bridge dispatches must have a matching MCP tool, and every MCP tool must
