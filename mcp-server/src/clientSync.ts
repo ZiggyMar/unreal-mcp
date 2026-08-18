@@ -49,8 +49,15 @@ const WIDGET_CALLS =
 export const isServerEvent = (netMode: string | undefined): boolean => /executes on server/i.test(netMode ?? "");
 
 export interface ServerUiOptions {
-  /** The replication line from the node's full title. Asked for lazily - it costs a call. */
-  netModeOf: (entryId: string) => Promise<string | undefined>;
+  /**
+   * Whether this chain runs on the server, and why.
+   *
+   * Not simply "is this event a Server RPC": authority is inherited by whoever you call, so the
+   * event that updates the widget usually declares nothing at all and runs on the server anyway
+   * because something four calls back was a Server RPC. `via` carries that route so the report can
+   * say which one.
+   */
+  authorityOf: (chain: SyncChain) => Promise<{ server: boolean; via?: string[] }>;
   /** Whether a cast target is a widget class. Answered from the class ancestry, not from its name. */
   isWidgetClass: (className: string) => Promise<boolean>;
 }
@@ -83,16 +90,18 @@ export async function findServerSideUi(
     }
     if (touched.length === 0) continue;
 
-    const netMode = await options.netModeOf(chain.entryId);
-    if (!isServerEvent(netMode)) continue;
+    const authority = await options.authorityOf(chain);
+    if (!authority.server) continue;
 
     const unique = [...new Set(touched)];
+    const route = authority.via && authority.via.length > 1 ? ` It runs there via ${authority.via.join(" -> ")}.` : "";
     findings.push({
       check: "server-event-touches-widget",
       severity: "error",
       message:
         `"${chain.entry}" runs on the server and does UI work (${unique.slice(0, 3).join(", ")}). A widget ` +
-        `exists only on the machine that created it, so this updates the host's screen and nobody else's.`,
+        `exists only on the machine that created it, so this updates the host's screen and nobody else's.` +
+        route,
       fix:
         `Send the value, not the UI update. Replicate what changed and let each client update its own ` +
         `widget - a RepNotify is usually enough - or use a Client RPC to the owning player when only ` +

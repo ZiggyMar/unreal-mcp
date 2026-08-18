@@ -571,8 +571,42 @@ reacted to.
 The replication mode is looked up lazily - one bridge call per event - and only for chains that
 have already been shown to touch a widget. Most graphs never ask.
 
-**What it does not do yet:** authority is only read where the event itself declares it. A plain
-event called from a Server RPC in a *different* Blueprint, through an interface message, is running
-on the server too, and this cannot currently see that. The firewall repair timer that pushes a
-progress ring into a widget from the server is exactly that shape, and it was found by hand rather
-than by this. Following authority across a Blueprint boundary is the next thing worth building.
+## Authority is inherited, so it has to be followed
+
+The first version of the widget check only saw authority that an event declared for itself, and the
+bug that motivated it does not look like that:
+
+    BP_Player.TraceInteract          Executes On Server
+      -> Interacted                  interface message, into another Blueprint
+         BP_FireWall.Interacted      a plain function
+           -> StartRepair            a plain custom event
+             -> Set Timer by Event   bound to...
+               -> UpdateRepairTimer  a plain custom event - which updates a widget
+
+Everything after the first line declares no replication at all, and all of it runs on the server,
+because authority is inherited by whoever you call. A repair ring pushed into a widget at the end of
+that chain fills on the host and nowhere else.
+
+`src/authorityMap.ts` follows it. The walk runs **backwards** on purpose: reading every event's
+replication would cost a bridge call per event across the whole project - thousands - so it starts
+from the few chains that do something suspicious and walks back through their callers, asking about
+replication only for units actually met. The firewall answer costs four questions.
+
+The report says which one:
+
+> "UpdateRepairTimer" runs on the server and does UI work (Cast To WB_Interaction_FW). A widget
+> exists only on the machine that created it, so this updates the host's screen and nobody else's.
+> It runs there via TraceInteract (Executes On Server) -> Interacted -> StartRepair ->
+> UpdateRepairTimer.
+
+Naming the route is most of the value. The verdict alone sends somebody to a Blueprint that looks
+completely innocent; the route tells them the cause is four calls away in a different asset.
+
+On that project this took `server-event-touches-widget` from one finding to four, and the three new
+ones were all real - the same repair feature, broken the same way, in three places.
+
+**What it still does not follow:** an interface message reaches every implementer, and which one is
+on the other end is a runtime fact - so any implementer counts as a possible caller. That is the
+safe direction: it can suggest authority a particular instance would not have, and it will not miss
+one. A timer bound through a `Create Event` node is invisible, because the bound function's name is
+not in the node.

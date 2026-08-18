@@ -14,17 +14,20 @@ test("a server event that updates a widget is reported", async () => {
       { id: "cast", type: "K2Node_DynamicCast", title: "Cast To WB_Interaction_FW" },
       { id: "set", type: "K2Node_CallFunction", title: "Set Scalar Parameter Value" },
     ]),
-    { netModeOf: async () => "Executes On Server", isWidgetClass: async (c) => c === "WB_Interaction_FW" }
+    { authorityOf: async () => ({ server: true, via: ["TraceInteract (Executes On Server)", "Interacted", "UpdateRepairTimer"] }), isWidgetClass: async (c) => c === "WB_Interaction_FW" }
   );
   assert.equal(found.length, 1);
   assert.match(found[0].message, /host's screen and nobody else's/);
+  // The route matters more than the verdict: it names the Server RPC four calls back that the
+  // reader would otherwise have to find by hand.
+  assert.match(found[0].message, /via TraceInteract \(Executes On Server\) -> Interacted -> UpdateRepairTimer/);
 });
 
 test("the same UI work on a normal event is left alone", async () => {
   const found = await findServerSideUi(
     [{ entryId: "e", entry: "ShowMenu", nodeIds: ["w"] }],
     nodes([{ id: "w", type: "K2Node_CallFunction", title: "Create Widget" }]),
-    { netModeOf: async () => undefined, isWidgetClass: async () => true }
+    { authorityOf: async () => ({ server: false }), isWidgetClass: async () => true }
   );
   assert.deepEqual(found, []);
 });
@@ -37,9 +40,9 @@ test("a server event that touches no UI costs nothing to check", async () => {
     [{ entryId: "e", entry: "ServerApplyDamage", nodeIds: ["a"] }],
     nodes([{ id: "a", type: "K2Node_VariableSet", title: "SET Health" }]),
     {
-      netModeOf: async () => {
+      authorityOf: async () => {
         asked += 1;
-        return "Executes On Server";
+        return { server: true };
       },
       isWidgetClass: async () => false,
     }
@@ -53,7 +56,7 @@ test("a cast is judged a widget by its ancestry, not by its name", async () => {
   const found = await findServerSideUi(
     [{ entryId: "e", entry: "ServerRefresh", nodeIds: ["c"] }],
     nodes([{ id: "c", type: "K2Node_DynamicCast", title: "Cast To RepairRing" }]),
-    { netModeOf: async () => "Executes On Server", isWidgetClass: async (c) => c === "RepairRing" }
+    { authorityOf: async () => ({ server: true }), isWidgetClass: async (c) => c === "RepairRing" }
   );
   assert.equal(found.length, 1);
 });

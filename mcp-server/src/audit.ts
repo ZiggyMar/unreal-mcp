@@ -30,6 +30,7 @@ import { reviewBlueprint } from "./review.js";
 import { findServerOnlyCasts } from "./multiplayer.js";
 import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
+import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { explainGraph } from "./explainGraph.js";
 
 /** What each finding is likely to cost, and why it sits where it does. */
@@ -175,6 +176,15 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const findings: AuditFinding[] = [];
   const unreadable: Array<{ name: string; error: string }> = [];
   const sessionGraphs: SessionGraph[] = [];
+  const units: AuthorityUnit[] = [];
+  const uiCandidates: Array<{
+    blueprint: string;
+    path: string;
+    graphName: string;
+    unitKey: string;
+    chain: { entryId: string; entry: string; nodeIds: string[] };
+    nodesById: Map<string, { id: string; type: string; title?: string }>;
+  }> = [];
 
   for (const bp of blueprints) {
     try {
@@ -253,41 +263,31 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         });
       }
 
+      // Collected here and judged after the loop: whether a chain runs on the server can depend on
+      // a Server RPC in a different Blueprint, which has not necessarily been read yet.
       for (const graph of review.graphNodes ?? []) {
         const nodes = (graph.nodes ?? []) as SessionGraph["nodes"];
-        const byId = new Map(nodes.map((n) => [n.id, n]));
         const explained = explainGraph({ nodes } as never);
-        const chains = explained.chains
-          .map((chain) => {
-            const entryNode = nodes.find((n) => (n.title ?? "").trim() === chain.entry.trim());
-            return entryNode ? { entryId: entryNode.id, entry: chain.entry, nodeIds: chain.nodeIds } : undefined;
-          })
-          .filter((c): c is { entryId: string; entry: string; nodeIds: string[] } => !!c);
-        for (const finding of await findServerSideUi(chains, byId, {
-          netModeOf: async (entryId) => {
-            const detail = await bridge
-              .send<{ title?: string }>("read_blueprint_node_detail", {
-                path: bp.path,
-                graphName: graph.graphName,
-                nodeId: entryId,
-              })
-              .catch(() => undefined);
-            return detail?.title;
-          },
-          isWidgetClass: async (className) => {
-            await learn(className);
-            return widgetClasses.get(className) === true;
-          },
-        })) {
-          findings.push({
+        for (const chain of explained.chains) {
+          // A function graph is one unit named after the graph; an event graph holds one unit per
+          // event. Callers write the bare name, so the editor's "Event " prefix comes off.
+          const isEventGraph = /^EventGraph$/i.test(graph.graphName);
+          const name = isEventGraph ? chain.entry.replace(/^Event\s+/i, "").trim() : graph.graphName;
+          const chainNodes = nodes.filter((n) => chain.nodeIds.includes(n.id) || n.id === chain.entryId);
+          units.push({
+            key: `${bp.name}::${name}`,
+            blueprint: bp.name,
+            name,
+            entryId: chain.entryId,
+            nodes: chainNodes as never,
+          });
+          uiCandidates.push({
             blueprint: bp.name,
             path: bp.path,
-            graph: graph.graphName,
-            check: finding.check,
-            severity: finding.severity,
-            message: finding.message,
-            fix: finding.fix,
-            cost: FINDING_COST[finding.check] ?? 1,
+            graphName: graph.graphName,
+            unitKey: `${bp.name}::${name}`,
+            chain: { entryId: chain.entryId, entry: chain.entry, nodeIds: chain.nodeIds },
+            nodesById: new Map(nodes.map((n) => [n.id, n])) as never,
           });
         }
       }
@@ -307,6 +307,52 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     } catch (err) {
       // One unreadable Blueprint must not cost the caller the audit.
       unreadable.push({ name: bp.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
+    }
+  }
+
+  // Authority is a project-wide question: the Server RPC that puts a chain on the server is
+  // routinely in a different Blueprint, reached through an interface message.
+  const unitIndex = new Map(units.map((u) => [u.key, u]));
+  const callers = buildCallers(units);
+  const netModeCache = new Map<string, boolean>();
+  const isServerRpc = async (unit: AuthorityUnit): Promise<boolean> => {
+    const cached = netModeCache.get(unit.key);
+    if (cached !== undefined) return cached;
+    const owner = uiCandidates.find((c) => c.unitKey === unit.key);
+    let server = false;
+    if (owner) {
+      const detail = await bridge
+        .send<{ title?: string }>("read_blueprint_node_detail", {
+          path: owner.path,
+          graphName: owner.graphName,
+          nodeId: unit.entryId,
+        })
+        .catch(() => undefined);
+      server = /executes on server/i.test(detail?.title ?? "");
+    }
+    netModeCache.set(unit.key, server);
+    return server;
+  };
+
+  for (const candidate of uiCandidates) {
+    const found = await findServerSideUi([candidate.chain], candidate.nodesById as never, {
+      authorityOf: async () => resolveServerAuthority(candidate.unitKey, unitIndex, callers, isServerRpc),
+      isWidgetClass: async (className) => {
+        await learn(className);
+        return widgetClasses.get(className) === true;
+      },
+    }).catch(() => []);
+    for (const finding of found) {
+      findings.push({
+        blueprint: candidate.blueprint,
+        path: candidate.path,
+        graph: candidate.graphName,
+        check: finding.check,
+        severity: finding.severity,
+        message: finding.message,
+        fix: finding.fix,
+        cost: FINDING_COST[finding.check] ?? 1,
+      });
     }
   }
 

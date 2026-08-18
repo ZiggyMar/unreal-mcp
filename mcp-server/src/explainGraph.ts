@@ -47,6 +47,8 @@ export interface GraphSummary {
 export interface ExplainedChain {
   /** The event or entry node this chain hangs off. */
   entry: string;
+  /** Its node id, so a caller can ask the editor about that node without matching on the title. */
+  entryId: string;
   /** What happens, in execution order. */
   steps: string[];
   /** True when the chain was cut short because it loops or branches beyond the step budget. */
@@ -142,7 +144,7 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
       frontier = next;
     }
 
-    chains.push({ entry: clean(entry.title), steps, truncated, nodeIds: [...seenInChain] });
+    chains.push({ entry: clean(entry.title), entryId: entry.id, steps, truncated, nodeIds: [...seenInChain] });
   }
 
   // Anything never reached is either dead logic or a pure data node feeding something else. Both
