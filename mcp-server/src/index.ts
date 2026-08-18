@@ -180,6 +180,10 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_list_material_parameters",
   ],
   data: [
+    "unreal_save_asset",
+    "unreal_create_data_table",
+    "unreal_add_data_table_row",
+    "unreal_list_data_table_rows",
     "unreal_create_struct",
     "unreal_add_struct_field",
     "unreal_list_struct_fields",
@@ -1682,6 +1686,107 @@ register(
     try {
       const result = await bridge.send("set_widget_property", { path, widget, property, value, onSlot });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_save_asset",
+  {
+    title: "Save any asset to disk",
+    description:
+      "Writes an asset to disk. Works on anything - Blueprints, structs, enums, materials, Data Tables. " +
+      "**Call this after creating or editing a non-Blueprint asset.** Everything this server creates is live in " +
+      "the editor immediately but stays unsaved until something writes it, and unsaved work is lost if the editor " +
+      "crashes. Blueprint tools save for you; the rest do not, because saving after every field would be a disk " +
+      "write per edit. " +
+      "Checks the file out first if the project is under source control, and explains rather than failing with " +
+      "'save_failed' if it cannot.",
+    inputSchema: {
+      path: z.string().describe('Full asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      return jsonResult(await bridge.send("save_asset", { path }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_create_data_table",
+  {
+    title: "Create a Data Table",
+    description:
+      "Creates a Data Table backed by a struct. **This is how you make gameplay data-driven:** items, weapons, " +
+      "enemy stats, dialogue lines and loot tables belong in rows, not in graph nodes. Adding item number two " +
+      "hundred then becomes one row, and the Blueprint that reads the table never changes. " +
+      "Make the row struct first with unreal_create_struct, then pass it here. " +
+      "Returns the row's field names, so you can add rows immediately without looking them up.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Data/DT_Items".'),
+      rowStruct: z
+        .string()
+        .describe('The struct that defines a row, e.g. "/Game/Data/S_Item" or a native row struct name.'),
+    },
+  },
+  async ({ packagePath, rowStruct }) => {
+    try {
+      return jsonResult(await bridge.send("create_data_table", { packagePath, rowStruct }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_add_data_table_row",
+  {
+    title: "Add a row to a Data Table",
+    description:
+      "Adds one named row and sets its values by field name. " +
+      "Every field name is checked before anything is written, so a typo refuses the row rather than leaving it " +
+      "half filled - a half-filled row looks correct in the editor until the wrong value shows up in play. " +
+      "The stored row is read back and returned, so you see what the engine actually kept rather than what you sent.",
+    inputSchema: {
+      path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
+      rowName: z.string().describe('The row key, e.g. "Potion". This is what Blueprints look up.'),
+      values: z
+        .record(z.string())
+        .optional()
+        .describe('Field values by name, e.g. {"DisplayName":"Health Potion","Value":"25"}.'),
+    },
+  },
+  async ({ path, rowName, values }) => {
+    try {
+      return jsonResult(await bridge.send("add_data_table_row", { path, rowName, values }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_data_table_rows",
+  {
+    title: "Read the rows of a Data Table",
+    description:
+      "Lists rows with their values. Paged deliberately: a Data Table is the one asset designed to get large, and " +
+      "returning nine hundred rows of item data would cost more context than the question that needed them. " +
+      "Defaults to 25 rows and tells you the total and the next offset.",
+    inputSchema: {
+      path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
+      limit: z.number().optional().describe("Rows to return. Defaults to 25, capped at 500."),
+      offset: z.number().optional().describe("Rows to skip, for paging through a large table."),
+    },
+  },
+  async ({ path, limit, offset }) => {
+    try {
+      return jsonResult(await bridge.send("list_data_table_rows", { path, limit, offset }));
     } catch (err) {
       return errorResult(err);
     }

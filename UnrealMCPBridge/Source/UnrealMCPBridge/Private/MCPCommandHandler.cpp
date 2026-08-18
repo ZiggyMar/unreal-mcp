@@ -52,6 +52,9 @@
 #include "Components/PanelSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Kismet2/StructureEditorUtils.h"
+#include "DataTableEditorUtils.h"
+#include "DataTableUtils.h"
+#include "Engine/DataTable.h"
 // StructureEditorUtils only forward-declares FStructVariableDescription; its definition lives here,
 // at the same path on both 5.6 and 5.8.
 #include "UserDefinedStructure/UserDefinedStructEditorData.h"
@@ -127,15 +130,19 @@ namespace
 
 	// Saves a Blueprint's package to disk in place. Used by create_blueprint (when
 	// save=true, the default) and save_blueprint.
-	bool SaveBlueprintPackage(UBlueprint* Blueprint, FString& OutError)
+	// Takes any asset, not just a Blueprint. It never needed more than a UObject and its package,
+	// and while it was Blueprint-only every struct, enum, material and Data Table created through
+	// this server stayed dirty in memory - work an agent would report as finished and a crash would
+	// erase.
+	bool SaveAssetPackage(UObject* Asset, FString& OutError)
 	{
-		if (!Blueprint)
+		if (!Asset)
 		{
-			OutError = TEXT("null_blueprint");
+			OutError = TEXT("null_asset");
 			return false;
 		}
 
-		UPackage* Package = Blueprint->GetOutermost();
+		UPackage* Package = Asset->GetOutermost();
 		Package->MarkPackageDirty();
 
 		const FString PackageFileName = FPackageName::LongPackageNameToFilename(
@@ -155,7 +162,8 @@ namespace
 					OutError = FString::Printf(
 						TEXT("checkout_failed: '%s' is read-only and source control refused to check it out. ")
 						TEXT("Someone else most likely has it checked out - Blueprints are binary assets, so two ")
-						TEXT("people cannot edit one safely. Nothing was saved; the edits are still in the editor. ")
+						TEXT("people cannot edit one binary asset safely. Nothing was saved; the edits are still in ")
+						TEXT("the editor. ")
 						TEXT("Resolve the checkout, then save again."),
 						*PackageFileName);
 					return false;
@@ -176,7 +184,7 @@ namespace
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 
-		const bool bSaved = UPackage::SavePackage(Package, Blueprint, *PackageFileName, SaveArgs);
+		const bool bSaved = UPackage::SavePackage(Package, Asset, *PackageFileName, SaveArgs);
 		if (!bSaved)
 		{
 			OutError = FString::Printf(TEXT("save_failed: %s"), *PackageFileName);
@@ -462,6 +470,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("delete_asset"), TEXT("refresh_blueprint"), TEXT("add_component"),
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
+		TEXT("save_asset"), TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
 }
@@ -680,6 +689,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleSpawnActor(Params);
 	}
+	else if (Cmd == TEXT("save_asset"))
+	{
+		Response = HandleSaveAsset(Params);
+	}
 	else if (Cmd == TEXT("save_level"))
 	{
 		Response = HandleSaveLevel(Params);
@@ -715,6 +728,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("set_widget_property"))
 	{
 		Response = HandleSetWidgetProperty(Params);
+	}
+	else if (Cmd == TEXT("create_data_table"))
+	{
+		Response = HandleCreateDataTable(Params);
+	}
+	else if (Cmd == TEXT("add_data_table_row"))
+	{
+		Response = HandleAddDataTableRow(Params);
+	}
+	else if (Cmd == TEXT("list_data_table_rows"))
+	{
+		Response = HandleListDataTableRows(Params);
 	}
 	else if (Cmd == TEXT("create_struct"))
 	{
@@ -1235,7 +1260,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	FString SaveError;
 	if (bSave)
 	{
-		bSaved = SaveBlueprintPackage(NewBlueprint, SaveError);
+		bSaved = SaveAssetPackage(NewBlueprint, SaveError);
 	}
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -2073,7 +2098,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveBlueprint(const TSharedPtr
 	}
 
 	FString SaveError;
-	const bool bSaved = SaveBlueprintPackage(Blueprint, SaveError);
+	const bool bSaved = SaveAssetPackage(Blueprint, SaveError);
 	if (!bSaved)
 	{
 		return MakeErrorResponse(SaveError);
@@ -4055,7 +4080,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateWidgetBlueprint(const TS
 	FString SaveError;
 	if (bSave)
 	{
-		bSaved = SaveBlueprintPackage(NewBlueprint, SaveError);
+		bSaved = SaveAssetPackage(NewBlueprint, SaveError);
 	}
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -4430,6 +4455,322 @@ static TArray<TSharedPtr<FJsonValue>> DescribeStructFields(UUserDefinedStruct* S
 		Fields.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 	return Fields;
+}
+
+// --- Data Tables ----------------------------------------------------------------------------------
+//
+// A Data Table is a struct plus rows. That pairing is what makes gameplay data-driven: adding item
+// number two hundred becomes a row rather than a rewire, and the Blueprint that reads it never
+// changes. Without it, every new item is new graph work, which is exactly the manual labour this
+// project exists to remove.
+
+static UDataTable* ResolveDataTable(const FString& Path, FString& OutError)
+{
+	UObject* Loaded = StaticLoadObject(UDataTable::StaticClass(), nullptr, *Path);
+	UDataTable* Table = Cast<UDataTable>(Loaded);
+	if (!Table)
+	{
+		OutError = FString::Printf(
+			TEXT("data_table_not_found: %s. Use an asset path like /Game/Data/DT_Items.DT_Items"), *Path);
+		return nullptr;
+	}
+	if (!Table->RowStruct)
+	{
+		OutError = FString::Printf(
+			TEXT("data_table_has_no_row_struct: %s cannot hold rows until its row struct is set"), *Path);
+		return nullptr;
+	}
+	return Table;
+}
+
+// The row's own values, by field name. Shared by add and list so what you write back is spelled the
+// same way as what you read.
+static TSharedRef<FJsonObject> DescribeDataTableRow(const UScriptStruct* RowStruct, const uint8* RowData)
+{
+	TSharedRef<FJsonObject> Values = MakeShared<FJsonObject>();
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		FProperty* Property = *It;
+		Values->SetStringField(
+			DataTableUtils::GetPropertyExportName(Property),
+			DataTableUtils::GetPropertyValueAsString(Property, RowData, EDataTableExportFlags::None));
+	}
+	return Values;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveAsset(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	if (!Asset)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("asset_not_found: %s. Use a full object path like /Game/Data/DT_Items.DT_Items"), *Path));
+	}
+
+	FString SaveError;
+	if (!SaveAssetPackage(Asset, SaveError))
+	{
+		return MakeErrorResponse(SaveError);
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("saved"), true);
+	Result->SetStringField(TEXT("path"), Asset->GetPathName());
+	Result->SetStringField(TEXT("class"), Asset->GetClass()->GetName());
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateDataTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath, RowStructName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("packagePath"), PackagePath) ||
+		!Params->TryGetStringField(TEXT("rowStruct"), RowStructName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath and rowStruct are required, e.g. ")
+			TEXT("/Game/Data/DT_Items and /Game/Data/S_Item"));
+	}
+	FString PathError;
+	if (!ValidateNewAssetPath(PackagePath, PathError))
+	{
+		return MakeErrorResponse(PathError);
+	}
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
+	}
+
+	// Resolve the row struct before creating anything. A Data Table whose row struct is null is an
+	// asset you can see but cannot use, and it is a confusing thing to leave behind.
+	FString StructError;
+	UScriptStruct* RowStruct = ResolveStructByName(RowStructName, StructError);
+	if (!RowStruct)
+	{
+		return MakeErrorResponse(StructError);
+	}
+	if (!FDataTableEditorUtils::IsValidTableStruct(RowStruct))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("invalid_row_struct: %s cannot be used as a Data Table row. A row struct must be a ")
+			TEXT("user-defined struct (create one with create_struct) or a native struct deriving from ")
+			TEXT("FTableRowBase."),
+			*RowStructName));
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
+	}
+
+	const FScopedTransaction Transaction(
+		NSLOCTEXT("UnrealMCPBridge", "MCPCreateDataTable", "MCP: Create Data Table"));
+
+	UDataTable* Table = NewObject<UDataTable>(
+		Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+	if (!Table)
+	{
+		return MakeErrorResponse(TEXT("create_data_table_failed"));
+	}
+	Table->RowStruct = RowStruct;
+
+	FAssetRegistryModule::AssetCreated(Table);
+	Package->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Table->GetPathName());
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetStringField(TEXT("rowStruct"), RowStruct->GetPathName());
+	// The caller is about to add rows and needs to know what a row looks like. Saying so here saves
+	// a round trip to list_struct_fields, which a weak model may not think to make.
+	TArray<TSharedPtr<FJsonValue>> Fields;
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		Fields.Add(MakeShared<FJsonValueString>(DataTableUtils::GetPropertyExportName(*It)));
+	}
+	Result->SetArrayField(TEXT("rowFields"), Fields);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, RowName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("rowName"), RowName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and rowName are required"));
+	}
+
+	FString TableError;
+	UDataTable* Table = ResolveDataTable(Path, TableError);
+	if (!Table)
+	{
+		return MakeErrorResponse(TableError);
+	}
+
+	if (Table->GetRowMap().Contains(FName(*RowName)))
+	{
+		// AddRow returns null for this and for three other reasons, so the caller would otherwise
+		// get a generic failure for the one case that has an obvious fix.
+		return MakeErrorResponse(FString::Printf(
+			TEXT("row_already_exists: %s already has a row named '%s'"), *Path, *RowName));
+	}
+
+	// Check every field name before writing anything. Half-populated rows are worse than a refusal,
+	// because they look correct in the editor until the one wrong field is noticed in play.
+	const TSharedPtr<FJsonObject>* ValuesObj = nullptr;
+	TArray<TPair<FProperty*, FString>> Pending;
+	if (Params->TryGetObjectField(TEXT("values"), ValuesObj) && ValuesObj && ValuesObj->IsValid())
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*ValuesObj)->Values)
+		{
+			FProperty* Property = nullptr;
+			for (TFieldIterator<FProperty> It(Table->RowStruct); It; ++It)
+			{
+				if (DataTableUtils::GetPropertyExportName(*It).Equals(Pair.Key, ESearchCase::IgnoreCase) ||
+					It->GetName().Equals(Pair.Key, ESearchCase::IgnoreCase))
+				{
+					Property = *It;
+					break;
+				}
+			}
+			if (!Property)
+			{
+				TArray<FString> Available;
+				for (TFieldIterator<FProperty> It(Table->RowStruct); It; ++It)
+				{
+					Available.Add(DataTableUtils::GetPropertyExportName(*It));
+				}
+				return MakeErrorResponse(FString::Printf(
+					TEXT("unknown_field: '%s' is not a field of row struct %s (available: %s)"),
+					*Pair.Key, *Table->RowStruct->GetName(), *FString::Join(Available, TEXT(", "))));
+			}
+			FString AsString;
+			if (!Pair.Value->TryGetString(AsString))
+			{
+				// Numbers and booleans arrive as JSON scalars often enough to be worth accepting
+				// rather than refusing on a technicality about quoting.
+				AsString = Pair.Value->Type == EJson::Boolean
+					? (Pair.Value->AsBool() ? TEXT("true") : TEXT("false"))
+					: FString::SanitizeFloat(Pair.Value->AsNumber());
+			}
+			Pending.Add(TPair<FProperty*, FString>(Property, AsString));
+		}
+	}
+
+	uint8* RowData = FDataTableEditorUtils::AddRow(Table, FName(*RowName));
+	if (!RowData)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("add_row_failed: %s"), *RowName));
+	}
+
+	TArray<FString> Problems;
+	for (const TPair<FProperty*, FString>& Entry : Pending)
+	{
+		const FString Error = DataTableUtils::AssignStringToProperty(Entry.Value, Entry.Key, RowData);
+		if (!Error.IsEmpty())
+		{
+			Problems.Add(FString::Printf(TEXT("%s: %s"), *Entry.Key->GetName(), *Error));
+		}
+	}
+
+	FDataTableEditorUtils::BroadcastPostChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowData);
+	Table->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("rowName"), RowName);
+	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	// Read the row back rather than echoing the input. A value the engine rejected or coerced would
+	// otherwise be reported as if it had been stored exactly as sent.
+	Result->SetObjectField(TEXT("values"), DescribeDataTableRow(Table->RowStruct, RowData));
+	if (Problems.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> ProblemJson;
+		for (const FString& Problem : Problems)
+		{
+			ProblemJson.Add(MakeShared<FJsonValueString>(Problem));
+		}
+		Result->SetArrayField(TEXT("fieldsNotSet"), ProblemJson);
+	}
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListDataTableRows(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path is required"));
+	}
+
+	FString TableError;
+	UDataTable* Table = ResolveDataTable(Path, TableError);
+	if (!Table)
+	{
+		return MakeErrorResponse(TableError);
+	}
+
+	// Data Tables are the one asset designed to get large - that is the entire point of using one.
+	// Returning nine hundred rows of item data would cost more context than the task it was fetched
+	// for, so this pages by default and says how much it left behind.
+	int32 Limit = 25;
+	double LimitValue = 0;
+	if (Params->TryGetNumberField(TEXT("limit"), LimitValue) && LimitValue > 0)
+	{
+		Limit = FMath::Min(static_cast<int32>(LimitValue), 500);
+	}
+	int32 Offset = 0;
+	double OffsetValue = 0;
+	if (Params->TryGetNumberField(TEXT("offset"), OffsetValue) && OffsetValue > 0)
+	{
+		Offset = static_cast<int32>(OffsetValue);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 Index = 0;
+	for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+	{
+		if (Index++ < Offset)
+		{
+			continue;
+		}
+		if (Rows.Num() >= Limit)
+		{
+			break;
+		}
+		TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("rowName"), Pair.Key.ToString());
+		Row->SetObjectField(TEXT("values"), DescribeDataTableRow(Table->RowStruct, Pair.Value));
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Table->GetPathName());
+	Result->SetStringField(TEXT("rowStruct"), Table->RowStruct->GetPathName());
+	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	Result->SetArrayField(TEXT("rows"), Rows);
+	const int32 Shown = Offset + Rows.Num();
+	if (Shown < Table->GetRowMap().Num())
+	{
+		Result->SetNumberField(TEXT("nextOffset"), Shown);
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("Showing %d-%d of %d rows. Pass offset=%d for more."),
+			Offset, Shown - 1, Table->GetRowMap().Num(), Shown));
+	}
+	return MakeOkResponse(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateStruct(const TSharedPtr<FJsonObject>& Params)
