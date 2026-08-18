@@ -8,6 +8,7 @@ import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
+import { SessionJournal } from "./journal.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +43,26 @@ const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
 // (see COMMAND_TIMEOUTS_MS in bridgeClient.ts). Set this only to force a single flat timeout.
 const TIMEOUT_OVERRIDE_MS = process.env.UNREAL_MCP_TIMEOUT_MS ? Number(process.env.UNREAL_MCP_TIMEOUT_MS) : undefined;
 
-const bridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT, timeoutMs: TIMEOUT_OVERRIDE_MS });
+const rawBridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT, timeoutMs: TIMEOUT_OVERRIDE_MS });
+const journal = new SessionJournal();
+
+/**
+ * Every command goes through here, so the change log cannot drift from what was actually sent.
+ * Recording at each of the fifty call sites would be one forgotten line away from lying to the
+ * user about what was touched, and a change log that is wrong is worse than none.
+ */
+const bridge = {
+  async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
+    try {
+      const result = await rawBridge.send<T>(cmd, params);
+      journal.record(cmd, params, true);
+      return result;
+    } catch (err) {
+      journal.record(cmd, params, false, err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+  },
+};
 
 const server = new McpServer({
   name: "unreal-mcp-server",
@@ -69,6 +89,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_ping",
   "unreal_doctor",
   "unreal_enable_tools",
+  "unreal_session_changes",
   "unreal_get_project_overview",
   "unreal_search_project",
   "unreal_list_blueprints",
@@ -1415,7 +1436,7 @@ register(
   },
   async () => {
     try {
-      const report = await runDoctor(bridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
+      const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
       return jsonResult(report);
     } catch (err) {
       return errorResult(err);
@@ -1780,6 +1801,28 @@ server.registerPrompt(
   })
 );
 
+register(
+  "unreal_session_changes",
+  {
+    title: "What has been changed in this project so far",
+    description:
+      "Reports every change this server has made to the project during this session, grouped by asset and written " +
+      "in plain language rather than command names, plus anything that failed and anything that was deleted. " +
+      "Handing an AI direct control of a game engine introduces a failure mode that does not exist when a human is " +
+      "clicking the buttons: the human always knows what they touched. Use this to close that gap. Show it to the " +
+      "user before they save, when they ask what you did, when they seem unsure about letting you edit their " +
+      "project, or before doing anything you cannot easily reverse. It reads the server's own log, costs nothing, " +
+      "and touches the editor not at all.",
+    inputSchema: {
+      detailed: z.boolean().optional().describe("Include the full command-by-command list as well as the summary. Defaults to false."),
+    },
+  },
+  async ({ detailed }) => {
+    const summary = journal.summary();
+    return jsonResult(detailed ? { ...summary, log: journal.all() } : summary);
+  }
+);
+
 async function main() {
   // `unreal-mcp-server --doctor` runs the same diagnosis from a terminal, with no MCP client
   // involved. When the complaint is "my AI tool cannot see Unreal", removing the AI tool from the
@@ -1793,7 +1836,7 @@ async function main() {
   }
 
   if (process.argv.includes("--doctor")) {
-    const report = await runDoctor(bridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
+    const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
     console.log(formatDoctorReport(report));
     process.exit(report.verdict === "not_connected" ? 1 : 0);
   }

@@ -9,7 +9,7 @@ The goal this feeds: someone with zero coding skill points any AI model at their
 a feature, and gets a working, readable Blueprint. Every row below is something that currently
 stops that from feeling like magic.
 
-Last updated 2026-08-17.
+Last updated 2026-08-18.
 
 ## A. Getting connected at all
 
@@ -45,6 +45,8 @@ This is the single largest category. Most people who try an Unreal MCP server ne
 | C6 | A timeout leaves the caller unsure whether the write landed, so it retries and applies it twice. | Generic to every MCP over a stateful editor | **Solved** | Timeouts are per-command and sized to the operation, and the timeout message states explicitly that a timeout is not a rollback and that current state must be read before retrying a write. |
 | C8 | A newly added command inherits a timeout too short for what it does, so working calls report failure. | Found in this repo by live verification | **Solved** | The timeout policy was inverted: cheap reads are enumerated and everything else, including every future command, gets a generous default. The old short-default-plus-exceptions list had already gone stale for the UMG commands, which recompile a Blueprint and were being cut off at 8s. |
 | C7 | The tool answers confidently while the editor is still scanning, so a search reports that an asset does not exist when it does. | Found in this repo; generic to AssetRegistry-backed tooling | **Solved** | `unreal_doctor` surfaces `assetRegistryStillScanning` explicitly and says what it invalidates. A wrong answer delivered confidently is worse than a clean failure, so it is worth a dedicated check. |
+
+| C9 | Giving an AI direct control of an engine's core systems introduces failure modes that do not exist when a human is clicking the buttons: the human always knows what they touched. | [Gameenginehub on AI-native workflow](https://gameenginehub.com/insights/unreal-engine-ai-epic-mcp-developer-assistant-ai-native-workflow), [StraySpark](https://www.strayspark.studio/blog/aura-vs-mcp-ai-assistants-unreal-engine-2026) | **Solved** | `unreal_session_changes` reports everything the server changed this session, grouped by asset, in plain language rather than command names, with deletions and failures surfaced separately. Undo already existed; undo is useless if you cannot see what there is to undo, and the user this is aimed at cannot read a Blueprint diff. Recorded by wrapping the transport, so the log cannot drift from what was actually sent, and the report states its own limits (it does not see hand edits or other tools) rather than leaving that to be discovered. |
 
 ## D. Token cost and context bloat
 
@@ -83,6 +85,22 @@ This is the single largest category. Most people who try an Unreal MCP server ne
 | G4 | Linux support unclear / undocumented. | [chongdashu #35](https://github.com/chongdashu/unreal-mcp/issues) | **Open** | The plugin has no platform-specific code and the server is Node, so it should work; nothing has been verified on Linux, so nothing is claimed. |
 | G5 | Struct and enum authoring fails or is missing; `SetEnums` raises C2660 on UE 5.8. | [ChiR24 #566, #510](https://github.com/ChiR24/Unreal_mcp/issues) | **Solved** | `create_struct`, `add_struct_field`, `list_struct_fields`, `create_enum`, `list_enum_entries`, plus `struct:<Name>` / `enum:<Name>` variable types so a created struct is actually usable. The `SetEnums` trap is routed around rather than worked around: its signature genuinely differs between 5.6 and 5.8 (5.6 takes `EEnumFlags, bool`; 5.8 takes `UEnum::EUnderlyingType, EEnumFlags, EAddMaxKeyIfMissing`), so no single call compiles against both. `FEnumEditorUtils`/`FStructureEditorUtils` sit one level above and are identical on both, verified header to header. |
 | G6 | Headless / editor-not-running mode. | Competitive survey | **Open** | The architecture requires a running editor. A real limitation, stated rather than hidden. |
+| G7 | No Material authoring. | Gap against [tumourlove/monolith](https://github.com/tumourlove/monolith) and specialised material servers | **Open** | Materials can be *assigned* (`set_component_property`), but not authored: no material graph, no PBR parameter editing. This is a real gap for "looks AAA", since materials are most of what a player sees. |
+| G8 | No Niagara / VFX authoring. | Same | **Open** | Not addressed at all. |
+| G9 | No Animation authoring (montages, blend spaces, state machines). | Same | **Open** | Anim Blueprints are readable as Blueprints; the animation-specific asset types are not authored. |
+
+## A note on coverage
+
+The ecosystem moved while this document was being written. [tumourlove/monolith](https://github.com/tumourlove/monolith)
+now advertises 1,400+ actions across 25+ namespaces covering Materials, Niagara, Animation, GAS,
+Audio and more, targeting UE 5.7 and 5.8, also native C++ with no Python dependency.
+
+That is a far broader surface than this project has, and rows G7 through G9 above are the honest
+consequence. What this project is betting on instead is a different axis: that the bottleneck for
+someone with no coding experience is not how many asset types the tool can touch, but whether the
+output is correct, readable, and safe. Hence tiered reads, verified node names, enforced layout, a
+review gate, a crash sweep, and a change log. Breadth and those are not in conflict, and the gaps
+are listed as gaps rather than argued away.
 
 ## How to add to this document
 
