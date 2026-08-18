@@ -615,6 +615,51 @@ counts are printed to stderr at startup.
 A test asserts that no tool is stranded outside core and every group, so a tool added in future
 cannot silently become unreachable in `lazy`.
 
+### Security: what this bridge does and does not protect you from
+
+Security surveys of MCP servers keep finding the same shape. One 2025 review of popular servers
+found [43% with command-injection flaws, 22% allowing path traversal or arbitrary file reads, and no
+authentication by default](https://checkmarx.com/learn/mcp-security-risks-real-world-incidents-and-security-controls/).
+The current guidance is to validate every tool input and to require confirmation for anything
+irreversible.
+
+Stated plainly, because a vague security claim is worse than none:
+
+**What is protected**
+
+- **Loopback only.** The bridge binds `127.0.0.1` and refuses to listen anywhere else. A remote
+  attacker cannot reach it.
+- **No arbitrary code execution.** There is no `execute_python`, no shell, no eval. Every command is
+  a typed operation over engine APIs, so there is nothing to inject *into*.
+- **Writes are confined to `/Game`.** Creating, modifying and deleting are refused for anything
+  outside the project's own content. Engine and plugin content stays readable, because reading it
+  is useful and harmless.
+- **Deletion is reference-checked.** `unreal_delete_asset` refuses by default when something
+  outside the delete set still points at the target.
+- **Everything is undoable and visible.** Writes land in the editor's undo history under `MCP:`,
+  `unreal_undo_history` shows them, and `unreal_session_changes` lists what was touched.
+
+**What is not**
+
+- **There is no authentication.** Anything running as your user on your machine can talk to the
+  bridge while the editor is open. Loopback is the whole boundary, and on a shared or untrusted
+  machine that is not enough.
+- **Prompt injection is real and only partly mitigated.** A model reads Blueprint titles, node
+  comments and asset names out of the project. A sentence planted in any of them is a plausible way
+  to steer an agent, and no tool schema can prevent it. What the design does instead is bound the
+  damage: the worst case is confined to `/Game`, is undoable, is listed by
+  `unreal_session_changes`, and cannot delete something still referenced without an explicit
+  `force`.
+- **An agent can still do the wrong thing correctly.** Guards stop catastrophes, not mistakes. That
+  is what the review gate, the change log and the undo history are for.
+
+**The escape hatch is deliberately awkward.** Writing outside `/Game` requires relaunching the
+editor with `-MCPAllowEngineWrites`. It is a command-line switch on the *editor*, not a tool
+parameter and not an environment variable this server reads, because a control an agent can flip on
+its own is not a control. A human choosing it is a decision; anything else is an exploit.
+
+Losing a project asset is a bad afternoon. Losing your engine install is a reinstall.
+
 ### Two editors open: the silent wrong-project edit
 
 The bridge binds one port. If you have **two Unreal Editors open** with this plugin enabled, only one

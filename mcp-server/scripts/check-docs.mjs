@@ -81,6 +81,7 @@ const REQUIRED_README_SECTIONS = [
   "### Readable graphs are produced, not requested",
   "### When something is wrong",
   "### The quality gate",
+  "### Security: what this bridge does and does not protect you from",
   "### Two editors open: the silent wrong-project edit",
   "### Knowing what the agent touched",
   "### Cost modes",
