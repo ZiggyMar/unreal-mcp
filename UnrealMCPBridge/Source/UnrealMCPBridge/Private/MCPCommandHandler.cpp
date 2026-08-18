@@ -199,7 +199,27 @@ UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString
 	UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
 	if (!Blueprint)
 	{
-		OutError = FString::Printf(TEXT("blueprint_not_found: %s"), *Path);
+		// "blueprint_not_found: /Game/X.X" is true and useless. A weak model reads it, has no next
+		// action, and reissues the identical call until the step limit stops it - measured here as
+		// twenty consecutive failing add_variable calls against a Blueprint that was never created.
+		// This project already learned the general form of that lesson on pin names: a message that
+		// CONTAINS the answer is not the same as a message a caller can ACT on. This one did not
+		// even contain it.
+		//
+		// There are exactly two reasons to be here, so both are named unconditionally rather than
+		// diagnosed. The first version DID diagnose them, by sweeping the asset registry for
+		// near-miss names, and that was dropped: a registry sweep on every failed lookup is real
+		// work on a failure path, and one sentence covers both cases for free. (It was briefly
+		// suspected of hanging the editor during this work. It was not - the editor had a modal
+		// dialog open after a force-kill, which blocks the game thread for every command including
+		// ping. The sweep is gone on its own merits, not for that.)
+		OutError = FString::Printf(
+			TEXT("blueprint_not_found: %s. Either it does not exist yet, in which case create it first - ")
+			TEXT("scaffold_blueprint makes a Blueprint together with its variables, components and event ")
+			TEXT("handlers in one call - or the path is wrong: a Blueprint path repeats the name, as in ")
+			TEXT("/Game/Folder/BP_Thing.BP_Thing, and list_blueprints will show the real ones. Do not repeat ")
+			TEXT("this call unchanged; it will fail the same way until one of those two things is fixed."),
+			*Path);
 	}
 	return Blueprint;
 }
@@ -701,6 +721,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleAddComponent(Params);
 	}
+	else if (Cmd == TEXT("list_variables"))
+	{
+		Response = HandleListVariables(Params);
+	}
 	else if (Cmd == TEXT("list_components"))
 	{
 		Response = HandleListComponents(Params);
@@ -1151,6 +1175,28 @@ static bool ValidateNewAssetPath(const FString& PackagePath, FString& OutError)
 	if (!FName::IsValidXName(AssetName, INVALID_OBJECTNAME_CHARACTERS, &Reason))
 	{
 		OutError = FString::Printf(TEXT("bad_asset_name: '%s' (%s)"), *AssetName, *Reason.ToString());
+		return false;
+	}
+
+	// Refuse a FOLDER where an asset path was meant.
+	//
+	// "Create BP_Thing in /Game/Bench" is one sentence containing two things, and a caller that
+	// splits it wrongly passes packagePath="/Game/Bench" with the name dropped. Every check above
+	// passes: it is a valid long package name whose short name is "Bench". So an asset called
+	// Bench was created next to the folder Bench, the caller's real target never existed, and every
+	// later call against it failed with blueprint_not_found. Measured, not imagined - a 7B did
+	// exactly this and then alternated between the two failing calls until the step limit.
+	//
+	// A folder on disk at that exact path is unambiguous evidence of the mistake: you cannot mean
+	// to create an asset AT a directory, only inside one.
+	const FString DirectoryOnDisk = FPackageName::LongPackageNameToFilename(PackagePath);
+	if (IFileManager::Get().DirectoryExists(*DirectoryOnDisk))
+	{
+		OutError = FString::Printf(
+			TEXT("path_is_a_folder: '%s' is an existing folder, not an asset path. The asset name is missing - ")
+			TEXT("packagePath must end with the name of the thing being created, as in '%s/BP_Thing'. ")
+			TEXT("Nothing was created."),
+			*PackagePath, *PackagePath);
 		return false;
 	}
 	return true;
@@ -3641,6 +3687,64 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddComponent(const TSharedPtr<
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("name"), NewNode->GetVariableName().ToString());
 	Result->SetStringField(TEXT("class"), ComponentClass->GetName());
+	return MakeOkResponse(Result);
+}
+
+// Read a Blueprint's own variables.
+//
+// Components were listable and variables were not, which is a strange hole once you notice it: for
+// a brownfield project the first question about any Blueprint is what state it holds, and the only
+// way to answer it was the project-wide search index. That index is asynchronous, so asking it
+// immediately after a write can report "no" about something that plainly exists - a benchmark here
+// spent several runs reporting a model had failed when the variable was already there.
+//
+// A direct read cannot lag, which is the point of adding this.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Variables;
+	for (const FBPVariableDescription& Desc : Blueprint->NewVariables)
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Desc.VarName.ToString());
+		Entry->SetStringField(TEXT("type"), Desc.VarType.PinCategory.ToString());
+		if (Desc.VarType.PinSubCategoryObject.IsValid())
+		{
+			Entry->SetStringField(TEXT("subType"), Desc.VarType.PinSubCategoryObject->GetName());
+		}
+		Entry->SetBoolField(TEXT("isArray"), Desc.VarType.ContainerType == EPinContainerType::Array);
+		if (!Desc.DefaultValue.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("defaultValue"), Desc.DefaultValue);
+		}
+		if (!Desc.Category.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("category"), Desc.Category.ToString());
+		}
+		// Whether a designer can set this per-instance is the difference between a variable that is
+		// part of the Blueprint's interface and one that is internal bookkeeping, and it is exactly
+		// what someone reading an unfamiliar Blueprint wants to know.
+		Entry->SetBoolField(TEXT("instanceEditable"), (Desc.PropertyFlags & CPF_DisableEditOnInstance) == 0
+			&& (Desc.PropertyFlags & CPF_Edit) != 0);
+		Entry->SetBoolField(TEXT("blueprintReadOnly"), (Desc.PropertyFlags & CPF_BlueprintReadOnly) != 0);
+		Variables.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Blueprint->GetPathName());
+	Result->SetNumberField(TEXT("count"), Variables.Num());
+	Result->SetArrayField(TEXT("variables"), Variables);
 	return MakeOkResponse(Result);
 }
 

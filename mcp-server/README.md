@@ -186,6 +186,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_delete_actor` | `delete_actor` | Remove one placed actor from the open level. |
 | `unreal_save_level` | `save_level` | Save the open Level. Spawned actors live only in memory until this runs. |
 | `unreal_add_component` | `add_component` | Add a component to a Blueprint's hierarchy (mesh, collision, camera, spring arm, audio), optionally under a parent component. |
+| `unreal_list_variables` | `list_variables` | Read a Blueprint's variables with types, defaults and per-instance editability. A direct read, so it cannot lag. |
 | `unreal_list_components` | `list_components` | Read the component hierarchy, including components inherited from a parent class. |
 | `unreal_set_component_property` | `set_component_property` | Set one property on a component template. Fails loudly on an asset path that does not resolve, instead of silently setting `None`. |
 | `unreal_set_class_default` | `set_class_default` | Set a Class Defaults (CDO) property. This is how replication gets turned on: `bReplicates`, `NetUpdateFrequency`, `bAlwaysRelevant`. |
@@ -664,12 +665,16 @@ problem.**
 | `UNREAL_MCP_PROFILE` | Starts at | Reaches |
 | --- | --- | --- |
 | `full` (default) | 64 tools, ~20.9k tokens | everything, immediately |
-| `lazy` | 25 tools, ~8.8k tokens | everything, on request |
-| `core` | 25 tools, ~8.8k tokens | only those, permanently |
-| `minimal` | **10 tools, ~3.1k tokens** | only those, permanently |
+| `lazy` | 26 tools, ~9.5k tokens | everything, on request |
+| `core` | 26 tools, ~9.5k tokens | only those, permanently |
+| `minimal` | **10 tools, ~3.6k tokens** | only those, permanently |
+
+Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
+fails if a profile grows past the ceiling its intended model can hold. They were hand-measured once
+before that existed and were wrong within a few commits, which is the argument for the script.
 
 **`minimal` exists for a measured reason.** On a 12 GB GPU, a 14B model loads at 8k context and
-fails to load at 16k. The `lazy` profile is ~8.8k tokens of tool definitions by itself, so its tool
+fails to load at 16k. The `lazy` profile is ~9.5k tokens of tool definitions by itself, so its tool
 list alone would consume the entire budget that model has. **Tool payload size does not just cost
 tokens; it decides which models you can run at all.** `minimal` is the authoring spine only - find
 a function, create, add state, attach behaviour, compile, review, save - and everything else

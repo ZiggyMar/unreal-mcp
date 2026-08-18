@@ -114,7 +114,10 @@ test("the lazy profile starts small but still carries the whole authoring path",
     "unreal_enable_tools",
     "unreal_get_project_overview",
     "unreal_find_node",
-    "unreal_create_blueprint",
+    // unreal_create_blueprint is deliberately NOT here: it makes an empty Blueprint and a weak
+    // model picks it over scaffold_blueprint and then cannot finish. scaffold_blueprint is the
+    // authoring path this profile carries.
+    "unreal_scaffold_blueprint",
     "unreal_build_graph",
     "unreal_compile_blueprint",
     "unreal_save_blueprint",

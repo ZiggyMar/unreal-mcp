@@ -115,6 +115,13 @@ async function main() {
     return names.join(", ");
   });
 
+  await expectFailure(
+    "a folder path is refused instead of silently creating an asset named after the folder",
+    "create_blueprint",
+    { packagePath: ROOT, parentClass: "Actor" },
+    "path_is_a_folder"
+  );
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -263,6 +270,14 @@ async function main() {
       type: "struct:S_MCPVerifyItem",
     });
     return JSON.stringify(r);
+  });
+
+  await check("list_variables reads variables directly, without the lagging index", async () => {
+    // Components were listable and variables were not. The only way to answer "what state does
+    // this hold" was the project search index, which lags a write and reported false negatives.
+    const r = await bridge.send("list_variables", { path: `${bpPath}.BP_MCPVerify` });
+    if (typeof r.count !== "number" || r.count < 1) throw new Error(`expected variables, got ${JSON.stringify(r)}`);
+    return `${r.count} variable(s): ${r.variables.map((v) => `${v.name}:${v.type}`).join(", ")}`;
   });
 
   await check("add_variable of type enum:<Name>", async () => {
