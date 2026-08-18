@@ -74,7 +74,46 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
+/**
+ * Refuse to run against a plugin older than the source.
+ *
+ * A stale binary produces failures that look exactly like broken features, and this project has
+ * chased that three times. Checking first turns an afternoon of debugging the wrong thing into one
+ * line at the top of the run.
+ */
+async function assertBinaryIsFresh() {
+  const info = await bridge.send("ping", {});
+  if (!info.pluginBuiltAt) {
+    throw new Error(
+      "this editor's plugin does not report pluginBuiltAt, so it predates that field and is " +
+        "certainly older than the source - rebuild it for this engine and restart"
+    );
+  }
+  const built = Date.parse(info.pluginBuiltAt);
+  if (Number.isNaN(built)) return;
+  const { readdirSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const walk = (dir) => {
+    let newest = 0;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) newest = Math.max(newest, walk(full));
+      else if (/\.(cpp|h|cs)$/i.test(entry.name)) newest = Math.max(newest, statSync(full).mtimeMs);
+    }
+    return newest;
+  };
+  const newestSource = walk(new URL("../../UnrealMCPBridge/Source", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, ""));
+  if (built + 60_000 < newestSource) {
+    throw new Error(
+      `the running plugin was built ${info.pluginBuiltAt}, which is older than the newest source. ` +
+        `This editor is not running the code you just wrote - rebuild for ${info.engineVersion} and restart.`
+    );
+  }
+  console.log(`plugin built ${info.pluginBuiltAt} on ${info.engineVersion} - fresh`);
+}
+
 async function main() {
+  await assertBinaryIsFresh();
   console.log("live verification against a running editor\n");
 
   section("connectivity");

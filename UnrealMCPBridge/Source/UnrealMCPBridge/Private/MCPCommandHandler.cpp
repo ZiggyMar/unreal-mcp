@@ -846,6 +846,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandlePing(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("status"), TEXT("ok"));
 	Result->SetStringField(TEXT("plugin"), TEXT("UnrealMCPBridge"));
 	Result->SetNumberField(TEXT("protocolVersion"), 1);
+	// When this binary was compiled.
+	//
+	// Sounds like trivia; it is the fix for a class of failure that has now cost time three times.
+	// This plugin is built against two engine versions, and a change built for one and tested
+	// against the other fails in a way that looks like a broken feature and is really a stale DLL.
+	// Reporting the build time lets a test refuse to run rather than report a false failure - the
+	// editor cannot tell you the binary is old, but the binary can.
+	Result->SetStringField(TEXT("pluginBuiltAt"), TEXT(__DATE__) TEXT(" ") TEXT(__TIME__));
 	// WHICH project this is. With two editors open only one can hold the port, so a caller that
 	// never checks can spend a whole session editing the wrong project with no symptom at all.
 	Result->SetStringField(TEXT("project"), FApp::GetProjectName());

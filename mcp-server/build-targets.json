@@ -1,0 +1,15 @@
+{
+  "_comment": "Engine and project paths are machine-specific. Edit these for your setup; build-engines.mjs refuses to run without them.",
+  "targets": [
+    {
+      "name": "5.6",
+      "engine": "M:/Unreal/UE_5.6",
+      "project": "A:/UnrealProjects/UnrealMCPTest56/UnrealMCPTest56.uproject"
+    },
+    {
+      "name": "5.8",
+      "engine": "F:/UE_5.8",
+      "project": "A:/UnrealProjects/AVS_ScaleTest/AntiVirusSquadUE58.uproject"
+    }
+  ]
+}

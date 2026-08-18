@@ -65,3 +65,61 @@ UE's own default stub events, unconnected and correctly reported as disabled by 
 - Only tested against one project. Behavior against Blueprints with more exotic node types
   (macros, timelines, interfaces with default implementations) is unverified.
 
+## Two engines means two builds
+
+This plugin supports UE 5.6 and 5.8. Keeping both honest used to be a human remembering to do the
+second one, and that failed three times - each time producing a failure that looked like broken code
+and was really a binary older than the change:
+
+- a guard that "could not fire on a fresh project" (it could; the binary predated it)
+- `add_variable did not report the parent class` (it did; built for 5.6, exercised on 5.8)
+- and an hour spent on a hang that turned out to be a modal dialog on a force-killed editor
+
+Each one sent the investigation into the wrong codebase, which is the expensive part. So it is now
+impossible to do quietly.
+
+### `npm run build:engines`
+
+Syncs the plugin source into every configured project and builds against every engine, and
+**refuses to report success unless every target actually built** - a partial success reported as
+success is the original problem restated. It requires both a zero exit code and `Result: Succeeded`
+in the output, because trusting an exit code alone is its own genre of bug.
+
+Targets live in `mcp-server/build-targets.json`, since engine and project paths are specific to a
+machine:
+
+```json
+{
+  "targets": [
+    { "name": "5.6", "engine": "M:/Unreal/UE_5.6", "project": "A:/.../Test56.uproject" },
+    { "name": "5.8", "engine": "F:/UE_5.8",        "project": "A:/.../Real58.uproject" }
+  ]
+}
+```
+
+### The binary says how old it is
+
+The editor cannot tell you its plugin is stale, but the plugin can: `ping` now reports
+`pluginBuiltAt`, stamped at compile time.
+
+`live-verify` checks that before running anything and **fails outright** if the running plugin is
+older than the newest source file. A warning at the top of a hundred passing checks is a warning
+nobody reads; refusing to start is a sentence somebody acts on:
+
+```
+the running plugin was built Aug 18 2026 09:14:02, which is older than the newest
+source. This editor is not running the code you just wrote - rebuild for 5.8 and
+restart.
+```
+
+There is a minute of slack, because the compiler stamps each translation unit as it reaches it, so
+a build that began just before the last save can still contain the change.
+
+`npm run check:fresh` runs the same check on its own.
+
+### Why this is in a project about Blueprints
+
+It is not really about engine versions. It is the same rule the rest of this project keeps
+rediscovering: **a check that can be skipped by a person having a bad day is not a check.** The
+parity guard, the docs guard, the profile budget and this all exist for the same reason, and each
+was added after the thing it prevents had already happened at least once.
