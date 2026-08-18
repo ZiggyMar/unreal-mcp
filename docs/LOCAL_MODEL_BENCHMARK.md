@@ -250,6 +250,53 @@ index, and now this.
 second `build_graph` adds to the graph instead of replacing it, and that the original handler still
 prints what it printed before.
 
+## UMG: the composite pattern, confirmed on a second content type
+
+`unreal_scaffold_blueprint` exists because a small model cannot hold a plan across turns. UMG had
+no equivalent — building a screen was create, add, add, set, compile, save — so it was the clearest
+untested case of the same pattern. This measured it rather than assuming it.
+
+| | Before | After |
+| --- | --- | --- |
+| Build a HUD with a labelled TextBlock and a Button | **0/3** | **3/3** |
+
+`unreal_scaffold_widget` builds the Widget Blueprint and everything inside it in one call, and the
+7B emits that call perfectly formed — root panel, both widgets, the label's text — on its first
+attempt.
+
+It is also in the `minimal` profile, which previously had no widget tool at all: **the smallest and
+most reliable configuration could not build a user interface.** Making room meant trimming
+descriptions, which is its own lesson — `scaffold_blueprint`'s description was 3365 characters, much
+of it explaining *why the tool exists*. That reasoning is paid on every request by every client,
+while a reader pays for it once. It now lives in the source and in this document, and the profile
+came in under budget with a whole new tool added.
+
+### Three real bugs, and one honest null result
+
+**A trap asset.** Asked to make a widget after its first attempt failed, the model fell back to
+`create_blueprint` with `parentClass: UserWidget`. The engine accepts that and produces a plain
+Blueprint that **cannot open in the UMG designer and cannot contain widgets** — every call reports
+success and the asset is useless in a way nothing reveals until someone tries to use it. Now
+refused, naming `create_widget_blueprint` instead.
+
+**A stale tool list.** The model worked out on its own that it needed the `ui` group and enabled it
+correctly — and then every follow-up call was silently discarded. The server sends
+`notifications/tools/list_changed`, and the benchmark harness ignored it. Worse, the path that
+recovers tool calls from message text filters against that same stale list, so a newly enabled tool
+was invisible twice over. **The lazy-loading feature worked; the client measuring it did not.**
+
+**A hardcoded test count.** `enabling a group makes exactly that group appear` asserted `+4` for the
+`ui` group, so adding a tool to that group failed the test for the wrong reason — it read as a leak
+when the group had simply grown. It now counts the list it already asserts.
+
+**And a null result worth stating.** The 7B still uses its entire step budget on this task: the
+passing work is done in two calls, and the remaining eighteen are unrequested variables and a loop
+on `unreal_doctor`, which takes no arguments and is the easiest thing to emit when a model has
+finished and not realised it. `doctor`'s healthy answer now says outright that calling it again
+returns the same thing. **It did not measurably help.** It is kept because the sentence is true,
+not because it fixed anything, and the loop remains a model behaviour this tool surface has not yet
+found a lever on.
+
 ## Which model tier actually works
 
 Three models, on the same 12 GB card:

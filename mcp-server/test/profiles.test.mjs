@@ -138,17 +138,26 @@ test("enabling a group makes exactly that group appear, and nothing else", async
   const after = toolsFrom(messages, 4);
 
   assert.ok(!before.includes("unreal_add_widget"));
-  for (const ui of [
+  // Listed once and counted from that list. The count used to be hardcoded as +4, so adding a tool
+  // to the group failed this test for the wrong reason - it read as "enabling ui leaked something"
+  // when the group had simply grown.
+  const uiTools = [
+    "unreal_scaffold_widget",
     "unreal_create_widget_blueprint",
     "unreal_add_widget",
     "unreal_list_widgets",
     "unreal_set_widget_property",
-  ]) {
+  ];
+  for (const ui of uiTools) {
     assert.ok(after.includes(ui), `${ui} did not appear after enabling "ui"`);
   }
   assert.ok(!after.includes("unreal_spawn_actor"), "enabling ui also enabled scene");
   assert.ok(!after.includes("unreal_create_struct"), "enabling ui also enabled data");
-  assert.equal(after.length, before.length + 4);
+  assert.equal(
+    after.length,
+    before.length + uiTools.length,
+    "enabling ui changed the tool count by something other than the ui group"
+  );
 });
 
 test("enabling several groups at once works, and re-enabling is harmless", async () => {

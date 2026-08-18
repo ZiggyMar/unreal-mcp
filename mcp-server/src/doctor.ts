@@ -296,7 +296,24 @@ export async function runDoctor(
     checks,
     nextAction: worst
       ? `${worst.name}: ${worst.remedy ?? worst.detail}`
-      : "Everything checks out. The editor is reachable, indexed, and ready to be edited.",
+      : // The healthy answer says what to do next, which is nothing.
+        //
+        // This tool takes no arguments, which makes it the easiest thing in the world to emit when
+        // a model has finished its work and has not realised it. Measured: a 7B completed a task
+        // in two calls and then called doctor until the step limit stopped it. In a benchmark that
+        // is wasted budget; in a real client there is no step limit.
+        //
+        // A diagnostic that reports "all fine" and stops there invites being asked again. Saying
+        // outright that a healthy result is not a reason to keep going costs nothing when
+        // something is actually wrong, because then this branch never runs.
+        //
+        // Honest caveat: this did NOT measurably reduce the loop when it was tried - the 7B still
+        // used its whole step budget. It is kept because the sentence is true and useful to any
+        // reader, not because it fixed anything. The loop is a model behaviour this tool surface
+        // has not yet found a lever on.
+        "Everything checks out. The editor is reachable, indexed, and ready to be edited. " +
+        "Nothing here needs fixing, so calling this again will return the same answer - if your " +
+        "task is finished, stop and report what you did.",
   };
 }
 

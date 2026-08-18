@@ -1268,6 +1268,23 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 		return MakeErrorResponse(ClassError);
 	}
 
+	// A UserWidget parent here produces a trap, so refuse it and name the right command.
+	//
+	// The engine will happily make a plain Blueprint whose parent is UserWidget. It is not a Widget
+	// Blueprint: it does not open in the UMG designer, and no widget can be added to it. Everything
+	// reports success, and the asset is useless in a way that is not visible until someone tries to
+	// use it. Measured - a 7B asked to build a HUD fell back to exactly this after its first
+	// attempt failed, and produced an asset that looked like the answer.
+	if (ParentClass->IsChildOf(UUserWidget::StaticClass()))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("use_create_widget_blueprint: '%s' is a UMG widget class. Creating a plain Blueprint from it ")
+			TEXT("would succeed and give you an asset that cannot open in the UMG designer and cannot contain ")
+			TEXT("widgets. Use create_widget_blueprint instead - it makes a real Widget Blueprint. Nothing was ")
+			TEXT("created."),
+			*ParentClass->GetName()));
+	}
+
 	if (!FKismetEditorUtilities::CanCreateBlueprintOfClass(ParentClass))
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("class_not_blueprintable: %s"), *ParentClass->GetName()));

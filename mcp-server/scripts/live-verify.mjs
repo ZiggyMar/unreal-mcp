@@ -379,6 +379,20 @@ async function main() {
     return `root ${r.rootWidget} (${r.rootWidgetClass})`;
   });
 
+  await expectFailure(
+    "a UMG parent class is refused by create_blueprint, with the right command named",
+    "create_blueprint",
+    { packagePath: `${ROOT}/BP_ShouldBeAWidget`, parentClass: "UserWidget" },
+    "use_create_widget_blueprint"
+  );
+  await check("...and no trap asset was left behind", async () => {
+    // The engine will happily make a plain Blueprint parented to UserWidget. It cannot open in the
+    // UMG designer and cannot hold widgets, so it looks like the answer and is not one.
+    const r = await bridge.send("list_assets", { className: "Blueprint", pathPrefix: ROOT });
+    if (JSON.stringify(r).includes("BP_ShouldBeAWidget")) throw new Error("the trap asset was created anyway");
+    return "nothing created";
+  });
+
   await check("add_widget under the root", async () => {
     const r = await bridge.send("add_widget", {
       path: `${widgetPath}.W_MCPVerify`,
