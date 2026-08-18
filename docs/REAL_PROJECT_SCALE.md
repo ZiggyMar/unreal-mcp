@@ -206,6 +206,8 @@ Five new findings, all computed from reads that were already happening:
 | `cast-every-frame` | warning | a cast is not free and the answer does not change |
 | `level-sweep-maybe-repeating` | info | a timer and a level sweep in the same graph |
 | `state-outlives-owner` | warning | a score, name, team or progression living on a Pawn, which is destroyed on death |
+| `session-lan-mismatch` | error | the project hosts sessions one way and searches for them the other, so the lobby list is always empty |
+| `session-host-paths-disagree` | warning | more than one live host button, each with its own copy of the settings, already drifted apart |
 
 The last one is the judgment question: **a pawn is destroyed and recreated when the player dies, so
 anything that must outlive the body does not belong on the body.** Score on a Character reads as
@@ -505,3 +507,27 @@ It does not show a local model doing any of this end to end. These are measureme
 taken directly. The largest graph here is 104 nodes; a heavily built player Blueprint is several
 times that, and the explanation scales with entry points rather than nodes, which is the right
 direction but is not the same as proven.
+
+## The one that no per-Blueprint check could have found
+
+`session-lan-mismatch` is a different shape from everything above it. Every other check answers a
+question about one Blueprint. This one answers a question about the *project*: hosting happens in
+one asset and searching happens in another, each is individually correct, and the bug is that they
+disagree.
+
+It came from a real game, on a real deadline, where the report was:
+
+> sometimes a computer just can't host a lobby, and other times computers just can't find lobbies
+
+On that project the audit found four live host paths - three advertising online, one advertising on
+LAN - against one online search. Whichever button the player pressed decided whether anybody could
+see them, which is exactly why it read as intermittent and as a network problem.
+
+Two things made it findable at all. The first is that only *live* nodes count: that project's host
+button had 82 nodes of which 46 were abandoned - an entire earlier generation of session code, plus
+orphaned duplicates of the current one - and their flags disagreed with everything. The second is
+that a button's `On Clicked` is a `K2Node_ComponentBoundEvent`, which this repo's graph reader was
+not treating as an entry point. Until that was fixed, every widget Blueprint in every project read
+as almost entirely dead, and the live path could not be told from the abandoned one. The check was
+not possible before the bug in the reader was found, and the bug in the reader was only found by
+reading a real menu and not believing the answer.

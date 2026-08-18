@@ -117,12 +117,16 @@ if (missingWorkflow.length > 0) {
 //                     safety guarantee has already turned out to be false once here.
 //   Solved (by design) the architecture makes the complaint impossible
 //   Solved (optional) solved when a documented opt-in is configured
+//   Solved (documented) the tool cannot detect it, but the handbook the model reads names the
+//                     pattern and the fix. Deliberately the weakest "solved": it depends on the
+//                     model reading the right page, so prefer a check when one is possible.
 //   Partly / Open     reduced, or still true
 const ALLOWED_STATUSES = [
   "**Solved**",
   "**Solved (verified)**",
   "**Solved (by design)**",
   "**Solved (optional)**",
+  "**Solved (documented)**",
   "**Partly**",
   "**Open**",
 ];

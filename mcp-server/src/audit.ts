@@ -28,15 +28,22 @@
 import type { BridgeLike } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { findServerOnlyCasts } from "./multiplayer.js";
+import { reviewSessions, type SessionGraph } from "./sessions.js";
+import { explainGraph } from "./explainGraph.js";
 
 /** What each finding is likely to cost, and why it sits where it does. */
 export const FINDING_COST: Record<string, number> = {
   "cast-to-server-only-class": 100,
   "server-writes-unreplicated": 100,
+  // Costs the most that any of these can cost: the game builds, hosts, searches, reports no error,
+  // and the lobby list is empty. It cannot be reproduced on one machine.
+  "session-lan-mismatch": 100,
   "unhandled-cast-failure": 90,
   "level-sweep-every-frame": 85,
   "spawn-every-frame": 85,
   "state-outlives-owner": 80,
+  "session-host-paths-disagree": 65,
+  "session-host-without-search": 45,
   "cast-every-frame": 70,
   "branch-dead-path": 60,
   "tick-heavy": 55,
@@ -61,6 +68,10 @@ const WHY_IT_COSTS: Record<string, string> = {
   "level-sweep-every-frame": "Walks every actor in the level, 60+ times a second.",
   "spawn-every-frame": "The most expensive thing a Blueprint can do, repeated per frame.",
   "state-outlives-owner": "Resets on death or respawn, so it looks correct until somebody dies.",
+  "session-lan-mismatch":
+    "A LAN session is invisible to an online search and the reverse. Hosting succeeds, searching succeeds, the list is empty, and nothing anywhere reports an error.",
+  "session-host-paths-disagree":
+    "Menus grow more than one host button. Whichever one was pressed decides whether anybody can see the lobby, so the same build works and then does not.",
   "cast-every-frame": "Not free, and the answer does not change.",
   "branch-dead-path": "One side of a decision does nothing. Often correct; often the bug.",
   "tick-heavy": "Runs every frame whether or not anything changed.",
@@ -149,6 +160,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
 
   const findings: AuditFinding[] = [];
   const unreadable: Array<{ name: string; error: string }> = [];
+  const sessionGraphs: SessionGraph[] = [];
 
   for (const bp of blueprints) {
     try {
@@ -191,6 +203,19 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         }
       }
 
+      for (const graph of review.graphNodes ?? []) {
+        const nodes = (graph.nodes ?? []) as SessionGraph["nodes"];
+        sessionGraphs.push({
+          blueprint: bp.name,
+          path: bp.path,
+          graphName: graph.graphName,
+          nodes,
+          // Abandoned menu code is the normal state of a shipping project's lobby, and reporting
+          // flags on nodes that never run would bury the one that does.
+          liveNodeIds: new Set(explainGraph({ nodes } as never).chains.flatMap((c) => c.nodeIds)),
+        });
+      }
+
       for (const finding of review.blueprint ?? []) {
         findings.push({
           blueprint: bp.name,
@@ -207,6 +232,34 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       // One unreadable Blueprint must not cost the caller the audit.
       unreadable.push({ name: bp.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
     }
+  }
+
+  // Whether hosting and searching agree is a question about the PROJECT, not about any one
+  // Blueprint - which is why no per-Blueprint check could ever have found it.
+  try {
+    const session = await reviewSessions(sessionGraphs, async (path, graphName, nodeId) => {
+      const detail = await bridge.send<{ node?: { pins?: unknown[] }; pins?: unknown[] }>(
+        "read_blueprint_node_detail",
+        { path, graphName, nodeId }
+      );
+      return ((detail.node?.pins ?? detail.pins ?? []) as Array<{ name?: string; defaultValue?: unknown }>).filter(
+        (p) => p && typeof p === "object"
+      );
+    });
+    for (const finding of session.findings) {
+      findings.push({
+        blueprint: "(project)",
+        path: pathPrefix,
+        graph: "(sessions)",
+        check: finding.check,
+        severity: finding.severity,
+        message: finding.message,
+        fix: finding.fix,
+        cost: FINDING_COST[finding.check] ?? 1,
+      });
+    }
+  } catch {
+    // A project with no session nodes is the common case; never let this cost the audit.
   }
 
   // Grouped by kind, because "seventeen Blueprints have the same problem" is one decision to make,

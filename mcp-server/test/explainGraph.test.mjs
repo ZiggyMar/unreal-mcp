@@ -168,3 +168,18 @@ test("a shared chain is mentioned once, not once per entry", () => {
   );
   assert.equal((result.text.match(/run into the same nodes/g) ?? []).length, 1);
 });
+
+test("a button's On Clicked is an entry point, not dead logic", () => {
+  // K2Node_ComponentBoundEvent is what a widget button handler is. Leaving it out described every
+  // UMG Blueprint as almost entirely dead - the handlers and the entire menu hanging off them were
+  // reported as "not reached by any event chain". Found by reading a real UI Blueprint.
+  const result = explainGraph(
+    graph([
+      node("btn", "K2Node_ComponentBoundEvent", "On Clicked (HostButton)", [["host"]]),
+      node("host", "K2Node_CallFunction", "Create Kronos Match", []),
+    ])
+  );
+  assert.equal(result.chains.length, 1);
+  assert.match(result.text, /On Clicked \(HostButton\) -> Create Kronos Match/);
+  assert.deepEqual(result.unreachable, []);
+});

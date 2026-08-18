@@ -78,6 +78,13 @@ const ENTRY_TYPES = [
   "K2Node_InputActionEvent",
   "K2Node_InputKeyEvent",
   "K2Node_InputTouchEvent",
+  "K2Node_InputVectorAxisEvent",
+  // A button's On Clicked is a ComponentBoundEvent, and leaving these out described every widget
+  // Blueprint as almost entirely dead: the handlers became "not reached by any event chain", and
+  // the logic hanging off them - the whole menu - went with them. Found by reading a real UI
+  // Blueprint and not believing the answer.
+  "K2Node_ComponentBoundEvent",
+  "K2Node_ActorBoundEvent",
   "K2Node_FunctionEntry",
   "K2Node_Timeline",
 ];
