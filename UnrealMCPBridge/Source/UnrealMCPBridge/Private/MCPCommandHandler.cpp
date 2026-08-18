@@ -2469,6 +2469,84 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr
 		TEXT("unknown_action: %s (expected set_node_comment, add_comment_box, move_node)"), *Action));
 }
 
+/**
+ * Find a pin, accepting a near-miss, and say what was accepted.
+ *
+ * Found by benchmarking a 7B local model against a real task. It wrote "done" for the exec output
+ * of an event node. The error said, correctly, `output pin 'done' not found (available: then)` -
+ * naming the right answer - and the model reissued the identical call ELEVEN TIMES before the step
+ * limit stopped it. A message that contains the answer is not the same as a message a weak model
+ * can act on, and that gap is exactly what this project claims to close.
+ *
+ * So near-misses are resolved rather than rejected, under rules that cannot silently do the wrong
+ * thing:
+ *
+ *   - case-insensitive and underscore/space-insensitive match: "Then", "then_0" style typos
+ *   - a common alias for the same concept ("done", "out", "output" for an exec output)
+ *   - and, only when the node has EXACTLY ONE pin of that direction and kind, that pin
+ *
+ * The last rule is the powerful one and the one that needs the guard: with one exec output there
+ * is no other thing the caller could have meant. A Branch has two, so nothing is guessed there and
+ * the caller gets the list instead.
+ *
+ * Every correction is reported back, so the caller learns the real name instead of being quietly
+ * carried. Silent forgiveness would teach a model nothing and hide genuine mistakes.
+ */
+static UEdGraphPin* ResolvePinForgivingly(UEdGraphNode* Node, const FString& Requested,
+	EEdGraphPinDirection Direction, FString& OutCorrection)
+{
+	OutCorrection.Reset();
+	if (!Node)
+	{
+		return nullptr;
+	}
+	if (UEdGraphPin* Exact = Node->FindPin(FName(*Requested), Direction))
+	{
+		return Exact;
+	}
+
+	auto Normalise = [](const FString& In)
+	{
+		return In.ToLower().Replace(TEXT("_"), TEXT("")).Replace(TEXT(" "), TEXT(""));
+	};
+	const FString Wanted = Normalise(Requested);
+
+	// Aliases a model reaches for when it means "the execution output".
+	static const TSet<FString> ExecOutAliases = { TEXT("done"), TEXT("out"), TEXT("output"), TEXT("next"),
+		TEXT("exec"), TEXT("execute"), TEXT("completed"), TEXT("finished") };
+	static const TSet<FString> ExecInAliases = { TEXT("in"), TEXT("input"), TEXT("exec"), TEXT("execute"),
+		TEXT("enter"), TEXT("start") };
+
+	UEdGraphPin* OnlyExec = nullptr;
+	int32 ExecCount = 0;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (!Pin || Pin->Direction != Direction)
+		{
+			continue;
+		}
+		if (Normalise(Pin->PinName.ToString()) == Wanted)
+		{
+			OutCorrection = FString::Printf(TEXT("'%s' -> '%s'"), *Requested, *Pin->PinName.ToString());
+			return Pin;
+		}
+		if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+		{
+			ExecCount++;
+			OnlyExec = Pin;
+		}
+	}
+
+	const TSet<FString>& Aliases = (Direction == EGPD_Output) ? ExecOutAliases : ExecInAliases;
+	if (ExecCount == 1 && OnlyExec && Aliases.Contains(Wanted))
+	{
+		OutCorrection = FString::Printf(TEXT("'%s' -> '%s' (the node's only execution %s)"),
+			*Requested, *OnlyExec->PinName.ToString(), Direction == EGPD_Output ? TEXT("output") : TEXT("input"));
+		return OnlyExec;
+	}
+	return nullptr;
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path, GraphName;
@@ -2505,6 +2583,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 
 	TSharedRef<FJsonObject> NodesOut = MakeShared<FJsonObject>();
 	int32 ConnectionsMade = 0;
+	// Near-miss pin names that were accepted, so the caller learns the real ones instead of being
+	// quietly carried. Silent forgiveness teaches a model nothing and hides real mistakes.
+	TArray<FString> PinCorrections;
 	int32 DefaultsSet = 0;
 
 	// The whole batch is atomic: any failure restores the graph to exactly its pre-call
@@ -2635,6 +2716,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 					Names.Add(Pin->PinName.ToString());
 				}
 			}
+			if (Names.Num() == 0)
+			{
+				// An empty list reads as a tooling failure and tells the caller nothing. Say what
+				// is actually true: this node has none of that kind, so the reference is wrong.
+				return FString::Printf(TEXT("(none - '%s' has no %s pins at all, so the node reference is probably wrong)"),
+					*Node->GetName(), Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+			}
 			return FString::Join(Names, TEXT(", "));
 		};
 
@@ -2675,21 +2763,31 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 
 				const FString FromPinName = From.Mid(FromDot + 1);
 				const FString ToPinName = To.Mid(ToDot + 1);
-				UEdGraphPin* SourcePin = SourceNode->FindPin(FName(*FromPinName), EGPD_Output);
+				FString SourceCorrection;
+				UEdGraphPin* SourcePin = ResolvePinForgivingly(SourceNode, FromPinName, EGPD_Output, SourceCorrection);
 				if (!SourcePin)
 				{
 					RollbackBatch();
 					return MakeErrorResponse(FString::Printf(
-						TEXT("connection %d: output pin '%s' not found (available: %s)"),
+						TEXT("connection %d: output pin '%s' not found. Use one of: %s"),
 						i, *FromPinName, *DescribePins(SourceNode, EGPD_Output)));
 				}
-				UEdGraphPin* TargetPin = TargetNode->FindPin(FName(*ToPinName), EGPD_Input);
+				if (!SourceCorrection.IsEmpty())
+				{
+					PinCorrections.Add(SourceCorrection);
+				}
+				FString TargetCorrection;
+				UEdGraphPin* TargetPin = ResolvePinForgivingly(TargetNode, ToPinName, EGPD_Input, TargetCorrection);
 				if (!TargetPin)
 				{
 					RollbackBatch();
 					return MakeErrorResponse(FString::Printf(
-						TEXT("connection %d: input pin '%s' not found (available: %s)"),
+						TEXT("connection %d: input pin '%s' not found. Use one of: %s"),
 						i, *ToPinName, *DescribePins(TargetNode, EGPD_Input)));
+				}
+				if (!TargetCorrection.IsEmpty())
+				{
+					PinCorrections.Add(TargetCorrection);
 				}
 
 				SourceNode->Modify();
@@ -2733,7 +2831,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 					RollbackBatch();
 					return MakeErrorResponse(FString::Printf(TEXT("pinDefault %d: %s"), i, *TokenErr));
 				}
-				UEdGraphPin* Pin = Node->FindPin(FName(*PinName), EGPD_Input);
+				FString DefaultCorrection;
+				UEdGraphPin* Pin = ResolvePinForgivingly(Node, PinName, EGPD_Input, DefaultCorrection);
+				if (Pin && !DefaultCorrection.IsEmpty())
+				{
+					PinCorrections.Add(DefaultCorrection);
+				}
 				if (!Pin)
 				{
 					RollbackBatch();
@@ -2776,6 +2879,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetObjectField(TEXT("nodes"), NodesOut);
 	Result->SetNumberField(TEXT("connectionsMade"), ConnectionsMade);
+	if (PinCorrections.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> CorrectionValues;
+		for (const FString& Correction : PinCorrections)
+		{
+			CorrectionValues.Add(MakeShared<FJsonValueString>(Correction));
+		}
+		Result->SetArrayField(TEXT("pinNamesCorrected"), CorrectionValues);
+		Result->SetStringField(TEXT("pinNameNote"),
+			TEXT("These pin names did not exist and were resolved to the obvious match. Use the corrected names "
+				"next time; the graph was built with them."));
+	}
 	Result->SetNumberField(TEXT("pinDefaultsSet"), DefaultsSet);
 
 	// Compile by default: the workflow rule is compile-after-every-batch anyway, so doing
