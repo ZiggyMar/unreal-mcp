@@ -297,6 +297,39 @@ returns the same thing. **It did not measurably help.** It is kept because the s
 not because it fixed anything, and the loop remains a model behaviour this tool surface has not yet
 found a lever on.
 
+## A tool nobody finds does not exist: the fourth time
+
+`unreal_audit_project` answers the question people actually arrive with. A new benchmark task asks
+it the way a person would - *"Something is wrong with the Blueprints in /Game/Bench. Find out what,
+and tell me the single most important thing to fix. Do not guess."*
+
+Scored on **what the model did**, not on what it said, because a confident paragraph about a project
+it never opened is precisely the failure worth catching. The harness now records which tools were
+reached for and hands that to the check.
+
+| | Before | After |
+| --- | --- | --- |
+| Finds the tool that answers the question | **0/3** | **3/3** |
+
+The failure was consistent and informative. Every run called `unreal_doctor`,
+`unreal_get_project_overview`, `unreal_map_system` and `unreal_plan_feature` - **every tool that
+sounds diagnostic** - and never the one that is. The model was not confused about the task. It was
+looking in a reasonable place and the answer was not there.
+
+The fix was one sentence, added to the two tools it actually called:
+
+> **To find actual problems rather than shape, use unreal_audit_project.**
+
+That is the same fix that worked for `scaffold_blueprint`, for `add_event_handler`, and for the UMG
+composite. Four for four now, which makes it a rule rather than an anecdote:
+
+> **Building the better path is half the work. The redirect has to be where the model is already
+> looking, and it has to be one sentence** - a paragraph once pushed this model into truncating its
+> output mid-JSON.
+
+The other four tasks were re-run afterwards and all still pass, which is the check that matters when
+adding text to a description that every request pays for.
+
 ## Which model tier actually works
 
 Three models, on the same 12 GB card:

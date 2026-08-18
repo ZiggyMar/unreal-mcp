@@ -830,7 +830,7 @@ register(
   {
     title: "Get a cheap project-wide overview",
     description:
-      "Returns a cheap top-level summary of the whole project's Blueprint structure: total counts (blueprints, " +
+      "**To find actual problems rather than shape, use unreal_audit_project.** Returns a cheap top-level summary of the whole project's Blueprint structure: total counts (blueprints, " +
       "functions, variables, graphs, nodes), a breakdown by top-level content folder, and a breakdown by parent " +
       "class. Call this FIRST (before unreal_search_project or unreal_list_blueprints) to orient yourself in an " +
       "unfamiliar project. It costs one cheap index lookup instead of enumerating everything, and on a fresh editor " +
@@ -2701,7 +2701,7 @@ register(
   {
     title: "Find where the project needs attention, without reading it",
     description:
-      "Scans the whole project for the Blueprints most worth looking at: graphs too large to read at a glance, " +
+      "**To find actual problems rather than shape, use unreal_audit_project.** Scans the whole project for the Blueprints most worth looking at: graphs too large to read at a glance, " +
       "Blueprints that have grown into systems rather than classes, and cast-heavy Blueprints where an interface " +
       "should have replaced the chain. " +
       "unreal_review_blueprint answers \"is this one Blueprint good?\". Nobody asks that first. On a project someone " +

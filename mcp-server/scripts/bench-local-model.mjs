@@ -362,6 +362,63 @@ const TASKS = {
     },
   },
 
+  /**
+   * Discovery, not authoring.
+   *
+   * Every other task here asks the model to build something. This one asks the question people
+   * actually arrive with - "something is wrong with my project, find it" - and the thing being
+   * measured is whether a weak model REACHES for the right tool at all.
+   *
+   * That is worth measuring separately because this project has learned it the hard way three
+   * times: a tool nobody finds does not exist, and the fix has never once been a better tool. It
+   * was removing a worse one, or putting a pointer where the model was already looking.
+   */
+  audit: {
+    name: () => `BP_BenchAudit${currentRunId}`,
+    async setup() {
+      // A Blueprint with three deliberate, different problems, so the audit has something to rank.
+      const name = `BP_BenchAudit${currentRunId}`;
+      const path = `/Game/Bench/${name}.${name}`;
+      await probeCall("create_blueprint", { packagePath: `/Game/Bench/${name}`, parentClass: "Actor", save: false });
+      await probeCall("build_graph", {
+        path,
+        graphName: "EventGraph",
+        nodes: [
+          { ref: "tick", nodeType: "Event", eventName: "ReceiveTick" },
+          { ref: "a", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+          { ref: "b", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+          { ref: "orphan", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+        ],
+        connections: [
+          { from: "tick.then", to: "a.execute" },
+          { from: "a.then", to: "b.execute" },
+        ],
+      });
+      await probeCall("compile_blueprint", { path });
+      await probeCall("save_blueprint", { path });
+    },
+    request: () =>
+      "Something is wrong with the Blueprints in /Game/Bench in this Unreal project. Find out what, using the " +
+      "tools, and then tell me the single most important thing to fix. Do not guess - check the project.",
+    async verify(stats) {
+      // Checked against what the model DID, not against what it said. A confident paragraph about a
+      // project it never looked at is the failure this is watching for.
+      const used = [...(stats?.toolsUsed ?? [])];
+      if (used.includes("unreal_audit_project")) {
+        return { done: true, why: "found and used unreal_audit_project" };
+      }
+      // Reading the graphs one by one gets to the same answer the long way, and is a real success.
+      const readEach = used.filter((t) => /read_blueprint|explain_graph|review_blueprint/.test(t));
+      if (readEach.length > 0) {
+        return { done: true, why: `inspected the project with ${readEach.join(", ")}` };
+      }
+      return { done: false, why: `never inspected the project; called ${used.join(", ") || "nothing"}` };
+    },
+    async cleanup() {
+      await clearBench();
+    },
+  },
+
   feature: {
     name: () => `BP_BenchFeature${currentRunId}`,
     request: () =>
@@ -708,6 +765,7 @@ async function main() {
     await clearBench();
 
     const stats = {
+      toolsUsed: new Set(),
       steps: 0,
       toolCalls: 0,
       structuredCalls: 0,
@@ -780,7 +838,7 @@ async function main() {
         // told not to stop. A benchmark bug that looks exactly like a model failure is the worst
         // kind, because the fix goes into the wrong codebase.
         if (/\bDONE/i.test(text)) {
-          const check = await task.verify();
+          const check = await task.verify(stats);
           if (check.done) break;
           // A rejected DONE is the most interesting event in a run: either the model quit early or
           // the verifier is wrong. Printing the reason is what separates those two, and guessing
@@ -802,6 +860,10 @@ async function main() {
       messages.push(reply.message);
       for (const call of calls) {
         stats.toolCalls++;
+        // Which tools were reached for, not just how many times. Some tasks are about discovery -
+        // this project's recurring lesson is that a tool nobody finds does not exist - and that
+        // cannot be checked by inspecting the project afterwards.
+        stats.toolsUsed.add(call.function?.name ?? "");
         const name = call.function?.name ?? "";
         let argumentsObject = call.function?.arguments ?? {};
         if (typeof argumentsObject === "string") {
@@ -859,7 +921,7 @@ async function main() {
       }
     }
 
-    const verdict = await task.verify();
+    const verdict = await task.verify(stats);
     const tokensPerSecond = stats.evalMs > 0 ? (stats.evalTokens / stats.evalMs) * 1000 : 0;
     runResults.push({ ...stats, done: verdict.done, why: verdict.why, tokensPerSecond });
     console.log(
