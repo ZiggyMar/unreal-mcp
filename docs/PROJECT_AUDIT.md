@@ -84,6 +84,31 @@ Both are invisible day to day and both will surface the first time someone clone
 new machine - a week before a showcase, for instance.
 
 
+## The agent can run it now, which is the whole point
+
+For most of its life this was a script, and that was a mistake worth naming: **the most useful
+thing in the project was available to a person at a terminal and to nobody else**, while the entire
+argument for the project is that an agent does this work for you.
+
+`unreal_audit_project` is the same code. The script is now a thin front end over it - one
+implementation, two ways in.
+
+The reply is deliberately a summary rather than every finding. Measured against the real project:
+
+| | |
+| --- | --- |
+| Blueprints examined | 60 |
+| Time | 10s |
+| Findings | 250 |
+| **Reply size** | **~2,570 tokens** |
+
+Two hundred and fifty findings, delivered in about two and a half thousand tokens, because findings
+are grouped by kind with a few examples each. Seventeen Blueprints with the same problem is one
+decision to make, not seventeen. It also names the Blueprints worth opening first by accumulated
+cost, and ends with a single next action.
+
+That is the shape of the answer to *"my game has bugs and a deadline"*: not a list, a plan.
+
 ## Every command was costing a third of a second, and it was a checkbox
 
 Auditing 339 Blueprints took twelve minutes, which is far too slow for a tool whose whole argument

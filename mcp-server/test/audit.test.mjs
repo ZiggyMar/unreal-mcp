@@ -1,0 +1,145 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { auditProject, FINDING_COST } from "../dist/audit.js";
+
+/**
+ * A project of two Blueprints: one with a stray node and a leftover print, one clean.
+ *
+ * Built from the same shapes the bridge returns, so the test exercises the real path rather than a
+ * convenient one.
+ */
+function fakeBridge(overrides = {}) {
+  const graphs = {
+    "/Game/BP_Messy.BP_Messy": {
+      EventGraph: [
+        {
+          id: "e",
+          type: "K2Node_Event",
+          title: "Event BeginPlay",
+          connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "p", pin: "execute" }] }],
+        },
+        {
+          id: "p",
+          type: "K2Node_CallFunction",
+          title: "Print String",
+          connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "e", pin: "then" }] }],
+        },
+        { id: "orphan", type: "K2Node_CallFunction", title: "Get Actor Location", connectedPins: [] },
+      ],
+    },
+    "/Game/BP_Clean.BP_Clean": {
+      EventGraph: [
+        {
+          id: "e",
+          type: "K2Node_Event",
+          title: "Event BeginPlay",
+          connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "s", pin: "execute" }] }],
+        },
+        {
+          id: "s",
+          type: "K2Node_VariableSet",
+          title: "SET Health",
+          connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "e", pin: "then" }] }],
+        },
+      ],
+    },
+  };
+
+  return {
+    calls: [],
+    async send(cmd, params) {
+      this.calls.push(cmd);
+      if (overrides[cmd]) return overrides[cmd](params);
+      switch (cmd) {
+        case "list_blueprints":
+          return {
+            blueprints: [
+              { name: "BP_Messy", path: "/Game/BP_Messy.BP_Messy" },
+              { name: "BP_Clean", path: "/Game/BP_Clean.BP_Clean" },
+            ],
+          };
+        case "list_blueprint_graphs":
+          return { graphs: Object.keys(graphs[params.path] ?? {}).map((name) => ({ name })) };
+        case "read_blueprint_graph_summary":
+          return { graphName: params.graphName, nodes: graphs[params.path]?.[params.graphName] ?? [] };
+        case "list_variables":
+          return { parentClass: "Actor", variables: [] };
+        case "describe_class":
+          return { serverOnly: false, ancestry: ["Actor"] };
+        default:
+          throw new Error(`unexpected ${cmd}`);
+      }
+    },
+  };
+}
+
+test("findings are grouped and ranked by cost, not by count", () => {
+  // A dead event is cosmetic until somebody wires it; a cast that fails on every client but the
+  // host is a bug nobody can reproduce alone. Sorting by how many there are would bury the second.
+  assert.ok(FINDING_COST["cast-to-server-only-class"] > FINDING_COST["unlabelled-sections"]);
+  assert.ok(FINDING_COST["server-writes-unreplicated"] > FINDING_COST["dead-node"]);
+});
+
+test("a project audit reports the messy Blueprint and not the clean one", async () => {
+  const result = await auditProject(fakeBridge());
+  assert.equal(result.blueprintsScanned, 2);
+  assert.ok(result.findingCount > 0);
+  const worst = result.worstBlueprints.map((b) => b.name);
+  assert.ok(worst.includes("BP_Messy"), `expected BP_Messy in ${worst.join(", ")}`);
+});
+
+test("groups come back sorted by cost, most expensive first", async () => {
+  const result = await auditProject(fakeBridge());
+  for (let i = 1; i < result.groups.length; i += 1) {
+    assert.ok(
+      result.groups[i - 1].cost >= result.groups[i].cost,
+      `group ${i} (${result.groups[i].check}) outranks the one before it`
+    );
+  }
+});
+
+test("the reply is a summary, not every finding", async () => {
+  // The whole point of running this against a real project is that the answer stays small. A
+  // ranked list of eight hundred findings is the same as no list.
+  const result = await auditProject(fakeBridge(), { examplesPerGroup: 2 });
+  for (const group of result.groups) {
+    assert.ok(group.examples.length <= 2, `${group.check} returned ${group.examples.length} examples`);
+  }
+});
+
+test("one unreadable Blueprint does not cost the caller the audit", async () => {
+  const bridge = fakeBridge({
+    list_blueprint_graphs: (params) => {
+      if (params.path.includes("BP_Messy")) throw new Error("asset_locked");
+      return { graphs: [{ name: "EventGraph" }] };
+    },
+  });
+  const result = await auditProject(bridge);
+  assert.equal(result.unreadable.length, 1);
+  assert.equal(result.unreadable[0].name, "BP_Messy");
+  // ...and the other one was still audited.
+  assert.equal(result.blueprintsScanned, 2);
+});
+
+test("the limit is honoured and truncation is reported", async () => {
+  const result = await auditProject(fakeBridge(), { limit: 1 });
+  assert.equal(result.blueprintsScanned, 1);
+  assert.equal(result.truncated, true, "a caller must be told the sweep did not cover everything");
+});
+
+test("nextAction names the highest-cost group and how to fix it", async () => {
+  const result = await auditProject(fakeBridge());
+  assert.ok(result.nextAction.length > 0);
+  if (result.groups.length > 0) {
+    assert.match(result.nextAction, new RegExp(result.groups[0].check));
+  }
+});
+
+test("an empty project says so rather than inventing work", async () => {
+  const bridge = fakeBridge({ list_blueprints: () => ({ blueprints: [] }) });
+  const result = await auditProject(bridge);
+  assert.equal(result.findingCount, 0);
+  assert.equal(result.truncated, false);
+  assert.match(result.nextAction, /Nothing found|matched nothing/i);
+});

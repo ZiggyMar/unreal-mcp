@@ -16,6 +16,7 @@ import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
+import { auditProject } from "./audit.js";
 import { RepeatGuard } from "./repeatGuard.js";
 import { reviewStatePlacement } from "./statePlacement.js";
 import { allPolicies, resolveMode } from "./mode.js";
@@ -135,6 +136,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_map_system",
   "unreal_plan_feature",
   "unreal_project_health",
+  "unreal_audit_project",
   "unreal_list_blueprints",
   "unreal_list_blueprint_graphs",
   "unreal_read_blueprint_summary",
@@ -2653,6 +2655,41 @@ register(
     try {
       const result = await bridge.send("undo_history", { maxResults });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_audit_project",
+  {
+    title: "My game has bugs. Where do I look?",
+    description:
+      "**Audits every Blueprint and ranks what is worth fixing, by what it is likely to cost.** " +
+      "Reach for this when the request is about the project rather than about one asset - \"something is broken\", " +
+      "\"clean this up before we ship\", \"what is wrong with my game\". " +
+      "Ordered by cost rather than severity, because those differ: a dead event is cosmetic until somebody wires " +
+      "it, while a cast that fails on every client but the host is a bug nobody can reproduce alone. " +
+      "Findings are grouped, because seventeen Blueprints with the same problem is one decision, not seventeen, and " +
+      "the result names the Blueprints worth opening first. " +
+      "Bounded on purpose: it reads one graph summary per graph, and the reply is a ranked summary rather than " +
+      "every finding. Raise `limit` for a bigger sweep, and expect it to take longer.",
+    inputSchema: {
+      pathPrefix: z.string().optional().describe('Restrict to a folder, e.g. "/Game/Player". Defaults to /Game.'),
+      limit: z
+        .number()
+        .optional()
+        .describe("How many Blueprints to examine. Defaults to 150. A large project takes about a fifth of a second each."),
+      examplesPerGroup: z
+        .number()
+        .optional()
+        .describe("Examples reported per finding kind. Defaults to 3."),
+    },
+  },
+  async ({ pathPrefix, limit, examplesPerGroup }) => {
+    try {
+      return jsonResult(await auditProject(bridge, { pathPrefix, limit, examplesPerGroup }));
     } catch (err) {
       return errorResult(err);
     }
