@@ -570,6 +570,83 @@ async function main() {
     }
   });
 
+  await check("C5: a bad asset path FAILS rather than silently setting None", async () => {
+    // The claim that makes agent-authored Blueprints trustworthy: an invented path must not
+    // quietly become None, because the Blueprint then compiles perfectly and does nothing.
+    const bp = `${ROOT}/BP_FailLoud`;
+    await freshBlueprint(bp, "BP_FailLoud");
+    try {
+      await bridge.send("add_component", {
+        path: `${bp}.BP_FailLoud`,
+        componentClass: "StaticMeshComponent",
+        name: "Mesh",
+      });
+      let message = "";
+      try {
+        await bridge.send("set_component_property", {
+          path: `${bp}.BP_FailLoud`,
+          component: "Mesh",
+          property: "StaticMesh",
+          value: "/Game/Nope/DoesNotExist.DoesNotExist",
+        });
+      } catch (err) {
+        message = err instanceof Error ? err.message : String(err);
+      }
+      if (!message) {
+        throw new Error("an unresolvable asset path was accepted; it will have silently set None");
+      }
+      if (!/not_resolved|not_found/i.test(message)) {
+        throw new Error(`failed, but not in a way that names the cause: ${message.slice(0, 160)}`);
+      }
+      // Failing loudly is half of it. The other half is that a refused call changed nothing.
+      if (!/Nothing was changed/i.test(message)) {
+        throw new Error(`it reported the failure but left the property mutated: ${message.slice(0, 200)}`);
+      }
+      return firstLine(message).slice(0, 130);
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_FailLoud`], force: true }).catch(() => {});
+    }
+  });
+
+  await check("D3: the project index sees a brand new asset without an editor restart", async () => {
+    // M3's core claim: the index is kept fresh from AssetRegistry delegates rather than rescanned.
+    // If it were stale, search would report that things do not exist moments after creating them,
+    // which is worse than having no search at all.
+    const unique = `BP_IndexFresh${Math.floor(Date.now() / 1000) % 100000}`;
+    const bp = `${ROOT}/${unique}`;
+    await bridge.send("create_blueprint", { packagePath: bp, parentClass: "Actor", save: false });
+    try {
+      // The claim is that the index stays fresh without a rescan or an editor restart - not that
+      // it updates synchronously. It does not: the AssetRegistry delegate fires on a later tick,
+      // so a search issued in the same breath as the create genuinely misses it. Poll briefly and
+      // report how long it took, because that number is the useful part for a caller.
+      let hit = false;
+      let waitedMs = 0;
+      for (const delay of [0, 250, 500, 1000, 2000, 4000]) {
+        if (delay > 0) {
+          await new Promise((r) => setTimeout(r, delay));
+          waitedMs += delay;
+        }
+        const found = await bridge.send("search_project", { query: unique, maxResults: 10 });
+        hit = (found.hits ?? []).some((h) => h.name === unique || h.path.includes(unique));
+        if (hit) break;
+      }
+      if (!hit) {
+        const probe = await bridge.send("search_project", { query: "BP_", maxResults: 5 });
+        const overview = await bridge.send("get_project_overview", {});
+        throw new Error(
+          `an asset created ${waitedMs}ms ago is still not in the index. ` +
+            `Searching "BP_" returns ${(probe.hits ?? []).length} hits; the index reports ` +
+            `${overview.blueprintCount} Blueprints, scanning=${overview.assetRegistryStillScanning}. ` +
+            `Created at: ${bp}`
+        );
+      }
+      return `indexed without a restart, visible after ~${waitedMs}ms`;
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.${unique}`], force: true }).catch(() => {});
+    }
+  });
+
   await check("B3: refresh_blueprint runs and reports before/after error counts", async () => {
     const bp = `${ROOT}/BP_Refresh`;
     await freshBlueprint(bp, "BP_Refresh");

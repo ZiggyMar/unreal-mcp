@@ -3459,6 +3459,16 @@ namespace
 
 		Target->Modify();
 		void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
+
+		// Remember what an object property held, so a failed resolve can put it back. The guard
+		// below used to detect the bad path only after ImportText had already written null, so a
+		// refused call still left the property as None - loudly reported, but done. "Nothing was
+		// changed" is what every other failure path here promises, and it should be true.
+		const FObjectPropertyBase* ObjectPropertyForRollback = CastField<FObjectPropertyBase>(Property);
+		UObject* PreviousObject = ObjectPropertyForRollback
+			? ObjectPropertyForRollback->GetObjectPropertyValue(ValuePtr)
+			: nullptr;
+
 		const TCHAR* ImportResult = Property->ImportText_Direct(*Value, ValuePtr, Target, PPF_None);
 		if (!ImportResult)
 		{
@@ -3472,13 +3482,17 @@ namespace
 		// the pawn Blueprint existed, the tool said ok, and PIE spawned the engine
 		// default pawn. If the caller passed something that is not None but the property
 		// resolved to null, that is an error, and a weak model especially needs it said.
-		if (const FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(Property))
+		if (ObjectPropertyForRollback)
 		{
 			const bool bCallerMeantNull = Value.IsEmpty() || Value == TEXT("None") || Value == TEXT("none") || Value == TEXT("null");
-			if (!bCallerMeantNull && ObjectProperty->GetObjectPropertyValue(ValuePtr) == nullptr)
+			if (!bCallerMeantNull && ObjectPropertyForRollback->GetObjectPropertyValue(ValuePtr) == nullptr)
 			{
+				// Put back whatever was there before, so a refused call really did change nothing.
+				ObjectPropertyForRollback->SetObjectPropertyValue(ValuePtr, PreviousObject);
 				return MakeError(FString::Printf(
-					TEXT("asset_not_resolved: '%s' did not resolve for %s; the property is now None, which is almost never what you meant. Check the path exists (list_assets) and create referenced assets before referencing them."),
+					TEXT("asset_not_resolved: '%s' did not resolve for %s. Nothing was changed; the property still ")
+					TEXT("holds what it did before. Check the path exists (list_assets) and create referenced assets ")
+					TEXT("before referencing them."),
 					*Value, *PropertyName));
 			}
 		}
