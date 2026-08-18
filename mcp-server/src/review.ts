@@ -20,6 +20,8 @@ export interface BlueprintReview {
    * number nobody can trace back to a reason is worse than no number at all.
    */
   blueprint: Array<{ check: string; severity: "warning" | "info"; message: string; fix: string }>;
+  /** Raw graph nodes, only when asked for. See reviewBlueprint's includeGraphNodes. */
+  graphNodes?: Array<{ graphName: string; nodes: unknown[] }>;
   /** The one thing most worth fixing next, or a note that nothing needs fixing. */
   nextAction: string;
 }
@@ -34,7 +36,8 @@ export interface BlueprintReview {
 export async function reviewBlueprint(
   bridge: BridgeLike,
   path: string,
-  graphName?: string
+  graphName?: string,
+  options: { includeGraphNodes?: boolean } = {}
 ): Promise<BlueprintReview> {
   let graphNames: string[];
   if (graphName) {
@@ -48,6 +51,7 @@ export async function reviewBlueprint(
   // Kept because the multiplayer check needs the graph AND the variables together: whether a write
   // is a bug depends on where it runs and on whether the thing written replicates.
   const allNodes: Array<{ id: string; type: string; title: string; connectedPins?: unknown[] }> = [];
+  const graphNodes: Array<{ graphName: string; nodes: unknown[] }> = [];
   for (const name of graphNames) {
     const summary = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
       path,
@@ -55,6 +59,12 @@ export async function reviewBlueprint(
     });
     reports.push(reviewGraph(name, summary.nodes ?? []));
     allNodes.push(...(summary.nodes ?? []));
+    // Handing the raw nodes back on request means a caller that needs them - the whole-project
+    // audit - does not read every graph a second time. Off by default: an ordinary review has no
+    // use for them and should not pay to carry them.
+    if (options.includeGraphNodes) {
+      graphNodes.push({ graphName: name, nodes: summary.nodes ?? [] });
+    }
   }
 
   // Where the state lives, which no graph read can answer.
@@ -121,6 +131,7 @@ export async function reviewBlueprint(
     score,
     summary,
     graphs: reports,
+    graphNodes: options.includeGraphNodes ? graphNodes : undefined,
     blueprint: extraFindings.map(({ check, severity, message, fix }) => ({ check, severity, message, fix })),
     nextAction,
   };

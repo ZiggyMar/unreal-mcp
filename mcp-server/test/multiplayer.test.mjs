@@ -123,3 +123,94 @@ test("a multicast event alone marks the Blueprint as networked", () => {
   // Networked, so the mirror-image check is allowed to speak.
   assert.ok(ids(findings).includes("replicated-set-without-server-event"));
 });
+
+// --- casting to something that only exists on the server ---------------------------------------
+const { findServerOnlyCasts } = await import("../dist/multiplayer.js");
+const isGameMode = (name) => /^GM_|GameMode/.test(name);
+
+test("a client-side cast to a GameMode is flagged", () => {
+  // Found 24 times in one real project. A GameMode exists only on the server, so on every client
+  // the cast fails silently and every node after it never runs.
+  const findings = findServerOnlyCasts(
+    [
+      node("e", "K2Node_CustomEvent", "KillPlayerClient", ["c"]),
+      node("c", "K2Node_DynamicCast", "Cast To GM_Gameplay", ["s"]),
+      node("s", "K2Node_CallFunction", "SpawnSpectator", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].check, "cast-to-server-only-class");
+  assert.match(findings[0].message, /only on the server/i);
+  assert.match(findings[0].fix, /GameState|Switch Has Authority/);
+});
+
+test("a GameMode casting to a GameMode is not flagged", () => {
+  // The owner is server-only too, so there is no client for it to fail on.
+  const findings = findServerOnlyCasts(
+    [node("c", "K2Node_DynamicCast", "Cast To GM_Gameplay", [])],
+    isGameMode,
+    true
+  );
+  assert.deepEqual(findings, []);
+});
+
+test("a cast behind Switch Has Authority is not flagged", () => {
+  // Guarded by construction: that branch only runs on the server. Detecting the guard rather than
+  // assuming it is absent is what keeps this check trustworthy on a real project.
+  const findings = findServerOnlyCasts(
+    [
+      {
+        id: "a",
+        type: "K2Node_SwitchHasAuthority",
+        title: "Switch Has Authority",
+        connectedPins: [{ pin: "Authority", direction: "out", linkedTo: [{ node: "c", pin: "execute" }] }],
+      },
+      node("c", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.deepEqual(findings, []);
+});
+
+test("the Remote branch of Switch Has Authority is still flagged", () => {
+  // Remote is explicitly the client side, so a GameMode cast there is the bug in its purest form.
+  const findings = findServerOnlyCasts(
+    [
+      {
+        id: "a",
+        type: "K2Node_SwitchHasAuthority",
+        title: "Switch Has Authority",
+        connectedPins: [{ pin: "Remote", direction: "out", linkedTo: [{ node: "c", pin: "execute" }] }],
+      },
+      node("c", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.equal(findings.length, 1);
+});
+
+test("a cast to something that is not server-only is left alone", () => {
+  const findings = findServerOnlyCasts(
+    [node("c", "K2Node_DynamicCast", "Cast To BP_Player", [])],
+    isGameMode,
+    false
+  );
+  assert.deepEqual(findings, []);
+});
+
+test("the same target is reported once, not once per cast node", () => {
+  const findings = findServerOnlyCasts(
+    [
+      node("c1", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+      node("c2", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+      node("c3", "K2Node_DynamicCast", "Cast To GM_Gameplay", []),
+    ],
+    isGameMode,
+    false
+  );
+  assert.equal(findings.length, 1);
+});

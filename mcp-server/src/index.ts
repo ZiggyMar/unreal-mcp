@@ -141,6 +141,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_explain_graph",
   "unreal_find_node",
   "unreal_get_node_signature",
+  "unreal_describe_class",
   // unreal_create_blueprint is deliberately ABSENT, exactly as it is from `minimal`.
   //
   // It makes an EMPTY Blueprint, and it is the familiar name, so a small model reaches for it and
@@ -1496,6 +1497,33 @@ register(
     try {
       const result = await bridge.send("set_game_settings", { defaultGameMode, editorStartupMap, gameDefaultMap });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_describe_class",
+  {
+    title: "What is this class, really",
+    description:
+      "Reads a class's real ancestry from the running engine, plus the three facts that decide where its logic may " +
+      "live: whether it is server-only, an Actor, or a widget. " +
+      "**Ask before casting to something in a networked game.** A GameMode exists only on the server, so a cast to " +
+      "one from a PlayerController, Pawn, GameState or widget fails on every client - silently, with every node " +
+      "after the cast never running. " +
+      "Answering this by name would be a guess: a project's GameModes are often called things like AVSBaseGameMode " +
+      "or GM_Gameplay, and something called GameModeHelperWidget is not a GameMode at all.",
+    inputSchema: {
+      className: z
+        .string()
+        .describe('Short name, native path, or Blueprint asset path, e.g. "Character", "/Script/Engine.Actor", "/Game/BP_X.BP_X".'),
+    },
+  },
+  async ({ className }) => {
+    try {
+      return jsonResult(await bridge.send("describe_class", { className }));
     } catch (err) {
       return errorResult(err);
     }

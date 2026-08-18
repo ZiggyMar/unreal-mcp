@@ -144,3 +144,85 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
 
   return findings;
 }
+
+/**
+ * Casting to something that only exists on the server.
+ *
+ * A GameMode exists on the server and nowhere else. A PlayerController, a Pawn, a GameState and a
+ * widget all exist on clients too - so a cast to the GameMode from any of them fails on every
+ * machine that is not the host. It fails *silently*: the chain stops, nothing logs, and every node
+ * after the cast never runs.
+ *
+ * Found in a real project 24 times across 18 Blueprints, including the player's death sequence,
+ * where the failure meant no spectator, a vacuum that never ended, a timer never cleared and a
+ * widget never closed - for everyone except the host. Single-player testing cannot see it.
+ *
+ * Two things stop this being noise:
+ *
+ *   - A GameMode casting to a GameMode is fine, because the owner is server-only too.
+ *   - A cast behind `Switch Has Authority` is fine, because it only runs on the server by
+ *     construction. That guard is detected rather than assumed.
+ */
+export function findServerOnlyCasts(
+  nodes: MpNode[],
+  isServerOnlyClass: (className: string) => boolean,
+  ownerIsServerOnly: boolean
+): MpFinding[] {
+  if (ownerIsServerOnly) return [];
+
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const execTargets = (node: MpNode, onlyPin?: RegExp): MpNode[] => {
+    const out: MpNode[] = [];
+    for (const pin of node.connectedPins ?? []) {
+      if (pin.direction !== "out") continue;
+      if (onlyPin && !onlyPin.test(pin.pin)) continue;
+      for (const link of pin.linkedTo ?? []) {
+        if (!/^(execute|exec|then|in)$/i.test(link.pin)) continue;
+        const target = byId.get(link.node);
+        if (target) out.push(target);
+      }
+    }
+    return out;
+  };
+
+  // Everything downstream of the Authority branch of a Switch Has Authority runs only on the
+  // server, so a cast in there is correct rather than broken.
+  const serverGuarded = new Set<string>();
+  for (const node of nodes) {
+    if (!/Switch Has Authority|SwitchHasAuthority/i.test(node.title ?? "")) continue;
+    const queue = execTargets(node, /^authority$/i);
+    while (queue.length > 0) {
+      const current = queue.pop();
+      if (!current || serverGuarded.has(current.id)) continue;
+      serverGuarded.add(current.id);
+      queue.push(...execTargets(current));
+    }
+  }
+
+  const findings: MpFinding[] = [];
+  const alreadyReported = new Set<string>();
+  for (const node of nodes) {
+    if (!/K2Node_DynamicCast/.test(node.type)) continue;
+    if (serverGuarded.has(node.id)) continue;
+    const match = /^Cast To (.+)$/i.exec((node.title ?? "").trim());
+    if (!match) continue;
+    const target = match[1].trim();
+    if (!isServerOnlyClass(target)) continue;
+    if (alreadyReported.has(target)) continue;
+    alreadyReported.add(target);
+
+    findings.push({
+      check: "cast-to-server-only-class",
+      severity: "warning",
+      variable: target,
+      message:
+        `This casts to ${target}, which is a GameMode and therefore exists only on the server. ` +
+        `On every client the cast fails and nothing after it runs.`,
+      fix:
+        `Put whatever this needs on the GameState instead, which is replicated to clients, or guard ` +
+        `the cast with Switch Has Authority if the work genuinely belongs on the server. It will look ` +
+        `correct when hosting and do nothing for everyone else.`,
+    });
+  }
+  return findings;
+}

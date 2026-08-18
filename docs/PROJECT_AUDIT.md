@@ -82,3 +82,63 @@ Neither is a Blueprint bug, and both are the kind of thing only a fresh clone re
 
 Both are invisible day to day and both will surface the first time someone clones the repo onto a
 new machine - a week before a showcase, for instance.
+
+
+## Every command was costing a third of a second, and it was a checkbox
+
+Auditing 339 Blueprints took twelve minutes, which is far too slow for a tool whose whole argument
+is that it is cheap. Rather than guess, the calls were timed individually:
+
+```
+list_blueprint_graphs      84ms
+list_variables            332ms
+describe_class            335ms
+59 graph summaries      19670ms   (333ms each)
+```
+
+Those numbers are the tell. Wildly different amounts of work, all landing on **the same ~333ms** -
+and `ping`, which does nothing at all, answering in 8ms. That is not work. 333ms is 3Hz, and 3Hz is
+a tick rate.
+
+The cause is an editor setting called **"Use Less CPU when in Background"**
+(`bThrottleCPUWhenNotForeground`), which defaults to on and collapses the editor's tick rate
+whenever it is not the foreground window.
+
+That is a sensible default for a person and precisely wrong here, because **an agent always drives a
+backgrounded editor** - the human is in a chat client, not in Unreal. Every single command waited
+for the next slow tick before it was even read.
+
+The bridge now turns it off for the session, logs why, and writes nothing to the user's config.
+`-MCPKeepEditorThrottle` opts out.
+
+| | before | after |
+| --- | --- | --- |
+| One graph summary | 333ms | **20ms** |
+| 59 graphs (BP_Player) | 19,670ms | **1,207ms** |
+| Full 339-Blueprint audit | ~12 minutes | **74 seconds** |
+
+**16x, on every command, for every user.** Nothing about the work changed; the editor was simply
+asleep between requests.
+
+It is worth being clear about how this was found, because the same shape will hide other things: a
+set of measurements that differ in what they do but agree on how long they take is never about the
+work. The fixed part is the clue.
+
+## Casting to something that only exists on the server
+
+The audit's highest-cost check now catches the class of bug found by hand earlier, generalised:
+
+```
+cast-to-server-only-class  (13)  [cost 100]
+  BP_Player, PC_Base, PC_Gameplay, PC_Lobby, GS_Gameplay, BP_BaseEnemy,
+  BP_MomBase, BP_ShopComponent, BP_terminal, ...
+```
+
+Thirteen Blueprints cast to a GameMode from code that also runs on clients. Answering "is this class
+server-only" by name would have been a guess - the project's GameModes are called `AVSBaseGameMode`
+and `GM_Gameplay`, neither containing "GameModeBase" - so `describe_class` asks the running engine
+for the real ancestry instead.
+
+Two things keep it honest: a GameMode casting to a GameMode is fine, and a cast behind
+`Switch Has Authority` is fine. Both are detected rather than assumed, which is why the count came
+out at 13 rather than the 24 a naive scan reported.

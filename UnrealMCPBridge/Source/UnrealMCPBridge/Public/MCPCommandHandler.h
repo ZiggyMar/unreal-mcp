@@ -69,6 +69,7 @@ private:
 	static TSharedRef<FJsonObject> HandleListAssets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateLevel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetGameSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleDescribeClass(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListInputMappings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleGetGameSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleAddInputMapping(const TSharedPtr<FJsonObject>& Params);

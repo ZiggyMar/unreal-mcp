@@ -20,6 +20,7 @@ import { writeFileSync } from "node:fs";
 import { UnrealBridgeClient } from "../dist/bridgeClient.js";
 import { reviewBlueprint } from "../dist/review.js";
 import { explainGraph } from "../dist/explainGraph.js";
+import { findServerOnlyCasts } from "../dist/multiplayer.js";
 
 const bridge = new UnrealBridgeClient({
   host: process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1",
@@ -42,6 +43,7 @@ const JSON_OUT = valueOf("--json", null);
  * with two weeks before a showcase should work in.
  */
 const COST = {
+  "cast-to-server-only-class": 100,
   "server-writes-unreplicated": 100,
   "unhandled-cast-failure": 90,
   "level-sweep-every-frame": 85,
@@ -62,6 +64,8 @@ const COST = {
 };
 
 const WHY_IT_COSTS = {
+  "cast-to-server-only-class":
+    "A GameMode exists only on the server. On every client the cast fails silently and every node after it never runs. Single-player testing cannot see it.",
   "server-writes-unreplicated":
     "Shows up as 'it works for the host'. Nobody can reproduce it alone, which is why it survives to a showcase.",
   "unhandled-cast-failure":
@@ -91,6 +95,27 @@ async function main() {
 
   const findings = [];
   const failures = [];
+
+  // Which classes are server-only, asked once and cached.
+  //
+  // Answering this by name would be a guess: a project's GameModes are called things like
+  // AVSBaseGameMode and GM_Gameplay, neither of which contains "GameModeBase". The engine knows its
+  // own hierarchy, so ask it - once per distinct cast target, not once per cast.
+  // Blueprint classes resolve by asset path; the name in a graph title ("Cast To GM_Gameplay") is
+  // the asset name. Map one to the other from the listing already in hand rather than guessing.
+  const pathOfBlueprint = new Map((listed.blueprints ?? []).map((x) => [x.name, x.path]));
+  const serverOnlyCache = new Map();
+  const isServerOnlyClass = (className) => serverOnlyCache.get(className) === true;
+  const learnClass = async (className) => {
+    if (serverOnlyCache.has(className)) return;
+    try {
+      const described = await bridge.send("describe_class", { className: pathOfBlueprint.get(className) ?? className });
+      serverOnlyCache.set(className, described.serverOnly === true);
+    } catch {
+      // A cast target that cannot be resolved is not something to guess about.
+      serverOnlyCache.set(className, false);
+    }
+  };
   let tokensRead = 0;
   let done = 0;
 
@@ -100,7 +125,9 @@ async function main() {
     done += 1;
     process.stdout.write(`\r  reviewing ${done}/${blueprints.length}  ${name.slice(0, 40).padEnd(40)}`);
     try {
-      const review = await reviewBlueprint(bridge, path);
+      // includeGraphNodes: the cast check needs the same nodes the review just read. Without it
+      // every graph is read twice, which took a 339-Blueprint audit from under a minute to twenty.
+      const review = await reviewBlueprint(bridge, path, undefined, { includeGraphNodes: true });
       tokensRead += est(review);
       for (const graph of review.graphs ?? []) {
         for (const finding of graph.findings ?? []) {
@@ -116,6 +143,30 @@ async function main() {
           });
         }
       }
+      // Casting to a server-only class, which needs the graph and the owner's own class together.
+      const ownerServerOnly = await (async () => {
+        await learnClass(name);
+        return isServerOnlyClass(name);
+      })();
+      for (const summary of review.graphNodes ?? []) {
+        for (const node of summary.nodes ?? []) {
+          const match = /^Cast To (.+)$/i.exec((node.title ?? "").trim());
+          if (match) await learnClass(match[1].trim());
+        }
+        for (const finding of findServerOnlyCasts(summary.nodes ?? [], isServerOnlyClass, ownerServerOnly)) {
+          findings.push({
+            blueprint: name,
+            path,
+            graph: summary.graphName,
+            check: finding.check,
+            severity: finding.severity,
+            message: finding.message,
+            fix: finding.fix,
+            cost: COST[finding.check] ?? 1,
+          });
+        }
+      }
+
       for (const finding of review.blueprint ?? []) {
         findings.push({
           blueprint: name,

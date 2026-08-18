@@ -1,4 +1,7 @@
 #include "MCPTcpServer.h"
+#include "Editor/EditorPerformanceSettings.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/App.h"
 #include "MCPCommandHandler.h"
 
@@ -50,8 +53,53 @@ FMCPTcpServer::~FMCPTcpServer()
 	Stop();
 }
 
+/**
+ * Stop the editor throttling itself into uselessness while an agent is driving it.
+ *
+ * "Use Less CPU when in Background" (bThrottleCPUWhenNotForeground) defaults to ON, and it does
+ * exactly what it says: when the editor is not the foreground application, its tick rate collapses.
+ *
+ * That is a sensible default for a person, and precisely wrong here, because an agent ALWAYS drives
+ * a backgrounded editor - the human is in a chat client, not in Unreal. Every command then waits for
+ * the next slow tick before it is even read.
+ *
+ * Measured before this existed: `ping` answered in 8ms while every other command took ~333ms, on
+ * both engine versions and both projects. That is not work, it is a 3Hz tick. Over a 339-Blueprint
+ * audit it was the entire runtime.
+ *
+ * Opt out with -MCPKeepEditorThrottle if you would rather have the CPU back; the setting is only
+ * changed in memory, so nothing is written to the user's config either way.
+ */
+static void DisableBackgroundThrottlingForAgentUse()
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("MCPKeepEditorThrottle")))
+	{
+		UE_LOG(LogMCPBridge, Log,
+			TEXT("UnrealMCPBridge: leaving editor background throttling alone (-MCPKeepEditorThrottle). ")
+			TEXT("Expect roughly 300ms per command while the editor is not the foreground window."));
+		return;
+	}
+
+	UEditorPerformanceSettings* Settings = GetMutableDefault<UEditorPerformanceSettings>();
+	if (!Settings || !Settings->bThrottleCPUWhenNotForeground)
+	{
+		return;
+	}
+
+	Settings->bThrottleCPUWhenNotForeground = false;
+	// PostEditChange rather than a config write: this is a runtime decision for this session, not a
+	// change to what the user chose.
+	Settings->PostEditChange();
+	UE_LOG(LogMCPBridge, Log,
+		TEXT("UnrealMCPBridge: disabled \"Use Less CPU when in Background\" for this session. An agent ")
+		TEXT("drives a backgrounded editor, and that setting costs about 300ms on every command. ")
+		TEXT("Nothing was written to your config; use -MCPKeepEditorThrottle to keep the throttle."));
+}
+
 bool FMCPTcpServer::Start(int32 Port)
 {
+	DisableBackgroundThrottlingForAgentUse();
+
 	if (Listener.IsValid())
 	{
 		return true;

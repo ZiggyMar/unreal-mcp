@@ -334,9 +334,22 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 		}
 	}
 
+	// A Blueprint's generated class is its asset name plus "_C", and the name that appears in a
+	// graph - "Cast To GM_Gameplay" - is the asset name. Trying the suffix here means the name a
+	// caller actually has in hand resolves, rather than only the one the engine uses internally.
+	if (!ClassName.EndsWith(TEXT("_C")))
+	{
+		const FString Generated = ClassName + TEXT("_C");
+		if (UClass* Found = FindFirstObject<UClass>(*Generated, EFindFirstObjectOptions::None, ELogVerbosity::NoLogging))
+		{
+			return Found;
+		}
+	}
+
 	OutError = FString::Printf(
-		TEXT("class_not_found: %s (tried short name and A/U prefixes; try a full path like /Script/Engine.%s)"),
-		*ClassName, *ClassName);
+		TEXT("class_not_found: %s (tried the short name, A/U prefixes, and the _C form a Blueprint class ")
+		TEXT("uses; try a full path like /Script/Engine.%s or /Game/Folder/%s.%s_C)"),
+		*ClassName, *ClassName, *ClassName, *ClassName);
 	return nullptr;
 }
 
@@ -701,6 +714,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("set_game_settings"))
 	{
 		Response = HandleSetGameSettings(Params);
+	}
+	else if (Cmd == TEXT("describe_class"))
+	{
+		Response = HandleDescribeClass(Params);
 	}
 	else if (Cmd == TEXT("list_input_mappings"))
 	{
@@ -3292,6 +3309,58 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetGameSettings(const TSharedP
 // that a new user who can only say "it still doesn't work" would end up scrapping the project.
 // Movement not working is usually one of four mechanical facts - no mapping, no GameMode, the wrong
 // pawn, or a pawn with no input events - and three of those were unreadable.
+
+// What a class actually IS, by walking its real ancestry.
+//
+// Written for one question that turned out to matter a lot: is this class server-only? A GameMode
+// exists only on the server, so a client casting to one fails every time, silently, and every node
+// after the cast never runs. In a real project that pattern appeared 24 times.
+//
+// Answering it by name would be a guess - the project's own GameModes are called AVSBaseGameMode
+// and GM_Gameplay, neither of which contains "GameModeBase", while something called
+// GameModeHelperWidget is not a GameMode at all. Reflection knows; a regex is pretending.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleDescribeClass(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ClassName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("className"), ClassName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: className is required, e.g. \"Character\" or /Game/BP_X.BP_X"));
+	}
+
+	FString ClassError;
+	UClass* Resolved = ResolveClassByName(ClassName, ClassError);
+	if (!Resolved)
+	{
+		return MakeErrorResponse(ClassError);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Ancestry;
+	for (const UClass* Current = Resolved; Current; Current = Current->GetSuperClass())
+	{
+		Ancestry.Add(MakeShared<FJsonValueString>(Current->GetName()));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("name"), Resolved->GetName());
+	Result->SetStringField(TEXT("path"), Resolved->GetPathName());
+	Result->SetArrayField(TEXT("ancestry"), Ancestry);
+	Result->SetBoolField(TEXT("isBlueprint"), Resolved->ClassGeneratedBy != nullptr);
+
+	// The three facts that decide where logic may live in a networked game, answered outright so a
+	// caller does not have to know the class hierarchy to use them.
+	Result->SetBoolField(TEXT("serverOnly"), Resolved->IsChildOf(AGameModeBase::StaticClass()));
+	Result->SetBoolField(TEXT("isActor"), Resolved->IsChildOf(AActor::StaticClass()));
+	Result->SetBoolField(TEXT("isWidget"), Resolved->IsChildOf(UUserWidget::StaticClass()));
+	if (Resolved->IsChildOf(AGameModeBase::StaticClass()))
+	{
+		Result->SetStringField(
+			TEXT("note"),
+			TEXT("A GameMode exists only on the server. Casting to this from anything that runs on a "
+				 "client - a PlayerController, a Pawn, a GameState, a widget - fails silently there, and "
+				 "every node after the cast never runs. Use GameState for anything clients must see."));
+	}
+	return MakeOkResponse(Result);
+}
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleListInputMappings(const TSharedPtr<FJsonObject>& Params)
 {
