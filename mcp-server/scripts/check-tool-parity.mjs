@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+// Every command the C++ bridge implements must be reachable as an MCP tool.
+//
+// This exists because it silently was not: the bridge shipped 37 commands while the MCP server
+// exposed 23, so levels, actors, components, class defaults, input, and PIE were implemented,
+// live-verified, documented, and unreachable by any AI client. Nothing failed loudly, because
+// nothing was checking. This is that check.
+//
+// Run: npm run check:parity   (also runs as part of npm test)
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(here, "..", "..");
+
+const handlerPath = join(repoRoot, "UnrealMCPBridge", "Source", "UnrealMCPBridge", "Private", "MCPCommandHandler.cpp");
+const serverPath = join(here, "..", "src", "index.ts");
+
+// Commands the bridge dispatches, from its own `Cmd == TEXT("...")` chain.
+const bridgeCommands = new Set(
+  [...readFileSync(handlerPath, "utf8").matchAll(/Cmd\s*==\s*TEXT\("([a-z0-9_]+)"\)/g)].map((m) => m[1])
+);
+
+// Tools the MCP server registers, minus the unreal_ prefix.
+const registeredTools = new Set(
+  [...readFileSync(serverPath, "utf8").matchAll(/server\.registerTool\(\s*"unreal_([a-z0-9_]+)"/g)].map((m) => m[1])
+);
+
+// Tool names that intentionally differ from their bridge command name.
+const aliases = new Map([
+  ["read_blueprint_summary", "read_blueprint_graph_summary"],
+  ["read_node_detail", "read_blueprint_node_detail"],
+]);
+
+const covered = new Set();
+for (const tool of registeredTools) {
+  covered.add(aliases.get(tool) ?? tool);
+}
+
+const unreachable = [...bridgeCommands].filter((cmd) => !covered.has(cmd)).sort();
+const dangling = [...covered].filter((cmd) => !bridgeCommands.has(cmd)).sort();
+
+if (unreachable.length === 0 && dangling.length === 0) {
+  console.log(`tool parity ok: ${bridgeCommands.size} bridge commands, ${registeredTools.size} MCP tools, all matched`);
+  process.exit(0);
+}
+
+if (unreachable.length > 0) {
+  console.error(
+    `\nUNREACHABLE: ${unreachable.length} bridge command(s) have no MCP tool, so no AI client can call them:\n` +
+      unreachable.map((c) => `  - ${c}`).join("\n") +
+      `\n\nAdd a server.registerTool("unreal_${unreachable[0]}", ...) in mcp-server/src/index.ts.`
+  );
+}
+if (dangling.length > 0) {
+  console.error(
+    `\nDANGLING: ${dangling.length} MCP tool(s) call a bridge command that does not exist, so they fail at runtime:\n` +
+      dangling.map((c) => `  - ${c}`).join("\n") +
+      `\n\nEither implement it in MCPCommandHandler.cpp or add it to the alias map in this script.`
+  );
+}
+process.exit(1);

@@ -802,6 +802,352 @@ server.registerTool(
   }
 );
 
+server.registerTool(
+  "unreal_list_assets",
+  {
+    title: "List project assets of a class",
+    description:
+      "AssetRegistry query for real asset paths by class, so you never guess or invent a content path. " +
+      "Pass the class name without its U/A prefix (StaticMesh, SkeletalMesh, Material, AnimBlueprint, " +
+      "AnimSequence, Texture2D, SoundWave, NiagaraSystem, World, ...). " +
+      "**Call this before any tool that takes an asset path** (unreal_spawn_actor's staticMesh, " +
+      "unreal_set_component_property with an asset value, unreal_set_class_default): a path that does not " +
+      "resolve is the single most common way an agent-authored Blueprint silently ends up broken.",
+    inputSchema: {
+      className: z.string().describe('Asset class name, e.g. "StaticMesh", "SkeletalMesh", "AnimBlueprint", "Material".'),
+      pathPrefix: z.string().optional().describe('Restrict to a content path, e.g. "/Game/Meshes". Defaults to the whole project, including engine content.'),
+      maxResults: z.number().optional().describe("Cap the number of results returned. Keep this small; the response is token-billed."),
+    },
+  },
+  async ({ className, pathPrefix, maxResults }) => {
+    try {
+      const result = await bridge.send("list_assets", { className, pathPrefix, maxResults });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_create_level",
+  {
+    title: "Create a new Level (World) asset",
+    description:
+      "Creates and saves a new empty Level asset, optionally assigning its GameMode override. A brand new level is " +
+      "unplayable until it has at least a PlayerStart and a floor, so the normal sequence is: unreal_create_level, " +
+      "unreal_open_level, unreal_spawn_actor for a PlayerStart plus a StaticMeshActor floor plus a light, " +
+      "unreal_save_level, then unreal_set_game_settings to make it the startup and default map.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Maps/L_Arena".'),
+      gameModeClass: z.string().optional().describe("Optional GameMode class or Blueprint path to set as this level's GameMode override."),
+    },
+  },
+  async ({ packagePath, gameModeClass }) => {
+    try {
+      const result = await bridge.send("create_level", { packagePath, gameModeClass });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_open_level",
+  {
+    title: "Open a Level in the editor",
+    description:
+      "Loads a Level asset into the editor world. Every actor tool (unreal_spawn_actor, unreal_save_level) operates " +
+      "on the currently open level, so call this first to choose which level you are editing. Opening a level " +
+      "discards unsaved changes in the current one, so call unreal_save_level before switching.",
+    inputSchema: {
+      path: z.string().describe('Level asset path, e.g. "/Game/Maps/L_Arena".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("open_level", { path });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_spawn_actor",
+  {
+    title: "Spawn an actor into the open level",
+    description:
+      "Places an actor in the currently open level with a transform and an optional label. Accepts any actor class " +
+      "by name (PlayerStart, DirectionalLight, SkyLight, PointLight, StaticMeshActor, ...) or a Blueprint asset " +
+      "path for your own actors. For blocking out geometry, pass actorClass StaticMeshActor plus staticMesh to " +
+      "spawn and assign a mesh in one call. Changes live in memory until unreal_save_level. Requires an open " +
+      "level: call unreal_open_level first if this returns no_editor_world.",
+    inputSchema: {
+      actorClass: z.string().describe('Actor class name ("PlayerStart", "DirectionalLight", "StaticMeshActor") or a Blueprint asset path.'),
+      label: z.string().optional().describe("Human-readable label shown in the World Outliner. Name things meaningfully; a human reads this list."),
+      locX: z.number().optional().describe("World location X. Defaults to 0."),
+      locY: z.number().optional().describe("World location Y. Defaults to 0."),
+      locZ: z.number().optional().describe("World location Z. Defaults to 0."),
+      pitch: z.number().optional().describe("Rotation pitch in degrees. Defaults to 0."),
+      yaw: z.number().optional().describe("Rotation yaw in degrees. Defaults to 0."),
+      roll: z.number().optional().describe("Rotation roll in degrees. Defaults to 0."),
+      scaleX: z.number().optional().describe("Scale X. Defaults to 1."),
+      scaleY: z.number().optional().describe("Scale Y. Defaults to 1."),
+      scaleZ: z.number().optional().describe("Scale Z. Defaults to 1."),
+      staticMesh: z.string().optional().describe('StaticMeshActor only: mesh asset path to assign, e.g. "/Engine/BasicShapes/Cube.Cube". Verify it with unreal_list_assets first.'),
+    },
+  },
+  async (args) => {
+    try {
+      const result = await bridge.send("spawn_actor", args);
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_save_level",
+  {
+    title: "Save the open Level to disk",
+    description:
+      "Saves the currently open Level. Actors placed with unreal_spawn_actor exist only in the running editor's " +
+      "memory until this is called, exactly like unreal_save_blueprint for Blueprint edits.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const result = await bridge.send("save_level", {});
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_add_component",
+  {
+    title: "Add a component to a Blueprint",
+    description:
+      "Adds a component to a Blueprint's component hierarchy (the Components panel), which is how an actor gets a " +
+      "mesh, collision, camera, movement, audio, or particle behavior. Pass parent to attach beneath an existing " +
+      "component instead of at the root; call unreal_list_components first to see the current hierarchy and the " +
+      "exact parent name. Configure the new component with unreal_set_component_property, then " +
+      "unreal_compile_blueprint and unreal_save_blueprint.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      componentClass: z.string().describe('Component class, e.g. "StaticMeshComponent", "SphereComponent", "CameraComponent", "SpringArmComponent", "AudioComponent".'),
+      name: z.string().describe('Name for the component as it appears in the Components panel, e.g. "PickupCollision".'),
+      parent: z.string().optional().describe("Existing component name to attach under. Defaults to the Blueprint's root component."),
+    },
+  },
+  async ({ path, componentClass, name, parent }) => {
+    try {
+      const result = await bridge.send("add_component", { path, componentClass, name, parent });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_list_components",
+  {
+    title: "List a Blueprint's components",
+    description:
+      "Reads a Blueprint's component hierarchy: each component's name, class, and parent, including components " +
+      "inherited from a C++ or Blueprint parent class. Call this before unreal_add_component to pick a valid " +
+      "parent, or before unreal_set_component_property to get the exact component name, rather than guessing " +
+      'names like "Mesh" or "Root".',
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("list_components", { path });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_set_component_property",
+  {
+    title: "Set a property on a Blueprint component",
+    description:
+      "Sets one property on a component's template (its defaults): a StaticMeshComponent's StaticMesh, a " +
+      "SphereComponent's SphereRadius, a CameraComponent's FieldOfView, a collision setting, and so on. Values are " +
+      "written as strings and coerced to the property's real type; struct values use UE's literal syntax such as " +
+      '"(X=0,Y=0,Z=100)". If the value names an asset that does not resolve, the call FAILS rather than silently ' +
+      "setting None, so a bad path is reported instead of shipping a broken Blueprint. Get exact component names " +
+      "from unreal_list_components and verify asset paths with unreal_list_assets.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      component: z.string().describe("Component name, exactly as returned by unreal_list_components."),
+      property: z.string().describe('Property name, e.g. "StaticMesh", "SphereRadius", "FieldOfView", "bGenerateOverlapEvents".'),
+      value: z.string().describe('Value as a string: "true", "250.0", an asset path, or a struct literal like "(X=0,Y=0,Z=100)".'),
+    },
+  },
+  async ({ path, component, property, value }) => {
+    try {
+      const result = await bridge.send("set_component_property", { path, component, property, value });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_set_class_default",
+  {
+    title: "Set a Blueprint class default (CDO property)",
+    description:
+      "Sets a property on the Blueprint's Class Default Object: the values shown in the Class Defaults panel. This " +
+      "is how you configure inherited settings without touching a graph, and it is the correct way to turn on " +
+      'replication for an actor ("bReplicates", "bAlwaysRelevant", "NetUpdateFrequency"), set a Character\'s ' +
+      "movement defaults, or set the default value of any inherited variable. Same string coercion and same " +
+      "fail-loudly-on-unresolved-asset behavior as unreal_set_component_property.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      property: z.string().describe('Property name on the class, e.g. "bReplicates", "NetUpdateFrequency", "InitialLifeSpan".'),
+      value: z.string().describe('Value as a string, e.g. "true", "10.0", an asset path, or a struct literal.'),
+    },
+  },
+  async ({ path, property, value }) => {
+    try {
+      const result = await bridge.send("set_class_default", { path, property, value });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_set_game_settings",
+  {
+    title: "Set project GameMode and startup maps",
+    description:
+      "Writes the project's UGameMapsSettings: the default GameMode, the map the editor opens on, and the map the " +
+      "packaged game launches into, persisted to the project's config. Without this, a level you just built is " +
+      "never actually the one that runs. Pass any combination of the three; at least one is required.",
+    inputSchema: {
+      defaultGameMode: z.string().optional().describe('GameMode class or Blueprint path, e.g. "/Game/BP/BP_MyGameMode.BP_MyGameMode".'),
+      editorStartupMap: z.string().optional().describe('Level path the editor opens on startup, e.g. "/Game/Maps/L_Arena".'),
+      gameDefaultMap: z.string().optional().describe('Level path the packaged game loads first, e.g. "/Game/Maps/L_Arena".'),
+    },
+  },
+  async ({ defaultGameMode, editorStartupMap, gameDefaultMap }) => {
+    try {
+      const result = await bridge.send("set_game_settings", { defaultGameMode, editorStartupMap, gameDefaultMap });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_add_input_mapping",
+  {
+    title: "Add a project input mapping",
+    description:
+      "Adds an action or axis mapping to the project's input settings and saves them to config, so InputAction and " +
+      'InputAxis event nodes have something real behind them. kind "action" is a press/release binding (Jump, ' +
+      'Fire); kind "axis" is a continuous value (MoveForward) and takes scale, so a W/S pair is two calls with ' +
+      "scale 1 and -1. Key names are UE's own: W, A, S, D, SpaceBar, LeftMouseButton, Gamepad_LeftX. Add the " +
+      "mapping before adding the matching input event node to a graph.",
+    inputSchema: {
+      kind: z.enum(["action", "axis"]).describe('"action" for press/release, "axis" for a continuous value.'),
+      name: z.string().describe('Mapping name the Blueprint event node will use, e.g. "Jump" or "MoveForward".'),
+      key: z.string().describe('UE key name, e.g. "SpaceBar", "W", "LeftMouseButton", "Gamepad_LeftX".'),
+      scale: z.number().optional().describe("Axis only: the value this key contributes, typically 1 or -1. Defaults to 1."),
+    },
+  },
+  async ({ kind, name, key, scale }) => {
+    try {
+      const result = await bridge.send("add_input_mapping", { kind, name, key, scale });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_start_pie",
+  {
+    title: "Start Play In Editor",
+    description:
+      "Starts a PIE session so runtime behavior can actually be verified instead of assumed, including multiplayer: " +
+      "pass numPlayers greater than 1 (and listenServer) to launch multiple clients and exercise replication. PIE " +
+      "starts on the next editor tick, so poll unreal_pie_status rather than assuming it is already running, and " +
+      "call unreal_stop_pie when finished. Compiling a Blueprint proves it is valid; running it is the only thing " +
+      "that proves it works.",
+    inputSchema: {
+      numPlayers: z.number().optional().describe("Number of PIE clients. Defaults to 1. Use 2 or more to test replication."),
+      listenServer: z.boolean().optional().describe("Run the first client as a listen server, the usual multiplayer setup. Defaults to false."),
+    },
+  },
+  async ({ numPlayers, listenServer }) => {
+    try {
+      const result = await bridge.send("start_pie", { numPlayers, listenServer });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_stop_pie",
+  {
+    title: "Stop Play In Editor",
+    description:
+      "Ends the running PIE session and reports whether one was running. Always stop PIE before further editing: " +
+      "Blueprint writes made while PIE is running act on the editor world, not the running one, and are easy to " +
+      "misread as having had no effect.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const result = await bridge.send("stop_pie", {});
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+server.registerTool(
+  "unreal_pie_status",
+  {
+    title: "Check whether PIE is running",
+    description:
+      "Reports whether a PIE session is currently active. Poll this after unreal_start_pie, which takes effect on " +
+      "the next editor tick, before concluding anything about runtime behavior.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const result = await bridge.send("pie_status", {});
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
