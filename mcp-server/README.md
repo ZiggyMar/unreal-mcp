@@ -623,9 +623,17 @@ problem.**
 
 | `UNREAL_MCP_PROFILE` | Starts at | Reaches |
 | --- | --- | --- |
-| `full` (default) | 56 tools, ~17.7k tokens | everything, immediately |
-| `lazy` | 20 tools, ~6.6k tokens (**63% less**) | everything, on request |
-| `core` | 20 tools, ~6.6k tokens | only those 20, permanently |
+| `full` (default) | 64 tools, ~20.9k tokens | everything, immediately |
+| `lazy` | 25 tools, ~8.8k tokens | everything, on request |
+| `core` | 25 tools, ~8.8k tokens | only those, permanently |
+| `minimal` | **10 tools, ~3.1k tokens** | only those, permanently |
+
+**`minimal` exists for a measured reason.** On a 12 GB GPU, a 14B model loads at 8k context and
+fails to load at 16k. The `lazy` profile is ~8.8k tokens of tool definitions by itself, so its tool
+list alone would consume the entire budget that model has. **Tool payload size does not just cost
+tokens; it decides which models you can run at all.** `minimal` is the authoring spine only - find
+a function, create, add state, attach behaviour, compile, review, save - and everything else
+arrives through `unreal_enable_tools`.
 
 **`lazy` is the one to reach for.** Every tool is registered with its full schema, but the optional
 groups start switched off. When the model needs one it calls `unreal_enable_tools`, the group

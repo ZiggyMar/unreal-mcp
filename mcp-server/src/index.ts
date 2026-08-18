@@ -215,6 +215,30 @@ const GROUP_SUMMARY: Record<string, string> = {
   maintenance: "reference lookup, asset deletion, Refresh Nodes repair",
 };
 
+/**
+ * The smallest set that can still build something, for models running on a tight GPU.
+ *
+ * This exists because of a measurement, not a preference. On a 12 GB card, qwen2.5-coder:14b loads
+ * at 8k context and fails to load at 16k. The "lazy" profile is ~8.2k tokens of tool definitions
+ * BY ITSELF, so its tool list alone consumes the entire budget a 14B has available - the payload
+ * does not merely cost tokens, it decides which models you can run at all.
+ *
+ * So this is the authoring spine and nothing else: find the right function, create, add state,
+ * attach behaviour, compile, review, save. Everything else arrives through unreal_enable_tools.
+ */
+const MINIMAL_PROFILE_TOOLS = new Set([
+  "unreal_doctor",
+  "unreal_enable_tools",
+  "unreal_list_blueprints",
+  "unreal_find_node",
+  "unreal_create_blueprint",
+  "unreal_add_variable",
+  "unreal_add_event_handler",
+  "unreal_compile_blueprint",
+  "unreal_review_blueprint",
+  "unreal_save_blueprint",
+]);
+
 const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
 
 // How much to spend per build. The floor never moves: every mode still builds atomically, lays the
@@ -232,6 +256,9 @@ const toolHandles = new Map<string, { enable(): void; disable(): void; enabled: 
  */
 const register: typeof server.registerTool = ((name: string, config: never, handler: never) => {
   if (PROFILE === "core" && !CORE_PROFILE_TOOLS.has(name)) {
+    return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
+  }
+  if (PROFILE === "minimal" && !MINIMAL_PROFILE_TOOLS.has(name)) {
     return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
   }
   registeredToolNames.push(name);
@@ -2400,9 +2427,9 @@ async function main() {
   if (MODE_WARNING) {
     console.error(`unreal-mcp-server: ${MODE_WARNING}`);
   }
-  if (PROFILE !== "core" && PROFILE !== "full" && PROFILE !== "lazy") {
+  if (PROFILE !== "core" && PROFILE !== "full" && PROFILE !== "lazy" && PROFILE !== "minimal") {
     console.error(
-      `unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: core, lazy, full.`
+      `unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: minimal, core, lazy, full.`
     );
   }
 }
