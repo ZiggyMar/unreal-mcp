@@ -17,6 +17,7 @@ import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { auditProject } from "./audit.js";
+import { guardWithAuthority } from "./authorityGuard.js";
 import { RepeatGuard } from "./repeatGuard.js";
 import { reviewStatePlacement } from "./statePlacement.js";
 import { allPolicies, resolveMode } from "./mode.js";
@@ -188,6 +189,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     // for the familiar name over scaffold_blueprint and then cannot finish - measured, see
     // CORE_PROFILE_TOOLS. A caller that genuinely wants an empty Blueprint can enable it.
     "unreal_create_blueprint",
+    "unreal_guard_with_authority",
     "unreal_read_node_detail",
     "unreal_add_node",
     "unreal_connect_pins",
@@ -2728,6 +2730,38 @@ register(
     try {
       const result = await bridge.send("project_health", { maxPerCategory });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_guard_with_authority",
+  {
+    title: "Make this part run only on the server",
+    description:
+      "Puts a node behind a Branch on HasAuthority, keeping the chain it is already in. " +
+      "**This is the fix for a cast to a GameMode from anything that also runs on a client** - the most expensive " +
+      "thing unreal_audit_project reports, because it fails silently on every client and takes every node after it " +
+      "with it. " +
+      "It reroutes whatever currently runs into the node so it goes through the guard instead, then re-reads the " +
+      "graph to confirm the node is no longer reachable directly. " +
+      "Use `dryRun` to see the exact edit first. It refuses if the node has no incoming execution, because then " +
+      "there is no chain to guard and it would have to invent one. " +
+      "It is not a design decision: moving the state onto the GameState is often the better answer, and this cannot " +
+      "know that.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      graphName: z.string().describe('Graph containing the node, e.g. "EventGraph".'),
+      nodeId: z.string().describe("Node id from unreal_read_blueprint_summary. A leading prefix is enough."),
+      dryRun: z.boolean().optional().describe("Report the edit without making it."),
+      compile: z.boolean().optional().describe("Compile afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, graphName, nodeId, dryRun, compile }) => {
+    try {
+      return jsonResult(await guardWithAuthority(bridge, path, graphName, nodeId, { dryRun, compile }));
     } catch (err) {
       return errorResult(err);
     }

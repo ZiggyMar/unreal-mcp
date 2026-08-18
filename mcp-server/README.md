@@ -165,6 +165,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_review_blueprint` | *(composed: `list_blueprint_graphs` + `read_blueprint_graph_summary`)* | The quality gate: dead nodes, unhandled cast failures, leftover debug prints, placeholder names, heavy Tick, unlabelled sections. Returns findings with fixes, a score, and one `nextAction`. |
 | `unreal_audit_project` | *(composite)* | Audit every Blueprint and rank what to fix, by likely cost. The "my game has bugs, where do I look" tool. |
 | `unreal_project_health` | `project_health` | Where the whole project needs attention: oversized graphs, oversized Blueprints, cast-heavy Blueprints. Costs no asset reads. |
+| `unreal_guard_with_authority` | *(composite)* | Put a node behind a HasAuthority branch, keeping its chain. The fix for a client-side GameMode cast. |
 | `unreal_cleanup_blueprint` | *(composed: review + `remove_node` + layout)* | Applies the review fixes that cannot change behaviour, and lists what it left for you with reasons. |
 | `unreal_doctor` | *(composed: `ping` + `get_project_overview` + `find_node` + `pie_status`)* | One-call diagnosis of the whole setup, with a remedy per failed check. Never throws: an unreachable editor is the answer, not an error. |
 | `unreal_session_changes` | *(server-side log; touches the editor not at all)* | Everything this session changed, grouped by asset, in plain language, with deletions and failures called out. |
