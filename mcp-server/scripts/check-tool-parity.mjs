@@ -25,7 +25,7 @@ const bridgeCommands = new Set(
 
 // Tools the MCP server registers, minus the unreal_ prefix.
 const registeredTools = new Set(
-  [...readFileSync(serverPath, "utf8").matchAll(/server\.registerTool\(\s*"unreal_([a-z0-9_]+)"/g)].map((m) => m[1])
+  [...readFileSync(serverPath, "utf8").matchAll(/(?:server\.registerTool|register)\(\s*"unreal_([a-z0-9_]+)"/g)].map((m) => m[1])
 );
 
 // Tool names that intentionally differ from their bridge command name.
@@ -37,7 +37,7 @@ const aliases = new Map([
 // Tools implemented in the MCP server by composing several bridge commands, rather than mapping
 // to one. These are deliberate: they belong on the client side because they need no engine access
 // beyond the commands that already exist.
-const compositeTools = new Set(["auto_layout_graph"]);
+const compositeTools = new Set(["auto_layout_graph", "review_blueprint"]);
 
 const covered = new Set();
 for (const tool of registeredTools) {
