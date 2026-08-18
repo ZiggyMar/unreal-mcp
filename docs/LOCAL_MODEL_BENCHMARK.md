@@ -25,8 +25,15 @@ A local 7B builds working Blueprints reliably, once the tools are shaped for it.
 | --- | --- | --- |
 | Create a Blueprint, add a typed variable, compile, save | **0/5** | **5/5** (10/10 across two sets) |
 | Create a Blueprint and wire BeginPlay to a Print String | **0/5** | **5/5** |
+| A component with a property, a variable, and **two** wired handlers | — | **5/5** |
 
 Same model, same hardware, same prompts. The graph task had never passed once.
+
+The third task was added afterwards to find where the ceiling had moved to, and it did not find one:
+a `SphereComponent` with `SphereRadius` set, a float variable, and both a BeginPlay and an
+ActorBeginOverlap handler each printing a different message — the shape of a real small feature —
+passes every time. Verified by reading the component list and the graph back, including that both
+handlers are actually wired rather than merely present.
 
 ### The three changes, in order of how much they mattered
 

@@ -263,6 +263,7 @@ With `qwen2.5-coder:7b` on an RTX 3060 that is also running the editor:
 | --- | --- | --- |
 | Blueprint + typed variable + compile + save | **0/5** | **5/5** (10/10 over two sets) |
 | Blueprint + BeginPlay wired to Print String | **0/5** | **5/5** |
+| Component with a property + variable + **two** wired handlers | — | **5/5** |
 
 At ~20 tok/s, with zero malformed arguments and zero invented tool names throughout.
 
@@ -279,6 +280,10 @@ order, so a model that cannot hold a plan across turns does not need to (0/5 to 
 one-line pointer at the top of `create_blueprint`'s description, because the scaffold went unused
 until it was advertised where the model was already looking — the second time that happened here,
 which makes it a pattern.
+
+The third task was added to find where the ceiling had moved to, and did not find one: a
+`SphereComponent` with its radius set, a variable, and two separate wired handlers — a real small
+feature — passes every time.
 
 Scope, honestly: these are single features with clear descriptions, not system design. A small
 model still cannot hold a plan across turns. It no longer has to. Full write-up in
