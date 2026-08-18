@@ -189,6 +189,48 @@ give it a body, configure its class defaults, bind input to it, and actually run
 Compiling proves a Blueprint is valid. Running it is the only thing that proves it works, which is
 what `start_pie` is for.
 
+### Structs and enums: the refactor a real project gets
+
+| Tool | Bridge command | Purpose |
+| --- | --- | --- |
+| `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
+| `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
+| `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
+| `unreal_create_enum` | `create_enum` | Create a user-defined Enum with named entries. |
+| `unreal_list_enum_entries` | `list_enum_entries` | Read an Enum's entries. Works on engine enums too, for looking up exact value spellings. |
+
+Six variables called `ItemName`, `ItemIcon`, `ItemCount`, `ItemWeight`, `ItemStackable`,
+`ItemRarity` are one `S_ItemData` struct, and every function passing them around gets one pin
+instead of six. An integer 0/1/2 standing for "Idle/Chasing/Attacking" is an enum, and the Switch
+node then has one clearly-labelled pin per case instead of magic numbers.
+
+Variable types gained two descriptors to make this usable end to end, since a struct you cannot
+declare a variable of is decoration: `struct:<Name>` and `enum:<Name>`, accepted anywhere a type
+string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, and struct fields,
+so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
+native engine structs.
+
+`unreal_create_struct` validates every field type **before** creating the asset, so a typo in the
+fifth field fails cleanly instead of leaving a half-built struct in the project for someone to find
+later.
+
+#### The `SetEnums` trap, and why this is routed around it
+
+`UUserDefinedEnum::SetEnums` is the obvious API for writing an enum's values, and
+[ChiR24/Unreal_mcp #566](https://github.com/ChiR24/Unreal_mcp/issues) reports it as an open bug: a
+C2660 on UE 5.8. The underlying reason is worse than a hidden overload. The signature genuinely
+differs between the two engines this project supports:
+
+```
+5.6: SetEnums(TArray<TPair<FName,int64>>&, ECppForm, EEnumFlags, bool)
+5.8: SetEnums(TArray<TPair<FName,int64>>&, ECppForm, UEnum::EUnderlyingType, EEnumFlags,
+              EAddMaxKeyIfMissing)
+```
+
+No single call compiles against both. So nothing here calls it. `FEnumEditorUtils` and
+`FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
+header to header, which makes the problem not exist rather than solved-for-one-version.
+
 ### UMG: the UI half
 
 A game the user can see is mostly UI, and none of it used to be reachable through this bridge.
@@ -312,7 +354,7 @@ report, which costs more than a missed finding.
 ### Tool profiles, for small-context models
 
 Tool definitions are paid for on every request, before the user's message is read. The full set is
-44 tools and roughly 13.7k tokens of standing cost. On a 200k-context model that is noise; on an
+49 tools and roughly 15.0k tokens of standing cost. On a 200k-context model that is noise; on an
 8k or 32k local model it is the difference between usable and unusable.
 
 The instructive descriptions are not the thing to cut, because they are why a weaker model
@@ -322,7 +364,7 @@ succeeds at all. So rather than making every user's tools worse, set:
 UNREAL_MCP_PROFILE=core
 ```
 
-which exposes 17 tools for about 5.3k tokens, a 61% reduction, and still keeps a straight line
+which exposes 17 tools for about 5.3k tokens, a 65% reduction, and still keeps a straight line
 through the whole job: orient, search, read, find the exact node, create the Blueprint, add
 variables and functions, build the graph, compile, lay out, review, save. What it drops is the
 single-node editing tools (`unreal_build_graph` does that job in one call), the level / actor /

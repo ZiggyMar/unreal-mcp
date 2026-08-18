@@ -51,6 +51,15 @@
 #include "Components/PanelWidget.h"
 #include "Components/PanelSlot.h"
 #include "Components/CanvasPanel.h"
+#include "Kismet2/StructureEditorUtils.h"
+// StructureEditorUtils only forward-declares FStructVariableDescription; its definition lives here,
+// at the same path on both 5.6 and 5.8.
+#include "UserDefinedStructure/UserDefinedStructEditorData.h"
+#include "Kismet2/EnumEditorUtils.h"
+// StructUtils/ is the portable path: 5.6 still ships an Engine/UserDefinedStruct.h shim, 5.8 does
+// not, so the obvious include compiles on the older engine and fails on the newer one.
+#include "StructUtils/UserDefinedStruct.h"
+#include "Engine/UserDefinedEnum.h"
 #include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -314,15 +323,45 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 		OutType.PinCategory = UEdGraphSchema_K2::PC_Class;
 		OutType.PinSubCategoryObject = Class;
 	}
+	else if (Lower.StartsWith(TEXT("struct:")))
+	{
+		const FString StructName = TypeStr.Mid(7);
+		FString StructError;
+		UScriptStruct* Struct = ResolveStructByName(StructName, StructError);
+		if (!Struct)
+		{
+			OutError = StructError;
+			return false;
+		}
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutType.PinSubCategoryObject = Struct;
+	}
+	else if (Lower.StartsWith(TEXT("enum:")))
+	{
+		const FString EnumName = TypeStr.Mid(5);
+		FString EnumError;
+		UEnum* Enum = ResolveEnumByName(EnumName, EnumError);
+		if (!Enum)
+		{
+			OutError = EnumError;
+			return false;
+		}
+		// Blueprint enum values are byte-typed with the UEnum as the subcategory object; the
+		// schema maps PC_Enum onto PC_Byte anyway, so this is the form the editor itself produces.
+		OutType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+		OutType.PinSubCategoryObject = Enum;
+	}
 	else
 	{
 		OutError = FString::Printf(
 			TEXT("unknown_type: %s (supported: bool, byte, int, int64, float, double, string, name, text, ")
-			TEXT("vector, rotator, transform, object:<Class>, class:<Class>)"),
+			TEXT("vector, rotator, transform, object:<Class>, class:<Class>, struct:<Struct>, enum:<Enum>)"),
 			*TypeStr);
 		return false;
 	}
 
+	// PC_Byte is deliberately absent here: a plain "byte" has no subcategory object, and an
+	// "enum:<Name>" byte already had its object resolved above or returned an error.
 	const bool bNeedsSubCategoryObject =
 		OutType.PinCategory == UEdGraphSchema_K2::PC_Struct ||
 		OutType.PinCategory == UEdGraphSchema_K2::PC_Object ||
@@ -511,6 +550,26 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("set_widget_property"))
 	{
 		Response = HandleSetWidgetProperty(Params);
+	}
+	else if (Cmd == TEXT("create_struct"))
+	{
+		Response = HandleCreateStruct(Params);
+	}
+	else if (Cmd == TEXT("add_struct_field"))
+	{
+		Response = HandleAddStructField(Params);
+	}
+	else if (Cmd == TEXT("list_struct_fields"))
+	{
+		Response = HandleListStructFields(Params);
+	}
+	else if (Cmd == TEXT("create_enum"))
+	{
+		Response = HandleCreateEnum(Params);
+	}
+	else if (Cmd == TEXT("list_enum_entries"))
+	{
+		Response = HandleListEnumEntries(Params);
 	}
 	else
 	{
@@ -3734,4 +3793,408 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetWidgetProperty(const TShare
 		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 	}
 	return Response;
+}
+
+// ---------------------------------------------------------------------------------------------
+// User-defined Structs and Enums
+//
+// Six loose variables called Name, Icon, Count, Weight, Stackable, Rarity is what a project looks
+// like before someone introduces a struct. Structs and enums are the first refactor a real project
+// gets, and without them an agent-built project accretes loose variables forever.
+//
+// Everything here goes through FStructureEditorUtils / FEnumEditorUtils, never through
+// UUserDefinedEnum::SetEnums. That is not a style preference. SetEnums has a genuinely different
+// signature on the two supported engines:
+//
+//   5.6: SetEnums(TArray<TPair<FName,int64>>&, ECppForm, EEnumFlags, bool)
+//   5.8: SetEnums(TArray<TPair<FName,int64>>&, ECppForm, UEnum::EUnderlyingType, EEnumFlags,
+//                 EAddMaxKeyIfMissing)
+//
+// so no single call to it compiles against both. This is the C2660 that ChiR24/Unreal_mcp #566
+// reports as an open bug. The editor utils above it are identical on both versions, verified
+// header-to-header, so routing through them makes the whole problem not exist.
+// ---------------------------------------------------------------------------------------------
+
+/** Find a user-defined asset (struct or enum) by short name, using the asset registry. */
+static UObject* FindUserDefinedAssetByName(UClass* AssetClass, const FString& Name)
+{
+	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	TArray<FAssetData> Assets;
+	Registry.Get().GetAssetsByClass(AssetClass->GetClassPathName(), Assets);
+	for (const FAssetData& Asset : Assets)
+	{
+		if (Asset.AssetName.ToString().Equals(Name, ESearchCase::IgnoreCase))
+		{
+			return Asset.GetAsset();
+		}
+	}
+	return nullptr;
+}
+
+UScriptStruct* FMCPCommandHandler::ResolveStructByName(const FString& Name, FString& OutError)
+{
+	if (Name.StartsWith(TEXT("/")))
+	{
+		// Accept both "/Game/Data/S_Item" and "/Game/Data/S_Item.S_Item".
+		FString Path = Name;
+		if (!Path.Contains(TEXT(".")))
+		{
+			Path = FString::Printf(TEXT("%s.%s"), *Name, *FPackageName::GetShortName(Name));
+		}
+		if (UScriptStruct* Loaded = LoadObject<UScriptStruct>(nullptr, *Path))
+		{
+			return Loaded;
+		}
+	}
+	else
+	{
+		// Engine structs first, then the project's own.
+		for (const TCHAR* Prefix : { TEXT("/Script/CoreUObject."), TEXT("/Script/Engine.") })
+		{
+			if (UScriptStruct* Native = FindObject<UScriptStruct>(nullptr, *(FString(Prefix) + Name)))
+			{
+				return Native;
+			}
+		}
+		if (UObject* Found = FindUserDefinedAssetByName(UUserDefinedStruct::StaticClass(), Name))
+		{
+			return Cast<UScriptStruct>(Found);
+		}
+	}
+
+	OutError = FString::Printf(
+		TEXT("struct_not_found: %s (pass a short asset name like S_ItemData, or a full path like ")
+		TEXT("/Game/Data/S_ItemData. Create one with create_struct.)"), *Name);
+	return nullptr;
+}
+
+UEnum* FMCPCommandHandler::ResolveEnumByName(const FString& Name, FString& OutError)
+{
+	if (Name.StartsWith(TEXT("/")))
+	{
+		FString Path = Name;
+		if (!Path.Contains(TEXT(".")))
+		{
+			Path = FString::Printf(TEXT("%s.%s"), *Name, *FPackageName::GetShortName(Name));
+		}
+		if (UEnum* Loaded = LoadObject<UEnum>(nullptr, *Path))
+		{
+			return Loaded;
+		}
+	}
+	else
+	{
+		if (UEnum* Native = FindObject<UEnum>(nullptr, *(FString(TEXT("/Script/Engine.")) + Name)))
+		{
+			return Native;
+		}
+		if (UObject* Found = FindUserDefinedAssetByName(UUserDefinedEnum::StaticClass(), Name))
+		{
+			return Cast<UEnum>(Found);
+		}
+	}
+
+	OutError = FString::Printf(
+		TEXT("enum_not_found: %s (pass a short asset name like E_WeaponType, or a full path like ")
+		TEXT("/Game/Data/E_WeaponType. Create one with create_enum.)"), *Name);
+	return nullptr;
+}
+
+/** Read a struct's fields into JSON, shared by create_struct, add_struct_field, and list_struct_fields. */
+static TArray<TSharedPtr<FJsonValue>> DescribeStructFields(UUserDefinedStruct* Struct)
+{
+	TArray<TSharedPtr<FJsonValue>> Fields;
+	for (const FStructVariableDescription& Desc : FStructureEditorUtils::GetVarDesc(Struct))
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		const FEdGraphPinType PinType = Desc.ToPinType();
+		Entry->SetStringField(TEXT("name"), Desc.FriendlyName);
+		Entry->SetStringField(TEXT("type"), PinType.PinCategory.ToString());
+		if (PinType.PinSubCategoryObject.IsValid())
+		{
+			Entry->SetStringField(TEXT("subType"), PinType.PinSubCategoryObject->GetName());
+		}
+		Entry->SetBoolField(TEXT("isArray"), PinType.ContainerType == EPinContainerType::Array);
+		if (!Desc.DefaultValue.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("defaultValue"), Desc.DefaultValue);
+		}
+		Fields.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	return Fields;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateStruct(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("packagePath"), PackagePath))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Data/S_ItemData"));
+	}
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
+	}
+
+	// Resolve every field type BEFORE creating anything, so a typo in field five does not leave a
+	// half-built struct asset behind for someone to find later.
+	struct FPendingField
+	{
+		FString Name;
+		FEdGraphPinType Type;
+	};
+	TArray<FPendingField> Pending;
+	const TArray<TSharedPtr<FJsonValue>>* FieldArray = nullptr;
+	if (Params->TryGetArrayField(TEXT("fields"), FieldArray))
+	{
+		for (int32 i = 0; i < FieldArray->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* FieldObj = nullptr;
+			if (!(*FieldArray)[i]->TryGetObject(FieldObj))
+			{
+				return MakeErrorResponse(FString::Printf(TEXT("bad_field at index %d: expected an object"), i));
+			}
+			FPendingField Field;
+			FString TypeStr;
+			if (!(*FieldObj)->TryGetStringField(TEXT("name"), Field.Name) || Field.Name.IsEmpty() ||
+				!(*FieldObj)->TryGetStringField(TEXT("type"), TypeStr))
+			{
+				return MakeErrorResponse(FString::Printf(TEXT("bad_field at index %d: name and type are required"), i));
+			}
+			FString TypeError;
+			if (!ResolvePinType(TypeStr, Field.Type, TypeError))
+			{
+				return MakeErrorResponse(FString::Printf(TEXT("bad_field '%s': %s"), *Field.Name, *TypeError));
+			}
+			Pending.Add(MoveTemp(Field));
+		}
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateStruct", "MCP: Create Struct"));
+
+	UUserDefinedStruct* Struct = FStructureEditorUtils::CreateUserDefinedStruct(
+		Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+	if (!Struct)
+	{
+		return MakeErrorResponse(TEXT("create_struct_failed"));
+	}
+
+	// A freshly created struct always arrives with one placeholder bool member, exactly as it does
+	// in the editor. Reuse it for the first requested field rather than adding and then deleting.
+	for (int32 i = 0; i < Pending.Num(); ++i)
+	{
+		if (i > 0 && !FStructureEditorUtils::AddVariable(Struct, Pending[i].Type))
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("add_field_failed: %s"), *Pending[i].Name));
+		}
+
+		const TArray<FStructVariableDescription>& Desc = FStructureEditorUtils::GetVarDesc(Struct);
+		if (!Desc.IsValidIndex(i))
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("field_index_out_of_range: %s"), *Pending[i].Name));
+		}
+		const FGuid Guid = Desc[i].VarGuid;
+
+		if (i == 0)
+		{
+			FStructureEditorUtils::ChangeVariableType(Struct, Guid, Pending[i].Type);
+		}
+		FStructureEditorUtils::RenameVariable(Struct, Guid, Pending[i].Name);
+	}
+
+	FAssetRegistryModule::AssetCreated(Struct);
+	Package->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Struct->GetPathName());
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetArrayField(TEXT("fields"), DescribeStructFields(Struct));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddStructField(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, FieldName, TypeStr;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), FieldName) ||
+		!Params->TryGetStringField(TEXT("type"), TypeStr))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, name, type are required"));
+	}
+
+	FString StructError;
+	UScriptStruct* Resolved = ResolveStructByName(Path, StructError);
+	UUserDefinedStruct* Struct = Cast<UUserDefinedStruct>(Resolved);
+	if (!Resolved)
+	{
+		return MakeErrorResponse(StructError);
+	}
+	if (!Struct)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("not_a_user_struct: %s is a native engine struct and cannot be edited"), *Path));
+	}
+
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!ResolvePinType(TypeStr, PinType, TypeError))
+	{
+		return MakeErrorResponse(TypeError);
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddStructField", "MCP: Add Struct Field"));
+	if (!FStructureEditorUtils::AddVariable(Struct, PinType))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("add_field_failed: %s"), *FieldName));
+	}
+
+	const TArray<FStructVariableDescription>& Desc = FStructureEditorUtils::GetVarDesc(Struct);
+	if (Desc.Num() > 0)
+	{
+		FStructureEditorUtils::RenameVariable(Struct, Desc.Last().VarGuid, FieldName);
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Struct->GetPathName());
+	Result->SetStringField(TEXT("added"), FieldName);
+	Result->SetArrayField(TEXT("fields"), DescribeStructFields(Struct));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListStructFields(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	FString StructError;
+	UScriptStruct* Resolved = ResolveStructByName(Path, StructError);
+	if (!Resolved)
+	{
+		return MakeErrorResponse(StructError);
+	}
+	UUserDefinedStruct* Struct = Cast<UUserDefinedStruct>(Resolved);
+	if (!Struct)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("not_a_user_struct: %s is a native engine struct; its layout is defined in C++"), *Path));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Struct->GetPathName());
+	Result->SetStringField(TEXT("name"), Struct->GetName());
+	Result->SetArrayField(TEXT("fields"), DescribeStructFields(Struct));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateEnum(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("packagePath"), PackagePath))
+	{
+		return MakeErrorResponse(TEXT("missing_param: packagePath is required, e.g. /Game/Data/E_WeaponType"));
+	}
+	if (FPackageName::DoesPackageExist(PackagePath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_already_exists: %s"), *PackagePath));
+	}
+
+	TArray<FString> Entries;
+	const TArray<TSharedPtr<FJsonValue>>* EntryArray = nullptr;
+	if (Params->TryGetArrayField(TEXT("entries"), EntryArray))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *EntryArray)
+		{
+			FString Entry;
+			if (!Value->TryGetString(Entry) || Entry.IsEmpty())
+			{
+				return MakeErrorResponse(TEXT("bad_entry: entries must be non-empty strings"));
+			}
+			Entries.Add(Entry);
+		}
+	}
+
+	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	UPackage* Package = CreatePackage(*PackagePath);
+	if (!Package)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateEnum", "MCP: Create Enum"));
+
+	UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(FEnumEditorUtils::CreateUserDefinedEnum(
+		Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional));
+	if (!Enum)
+	{
+		return MakeErrorResponse(TEXT("create_enum_failed"));
+	}
+
+	// Like a new struct, a new enum arrives with one placeholder entry. Rename it for the first
+	// requested value and append the rest. Display names are what a designer sees and what
+	// Blueprint pins show, so they are set rather than left as NewEnumerator0.
+	for (int32 i = 0; i < Entries.Num(); ++i)
+	{
+		if (i > 0)
+		{
+			FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
+		}
+		FEnumEditorUtils::SetEnumeratorDisplayName(Enum, i, FText::FromString(Entries[i]));
+	}
+
+	FAssetRegistryModule::AssetCreated(Enum);
+	Package->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Enum->GetPathName());
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetNumberField(TEXT("entryCount"), Entries.Num());
+	Result->SetStringField(TEXT("useAs"), FString::Printf(TEXT("enum:%s"), *AssetName));
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListEnumEntries(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	FString EnumError;
+	UEnum* Enum = ResolveEnumByName(Path, EnumError);
+	if (!Enum)
+	{
+		return MakeErrorResponse(EnumError);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	// NumEnums() counts the implicit _MAX sentinel, which is never a value a caller should use.
+	const int32 Count = Enum->NumEnums() > 0 ? Enum->NumEnums() - 1 : 0;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetNumberField(TEXT("index"), i);
+		Entry->SetStringField(TEXT("name"), Enum->GetNameStringByIndex(i));
+		Entry->SetStringField(TEXT("displayName"), Enum->GetDisplayNameTextByIndex(i).ToString());
+		Entry->SetNumberField(TEXT("value"), Enum->GetValueByIndex(i));
+		Entries.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Enum->GetPathName());
+	Result->SetStringField(TEXT("name"), Enum->GetName());
+	Result->SetBoolField(TEXT("editable"), Cast<UUserDefinedEnum>(Enum) != nullptr);
+	Result->SetArrayField(TEXT("entries"), Entries);
+	return MakeOkResponse(Result);
 }

@@ -827,7 +827,7 @@ register(
       "unreal_add_node targeting the new graphName. Wire logic from the entry node's output pins to the result " +
       "node's input pins. Call the function from other graphs via unreal_add_node CallFunction with functionName " +
       "set to this name and no className. Type strings are the same compact descriptors unreal_add_variable uses " +
-      '("bool", "int", "float", "string", "vector", "object:<Class>", ...).',
+      '("bool", "int", "float", "string", "vector", "object:<Class>", "struct:<Struct>", "enum:<Enum>", ...).',
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       functionName: z.string().describe('Name for the new function, e.g. "HandleDamage". Fails if a graph with this name exists.'),
@@ -1462,6 +1462,138 @@ register(
   async ({ path, widget, property, value, onSlot }) => {
     try {
       const result = await bridge.send("set_widget_property", { path, widget, property, value, onSlot });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_create_struct",
+  {
+    title: "Create a Blueprint Struct",
+    description:
+      "Creates a user-defined Struct with typed fields in one call. This is the refactor that stops a project " +
+      "accreting loose variables: six variables called ItemName, ItemIcon, ItemCount, ItemWeight, ItemStackable, " +
+      "ItemRarity are one S_ItemData struct, and every function that passes them around gets one pin instead of " +
+      "six.\n\n" +
+      "Use the struct afterwards by passing type \"struct:<Name>\" to unreal_add_variable, unreal_create_function's " +
+      "inputs/outputs, or unreal_create_struct's own fields (structs can nest). Break it apart in a graph with a " +
+      "Break node, found via unreal_find_node.\n\n" +
+      "Every field type is validated BEFORE the asset is created, so a typo in the fifth field fails the call " +
+      "cleanly instead of leaving a half-built struct in the project.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Data/S_ItemData". Prefix struct assets with S_ by convention.'),
+      fields: z
+        .array(z.object({ name: z.string(), type: z.string() }))
+        .optional()
+        .describe(
+          'Fields in order, e.g. [{"name":"DisplayName","type":"text"},{"name":"Icon","type":"object:Texture2D"},' +
+            '{"name":"Rarity","type":"enum:E_Rarity"}]. Same type descriptors as unreal_add_variable.'
+        ),
+    },
+  },
+  async ({ packagePath, fields }) => {
+    try {
+      const result = await bridge.send("create_struct", { packagePath, fields });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_add_struct_field",
+  {
+    title: "Add a field to an existing Struct",
+    description:
+      "Appends one typed field to a user-defined Struct and returns the full field list afterwards. Adding a field " +
+      "to a struct already in use is safe: existing pins keep their values and gain the new one at its default. " +
+      "Native engine structs (Vector, Transform, HitResult) are defined in C++ and cannot be edited; the error " +
+      "says so rather than failing obscurely.",
+    inputSchema: {
+      path: z.string().describe('Struct asset: a short name like "S_ItemData" or a full path like "/Game/Data/S_ItemData".'),
+      name: z.string().describe('Field name, e.g. "MaxStackSize".'),
+      type: z.string().describe('Field type, e.g. "int", "text", "object:Texture2D", "struct:S_Other", "enum:E_Rarity".'),
+    },
+  },
+  async ({ path, name, type }) => {
+    try {
+      const result = await bridge.send("add_struct_field", { path, name, type });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_struct_fields",
+  {
+    title: "Read a Struct's fields",
+    description:
+      "Returns a struct's fields in order with each one's name, type, sub-type, array-ness, and default value. " +
+      "Call this before writing graph logic that breaks a struct apart, so pin names are read rather than guessed.",
+    inputSchema: {
+      path: z.string().describe('Struct asset: short name or full path.'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("list_struct_fields", { path });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_create_enum",
+  {
+    title: "Create a Blueprint Enum",
+    description:
+      "Creates a user-defined Enum with named entries. Reach for this the moment a variable is a state or a kind: " +
+      'an integer 0/1/2 for "Idle/Chasing/Attacking", or a string compared against "Fire"/"Ice", is a bug waiting ' +
+      "to happen and unreadable in a graph. An enum gives a Switch node one clearly-labelled pin per case, and " +
+      "makes an invalid value unrepresentable.\n\n" +
+      'Use it afterwards with type "enum:<Name>" on unreal_add_variable or a struct field, and switch on it with a ' +
+      "Switch on <Enum> node found via unreal_find_node.",
+    inputSchema: {
+      packagePath: z.string().describe('Where to create it, e.g. "/Game/Data/E_EnemyState". Prefix enum assets with E_ by convention.'),
+      entries: z
+        .array(z.string())
+        .optional()
+        .describe('Entry display names in order, e.g. ["Idle","Chasing","Attacking","Dead"]. These are what a designer sees on the pins.'),
+    },
+  },
+  async ({ packagePath, entries }) => {
+    try {
+      const result = await bridge.send("create_enum", { packagePath, entries });
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_enum_entries",
+  {
+    title: "Read an Enum's entries",
+    description:
+      "Returns an enum's entries with index, internal name, display name, and value, plus whether the enum is " +
+      "editable (user-defined) or native C++. Works on engine enums too, so it doubles as a way to look up the " +
+      "exact spelling of a built-in enum value before setting it as a pin default.",
+    inputSchema: {
+      path: z.string().describe('Enum asset: short name like "E_EnemyState", or a full path.'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      const result = await bridge.send("list_enum_entries", { path });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
