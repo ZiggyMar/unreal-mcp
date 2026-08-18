@@ -516,9 +516,19 @@ async function main() {
         // gives it somewhere to go. This is also what a real client does, and what this project
         // ships unreal_review_blueprint for - a benchmark whose client blindly believes the model
         // is measuring optimism.
-        if (/DONE/i.test(text)) {
+        // The word boundary here is load-bearing, and was once a literal backspace byte: an
+        // editing slip turned \b into 0x08, so this regex could never match. Every DONE the model
+        // sent was therefore ignored, and the harness prodded it to keep calling tools. The
+        // resulting churn got read as a model that could not tell it had finished; it was being
+        // told not to stop. A benchmark bug that looks exactly like a model failure is the worst
+        // kind, because the fix goes into the wrong codebase.
+        if (/\bDONE/i.test(text)) {
           const check = await task.verify();
           if (check.done) break;
+          // A rejected DONE is the most interesting event in a run: either the model quit early or
+          // the verifier is wrong. Printing the reason is what separates those two, and guessing
+          // between them has already sent this project after the wrong bug once.
+          if (TRACE) console.log(`    !! DONE rejected: ${check.why}`);
           messages.push({
             role: "user",
             content: `Not finished: ${check.why}. Do that now with the tools, then reply DONE.`,

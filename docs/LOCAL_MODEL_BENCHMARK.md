@@ -133,6 +133,70 @@ gap and the verifier.
 
 **After all four: 5/5, 5/5, 5/5**, fifteen consecutive passes.
 
+## The `minimal` profile, finally measured
+
+Every result above was measured on `lazy`. The `minimal` profile — the one that exists specifically
+because a 14B on a 12 GB card loads at 8k context and fails at 16k — had never been benchmarked at
+all. Its whole justification was an argument.
+
+It is the best-performing profile by a distance:
+
+| Profile | health | graph | feature | Calls per task | Errored calls |
+| --- | --- | --- | --- | --- | --- |
+| `minimal` (10 tools, ~3.6k tok) | **3/3** | **3/3** | **3/3** | **1** | **0** |
+| `lazy` (25 tools, ~9.2k tok) | 3/3 | 3/3 | 3/3 | 1–16 | 0–7 |
+
+Same model, same hardware, same tasks, run back to back.
+
+**`minimal` completes every task in exactly one call, with no failed calls, every time.** `lazy`
+also passes everything, but takes up to sixteen calls and burns up to seven failures getting there,
+because the extra tools give the model more ways to go wrong before it finds the one that works.
+
+That is worth stating plainly, because it inverts the usual assumption:
+
+> A smaller tool surface is not a compromise you make for weak models. Here it is **cheaper and
+> more reliable at the same time** — a third of the token cost and a sixteenth of the calls.
+
+The reason is `unreal_scaffold_blueprint`. `minimal` contains it and does not contain a worse
+alternative, so the model reaches the good path first and the whole feature — component, property,
+variable, two wired handlers, compile, layout, review, save — lands in a single call.
+
+## The benchmark bug that made all of this look worse than it was
+
+The first `minimal` run passed 9/9 and used **exactly 20 calls every single time**, which is the
+step limit. The trace showed the model doing the entire job in one call and then calling
+`unreal_doctor` nineteen times.
+
+The obvious reading was that the model could not tell it had finished, so a completion signal was
+added to the scaffold result. Call counts halved and that looked like a confirmation.
+
+It was not. The real cause was in the harness:
+
+```js
+if (/\bDONE\b/i.test(text))   // what was meant
+if (/<0x08>DONE<0x08>/i.test(text))   // what was there
+```
+
+An editing slip had turned the `\b` word boundaries into literal **backspace bytes**, so the regex
+could never match. Every `DONE` the model sent was ignored, and the harness answered each one by
+telling the model to keep calling tools. The model was not failing to stop. It was being told not
+to.
+
+With one byte fixed, every task drops to **one call**.
+
+Two things worth keeping from that:
+
+**An A/B was run afterwards rather than assumed.** With the harness fixed, the completion signal
+was measured with and without: **no difference, 1 call either way**. It could not have made one —
+the harness decides completion by inspecting the project, so nothing a tool result says can
+influence it. The change is kept anyway, deliberately shortened, because a real client has no
+verifier and the model itself has to decide when to stop; but it is documented as unmeasured rather
+than credited with a result it did not produce.
+
+**A benchmark bug that mimics a model failure is the worst kind**, because every instinct sends you
+to fix the wrong codebase — and it nearly did. The harness now prints why a `DONE` was rejected, so
+the next time this happens the answer is on screen instead of inferred.
+
 ## Which model tier actually works
 
 Three models, on the same 12 GB card:
