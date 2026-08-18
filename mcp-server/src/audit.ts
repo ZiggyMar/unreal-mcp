@@ -29,6 +29,7 @@ import type { BridgeLike } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { findServerOnlyCasts } from "./multiplayer.js";
 import { reviewSessions, type SessionGraph } from "./sessions.js";
+import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { explainGraph } from "./explainGraph.js";
 
 /** What each finding is likely to cost, and why it sits where it does. */
@@ -38,6 +39,9 @@ export const FINDING_COST: Record<string, number> = {
   // Costs the most that any of these can cost: the game builds, hosts, searches, reports no error,
   // and the lobby list is empty. It cannot be reproduced on one machine.
   "session-lan-mismatch": 100,
+  // Same tier as the casts that only fail on clients, and for the same reason: on a listen server
+  // the host IS the server, so it works on the machine the developer is looking at.
+  "server-event-touches-widget": 95,
   "unhandled-cast-failure": 90,
   "level-sweep-every-frame": 85,
   "spawn-every-frame": 85,
@@ -45,6 +49,7 @@ export const FINDING_COST: Record<string, number> = {
   "session-host-paths-disagree": 65,
   "session-host-without-search": 45,
   "cast-every-frame": 70,
+  "repnotify-does-nothing": 60,
   "branch-dead-path": 60,
   "tick-heavy": 55,
   "level-sweep-maybe-repeating": 50,
@@ -68,6 +73,10 @@ const WHY_IT_COSTS: Record<string, string> = {
   "level-sweep-every-frame": "Walks every actor in the level, 60+ times a second.",
   "spawn-every-frame": "The most expensive thing a Blueprint can do, repeated per frame.",
   "state-outlives-owner": "Resets on death or respawn, so it looks correct until somebody dies.",
+  "server-event-touches-widget":
+    "A widget exists only on the machine that created it, so this updates the host's screen and nobody else's. The cast succeeds and nothing errors.",
+  "repnotify-does-nothing":
+    "Marking a variable RepNotify says the clients must react when it arrives. An empty one is usually the missing half of a feature - the half that works for everybody who is not hosting.",
   "session-lan-mismatch":
     "A LAN session is invisible to an online search and the reverse. Hosting succeeds, searching succeeds, the list is empty, and nothing anywhere reports an error.",
   "session-host-paths-disagree":
@@ -145,15 +154,20 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   // neither of which contains "GameModeBase".
   const pathOfBlueprint = new Map(all.map((bp) => [bp.name, bp.path]));
   const serverOnly = new Map<string, boolean>();
+  const widgetClasses = new Map<string, boolean>();
   const learn = async (className: string) => {
-    if (serverOnly.has(className)) return;
+    if (serverOnly.has(className) && widgetClasses.has(className)) return;
     try {
-      const described = await bridge.send<{ serverOnly?: boolean }>("describe_class", {
+      const described = await bridge.send<{ serverOnly?: boolean; ancestry?: string[] }>("describe_class", {
         className: pathOfBlueprint.get(className) ?? className,
       });
       serverOnly.set(className, described.serverOnly === true);
+      // Widget classes are called all sorts of things - W_, WB_, WBP_, or nothing at all - so this
+      // is answered from the ancestry and never from the name.
+      widgetClasses.set(className, (described.ancestry ?? []).some((a) => /UserWidget/i.test(a)));
     } catch {
       serverOnly.set(className, false);
+      widgetClasses.set(className, false);
     }
   };
   const isServerOnlyClass = (className: string) => serverOnly.get(className) === true;
@@ -214,6 +228,68 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
           // flags on nodes that never run would bury the one that does.
           liveNodeIds: new Set(explainGraph({ nodes } as never).chains.flatMap((c) => c.nodeIds)),
         });
+      }
+
+      // Both of these need things the per-graph checks do not have: the replication mode of an
+      // event, and whether a RepNotify function has a body. Asked for lazily, and only when a graph
+      // has already shown it might matter.
+      const variables = (review.variables ?? []) as Array<{ name: string; repNotify?: string }>;
+      const graphIsEmpty = (functionName: string): boolean | undefined => {
+        const graph = (review.graphNodes ?? []).find((g) => g.graphName === functionName);
+        if (!graph) return undefined;
+        const nodes = (graph.nodes ?? []) as Array<{ connectedPins?: Array<{ linkedTo?: unknown[] }> }>;
+        return nodes.every((n) => (n.connectedPins ?? []).every((pin) => (pin.linkedTo ?? []).length === 0));
+      };
+      for (const finding of findEmptyRepNotifies(variables, graphIsEmpty)) {
+        findings.push({
+          blueprint: bp.name,
+          path: bp.path,
+          graph: "(whole asset)",
+          check: finding.check,
+          severity: finding.severity,
+          message: finding.message,
+          fix: finding.fix,
+          cost: FINDING_COST[finding.check] ?? 1,
+        });
+      }
+
+      for (const graph of review.graphNodes ?? []) {
+        const nodes = (graph.nodes ?? []) as SessionGraph["nodes"];
+        const byId = new Map(nodes.map((n) => [n.id, n]));
+        const explained = explainGraph({ nodes } as never);
+        const chains = explained.chains
+          .map((chain) => {
+            const entryNode = nodes.find((n) => (n.title ?? "").trim() === chain.entry.trim());
+            return entryNode ? { entryId: entryNode.id, entry: chain.entry, nodeIds: chain.nodeIds } : undefined;
+          })
+          .filter((c): c is { entryId: string; entry: string; nodeIds: string[] } => !!c);
+        for (const finding of await findServerSideUi(chains, byId, {
+          netModeOf: async (entryId) => {
+            const detail = await bridge
+              .send<{ title?: string }>("read_blueprint_node_detail", {
+                path: bp.path,
+                graphName: graph.graphName,
+                nodeId: entryId,
+              })
+              .catch(() => undefined);
+            return detail?.title;
+          },
+          isWidgetClass: async (className) => {
+            await learn(className);
+            return widgetClasses.get(className) === true;
+          },
+        })) {
+          findings.push({
+            blueprint: bp.name,
+            path: bp.path,
+            graph: graph.graphName,
+            check: finding.check,
+            severity: finding.severity,
+            message: finding.message,
+            fix: finding.fix,
+            cost: FINDING_COST[finding.check] ?? 1,
+          });
+        }
       }
 
       for (const finding of review.blueprint ?? []) {

@@ -11,6 +11,12 @@ export interface BlueprintReview {
   summary: { errors: number; warnings: number; infos: number };
   graphs: QualityReport[];
   /**
+   * The variables, handed back so a caller does not read them a second time. The whole-project
+   * audit needs them for the checks that depend on how a variable replicates, and list_variables is
+   * one bridge call per Blueprint - across a real project that is hundreds.
+   */
+  variables?: Array<{ name: string; type?: string; replicated?: boolean; repNotify?: string }>;
+  /**
    * Findings about the Blueprint as a whole rather than about one graph: where its state lives, and
    * whether what the server writes will ever reach a client.
    *
@@ -72,6 +78,7 @@ export async function reviewBlueprint(
   // This is one extra cheap call, and it buys the judgment that separates a Blueprint that works
   // from one a team can extend. It is allowed to fail silently: a review that refuses to run
   // because one optional check could not gather its data is worse than a review missing that check.
+  let variables: BlueprintReview["variables"] = [];
   let stateFindings: StateFinding[] = [];
   let mpFindings: MpFinding[] = [];
   try {
@@ -81,6 +88,7 @@ export async function reviewBlueprint(
     }>("list_variables", { path });
     stateFindings = reviewStatePlacement(state.parentClass ?? "", state.variables ?? []);
     mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? []);
+    variables = state.variables ?? [];
   } catch {
     stateFindings = [];
     mpFindings = [];
@@ -131,6 +139,9 @@ export async function reviewBlueprint(
     score,
     summary,
     graphs: reports,
+    // Only when the caller already asked for the raw nodes: an ordinary review has no use for the
+    // variable list and should not pay to carry it.
+    variables: options.includeGraphNodes ? variables : undefined,
     graphNodes: options.includeGraphNodes ? graphNodes : undefined,
     blueprint: extraFindings.map(({ check, severity, message, fix }) => ({ check, severity, message, fix })),
     nextAction,

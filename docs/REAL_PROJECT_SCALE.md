@@ -208,6 +208,8 @@ Five new findings, all computed from reads that were already happening:
 | `state-outlives-owner` | warning | a score, name, team or progression living on a Pawn, which is destroyed on death |
 | `session-lan-mismatch` | error | the project hosts sessions one way and searches for them the other, so the lobby list is always empty |
 | `session-host-paths-disagree` | warning | more than one live host button, each with its own copy of the settings, already drifted apart |
+| `server-event-touches-widget` | error | a Server RPC that creates, removes or casts to a widget - it lands on the host's screen and nowhere else |
+| `repnotify-does-nothing` | warning | a variable replicated with RepNotify whose OnRep function is empty |
 
 The last one is the judgment question: **a pawn is destroyed and recreated when the player dies, so
 anything that must outlive the body does not belong on the body.** Score on a Character reads as
@@ -553,3 +555,24 @@ is dead is that somebody might delete it. Execution flow is now followed in one 
 `src/execFlow.ts`, shared by the graph reader, the quality checks and the authority guard - three
 copies of the same traversal had the same hole, and a guard that rewires the wrong node because it
 mistook a wire for a predecessor is the quiet kind of broken.
+
+## What the editor knows and the reader was throwing away
+
+A custom event's replication is written into its node title - `Executes On Server`,
+`Executes On All`, `Executes On Owning Client` - and the graph summary was cleaning it off along
+with the rest of the editor's layout noise. Until that was noticed, every multiplayer check had to
+guess authority from the event's *name*, which is a guess about a naming convention rather than a
+fact about the graph.
+
+With the fact available, two checks became possible, and both found real bugs in a real project on
+the first run: a ping tag that only the host could see, and 27 replicated values that no client ever
+reacted to.
+
+The replication mode is looked up lazily - one bridge call per event - and only for chains that
+have already been shown to touch a widget. Most graphs never ask.
+
+**What it does not do yet:** authority is only read where the event itself declares it. A plain
+event called from a Server RPC in a *different* Blueprint, through an interface message, is running
+on the server too, and this cannot currently see that. The firewall repair timer that pushes a
+progress ring into a widget from the server is exactly that shape, and it was found by hand rather
+than by this. Following authority across a Blueprint boundary is the next thing worth building.
