@@ -578,6 +578,45 @@ counts are printed to stderr at startup.
 A test asserts that no tool is stranded outside core and every group, so a tool added in future
 cannot silently become unreachable in `lazy`.
 
+### Two editors open: the silent wrong-project edit
+
+The bridge binds one port. If you have **two Unreal Editors open** with this plugin enabled, only one
+of them can hold it — and every MCP call goes to that one, whichever it happens to be. An agent told
+to work on project A can spend an entire session editing project B, with no error, no warning, and
+no symptom until somebody notices the damage.
+
+This is not hypothetical: the same failure is
+[an open bug in Unity's MCP ecosystem](https://github.com/CoplayDev/unity-mcp/issues/1023) — "MCP
+affects other projects when working in two or more editors".
+
+Three defences, because a silent failure needs to be made loud in more than one place:
+
+**1. `ping` now says which project it is.** Project name, `.uproject` path, and engine version. Every
+`unreal_doctor` run names the connected project, so the answer to "am I attached to the right thing?"
+is one cheap call away instead of unknowable.
+
+**2. `UNREAL_MCP_EXPECT_PROJECT` refuses to write to the wrong one.** Set it to your project's name
+and the **first write of the session** is checked. On a mismatch, nothing is sent:
+
+```
+UnrealMCPBridge error: WRONG PROJECT: this bridge is attached to "OtherGame"
+(A:/Projects/OtherGame/OtherGame.uproject), but UNREAL_MCP_EXPECT_PROJECT is "MyGame".
+Refusing to write. This normally means a second Unreal Editor is open: only one can hold
+port 8765, so every call goes to that one. Close the other editor, or run each on its own
+port with -MCPBridgePort=<n> and UNREAL_MCP_BRIDGE_PORT. Nothing has been changed.
+```
+
+Checked on the first *write*, not in `unreal_doctor` alone, because this failure is silent by nature:
+it gets found by someone noticing damage, not by anyone thinking to run a diagnosis first.
+
+**3. The editor that loses the port says so.** Previously it logged `failed to bind TCP listener`,
+which reads like a minor startup nuisance. It now states that another editor almost certainly holds
+the port, that *this* editor's bridge is not running, and that edits meant for this project will land
+in the other one instead.
+
+Running two projects deliberately is fine: give each editor its own port with `-MCPBridgePort=<n>`
+and point each MCP server at it with `UNREAL_MCP_BRIDGE_PORT`.
+
 ### Knowing what the agent touched
 
 Handing an AI direct control of a game engine introduces a failure mode that does not exist when a

@@ -1,4 +1,5 @@
 #include "MCPTcpServer.h"
+#include "Misc/App.h"
 #include "MCPCommandHandler.h"
 
 #include "Sockets.h"
@@ -66,14 +67,26 @@ bool FMCPTcpServer::Start(int32 Port)
 
 	if (!Listener->IsActive())
 	{
-		UE_LOG(LogMCPBridge, Error, TEXT("UnrealMCPBridge: failed to bind TCP listener on 127.0.0.1:%d"), Port);
+		// Almost always a second editor already holding the port. That case is dangerous rather than
+		// merely inconvenient: this editor's bridge stays silent, every MCP call goes to the OTHER
+		// editor, and an agent told to work on this project edits a different one without any
+		// symptom until someone notices the damage. So say exactly that, loudly.
+		UE_LOG(LogMCPBridge, Error,
+			TEXT("UnrealMCPBridge: FAILED to bind 127.0.0.1:%d. Another program is already using that port, ")
+			TEXT("and it is most likely a SECOND UNREAL EDITOR with this plugin enabled. ")
+			TEXT("This editor's bridge is NOT running: any AI tool connecting to port %d is talking to that ")
+			TEXT("other editor, and edits meant for this project ('%s') will land in that one instead. ")
+			TEXT("Close the other editor, or give this one a different port with -MCPBridgePort=<n> and point ")
+			TEXT("the MCP server at it with UNREAL_MCP_BRIDGE_PORT."),
+			Port, Port, FApp::GetProjectName());
 		Listener.Reset();
 		return false;
 	}
 
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FMCPTcpServer::Tick));
 
-	UE_LOG(LogMCPBridge, Log, TEXT("UnrealMCPBridge: listening on 127.0.0.1:%d"), Port);
+	UE_LOG(LogMCPBridge, Log, TEXT("UnrealMCPBridge: listening on 127.0.0.1:%d for project '%s'"),
+		Port, FApp::GetProjectName());
 	return true;
 }
 

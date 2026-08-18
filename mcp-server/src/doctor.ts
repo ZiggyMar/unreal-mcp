@@ -47,9 +47,10 @@ function message(err: unknown): string {
 
 export async function runDoctor(
   bridge: BridgeLike,
-  connection: { host: string; port: number },
+  connection: { host: string; port: number; expectedProject?: string },
   now: () => number = () => Date.now()
 ): Promise<DoctorReport> {
+  const expectedProject = connection.expectedProject;
   const checks: DoctorCheck[] = [];
 
   // 1. Can we reach the plugin at all? Everything else is meaningless until this passes, so this
@@ -77,11 +78,48 @@ export async function runDoctor(
     };
   }
   const latencyMs = now() - started;
+  const project = (ping as PingResult & { project?: string; projectFile?: string; engineVersion?: string }).project;
+  const projectFile = (ping as PingResult & { projectFile?: string }).projectFile;
+  const engineVersion = (ping as PingResult & { engineVersion?: string }).engineVersion;
   checks.push({
     name: "bridge reachable",
     status: "ok",
-    detail: `${ping.plugin ?? "UnrealMCPBridge"} answered at ${connection.host}:${connection.port} in ${latencyMs}ms.`,
+    detail:
+      `${ping.plugin ?? "UnrealMCPBridge"} answered at ${connection.host}:${connection.port} in ${latencyMs}ms` +
+      `${project ? `, editing project "${project}"${engineVersion ? ` on UE ${engineVersion}` : ""}` : ""}.`,
   });
+
+  // WHICH project. Only one editor can hold the port, so with two open, every call silently goes
+  // to whichever won the race. An agent told to work on project A can spend an entire session
+  // editing project B with no symptom until someone notices the damage. Naming the project on
+  // every diagnosis is the cheapest possible defence.
+  if (!project) {
+    checks.push({
+      name: "which project",
+      status: "warn",
+      detail: "This plugin build does not report which project it has open.",
+      remedy:
+        "Update the plugin. Without it there is no way to tell whether you are connected to the project you mean, " +
+        "and with two editors open only one of them owns this port.",
+    });
+  } else if (expectedProject && project.toLowerCase() !== expectedProject.toLowerCase()) {
+    checks.push({
+      name: "which project",
+      status: "fail",
+      detail: `Connected to "${project}", but UNREAL_MCP_EXPECT_PROJECT is set to "${expectedProject}".`,
+      remedy:
+        `You are about to edit the WRONG PROJECT. This happens when a second editor is open: only one can hold ` +
+        `port ${connection.port}, and every call goes to that one. Close the other editor, or run each on its own ` +
+        `port with -MCPBridgePort=<n> and UNREAL_MCP_BRIDGE_PORT. Do not make any edits until this reports the ` +
+        `project you intend.` + (projectFile ? ` Currently connected to: ${projectFile}` : ""),
+    });
+  } else {
+    checks.push({
+      name: "which project",
+      status: "ok",
+      detail: `"${project}"${projectFile ? ` (${projectFile})` : ""}.`,
+    });
+  }
 
   // 2. Does the loaded plugin speak the protocol this server was written against?
   const protocol = ping.protocolVersion;
