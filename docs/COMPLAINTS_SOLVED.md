@@ -99,8 +99,21 @@ This is the single largest category. Most people who try an Unreal MCP server ne
 | G5 | Struct and enum authoring fails or is missing; `SetEnums` raises C2660 on UE 5.8. | [ChiR24 #566, #510](https://github.com/ChiR24/Unreal_mcp/issues) | **Solved** | `create_struct`, `add_struct_field`, `list_struct_fields`, `create_enum`, `list_enum_entries`, plus `struct:<Name>` / `enum:<Name>` variable types so a created struct is actually usable. The `SetEnums` trap is routed around rather than worked around: its signature genuinely differs between 5.6 and 5.8 (5.6 takes `EEnumFlags, bool`; 5.8 takes `UEnum::EUnderlyingType, EEnumFlags, EAddMaxKeyIfMissing`), so no single call compiles against both. `FEnumEditorUtils`/`FStructureEditorUtils` sit one level above and are identical on both, verified header to header. |
 | G6 | Headless / editor-not-running mode. | Competitive survey | **Open** | The architecture requires a running editor. A real limitation, stated rather than hidden. |
 | G7 | No Material authoring. | Gap against [tumourlove/monolith](https://github.com/tumourlove/monolith) and specialised material servers | **Partly** | `create_material` builds a master material with BaseColor/Metallic/Roughness/Emissive exposed as **parameters** rather than constants, so it is instanceable from the moment it exists; `create_material_instance`, `set_material_parameter` and `list_material_parameters` cover the instancing workflow real projects use. Live-verified on 5.6. Still open: arbitrary material graph authoring (texture sampling, blends, custom expressions), which is a much larger surface. |
-| G8 | No Niagara / VFX authoring. | Same | **Open** | Not addressed at all. |
-| G9 | No Animation authoring (montages, blend spaces, state machines). | Same | **Open** | Anim Blueprints are readable as Blueprints; the animation-specific asset types are not authored. |
+| G8 | No Niagara / VFX authoring. | Same | **Partly** | Corrected after testing rather than assuming: *using* VFX works today. A `NiagaraComponent` can be added to any Blueprint and pointed at a system with `set_component_property`, and graphs can call `SpawnSystemAtLocation`, `SetAsset` and `Activate`. Recipe 8 covers it, with every name verified against the live engine. What is genuinely missing is **authoring a Niagara system from nothing**, which is a separate surface and rarely what someone with no coding experience needs. |
+| G9 | No Animation authoring (montages, blend spaces, state machines). | Same | **Partly** | Same correction: *using* animation works. A `SkeletalMeshComponent` can be added and given a mesh and an Anim Blueprint (`SetSkeletalMeshAsset`, `SetAnimInstanceClass`), and `PlayAnimMontage` drives it from a graph. Recipe 8 covers it. Authoring the animation assets themselves is still out of scope. Testing this also surfaced a rename trap now documented: the obvious `SetSkeletalMesh` exists on three unrelated editor classes and none is the component you have. |
+
+## Checking before building
+
+Three rows in this document (G8, G9, and part of G7) were written as **Open** on the assumption
+that a capability was missing, and were corrected only after somebody actually tried it. Attaching
+a `NiagaraComponent`, an `AudioComponent`, or a `SkeletalMeshComponent` and pointing it at an asset
+worked on the first attempt, through tools that already existed.
+
+That is worth recording as a habit rather than an anecdote. The cost of assuming a gap is not just
+a wrong row in a table: it is building a redundant tool, which adds context cost for every user
+forever and makes the real gap harder to see. **Test the capability before writing the tool.** When
+the answer turns out to be "this already works", the deliverable is a recipe and a corrected row,
+not code.
 
 ## A note on coverage
 

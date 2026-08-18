@@ -353,6 +353,29 @@ Three uses, in order of how much trouble they save:
 An empty result is informative rather than a failure: the system genuinely is not there, or is
 named something else, and the response says so.
 
+### VFX, sound, and animation already work
+
+There is no Niagara tool or animation tool here, and for the common case there does not need to be.
+Attaching and driving assets that already exist is what a feature actually requires, and that works
+through the component tools:
+
+- `unreal_add_component` a `NiagaraComponent`, `AudioComponent`, or `SkeletalMeshComponent`
+- `unreal_set_component_property` to point it at the asset (`Asset`, `Sound`, `SkeletalMeshAsset`,
+  `AnimClass`)
+- drive it from a graph with `SpawnSystemAtLocation`, `PlaySoundAtLocation`, `PlayAnimMontage`,
+  `SetAnimInstanceClass`
+
+Recipe 8 in [../docs/RECIPES.md](../docs/RECIPES.md) has the full list, every name verified against
+the running engine.
+
+This was **tested before being believed**, and the test corrected the record: three rows in the
+complaint matrix said "Open" on the assumption these were missing. They were not. The cost of
+assuming a gap is not a wrong row in a table, it is building a redundant tool that then charges
+every user context for the rest of time.
+
+What is genuinely absent is *authoring* a Niagara system, an animation sequence, or an Anim
+Blueprint state machine from nothing. Those are separate surfaces, and they are listed as gaps.
+
 ### Materials: most of what a player actually sees
 
 | Tool | Bridge command | Purpose |
