@@ -161,6 +161,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |
 | `unreal_review_blueprint` | *(composed: `list_blueprint_graphs` + `read_blueprint_graph_summary`)* | The quality gate: dead nodes, unhandled cast failures, leftover debug prints, placeholder names, heavy Tick, unlabelled sections. Returns findings with fixes, a score, and one `nextAction`. |
 | `unreal_doctor` | *(composed: `ping` + `get_project_overview` + `find_node` + `pie_status`)* | One-call diagnosis of the whole setup, with a remedy per failed check. Never throws: an unreachable editor is the answer, not an error. |
+| `unreal_session_changes` | *(server-side log; touches the editor not at all)* | Everything this session changed, grouped by asset, in plain language, with deletions and failures called out. |
 | `unreal_refresh_blueprint` | `refresh_blueprint` | The "right-click > Refresh Nodes" repair: every node re-reads its backing signature. The fix for the whole `in use pin no longer exists` family after a C++ change. |
 | `unreal_delete_asset` | `delete_asset` | Delete assets by path, **blocked by default** if anything outside the delete set still references them, with the blocking referencers reported. |
 
@@ -390,6 +391,126 @@ counts are printed to stderr at startup.
 
 A test asserts that no tool is stranded outside core and every group, so a tool added in future
 cannot silently become unreachable in `lazy`.
+
+### Knowing what the agent touched
+
+Handing an AI direct control of a game engine introduces a failure mode that does not exist when a
+human is clicking the buttons: **the human always knows what they touched.** Undo already covers
+the reversing half (every write lands in the editor's undo history under an `MCP:` prefix), but
+undo is useless if you cannot see what there is to undo, and the user this project is aimed at
+cannot read a Blueprint diff to find out.
+
+`unreal_session_changes` answers it directly, in plain language rather than command names:
+
+```json
+{
+  "totalWrites": 14, "succeeded": 13, "failed": 1, "assetsTouched": 2,
+  "destructive": [],
+  "byAsset": [
+    { "asset": "/Game/BP_Player.BP_Player",
+      "changes": ["added a variable", "built graph logic", "compiled a Blueprint"],
+      "writeCount": 11 }
+  ],
+  "scope": "This lists what this MCP server changed during this session only...",
+  "undo": "Every change above is in the editor's undo history under an \"MCP:\" prefix..."
+}
+```
+
+Three decisions worth naming:
+
+- **Recorded by wrapping the transport**, not at the fifty call sites. A log assembled by
+  remembering to add a line in fifty places is one omission away from telling the user something
+  untrue about their own project, and a change log that is wrong is worse than none.
+- **An unrecognised command counts as a write.** A command added later must not escape the log
+  because `journal.ts` has not heard of it. Under-reporting a change is the dangerous direction.
+- **The report states its own limits.** It sees what this server did, not hand edits in the editor
+  or another tool, and it says so rather than leaving that to be discovered at a bad moment.
+
+### Live verification: `npm run verify:live`
+
+Compiling proves the plugin builds. Running it against a real editor is the only thing that proves
+a command works, and this project keeps being reminded of the difference. With an editor open on a
+project that has the plugin enabled:
+
+```bash
+npm run verify:live             # creates assets under /Game/MCPLiveVerify/ and deletes them again
+npm run verify:live -- --keep   # leave them behind to inspect
+```
+
+30 checks covering structs, enums, `struct:`/`enum:` variable types, the whole UMG surface, and the
+error paths (a wrong type, a native struct, a second child on a Button, an unknown parent), because
+wrong-input behaviour is half the product.
+
+Its first run found three real bugs that compiling could not have:
+
+1. **`create_enum` silently produced the wrong asset.** A new enum arrives *empty*, unlike a new
+   struct, which arrives with one placeholder member. The code assumed the struct behaviour, so
+   every `SetEnumeratorDisplayName` landed on an index that did not exist yet and did nothing.
+   Nothing failed. The result was one enumerator too few, all still named `NewEnumeratorN`. The
+   command also reported success by echoing the requested entry count back, which is precisely how
+   it stayed invisible; it now reads the count off the asset.
+2. **New commands inherited an 8s timeout.** `add_widget` recompiles the Widget Blueprint and was
+   being cut off mid-call. See C8 in the complaint matrix: the policy is now inverted, so cheap
+   reads are the enumerated list and everything else gets a generous default.
+3. **`create_blueprint` could hard-crash the editor.** See below.
+
+### Crash sweep: `npm run fuzz:crash`
+
+An assert or access violation inside the editor is not an error a caller can handle or retry. It
+is the editor gone, along with every unsaved change in the user's project. A wrong answer costs a
+retry; a crash costs them their work. So crashes get their own sweep, separate from correctness
+testing:
+
+```bash
+npm run fuzz:crash                 # with an editor open
+npm run fuzz:crash -- --limit 800  # place more of the catalog
+```
+
+Two passes, 477 attempts on the standard run:
+
+1. **Every node type the bridge places directly**, valid and invalid, plus **300 real functions
+   taken from the running engine's own catalog** and placed into a scratch graph.
+2. **Adversarial input on every create path**: empty, 512 characters, unicode, emoji, embedded
+   dots and slashes, `../..` traversal, quotes, `None`, a leading digit.
+
+A structured refusal counts as a **pass** - the tool said no instead of dying. Only a dead
+connection counts as a failure. Because a crash also ends the run, progress is written after every
+single attempt, so the sweep resumes past the input that killed the editor and names it in the
+report.
+
+Result on the current build: **364 accepted, 113 refused cleanly, 0 crashes**, including all 300
+catalog functions.
+
+The sweep found this, which is the second crash of the family and the reason the pass exists:
+
+```
+Assertion failed: false [UnrealNames.cpp:3278]
+FName's 1023 max length exceeded. Got 1039 characters excluding null-terminator
+```
+
+A 512-character asset name closed the editor. The doubling is the trap: the object path is
+`<package>.<name>`, so the name is counted twice and 512 sails past 1023. Every create path now
+validates the path first - length caps well below the engine's limit, `IsValidLongPackageName`,
+and `IsValidXName` - because there is no error to catch once `FName` asserts.
+
+### The crash worth naming
+
+`FPackageName::DoesPackageExist` answers for the **disk**. `FKismetEditorUtilities::CreateBlueprint`
+asserts on **memory**:
+
+```
+Assertion failed: FindObject<UBlueprint>(Outer, *NewBPName.ToString()) == 0
+```
+
+Those two disagree in a completely ordinary situation: delete an asset, then create one with the
+same name in the same session. The package is off disk so the guard passes; the `UObject` is still
+resident so the engine asserts. An assert is not an error a caller can handle, it is the editor
+gone, taking every unsaved change with it. This closed the editor during a live verification run.
+
+All four create paths now check memory first and return `asset_name_in_use` with an explanation,
+and the exact create-delete-create sequence is a regression check that also asserts the editor is
+still answering afterwards. A tool that can crash the editor from a plain input mistake is worse
+than one missing the feature.
 
 ### Tool parity is enforced, not assumed
 
