@@ -291,11 +291,35 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	if (ClassName.StartsWith(TEXT("/")))
 	{
 		UClass* Found = LoadObject<UClass>(nullptr, *ClassName);
-		if (!Found)
+		if (Found)
 		{
-			OutError = FString::Printf(TEXT("class_not_found: %s"), *ClassName);
+			return Found;
 		}
-		return Found;
+
+		// A Blueprint's asset path and its CLASS path differ by a "_C" suffix, and nothing about
+		// the asset path suggests that. Asked for "a variable of type BP_Item", the obvious thing to
+		// write is the Blueprint's own path - which resolves to the Blueprint asset, not to a class,
+		// and fails with class_not_found and no hint about what to do instead.
+		//
+		// This project already decided how to handle that shape of mistake, on pin names: accept the
+		// near miss and report the correction, so the caller learns the real name rather than being
+		// silently carried. Same treatment here.
+		if (!ClassName.EndsWith(TEXT("_C")))
+		{
+			const FString WithSuffix = ClassName + TEXT("_C");
+			if (UClass* BlueprintClass = LoadObject<UClass>(nullptr, *WithSuffix))
+			{
+				UE_LOG(LogTemp, Verbose, TEXT("MCP: resolved '%s' as '%s'"), *ClassName, *WithSuffix);
+				return BlueprintClass;
+			}
+		}
+
+		OutError = FString::Printf(
+			TEXT("class_not_found: %s. If this is a Blueprint, its CLASS path ends in _C ")
+			TEXT("(the asset is %s, the class is %s_C) - that form is accepted here, so the asset ")
+			TEXT("itself could not be loaded either."),
+			*ClassName, *ClassName, *ClassName);
+		return nullptr;
 	}
 
 	// Short name form ("Actor", "Pawn", "ActorComponent"): try native prefixes, then bare name.

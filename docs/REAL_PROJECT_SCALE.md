@@ -438,6 +438,67 @@ a Blueprint with one wired Print String and one orphaned one.
 The stray call is gone, every event survived, and a labelled section was added. Both halves are now
 permanent checks - the live suite fails if cleanup ever removes an event node again.
 
+## The two commands that cannot be undone
+
+`delete_asset` and `refresh_blueprint` are the only commands here where being wrong is
+unrecoverable rather than embarrassing, and neither had been exercised against real
+cross-references. Both turned out to be correct, which is worth writing down as plainly as a bug
+would be.
+
+**Deleting something the project depends on.** `BP_Player` has five referencers. Deleting it without
+`force` is refused, and the refusal names each blocking asset by path rather than saying "something
+references this":
+
+```
+delete_blocked: live assets outside the delete set still reference these.
+Pass force:true to delete anyway (breaks those references to None).
+blockers: [{ asset: ".../BP_Player", referencedBy: ".../GM_Player" }, ...]
+```
+
+**The subtle half** is the phrase *outside the delete set*. Two probe Blueprints were made in the
+copy, one holding a variable typed as the other:
+
+- deleting the referenced one alone: **refused**, naming its referencer
+- deleting **both together**: allowed, `{requested: 2, deleted: 2, forced: false}`
+
+That is the behaviour you want and the easy thing to get wrong - a naive check refuses to delete a
+pair that only reference each other, and then nobody can ever remove a retired system without
+`force`, which teaches people to pass `force` always.
+
+**Rebuilding a real Blueprint.** `refresh_blueprint` reconstructs nodes, so a dropped one is lost
+work. Against `BP_Vacuum` - 6 graphs, 134 nodes, 278 links:
+
+| | before | after |
+| --- | --- | --- |
+| graphs | 6 | 6 |
+| nodes | 134 | 134 |
+| links | 278 | 278 |
+
+Identical, and it compiled clean. Every graph, every node, every connection.
+
+### The defect that fell out of testing something else
+
+Building those probes needed a variable typed as another Blueprint, and the obvious thing to write
+failed:
+
+```
+object:/Game/DelProbe/BP_ProbeB.BP_ProbeB   ->  class_not_found
+object:/Game/DelProbe/BP_ProbeB.BP_ProbeB_C ->  works
+```
+
+A Blueprint's asset path and its **class** path differ by a `_C` suffix, and nothing about the asset
+path suggests it. Asked for "a variable of type BP_Item", the natural thing to write is the
+Blueprint's own path - which is a dead end with an error that does not even contain the answer, let
+alone name it.
+
+This project already decided how to handle that shape of mistake, on pin names: **accept the near
+miss and report the correction**, so the caller learns rather than being silently carried. The class
+resolver now does the same, and if the asset genuinely does not exist the error explains the `_C`
+distinction instead of restating the name.
+
+Blueprint-typed variables are how one Blueprint holds a reference to another, so this was in the way
+of the most ordinary thing there is.
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,

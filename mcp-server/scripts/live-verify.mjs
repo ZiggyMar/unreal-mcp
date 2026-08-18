@@ -332,6 +332,30 @@ async function main() {
     return `stray call removed, all ${after.events} events kept`;
   });
 
+  await check("a Blueprint asset path works as a variable type, without the _C suffix", async () => {
+    // A Blueprint's asset path and its CLASS path differ by _C, and nothing about the asset path
+    // says so. Asked for "a variable of type BP_Item", the natural thing to write is the asset
+    // path - which used to be a dead end with an error that did not even contain the answer.
+    const target = `${ROOT}/BP_MCPTypeTarget`;
+    const holder = `${ROOT}/BP_MCPTypeHolder`;
+    await bridge.send("create_blueprint", { packagePath: target, parentClass: "Actor", save: true });
+    await bridge.send("create_blueprint", { packagePath: holder, parentClass: "Actor", save: false });
+    const added = await bridge.send("add_variable", {
+      path: `${holder}.BP_MCPTypeHolder`,
+      variableName: "Target",
+      type: `object:${target}.BP_MCPTypeTarget`,
+    });
+    if (!added.added) throw new Error("the asset path was not accepted as a type");
+    return "asset path resolved to the Blueprint class";
+  });
+
+  await expectFailure(
+    "...and a type that genuinely does not exist explains the _C distinction",
+    "add_variable",
+    { path: `${ROOT}/BP_MCPTypeHolder.BP_MCPTypeHolder`, variableName: "Nope", type: "object:/Game/Nope/BP_Nope.BP_Nope" },
+    "class_not_found"
+  );
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -1146,6 +1170,8 @@ async function main() {
           `${ROOT}/BP_MCPNetProbe.BP_MCPNetProbe`,
           `${ROOT}/BP_MCPStateProbe.BP_MCPStateProbe`,
           `${ROOT}/BP_MCPCleanProbe.BP_MCPCleanProbe`,
+          `${ROOT}/BP_MCPTypeTarget.BP_MCPTypeTarget`,
+          `${ROOT}/BP_MCPTypeHolder.BP_MCPTypeHolder`,
           `${tablePath}.DT_MCPVerifyItems`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,
