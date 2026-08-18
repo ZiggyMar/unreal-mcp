@@ -450,10 +450,24 @@ picker for any chat.
 
 ## Recommended agent workflow
 
-If you are pointing an AI assistant at these tools, give it
-[../docs/AGENT_WORKFLOW.md](../docs/AGENT_WORKFLOW.md) as context (system prompt block, Claude
-Code Skill, or CLAUDE.md section). It encodes the tool-call order that works, the exec-pin naming
-sharp edges, and the compile-before-claiming-done rule, and it measurably reduces flailing.
+The difference between a smooth run and a flailing one is almost never model quality, it is
+tool-call order. [../docs/AGENT_WORKFLOW.md](../docs/AGENT_WORKFLOW.md) encodes the order that
+works, the sharp edges that each cost a failed call to discover (exec pin naming, cast pin
+spacing, struct default formats, the two UMG traps), the multiplayer and performance judgment
+learned by building a real replicated feature through these tools, and the rule that compiling is
+not the same as done.
+
+**You do not have to wire it up yourself.** The server offers it as an MCP prompt named
+`unreal_workflow`, so any client can pull it in with no configuration:
+
+```
+prompts/get  ->  unreal_workflow
+```
+
+That matters more than it sounds: "paste this document into your system prompt" is a step someone
+with no coding experience will not take, and they are exactly the user this guide is for. It is
+served in every profile and costs nothing until requested. Pasting it into a system prompt block,
+a Claude Code Skill, or a CLAUDE.md section still works if you prefer.
 
 ## Notes / limitations
 

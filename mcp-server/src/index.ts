@@ -8,6 +8,9 @@ import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -1720,6 +1723,61 @@ register(
           : "Nothing new to enable; those groups were already on.",
     });
   }
+);
+
+/**
+ * The workflow guide, served as an MCP prompt.
+ *
+ * docs/AGENT_WORKFLOW.md is the single highest-leverage thing in this repo for a weaker model:
+ * the difference between a smooth run and a flailing one is almost never model quality, it is
+ * tool-call order. But it only helps if the model actually receives it, and "paste this into your
+ * system prompt" is a step a person with zero coding experience will not take.
+ *
+ * So the server offers it directly. Any MCP client can pull it in without the user configuring
+ * anything, and it costs nothing until asked for.
+ */
+const WORKFLOW_FALLBACK =
+  "The workflow guide was not found next to this server. The short version: unreal_doctor if " +
+  "anything is broken; unreal_get_project_overview to orient; unreal_search_project to find; " +
+  "unreal_find_node and unreal_list_assets to check exact names before writing; unreal_build_graph " +
+  "to author whole graphs in one call without passing x/y; unreal_review_blueprint before claiming " +
+  "anything is done, and act on what it says; unreal_auto_layout_graph to make it readable; then " +
+  "save. Full text: docs/AGENT_WORKFLOW.md in the unreal-mcp repository.";
+
+function loadWorkflowGuide(): string {
+  // dist/index.js -> mcp-server/dist -> mcp-server -> repo root
+  const candidates = [
+    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", "AGENT_WORKFLOW.md"),
+    join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "AGENT_WORKFLOW.md"),
+  ];
+  for (const path of candidates) {
+    try {
+      return readFileSync(path, "utf8");
+    } catch {
+      /* try the next one */
+    }
+  }
+  return WORKFLOW_FALLBACK;
+}
+
+server.registerPrompt(
+  "unreal_workflow",
+  {
+    title: "How to drive these Unreal tools well",
+    description:
+      "The recommended tool-call order for building Blueprint features through this server, plus the sharp edges " +
+      "that cost a failed call each to discover: exec pin naming, cast pin spacing, struct default formats, the two " +
+      "UMG traps, multiplayer and performance judgment, and the rule that compiling is not the same as done. Pull " +
+      "this in at the start of any session that will edit an Unreal project.",
+  },
+  () => ({
+    messages: [
+      {
+        role: "user",
+        content: { type: "text", text: loadWorkflowGuide() },
+      },
+    ],
+  })
 );
 
 async function main() {
