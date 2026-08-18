@@ -11,6 +11,7 @@ import { formatDoctorReport, runDoctor } from "./doctor.js";
 import { SessionJournal, isWrite } from "./journal.js";
 import { mapSystem } from "./systemMap.js";
 import { planFeature } from "./planFeature.js";
+import { cleanupBlueprint } from "./cleanup.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -141,6 +142,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_save_blueprint",
   "unreal_auto_layout_graph",
   "unreal_review_blueprint",
+  "unreal_cleanup_blueprint",
 ]);
 
 /**
@@ -2285,6 +2287,39 @@ register(
     try {
       const result = await bridge.send("project_health", { maxPerCategory });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_cleanup_blueprint",
+  {
+    title: "Act on the review findings that are safe to fix automatically",
+    description:
+      "Runs the quality review and applies the fixes that cannot change what the Blueprint does: removing nodes " +
+      "wired to nothing, and laying the graph out with each execution chain in a labelled comment box. Then it " +
+      "re-reviews and reports the score before and after, because a cleanup that claims success without checking is " +
+      "the same failure as a model that reads findings and declares victory. " +
+      "What it deliberately does NOT touch is listed in `leftForYou`, each with the reason. Removing a leftover " +
+      "Print String means healing the execution chain around it; renaming a placeholder variable needs a name; an " +
+      "unhandled cast failure needs a decision about what should happen. Those are yours, and the tool says so " +
+      "rather than silently leaving them. " +
+      "The narrowness is the design. A cleanup tool that quietly changes behaviour is far more damaging than one " +
+      "that leaves work on the table, because whoever runs it is least able to notice. Pass dryRun to see what " +
+      "would change first.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      removeDeadNodes: z.boolean().optional().describe("Remove nodes connected to nothing. Defaults to true; they cannot affect behaviour."),
+      labelSections: z.boolean().optional().describe("Lay out the graph and wrap each execution chain in a titled comment box. Defaults to true; purely cosmetic."),
+      dryRun: z.boolean().optional().describe("Report what would change without changing anything. Defaults to false."),
+    },
+  },
+  async ({ path, removeDeadNodes, labelSections, dryRun }) => {
+    try {
+      const report = await cleanupBlueprint(bridge, path, { removeDeadNodes, labelSections, dryRun });
+      return jsonResult(report);
     } catch (err) {
       return errorResult(err);
     }
