@@ -142,6 +142,13 @@ Skip this if the project is single-player, but check first, because retrofitting
 
 The rule that prevents most bugs: **decide on the server, show on every client.**
 
+### The one that costs a day
+
+A `Server_` event that sets a variable which is not marked Replicated. The server changes its own
+copy; no client ever sees it; the bug reports as "it works for the host". `unreal_review_blueprint`
+checks for exactly this and names the variable, because it is invisible to every other signal you
+get - it compiles, it reviews clean everywhere else, and one-player testing cannot reveal it.
+
 ## 8. Performance judgment
 
 Blueprint execution cost is real but it is almost never the node count. It is:

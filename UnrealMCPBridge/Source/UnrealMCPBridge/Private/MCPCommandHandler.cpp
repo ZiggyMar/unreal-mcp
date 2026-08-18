@@ -3768,6 +3768,16 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 		Entry->SetBoolField(TEXT("instanceEditable"), (Desc.PropertyFlags & CPF_DisableEditOnInstance) == 0
 			&& (Desc.PropertyFlags & CPF_Edit) != 0);
 		Entry->SetBoolField(TEXT("blueprintReadOnly"), (Desc.PropertyFlags & CPF_BlueprintReadOnly) != 0);
+		// Replication, because in a networked game it is the difference between a variable that
+		// works and one that works only on the machine that changed it. A server RPC that sets an
+		// unreplicated variable is the single most common multiplayer bug in Blueprints, and it
+		// passes every other check: it compiles, it reviews clean, and it behaves perfectly until
+		// a second player connects.
+		Entry->SetBoolField(TEXT("replicated"), (Desc.PropertyFlags & CPF_Net) != 0);
+		if (!Desc.RepNotifyFunc.IsNone())
+		{
+			Entry->SetStringField(TEXT("repNotify"), Desc.RepNotifyFunc.ToString());
+		}
 		Variables.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 

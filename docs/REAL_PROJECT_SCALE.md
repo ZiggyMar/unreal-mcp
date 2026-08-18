@@ -242,6 +242,60 @@ things are present and asks the reader to check the link, rather than asserting 
 An unproven link must not outrank a real defect, and a guess dressed as a finding is worse than
 silence.
 
+## The bugs that only appear when a second player connects
+
+Multiplayer mistakes survive everything else in this project. They compile. They review clean. They
+behave perfectly in the editor with one player. Then two people join and the game is quietly wrong,
+in a place nobody thinks to look because nothing ever flagged it.
+
+The most common of them by a distance: **a server RPC that sets a variable nobody replicated.** The
+server changes its own copy, every client keeps the old value forever, and the symptom reported is
+"it works for the host".
+
+`server-writes-unreplicated` walks execution forward from every `Server_`-named custom event,
+collects what it writes, and checks each against the variable's replication flag - which
+`list_variables` now returns, alongside `repNotify`.
+
+```
+"Server_ShieldPressed" runs on the server and sets "bShieldOn", which is not
+replicated. The server will change its own copy and no client will ever see it.
+
+Fix: Mark "bShieldOn" as Replicated (or RepNotify if clients need to react to the
+change). Until then this works for whoever is hosting and silently does nothing
+for everyone else.
+```
+
+The mirror image is also checked, as `info`: replicated state written where nothing runs on the
+server, which a client changes locally and the next server update overwrites.
+
+### Verified by being wrong on purpose
+
+The real project's vacuum system replicates all four of its variables correctly, so the check stays
+silent on it - which is the right answer and proves nothing. So a deliberately broken Blueprint was
+built against the live editor: a `Server_` event setting an unreplicated bool. The check catches it,
+names the variable, and says what to do. That case is now a permanent live check rather than a thing
+someone once tried by hand.
+
+Two guards keep it from becoming noise:
+
+- **Silent on single-player.** With no server, client or multicast event and nothing replicated,
+  none of this applies, and a multiplayer warning on every single-player project would be ignored
+  everywhere including where it matters.
+- **Silent on variables it does not know.** Inherited and component variables have no entry to
+  check, and inventing a verdict for them is exactly the false positive that teaches a caller to
+  distrust the whole report.
+
+### A score nobody can explain is worse than no score
+
+Wiring this up exposed a real defect in the review from the previous change: the state-placement and
+multiplayer findings were being counted toward the score and used to choose `nextAction`, while
+appearing **nowhere a caller could read them**. The score moved for reasons the report did not
+contain.
+
+`BlueprintReview` now carries a `blueprint` array for findings about the asset as a whole rather
+than about one graph. They are kept separate from `graphs` because they are not about a graph, and
+filing them under an arbitrary one would be a lie.
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,

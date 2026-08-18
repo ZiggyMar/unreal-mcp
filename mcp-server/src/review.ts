@@ -1,5 +1,6 @@
 import { reviewGraph, type QualityReport } from "./quality.js";
 import { reviewStatePlacement, type StateFinding } from "./statePlacement.js";
+import { reviewMultiplayer, type MpFinding } from "./multiplayer.js";
 import type { BridgeLike } from "./autoLayout.js";
 import type { ListBlueprintGraphsResult, ReadBlueprintGraphSummaryResult } from "./types.js";
 
@@ -9,6 +10,16 @@ export interface BlueprintReview {
   score: number;
   summary: { errors: number; warnings: number; infos: number };
   graphs: QualityReport[];
+  /**
+   * Findings about the Blueprint as a whole rather than about one graph: where its state lives, and
+   * whether what the server writes will ever reach a client.
+   *
+   * Kept separate from `graphs` because they are not about a graph, and filing them under an
+   * arbitrary one would be a lie. They briefly counted toward the score and drove `nextAction`
+   * without appearing anywhere a caller could read them, which made the score unexplainable - a
+   * number nobody can trace back to a reason is worse than no number at all.
+   */
+  blueprint: Array<{ check: string; severity: "warning" | "info"; message: string; fix: string }>;
   /** The one thing most worth fixing next, or a note that nothing needs fixing. */
   nextAction: string;
 }
@@ -34,12 +45,16 @@ export async function reviewBlueprint(
   }
 
   const reports: QualityReport[] = [];
+  // Kept because the multiplayer check needs the graph AND the variables together: whether a write
+  // is a bug depends on where it runs and on whether the thing written replicates.
+  const allNodes: Array<{ id: string; type: string; title: string; connectedPins?: unknown[] }> = [];
   for (const name of graphNames) {
     const summary = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
       path,
       graphName: name,
     });
     reports.push(reviewGraph(name, summary.nodes ?? []));
+    allNodes.push(...(summary.nodes ?? []));
   }
 
   // Where the state lives, which no graph read can answer.
@@ -48,14 +63,17 @@ export async function reviewBlueprint(
   // from one a team can extend. It is allowed to fail silently: a review that refuses to run
   // because one optional check could not gather its data is worse than a review missing that check.
   let stateFindings: StateFinding[] = [];
+  let mpFindings: MpFinding[] = [];
   try {
-    const state = await bridge.send<{ parentClass?: string; variables?: Array<{ name: string; type?: string }> }>(
-      "list_variables",
-      { path }
-    );
+    const state = await bridge.send<{
+      parentClass?: string;
+      variables?: Array<{ name: string; type?: string; replicated?: boolean; repNotify?: string }>;
+    }>("list_variables", { path });
     stateFindings = reviewStatePlacement(state.parentClass ?? "", state.variables ?? []);
+    mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? []);
   } catch {
     stateFindings = [];
+    mpFindings = [];
   }
 
   const summary = reports.reduce(
@@ -66,8 +84,9 @@ export async function reviewBlueprint(
     }),
     { errors: 0, warnings: 0, infos: 0 }
   );
-  summary.warnings += stateFindings.filter((f) => f.severity === "warning").length;
-  summary.infos += stateFindings.filter((f) => f.severity === "info").length;
+  const extraFindings = [...stateFindings, ...mpFindings];
+  summary.warnings += extraFindings.filter((f) => f.severity === "warning").length;
+  summary.infos += extraFindings.filter((f) => f.severity === "info").length;
   const score = reports.length === 0 ? 100 : Math.min(...reports.map((report) => report.score));
 
   // One next action, not a list: a caller that is handed ten equal priorities picks none of them.
@@ -77,7 +96,7 @@ export async function reviewBlueprint(
       // Misplaced state competes for the single next action on equal terms. It is a warning rather
       // than an error, so a broken graph still outranks it - you cannot judge the architecture of
       // something that does not run.
-      stateFindings.map((finding) => ({
+      extraFindings.map((finding) => ({
         finding: {
           check: finding.check,
           severity: finding.severity as "warning" | "info",
@@ -97,5 +116,12 @@ export async function reviewBlueprint(
     ? `[${worst.graph}] ${worst.finding.message} ${worst.finding.fix}`
     : "Nothing to fix. This Blueprint passes every check.";
 
-  return { path, score, summary, graphs: reports, nextAction };
+  return {
+    path,
+    score,
+    summary,
+    graphs: reports,
+    blueprint: extraFindings.map(({ check, severity, message, fix }) => ({ check, severity, message, fix })),
+    nextAction,
+  };
 }

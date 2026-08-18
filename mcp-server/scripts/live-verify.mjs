@@ -206,6 +206,32 @@ async function main() {
     return `${explained.chains.length} chain(s), ${ratio.toFixed(1)}x smaller than the structure`;
   });
 
+  await check("a server event writing an unreplicated variable is caught", async () => {
+    // The most common multiplayer bug in Blueprints, and the one that survives every other check:
+    // it compiles, it reviews clean, and it works perfectly until a second player connects.
+    const mp = `${ROOT}/BP_MCPNetProbe`;
+    const obj = `${mp}.BP_MCPNetProbe`;
+    await bridge.send("create_blueprint", { packagePath: mp, parentClass: "Character", save: false });
+    await bridge.send("add_variable", { path: obj, variableName: "bShieldOn", type: "bool" });
+    await bridge.send("build_graph", {
+      path: obj,
+      graphName: "EventGraph",
+      nodes: [
+        { ref: "e", nodeType: "CustomEvent", eventName: "Server_ShieldPressed" },
+        { ref: "s", nodeType: "VariableSet", variableName: "bShieldOn" },
+      ],
+      connections: [{ from: "e.then", to: "s.execute" }],
+    });
+    const { reviewBlueprint } = await import("../dist/review.js");
+    const review = await reviewBlueprint(bridge, obj);
+    const finding = (review.blueprint ?? []).find((f) => f.check === "server-writes-unreplicated");
+    if (!finding) {
+      throw new Error(`not caught; blueprint findings: ${JSON.stringify(review.blueprint)}`);
+    }
+    if (!/bShieldOn/.test(finding.fix)) throw new Error("the fix does not name the variable");
+    return finding.message.slice(0, 80);
+  });
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -1017,6 +1043,7 @@ async function main() {
           `${widgetPath}.W_MCPVerify`,
           `${structPath}.S_MCPVerifyItem`,
           `${brownPath}.BP_MCPBrownfield`,
+          `${ROOT}/BP_MCPNetProbe.BP_MCPNetProbe`,
           `${tablePath}.DT_MCPVerifyItems`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,
