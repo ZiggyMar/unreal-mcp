@@ -246,6 +246,48 @@ a Blueprint that compiles and does nothing in a packaged game. See below.
 
 ---
 
+## 8. Effects, sound, and animation with assets that already exist
+
+You do not need a VFX or animation authoring tool to use VFX and animation. Almost everything a
+feature needs is *attaching and driving assets that are already in the project*, and that works
+today through components.
+
+**Attach it** (on a Blueprint):
+
+1. `unreal_add_component` — `NiagaraComponent`, `AudioComponent`, or `SkeletalMeshComponent`
+2. `unreal_set_component_property` — point it at the asset:
+   - Niagara: property `Asset`, value a `NiagaraSystem` path
+   - Audio: property `Sound`, value a `SoundBase`/`SoundCue` path
+   - Skeletal mesh: property `SkeletalMeshAsset`, and `AnimClass` for the Anim Blueprint
+3. Find the real paths first with `unreal_list_assets` (`NiagaraSystem`, `SoundWave`, `SkeletalMesh`,
+   `AnimBlueprint`). A path that does not resolve is refused rather than silently set to None.
+
+**Drive it** (in a graph):
+
+| Purpose | functionName | className |
+| --- | --- | --- |
+| Spawn an effect at a point | `SpawnSystemAtLocation` | `NiagaraFunctionLibrary` |
+| Swap the effect on a component | `SetAsset` | `NiagaraComponent` |
+| Turn a component on or off | `Activate` | `ActorComponent` |
+| Play a sound in the world | `PlaySoundAtLocation` | `GameplayStatics` |
+| Play a UI sound | `PlaySound2D` | `GameplayStatics` |
+| Play a montage on a Character | `PlayAnimMontage` | `Character` |
+| Set the skeletal mesh | `SetSkeletalMeshAsset` | `SkeletalMeshComponent` |
+| Set the Anim Blueprint | `SetAnimInstanceClass` | `SkeletalMeshComponent` |
+
+**Notes**
+
+- **`SetSkeletalMeshAsset`, not `SetSkeletalMesh`.** The obvious name exists on three unrelated
+  editor classes and none of them is the component you have. This is exactly the trap
+  `unreal_find_node` exists for.
+- Prefer spawning a one-shot effect (`SpawnSystemAtLocation`) over keeping a permanent component
+  for something that happens occasionally.
+- What is *not* covered: authoring a Niagara system, an animation sequence, or an Anim Blueprint
+  state machine from nothing. Those are separate authoring surfaces. Using assets an artist made,
+  or that came with a marketplace pack, is covered completely.
+
+---
+
 ## Nodes that are not functions
 
 This is the trap that most reliably defeats a model with no Unreal training, and no amount of

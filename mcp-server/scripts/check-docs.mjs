@@ -76,6 +76,7 @@ const REQUIRED_README_SECTIONS = [
   "### Handbooks, for models that were never trained on Unreal",
   "### Acting like a colleague, not a code generator",
   "### Working on a project that already exists",
+  "### VFX, sound, and animation already work",
   "### Materials",
   "### Readable graphs are produced, not requested",
   "### When something is wrong",
