@@ -246,6 +246,12 @@ constants. That is the difference between a project that can be art-directed lat
 every variation means another material graph: a parameterised master can be instanced, so fifty
 colour variants cost fifty instances rather than fifty materials.
 
+Pass `baseColorTexture` and the material becomes **texture x tint**: the colour parameter multiplies
+the texture rather than replacing it, which is what keeps a master material recolourable per
+instance. Pass `normalTexture` and it is sampled as a normal map (not as colour, which would light
+the surface completely wrong) and wired to the Normal input. That is most of the difference between
+a surface that reads as a real material and one that reads as coloured plastic.
+
 Colours are `"R,G,B"` or `"R,G,B,A"` with values 0-1, so `"1,0,0"` is red. Emissive values above 1
 glow brighter. Metallic is genuinely 0 or 1 for real surfaces; roughness is where the character
 lives, 0 being a mirror and 1 being completely matte.

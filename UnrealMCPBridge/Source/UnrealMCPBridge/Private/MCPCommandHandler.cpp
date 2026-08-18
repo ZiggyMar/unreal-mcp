@@ -67,6 +67,9 @@
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionTextureSampleParameter2D.h"
+#include "Materials/MaterialExpressionMultiply.h"
+#include "SceneTypes.h"
 #include "Engine/Texture.h"
 #include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -4506,8 +4509,74 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateMaterial(const TSharedPt
 	{
 		ColorExpression->ParameterName = TEXT("BaseColor");
 		ColorExpression->DefaultValue = BaseColor;
-		UMaterialEditingLibrary::ConnectMaterialProperty(ColorExpression, FString(), MP_BaseColor);
 		Parameters.Add(MakeShared<FJsonValueString>(TEXT("BaseColor (vector)")));
+	}
+
+	// With a texture, the standard master-material shape is texture RGB multiplied by a colour
+	// parameter, so the parameter becomes a TINT over the texture rather than a flat replacement
+	// for it. That one multiply is the difference between "instances can recolour this material"
+	// and "instances can only replace the texture", and it costs one expression.
+	UMaterialExpressionTextureSampleParameter2D* BaseTextureExpression = nullptr;
+	FString BaseTexturePath;
+	if (Params->TryGetStringField(TEXT("baseColorTexture"), BaseTexturePath) && !BaseTexturePath.IsEmpty())
+	{
+		UTexture* Texture = LoadObject<UTexture>(nullptr, *BaseTexturePath);
+		if (!Texture)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("texture_not_found: %s. Check the path with list_assets className=Texture2D."), *BaseTexturePath));
+		}
+		BaseTextureExpression = Cast<UMaterialExpressionTextureSampleParameter2D>(
+			UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -800, -200));
+		if (BaseTextureExpression)
+		{
+			BaseTextureExpression->ParameterName = TEXT("BaseColorTexture");
+			BaseTextureExpression->Texture = Texture;
+			BaseTextureExpression->SamplerType = SAMPLERTYPE_Color;
+			Parameters.Add(MakeShared<FJsonValueString>(TEXT("BaseColorTexture (texture)")));
+		}
+	}
+
+	if (BaseTextureExpression && ColorExpression)
+	{
+		UMaterialExpressionMultiply* Multiply = Cast<UMaterialExpressionMultiply>(
+			UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -200, -200));
+		if (Multiply)
+		{
+			UMaterialEditingLibrary::ConnectMaterialExpressions(BaseTextureExpression, TEXT("RGB"), Multiply, TEXT("A"));
+			UMaterialEditingLibrary::ConnectMaterialExpressions(ColorExpression, FString(), Multiply, TEXT("B"));
+			UMaterialEditingLibrary::ConnectMaterialProperty(Multiply, FString(), MP_BaseColor);
+		}
+	}
+	else if (BaseTextureExpression)
+	{
+		UMaterialEditingLibrary::ConnectMaterialProperty(BaseTextureExpression, TEXT("RGB"), MP_BaseColor);
+	}
+	else if (ColorExpression)
+	{
+		UMaterialEditingLibrary::ConnectMaterialProperty(ColorExpression, FString(), MP_BaseColor);
+	}
+
+	FString NormalTexturePath;
+	if (Params->TryGetStringField(TEXT("normalTexture"), NormalTexturePath) && !NormalTexturePath.IsEmpty())
+	{
+		UTexture* Normal = LoadObject<UTexture>(nullptr, *NormalTexturePath);
+		if (!Normal)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("texture_not_found: %s (normalTexture)."), *NormalTexturePath));
+		}
+		UMaterialExpressionTextureSampleParameter2D* NormalExpression = Cast<UMaterialExpressionTextureSampleParameter2D>(
+			UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -800, 320));
+		if (NormalExpression)
+		{
+			NormalExpression->ParameterName = TEXT("NormalTexture");
+			NormalExpression->Texture = Normal;
+			// Normal maps must be sampled as normals, or the surface lights completely wrong.
+			NormalExpression->SamplerType = SAMPLERTYPE_Normal;
+			UMaterialEditingLibrary::ConnectMaterialProperty(NormalExpression, TEXT("RGB"), MP_Normal);
+			Parameters.Add(MakeShared<FJsonValueString>(TEXT("NormalTexture (texture)")));
+		}
 	}
 	if (AddScalarParam(Material, TEXT("Metallic"), static_cast<float>(Metallic), MP_Metallic, -60))
 	{
