@@ -73,14 +73,7 @@ Ensure you have **Node.js 18+** and a **UE 5.6 / 5.8** project.
 
 ### 1. Install the Unreal Plugin
 
-**Easiest path**: download the prebuilt plugin for your engine version and unzip it into your
-project's `Plugins/UnrealMCPBridge/` folder, so you never compile it yourself:
-
-- [v0.2.0-ue5.8](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.2.0-ue5.8) for UE 5.8
-- [v0.2.0-ue5.6](https://github.com/ZiggyMar/unreal-mcp/releases/tag/v0.2.0-ue5.6) for UE 5.6
-
-Or build it yourself by copying the `UnrealMCPBridge` plugin folder to your Unreal project's
-`Plugins/` directory:
+Copy the `UnrealMCPBridge` plugin folder into your Unreal project's `Plugins/` directory:
 
 ```bash
 # macOS / Linux
@@ -90,6 +83,12 @@ mkdir -p "/path/to/YourProject/Plugins" && cp -r UnrealMCPBridge "/path/to/YourP
 New-Item -ItemType Directory -Force -Path "C:\path\to\YourProject\Plugins"; Copy-Item -Recurse UnrealMCPBridge "C:\path\to\YourProject\Plugins\"
 ```
 *Note: Rebuild/open your Unreal project to compile the plugin, and ensure it is enabled in the editor.*
+
+There are prebuilt plugin releases on the releases page, and they are **older than this server**.
+The bridge has gained more than twenty commands since the last one, and the protocol number did not
+change, so an old plugin looks healthy and then fails on the first tool that needs a command it does
+not have. `--doctor` now probes for those commands specifically and says so. Building from this
+checkout is the reliable path.
 
 ### 2. Build the MCP Server
 Install the node dependencies and compile the typescript codebase:
@@ -133,10 +132,10 @@ that ran the command, so it cannot be the wrong one.
 Then **fully quit and reopen the client.** Closing the window is not enough, and it is the most
 common reason a correct config appears not to work.
 
-The old manual instructions follow, for reference:
+<details>
+<summary>Writing the config by hand (only if the command above cannot run)</summary>
 
-
-Connect the server to your MCP client using the absolute path to `mcp-server/dist/index.js`:
+Point your client at the absolute path of `mcp-server/dist/index.js`:
 
 **Claude Code:**
 ```bash
@@ -155,9 +154,15 @@ claude mcp add unreal -- node "/path/to/unreal-mcp/mcp-server/dist/index.js"
 }
 ```
 
+Note that `"command": "node"` depends on `node` being on the PATH your client uses, which on Windows
+it often is not. That is the single most common reason a correct-looking config never starts, and
+the reason `--print-config` exists.
+
+</details>
+
 Once registered, open your project in the Unreal Editor and verify the connection via `unreal_ping`.
 
-For more configuration options and details, see [`mcp-server/README.md`](file:///f:/Projects/UnrealMCP/mcp-server/README.md).
+For more configuration options and details, see [`mcp-server/README.md`](mcp-server/README.md).
 
 
 ## Contributing

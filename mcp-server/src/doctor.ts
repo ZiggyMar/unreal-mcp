@@ -143,6 +143,52 @@ export async function runDoctor(
     });
   }
 
+  // 2a-bis. Does the plugin actually implement what this server calls?
+  //
+  // The protocol number above catches nothing on its own: it has been 1 since the beginning, while
+  // the bridge has gained more than twenty commands. A plugin downloaded months ago therefore
+  // passes every check here and then fails on the first tool that needs one of them, with
+  // `unknown_cmd` and no explanation of why.
+  //
+  // That is not hypothetical - the README's own "easiest path" points at a prebuilt release, which
+  // is exactly how someone ends up with a current server and an old plugin.
+  //
+  // So probe. Each of these is called with no arguments, which every one of them rejects with
+  // `missing_param` before doing any work, so the probe is free and safe. `unknown_cmd` back means
+  // the command is genuinely absent.
+  const FEATURE_PROBES: Array<{ cmd: string; feature: string }> = [
+    { cmd: "list_variables", feature: "reading a Blueprint's variables" },
+    { cmd: "create_data_table", feature: "Data Tables" },
+    { cmd: "save_asset", feature: "saving anything that is not a Blueprint" },
+  ];
+  const missing: string[] = [];
+  for (const probe of FEATURE_PROBES) {
+    try {
+      await bridge.send(probe.cmd, {});
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/unknown_cmd/i.test(message)) missing.push(`${probe.cmd} (${probe.feature})`);
+    }
+  }
+  if (missing.length === 0) {
+    checks.push({
+      name: "plugin features",
+      status: "ok",
+      detail: `The plugin implements every command this server probes for.`,
+    });
+  } else {
+    checks.push({
+      name: "plugin features",
+      status: "fail",
+      detail: `The plugin is missing ${missing.length} command(s) this server uses: ${missing.join(", ")}.`,
+      remedy:
+        "The plugin in your project is older than this MCP server - most likely a prebuilt release " +
+        "downloaded before these were added. Copy the UnrealMCPBridge folder from this checkout into " +
+        "your project's Plugins/ directory, let the editor rebuild it, and restart. Until then the " +
+        "affected tools fail with unknown_cmd and nothing explains why.",
+    });
+  }
+
   // 2b. Source control, because it decides whether a save can succeed at all.
   const scEnabled = (ping as PingResult & { sourceControlEnabled?: boolean }).sourceControlEnabled;
   const scAvailable = (ping as PingResult & { sourceControlAvailable?: boolean }).sourceControlAvailable;

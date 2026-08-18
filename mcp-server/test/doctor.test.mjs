@@ -5,7 +5,17 @@ import { runDoctor, formatDoctorReport } from "../dist/doctor.js";
 
 const CONN = { host: "127.0.0.1", port: 8765 };
 
+// The feature probes doctor uses to detect a plugin older than this server. The real bridge
+// rejects each of these with missing_param before doing any work; what matters is that it does NOT
+// answer unknown_cmd. A fixture missing them models an old plugin, which is a different test.
+const PROBE_REPLIES = {
+  list_variables: new Error("missing_param: path"),
+  create_data_table: new Error("missing_param: packagePath and rowStruct are required"),
+  save_asset: new Error("missing_param: path"),
+};
+
 const HEALTHY = {
+  ...PROBE_REPLIES,
   ping: {
     status: "ok",
     plugin: "UnrealMCPBridge",
@@ -217,4 +227,38 @@ test("a plugin too old to report its project is called out", async () => {
   const which = check(report, "which project");
   assert.equal(which.status, "warn");
   assert.match(which.remedy, /Update the plugin/);
+});
+
+test("a plugin older than the server is caught, even though the protocol number matches", async () => {
+  // The trap this exists for: the protocol number has been 1 since the beginning while the bridge
+  // gained more than twenty commands, so an old plugin passes every other check and then fails on
+  // the first tool that needs one of them, with unknown_cmd and no explanation.
+  const old = fakeBridge({
+    list_variables: undefined,
+    create_data_table: undefined,
+    save_asset: undefined,
+  });
+  // `undefined` in the overrides does not delete the key, so build the old plugin explicitly.
+  const oldPlugin = {
+    async send(cmd) {
+      if (["list_variables", "create_data_table", "save_asset"].includes(cmd)) {
+        throw new Error(`unknown_cmd: ${cmd}`);
+      }
+      return old.send(cmd);
+    },
+  };
+
+  const report = await runDoctor(oldPlugin, CONN, clock());
+  const features = check(report, "plugin features");
+  assert.ok(features, "no plugin features check was reported");
+  assert.equal(features.status, "fail");
+  assert.match(features.detail, /list_variables/);
+  assert.match(features.remedy, /older than this MCP server/i);
+  assert.equal(report.verdict, "degraded");
+});
+
+test("a current plugin reports no missing features", async () => {
+  const report = await runDoctor(fakeBridge(), CONN, clock());
+  const features = check(report, "plugin features");
+  assert.equal(features.status, "ok");
 });

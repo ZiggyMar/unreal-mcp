@@ -137,6 +137,44 @@ for (const row of rows) {
   }
 }
 
+// --- no links to somebody's hard drive ---------------------------------------------------------
+//
+// The root README shipped a `file:///f:/Projects/...` link to the author's own machine, in the file
+// a newcomer reads first, where it is worse than a missing link: it looks like a working reference.
+// It survived because nothing checked, and it was found by cloning the repo somewhere else and
+// reading it as a stranger would.
+//
+// A machine-local path in documentation is always a mistake, so this is a hard failure rather than
+// a warning.
+{
+  const { readdirSync } = await import("node:fs");
+  const docFiles = [
+    join(repoRoot, "README.md"),
+    join(repoRoot, "mcp-server", "README.md"),
+    ...readdirSync(join(repoRoot, "docs"))
+      .filter((name) => name.endsWith(".md"))
+      .map((name) => join(repoRoot, "docs", name)),
+  ];
+  for (const file of docFiles) {
+    let text;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    // Markdown link targets only: prose may legitimately mention a Windows path in an example.
+    for (const match of text.matchAll(/\]\(([^)]+)\)/g)) {
+      const target = match[1];
+      if (/^file:\/\//i.test(target) || /^[A-Za-z]:[\\/]/.test(target)) {
+        problems.push(
+          `${file.replace(repoRoot, "").replace(/^[\\/]/, "")} links to a machine-local path ` +
+            `"${target.slice(0, 60)}" - it works only on the machine it was written on. Use a repo-relative link.`
+        );
+      }
+    }
+  }
+}
+
 // --- report ------------------------------------------------------------------------------------
 if (problems.length === 0) {
   console.log(
