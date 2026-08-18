@@ -622,6 +622,135 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	return Result;
 }
 
+/**
+ * Project-wide health scan.
+ *
+ * unreal_review_blueprint answers "is this one Blueprint good?". Nobody asks that first. On a
+ * project someone has been building for months the real question is "where is the damage?", and
+ * answering it by reviewing every Blueprint in turn costs a read per asset - exactly the
+ * enumerate-everything cost this project exists to avoid.
+ *
+ * The index already holds a node-type histogram for every graph, computed once and kept fresh by
+ * AssetRegistry delegates. So this costs nothing beyond a walk of memory that was already paid
+ * for, and it answers the question directly: which Blueprints have grown past the point of being
+ * readable, and which carry the cast chains an interface should have replaced.
+ *
+ * Every threshold below is a judgement, so each finding says what it measured. A number without
+ * its reason is something a reader either obeys blindly or ignores entirely.
+ */
+TSharedRef<FJsonObject> FMCPProjectIndex::GetHealthReport(int32 MaxPerCategory) const
+{
+	const int32 Cap = FMath::Clamp(MaxPerCategory, 1, 100);
+
+	// A graph past this many nodes cannot be read at a glance and should have been split into
+	// functions. 60 is roughly one screen at a comfortable zoom.
+	constexpr int32 LargeGraphNodes = 60;
+	// Total nodes across a Blueprint. Past this it is a system, not a class.
+	constexpr int32 LargeBlueprintNodes = 250;
+	// Deliberately NOT scanned here: per-frame Tick work. The index stores node CLASSES, and
+	// "Event Tick" is an event node distinguished only by its title, so this data cannot tell a
+	// Tick handler from a BeginPlay handler. Guessing would produce confident false positives on
+	// the one measure people most want to trust. review_blueprint reads real titles and reports
+	// tick-heavy properly; this scan points you at which Blueprints to run it on.
+
+	struct FOffender
+	{
+		FString Path;
+		FString Name;
+		int32 Value = 0;
+		FString Detail;
+	};
+
+	TArray<FOffender> LargeGraphs;
+	TArray<FOffender> LargeBlueprints;
+	TArray<FOffender> ManyCasts;
+
+	int32 TotalNodes = 0;
+
+	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
+	{
+		const FMCPIndexBlueprint& Blueprint = Pair.Value;
+		int32 BlueprintNodes = 0;
+		int32 BlueprintCasts = 0;
+
+		for (const FMCPIndexGraph& Graph : Blueprint.Graphs)
+		{
+			BlueprintNodes += Graph.NodeCount;
+
+			if (Graph.NodeCount >= LargeGraphNodes)
+			{
+				LargeGraphs.Add({ Blueprint.Path, Blueprint.Name, Graph.NodeCount,
+					FString::Printf(TEXT("graph '%s' has %d nodes"), *Graph.Name, Graph.NodeCount) });
+			}
+
+			for (const TPair<FString, int32>& Entry : Graph.NodeTypeHistogram)
+			{
+				if (Entry.Key.Contains(TEXT("DynamicCast")))
+				{
+					BlueprintCasts += Entry.Value;
+				}
+			}
+		}
+
+		TotalNodes += BlueprintNodes;
+
+		if (BlueprintNodes >= LargeBlueprintNodes)
+		{
+			LargeBlueprints.Add({ Blueprint.Path, Blueprint.Name, BlueprintNodes,
+				FString::Printf(TEXT("%d nodes across %d graphs"), BlueprintNodes, Blueprint.Graphs.Num()) });
+		}
+		if (BlueprintCasts >= 5)
+		{
+			ManyCasts.Add({ Blueprint.Path, Blueprint.Name, BlueprintCasts,
+				FString::Printf(TEXT("%d cast nodes"), BlueprintCasts) });
+		}
+	}
+
+	auto SortAndEmit = [Cap](TArray<FOffender>& Offenders) -> TArray<TSharedPtr<FJsonValue>>
+	{
+		Offenders.Sort([](const FOffender& A, const FOffender& B) { return A.Value > B.Value; });
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (int32 i = 0; i < Offenders.Num() && i < Cap; ++i)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Offenders[i].Name);
+			Entry->SetStringField(TEXT("path"), Offenders[i].Path);
+			Entry->SetStringField(TEXT("why"), Offenders[i].Detail);
+			Out.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		return Out;
+	};
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("blueprintsScanned"), Entries.Num());
+	Result->SetNumberField(TEXT("totalNodes"), TotalNodes);
+
+	TSharedRef<FJsonObject> Findings = MakeShared<FJsonObject>();
+	Findings->SetArrayField(TEXT("oversizedGraphs"), SortAndEmit(LargeGraphs));
+	Findings->SetArrayField(TEXT("oversizedBlueprints"), SortAndEmit(LargeBlueprints));
+	Findings->SetArrayField(TEXT("castHeavy"), SortAndEmit(ManyCasts));
+	Result->SetObjectField(TEXT("findings"), Findings);
+
+	TSharedRef<FJsonObject> Thresholds = MakeShared<FJsonObject>();
+	Thresholds->SetStringField(TEXT("oversizedGraphs"),
+		FString::Printf(TEXT("a graph with %d or more nodes: past what can be read at a glance, so it should be "
+			"split into named functions"), LargeGraphNodes));
+	Thresholds->SetStringField(TEXT("oversizedBlueprints"),
+		FString::Printf(TEXT("a Blueprint with %d or more nodes in total: that is a system rather than a class, and "
+			"is usually several responsibilities that never got separated"), LargeBlueprintNodes));
+	Thresholds->SetStringField(TEXT("castHeavy"),
+		TEXT("5 or more cast nodes: a chain of casts is the shape an interface exists to replace, and it grows "
+			"every time a new type is added"));
+	Result->SetObjectField(TEXT("thresholds"), Thresholds);
+
+	Result->SetStringField(TEXT("note"),
+		TEXT("Computed from the index's existing node-type histograms, so this costs no asset reads. These are "
+			"places worth LOOKING at, not defects: a big graph can be fine. Use review_blueprint on anything here "
+			"for the per-Blueprint detail, and find_references before changing something widely used."));
+	// Returned raw, like GetOverview: the command handler wraps it.
+	return Result;
+}
+
 void FMCPProjectIndex::OnAssetAdded(const FAssetData& AssetData)
 {
 	if (!bBuilt || !IsBlueprintAsset(AssetData))

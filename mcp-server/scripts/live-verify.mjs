@@ -592,6 +592,17 @@ async function main() {
     return `${count} engine textures readable`;
   });
 
+  await check("project_health scans the whole project without reading any asset", async () => {
+    const r = await bridge.send("project_health", { maxPerCategory: 5 });
+    if (typeof r.blueprintsScanned !== "number") throw new Error(`no scan count: ${JSON.stringify(r).slice(0, 120)}`);
+    for (const category of ["oversizedGraphs", "oversizedBlueprints", "castHeavy"]) {
+      if (!Array.isArray(r.findings?.[category])) throw new Error(`missing category ${category}`);
+      // Every threshold must explain itself, or a reader either obeys it blindly or ignores it.
+      if (!r.thresholds?.[category]) throw new Error(`${category} has no stated threshold`);
+    }
+    return `${r.blueprintsScanned} Blueprints, ${r.totalNodes} nodes, thresholds all explained`;
+  });
+
   await check("C5: a bad asset path FAILS rather than silently setting None", async () => {
     // The claim that makes agent-authored Blueprints trustworthy: an invented path must not
     // quietly become None, because the Blueprint then compiles perfectly and does nothing.

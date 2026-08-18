@@ -82,6 +82,11 @@ public:
 	// Cheap top-level summary: counts + top-level folder breakdown + parent-class breakdown.
 	TSharedRef<FJsonObject> GetOverview() const;
 
+	// Project-wide health scan: the worst offenders by the measures that actually cost frames or
+	// make a project unmaintainable. Reads the histograms the index already keeps, so it costs
+	// nothing beyond what a rebuild already paid for.
+	TSharedRef<FJsonObject> GetHealthReport(int32 MaxPerCategory) const;
+
 	int32 GetIndexedBlueprintCount() const { return Entries.Num(); }
 
 private:

@@ -106,6 +106,7 @@ private:
 	static TSharedRef<FJsonObject> HandleSetActorProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleDeleteActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleUndoHistory(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleProjectHealth(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
