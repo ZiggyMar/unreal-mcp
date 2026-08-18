@@ -197,6 +197,59 @@ than credited with a result it did not produce.
 to fix the wrong codebase — and it nearly did. The harness now prints why a `DONE` was rejected, so
 the next time this happens the answer is on screen instead of inferred.
 
+## The brownfield task: editing what already exists
+
+Every task above builds something from nothing, which is the easy half of the job and not the half
+people have. The situation that actually matters is an existing project full of Blueprints someone
+else wrote, where the request is "add X to the thing that already works" — and where the failure
+that costs a day is not a missing feature, it is the agent quietly removing something.
+
+So this task is scored on what **survives** as much as on what gets added. The harness builds a
+Blueprint with a `Health` variable, a `Body` component and a BeginPlay handler that prints
+`existing`, then asks the model to add a `Stamina` variable and an overlap handler — without
+breaking anything.
+
+| Profile | Result | Calls |
+| --- | --- | --- |
+| `minimal` | **5/5** | 3 (one run took 20) |
+| `lazy` | **3/3** | 4–19 |
+
+A 7B extends an existing Blueprint correctly, in about three calls, without destroying anything.
+The two calls that matter are exactly the right two: `add_variable`, then `add_event_handler`.
+
+Verification is deliberately strict, and checks the printed **text** of the original handler rather
+than the node count — a node can survive with its inputs reset, which looks intact in a summary and
+is not.
+
+### It reported a destroyed Blueprint three times. The Blueprint was fine.
+
+Worth writing down, because the failure mode is more instructive than the result.
+
+The first version searched the graph **summary** for the text `existing`. The summary carries node
+types, titles and connections and deliberately *not* pin values — that is the entire point of the
+tiered read — so it could never match. Three runs reported `DESTRUCTIVE: the existing BeginPlay
+logic is gone` about a Blueprint that was perfectly intact, on runs where the model had done the
+right thing in two calls.
+
+The second version read the pin value properly and still failed, which looked like confirmation
+that the alarm was real. It was not: writes accept `"In String"` because pin resolution is
+forgiving, while reads report the canonical `"InString"`. **The input side is lenient and the
+output side is canonical, and a test that assumes those are the same string breaks.**
+
+Before believing any of it, `build_graph` was checked directly: 4 nodes → 5 nodes, nothing
+replaced. The product was additive the whole time.
+
+Two things came out of that:
+
+**A false destructive alarm is the worst bug a benchmark can have.** It is the single claim here
+most likely to be believed without checking, and it points at the wrong codebase. This is the third
+time in two days a harness bug has impersonated a product failure — the DONE regex, the lagging
+index, and now this.
+
+**The guarantee is now a permanent test rather than a hand check.** `live-verify` asserts that a
+second `build_graph` adds to the graph instead of replacing it, and that the original handler still
+prints what it printed before.
+
 ## Which model tier actually works
 
 Three models, on the same 12 GB card:

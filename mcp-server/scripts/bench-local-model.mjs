@@ -133,6 +133,115 @@ const TASKS = {
    * Harder: a component with a property, plus TWO handlers. This is the shape of a real small
    * feature, and it is where scaffold_blueprint either earns its keep or does not.
    */
+  /**
+   * The brownfield case, and the one that matters most.
+   *
+   * Every other task here creates something from nothing, which is the easy half of the job and
+   * not the half people actually have. The real situation is an existing project full of
+   * Blueprints someone else built, where the request is "add X to the thing that already works"
+   * and the failure that costs you a day is not a missing feature - it is the agent quietly
+   * removing something that was already there.
+   *
+   * So this one is scored on what SURVIVES as much as on what gets added.
+   */
+  brownfield: {
+    name: () => `BP_BenchExisting${currentRunId}`,
+    /**
+     * Build the "existing" Blueprint the model is asked to extend.
+     *
+     * Deliberately assembled from bridge primitives rather than scaffold_blueprint: scaffold is a
+     * server-side composite, and probeCall talks to the bridge directly so the setup cannot depend
+     * on the tool surface the model is being tested on.
+     */
+    async setup() {
+      const name = `BP_BenchExisting${currentRunId}`;
+      const path = `/Game/Bench/${name}.${name}`;
+      await probeCall("create_blueprint", { packagePath: `/Game/Bench/${name}`, parentClass: "Actor", save: false });
+      await probeCall("add_variable", { path, variableName: "Health", type: "float", defaultValue: "100" });
+      await probeCall("add_component", { path, componentClass: "StaticMeshComponent", name: "Body" });
+      await probeCall("build_graph", {
+        path,
+        graphName: "EventGraph",
+        nodes: [
+          { ref: "evt", nodeType: "Event", eventName: "ReceiveBeginPlay" },
+          { ref: "a0", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+        ],
+        connections: [{ from: "evt.then", to: "a0.execute" }],
+        pinDefaults: [{ node: "a0", pin: "In String", value: "existing" }],
+      });
+      await probeCall("compile_blueprint", { path });
+      await probeCall("save_blueprint", { path });
+    },
+    request: () =>
+      `The Blueprint /Game/Bench/BP_BenchExisting${currentRunId} already exists and is in use. Add a float ` +
+      "variable called Stamina with a default of 50, and add an ActorBeginOverlap handler that prints " +
+      '"touched". Everything already in this Blueprint must keep working - do not remove or replace what is ' +
+      "there.",
+    async verify() {
+      const name = `BP_BenchExisting${currentRunId}`;
+      const path = `/Game/Bench/${name}.${name}`;
+
+      const variables = await probeCall("list_variables", { path });
+      if (!/"name":"Stamina"/.test(variables)) return { done: false, why: "Stamina was not added" };
+      // The whole point: the new thing arrived AND the old thing is still there.
+      if (!/"name":"Health"/.test(variables)) {
+        return { done: false, why: "DESTRUCTIVE: the existing Health variable is gone" };
+      }
+
+      const components = await probeCall("list_components", { path });
+      if (!components.includes("Body")) {
+        return { done: false, why: "DESTRUCTIVE: the existing Body component is gone" };
+      }
+
+      // Check the printed strings, not just that nodes exist.
+      //
+      // The first version of this searched the graph SUMMARY for the text "existing". The summary
+      // carries node types, titles and connections and deliberately not pin values - that is the
+      // whole point of the tiered read - so it could never match, and this task reported
+      // "DESTRUCTIVE: the existing BeginPlay logic is gone" on three runs where the model had done
+      // exactly the right thing in two calls. A false destructive alarm is a particularly bad bug
+      // to ship in a benchmark: it is the single claim here most likely to be believed without
+      // checking.
+      let summary;
+      try {
+        summary = JSON.parse(await probeCall("read_blueprint_graph_summary", { path, graphName: "EventGraph" }));
+      } catch {
+        return { done: false, why: "the event graph could not be read" };
+      }
+      const nodes = summary.nodes ?? [];
+
+      /** Follow an event's exec output to the Print String it drives, and read what it prints. */
+      const printedBy = async (eventTitle) => {
+        const event = nodes.find((n) => (n.title ?? "").includes(eventTitle));
+        if (!event) return null;
+        const target = (event.connectedPins ?? []).flatMap((pin) => pin.linkedTo ?? [])[0];
+        if (!target) return null;
+        const detail = JSON.parse(
+          await probeCall("read_blueprint_node_detail", { path, graphName: "EventGraph", nodeId: target.node })
+        );
+        // Match the pin name the way the bridge itself does: spaces and case are not significant.
+        // Writes accept "In String" because pin resolution is forgiving; reads report the canonical
+        // "InString". Assuming those two spellings are the same string is what made this check
+        // report a destroyed Blueprint three times over a Blueprint that was perfectly intact.
+        const normalise = (text) => text.replace(/[^a-z0-9]/gi, "").toLowerCase();
+        const pin = (detail.pins ?? []).find((candidate) => normalise(candidate.name) === "instring");
+        return pin ? pin.defaultValue : null;
+      };
+
+      if ((await printedBy("BeginPlay")) !== "existing") {
+        return { done: false, why: "DESTRUCTIVE: the existing BeginPlay logic no longer prints 'existing'" };
+      }
+      if ((await printedBy("ActorBeginOverlap")) !== "touched") {
+        return { done: false, why: "no overlap handler printing 'touched' was added and wired" };
+      }
+
+      return { done: true, why: "Stamina and the overlap handler added, everything existing intact" };
+    },
+    async cleanup() {
+      await clearBench();
+    },
+  },
+
   feature: {
     name: () => `BP_BenchFeature${currentRunId}`,
     request: () =>
@@ -466,6 +575,10 @@ async function main() {
       evalTokens: 0,
       evalMs: 0,
     };
+
+    // A task may need the project put into a particular state first - the brownfield task has to
+    // have something to be brown about.
+    if (task.setup) await task.setup();
 
     const messages = [
       {

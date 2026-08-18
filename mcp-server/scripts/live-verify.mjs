@@ -122,6 +122,74 @@ async function main() {
     "path_is_a_folder"
   );
 
+  // --- editing what already exists ------------------------------------------------------------
+  //
+  // The single most expensive way this tool could fail is not a missing feature, it is quietly
+  // removing something that already worked. Most people pointing an agent at Unreal are pointing
+  // it at a project that already exists, and a Blueprint that loses a handler on Tuesday is found
+  // on Friday. That guarantee is worth a permanent test rather than a hand check.
+  section("adding to an existing Blueprint without breaking it");
+  const brownPath = `${ROOT}/BP_MCPBrownfield`;
+  await check("a second build_graph ADDS to the graph instead of replacing it", async () => {
+    await bridge.send("create_blueprint", { packagePath: brownPath, parentClass: "Actor", save: false });
+    const buildOne = (eventName, text) =>
+      bridge.send("build_graph", {
+        path: `${brownPath}.BP_MCPBrownfield`,
+        graphName: "EventGraph",
+        nodes: [
+          { ref: "evt", nodeType: "Event", eventName },
+          { ref: "a0", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+        ],
+        connections: [{ from: "evt.then", to: "a0.execute" }],
+        pinDefaults: [{ node: "a0", pin: "In String", value: text }],
+      });
+
+    await buildOne("ReceiveBeginPlay", "existing");
+    const before = await bridge.send("read_blueprint_graph_summary", {
+      path: `${brownPath}.BP_MCPBrownfield`,
+      graphName: "EventGraph",
+    });
+    await buildOne("ReceiveActorBeginOverlap", "touched");
+    const after = await bridge.send("read_blueprint_graph_summary", {
+      path: `${brownPath}.BP_MCPBrownfield`,
+      graphName: "EventGraph",
+    });
+
+    if (after.nodes.length <= before.nodes.length) {
+      throw new Error(
+        `the second build replaced the graph instead of adding to it: ${before.nodes.length} nodes -> ${after.nodes.length}`
+      );
+    }
+    return `${before.nodes.length} nodes -> ${after.nodes.length}, nothing replaced`;
+  });
+
+  await check("the original handler still prints what it printed before", async () => {
+    // Checked through the pin value, not the node count: a node can survive with its inputs reset,
+    // which looks intact in a summary and is not.
+    const summary = await bridge.send("read_blueprint_graph_summary", {
+      path: `${brownPath}.BP_MCPBrownfield`,
+      graphName: "EventGraph",
+    });
+    const event = summary.nodes.find((n) => (n.title ?? "").includes("BeginPlay"));
+    if (!event) throw new Error("the original BeginPlay event is gone");
+    const target = (event.connectedPins ?? []).flatMap((pin) => pin.linkedTo ?? [])[0];
+    if (!target) throw new Error("the original BeginPlay is no longer wired to anything");
+    const detail = await bridge.send("read_blueprint_node_detail", {
+      path: `${brownPath}.BP_MCPBrownfield`,
+      graphName: "EventGraph",
+      nodeId: target.node,
+    });
+    // Writes accept "In String"; reads report the canonical "InString". Assuming those match is a
+    // mistake this project has already made once, in the benchmark, where it reported a destroyed
+    // Blueprint three times over one that was perfectly intact.
+    const normalise = (text) => text.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const pin = (detail.pins ?? []).find((candidate) => normalise(candidate.name) === "instring");
+    if (!pin || pin.defaultValue !== "existing") {
+      throw new Error(`the original handler's text was lost; pin reads ${JSON.stringify(pin?.defaultValue)}`);
+    }
+    return `still prints "${pin.defaultValue}" after a later edit`;
+  });
+
   // --- Data Tables ---------------------------------------------------------------------------
   section("data tables");
   const tablePath = `${ROOT}/DT_MCPVerifyItems`;
@@ -918,6 +986,7 @@ async function main() {
           `${bpPath}.BP_MCPVerify`,
           `${widgetPath}.W_MCPVerify`,
           `${structPath}.S_MCPVerifyItem`,
+          `${brownPath}.BP_MCPBrownfield`,
           `${tablePath}.DT_MCPVerifyItems`,
           `${enumPath}.E_MCPVerifyState`,
           `${reusePath}.BP_MCPReuse`,
