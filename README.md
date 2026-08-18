@@ -98,7 +98,20 @@ Install the node dependencies and compile the typescript codebase:
 cd mcp-server && npm install && npm run build
 ```
 
-### 3. Register the Server
+### 3. Check it works before wiring anything up
+
+With the editor open, run:
+
+```bash
+node mcp-server/dist/index.js --doctor
+```
+
+It reports whether the plugin is reachable, whether its protocol matches the server, whether the
+project index is built or still scanning, whether the engine's node catalog is readable, and
+whether a PIE session is in the way. Every failed check comes with the remedy, so you never have
+to guess which of six things is wrong. Exit code 1 means the editor could not be reached.
+
+### 4. Register the Server
 Connect the server to your MCP client using the absolute path to `mcp-server/dist/index.js`:
 
 **Claude Code:**

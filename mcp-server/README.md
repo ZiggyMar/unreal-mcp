@@ -160,6 +160,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
 | `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |
 | `unreal_review_blueprint` | *(composed: `list_blueprint_graphs` + `read_blueprint_graph_summary`)* | The quality gate: dead nodes, unhandled cast failures, leftover debug prints, placeholder names, heavy Tick, unlabelled sections. Returns findings with fixes, a score, and one `nextAction`. |
+| `unreal_doctor` | *(composed: `ping` + `get_project_overview` + `find_node` + `pie_status`)* | One-call diagnosis of the whole setup, with a remedy per failed check. Never throws: an unreachable editor is the answer, not an error. |
 | `unreal_refresh_blueprint` | `refresh_blueprint` | The "right-click > Refresh Nodes" repair: every node re-reads its backing signature. The fix for the whole `in use pin no longer exists` family after a C++ change. |
 | `unreal_delete_asset` | `delete_asset` | Delete assets by path, **blocked by default** if anything outside the delete set still references them, with the blocking referencers reported. |
 
@@ -217,6 +218,38 @@ an overlap check asserted over every pair of placed nodes. `npm test` runs them.
 One honest limitation: each node move is its own editor transaction, because the layout is
 composed client-side from existing bridge commands. Undoing a layout therefore takes several
 Ctrl+Z presses rather than one. A batched move command in the plugin would fix it.
+
+### When something is wrong: `unreal_doctor`
+
+Setup friction is the largest category of complaint about Unreal MCP servers and the one most
+people never get past. The reports all look alike: something is refused or silent, and there is no
+way to tell which of six independent things is wrong. A troubleshooting page does not help, because
+it requires already suspecting the right cause.
+
+`unreal_doctor` checks all of them in order and reports every result with its remedy:
+
+1. **bridge reachable** - is the plugin answering at all
+2. **protocol version** - does the loaded plugin match this server, and which one is older
+3. **editor responsive** - is the game thread grinding on a compile or waiting on a modal dialog
+4. **project index** - built, empty, or still scanning. A still-scanning index is the dangerous
+   one: searches report that things do not exist when they do
+5. **node catalog** - can the engine's live function surface be read. Without it a model has no
+   ground truth for function names and will produce confident nonsense instead of errors
+6. **play-in-editor** - is PIE running, which makes Blueprint writes apply to the editor world
+   rather than the running one, so they look like they did nothing
+
+It never throws. An unreachable editor is the answer, not an error, and its remedy is the ordered
+checklist for fixing it.
+
+**It also runs without an MCP client at all:**
+
+```bash
+node dist/index.js --doctor
+```
+
+When the complaint is "my AI tool cannot see Unreal", taking the AI tool out of the picture is the
+fastest way to learn which half is broken. Exit code 1 if the editor is unreachable, 0 otherwise,
+so it can gate a script.
 
 ### The quality gate: compiling is not the bar
 

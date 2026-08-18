@@ -7,6 +7,7 @@ import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
+import { formatDoctorReport, runDoctor } from "./doctor.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -63,6 +64,7 @@ const server = new McpServer({
  */
 const CORE_PROFILE_TOOLS = new Set([
   "unreal_ping",
+  "unreal_doctor",
   "unreal_get_project_overview",
   "unreal_search_project",
   "unreal_list_blueprints",
@@ -1315,7 +1317,43 @@ register(
   }
 );
 
+register(
+  "unreal_doctor",
+  {
+    title: "Diagnose the whole setup in one call",
+    description:
+      "Run this the moment anything is not working, and run it first in a new session before concluding a tool is " +
+      "broken. It checks, in order: the editor bridge is reachable; the loaded plugin's protocol matches this " +
+      "server; the editor is responsive rather than grinding on a compile or a modal dialog; the project index is " +
+      "built and not still scanning (a still-scanning index reports that things do not exist when they do); the " +
+      "engine's live node catalog is readable; and whether a PIE session is running (Blueprint writes during PIE " +
+      "apply to the editor world, not the running one, so they look like they did nothing).\n\n" +
+      "Every check reports a status and, when it is not ok, the concrete remedy. The report ends with a single " +
+      "`nextAction`. It never throws: if the editor cannot be reached at all, that IS the answer, and the remedy " +
+      "is the ordered checklist for fixing it. Relay the remedy to the user in plain language; most of these are " +
+      "things only they can fix, in the editor.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const report = await runDoctor(bridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
+      return jsonResult(report);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
 async function main() {
+  // `unreal-mcp-server --doctor` runs the same diagnosis from a terminal, with no MCP client
+  // involved. When the complaint is "my AI tool cannot see Unreal", removing the AI tool from the
+  // picture is the fastest way to find out which half is broken.
+  if (process.argv.includes("--doctor")) {
+    const report = await runDoctor(bridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
+    console.log(formatDoctorReport(report));
+    process.exit(report.verdict === "not_connected" ? 1 : 0);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
