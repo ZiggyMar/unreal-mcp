@@ -270,6 +270,45 @@ The recipes now carry a table of the nodes that are *not* functions, because "fi
 nothing" is otherwise a dead end rather than a signal. The check runs against whichever engine
 version is open, so it cannot rot as the engine changes.
 
+### Acting like a colleague, not a code generator
+
+Asked for a stamina system, a competent colleague does not immediately start typing. They say:
+
+> "You already have a stamina variable on BP_Player and a HUD bar reading it — do you want me to
+> extend that, or did you mean something else?"
+
+That one sentence is worth more than any graph they could have built instead, because the
+alternative is a second stamina system quietly competing with the first, and nobody finds out for
+weeks.
+
+A model cannot do that from a chat window: it does not know what is in the project.
+`unreal_plan_feature` closes the gap. Give it the user's request in their own words and it returns:
+
+- **existingSystems** — what is already there, with the assets named, so the model can name them
+  back to the user
+- **raiseWithUser** — the things to say *before* building: what already exists, and what a change
+  would reach outside its own system
+- **newWork** — the concepts with genuinely nothing behind them
+- **conventions** — the naming prefixes, folders, and parent classes this project actually uses, so
+  new work looks like the work already there
+- **suggestedOrder** — read and confirm before building
+
+It is read-only and index-backed, costing a fraction of one Blueprint read, so there is no budget
+excuse to skip it. It is step 1 of the golden path.
+
+Three judgement calls in it are worth naming, because each one is a way the tool could have been
+annoying enough to ignore:
+
+- **Only direct matches count as "already exists."** Everything else in a system map is a
+  neighbour, and reporting neighbours as duplicates would make every request look like a conflict
+  until the model learned to ignore the warnings.
+- **When nothing matches, it asks rather than concluding.** "Nothing found" reads naturally as
+  "therefore build it", but a project that calls stamina `Endurance` would then get a second
+  system — the exact failure this exists to prevent. No stopword list can tell those apart; asking
+  can.
+- **It does not design the feature.** Judgement is the model's job. This supplies only the facts a
+  model cannot otherwise have.
+
 ### Working on a project that already exists
 
 The hardest thing about a real project is not writing new logic. It is that one Blueprint is wired

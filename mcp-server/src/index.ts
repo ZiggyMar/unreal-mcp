@@ -10,6 +10,7 @@ import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
 import { SessionJournal } from "./journal.js";
 import { mapSystem } from "./systemMap.js";
+import { planFeature } from "./planFeature.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -95,6 +96,7 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_get_project_overview",
   "unreal_search_project",
   "unreal_map_system",
+  "unreal_plan_feature",
   "unreal_list_blueprints",
   "unreal_list_blueprint_graphs",
   "unreal_read_blueprint_summary",
@@ -2068,6 +2070,43 @@ register(
     try {
       const result = await mapSystem(bridge, query, { maxAssets, depth });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_plan_feature",
+  {
+    title: "Check a feature request against the project before building it",
+    description:
+      "**Call this the moment the user asks for a feature, before anything else.** Give it their request in their " +
+      "own words. It checks every concept in the request against the project and reports what already exists, what " +
+      "a change would affect, what is genuinely new, and the project's own naming and folder conventions.\n\n" +
+      "This is the difference between a code generator and a colleague. A colleague asked for a stamina system " +
+      "does not immediately start typing: they say \"you already have a stamina variable on BP_Player and a HUD bar " +
+      "reading it - do you want me to extend that, or did you mean something else?\" That one sentence is worth more " +
+      "than any graph you could build instead, because the alternative is a second system quietly competing with " +
+      "the first, and the user will not find out for weeks.\n\n" +
+      "**Relay `raiseWithUser` to the user in plain language and wait for an answer** when it says something already " +
+      "exists or that a change reaches outside the system. Do not treat it as advisory and proceed anyway; that is " +
+      "the exact behaviour that makes people distrust these tools.\n\n" +
+      "Read-only, index-backed, and costs a fraction of one Blueprint read, so there is no budget excuse to skip it. " +
+      "Follow `conventions` when naming new assets: work that looks like the rest of the project is work someone " +
+      "will keep.",
+    inputSchema: {
+      request: z.string().describe("The user's request, in their own words. Do not rewrite or summarise it first; the wording carries the concepts."),
+      concepts: z
+        .array(z.string())
+        .optional()
+        .describe("Override the concepts to check, if you already know the project's vocabulary better than the request does (e.g. the user says \"energy\" but the project calls it Stamina)."),
+    },
+  },
+  async ({ request, concepts }) => {
+    try {
+      const plan = await planFeature(bridge, request, { concepts });
+      return jsonResult(plan);
     } catch (err) {
       return errorResult(err);
     }
