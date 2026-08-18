@@ -20,50 +20,65 @@ export interface BridgeClientOptions {
   timeoutMs?: number;
 }
 
-/** Default for a read or a single small write: the bridge answers these in milliseconds. */
-const DEFAULT_TIMEOUT_MS = 8_000;
+/**
+ * Timeout policy, deliberately inverted.
+ *
+ * The obvious design is a short default with a list of slow exceptions. That is what this file had,
+ * and it failed the moment new commands were added: the UMG and struct commands inherited an 8s
+ * budget, and add_widget recompiles the Widget Blueprint, so live verification hit a spurious
+ * timeout on a call that was working fine. Worse, the timeout aborted mid-sequence and invalidated
+ * two later checks, which is exactly the "a timeout is not a rollback" failure this client warns
+ * callers about.
+ *
+ * So the list is the other way round now: CHEAP READS are enumerated, and everything else - every
+ * write, every command added in future - gets a generous budget by default. A new command can no
+ * longer silently inherit a timeout too short for what it does. The cost of being wrong in this
+ * direction is waiting longer for a genuinely hung editor; the cost of being wrong in the other is
+ * reporting failure for work that succeeded.
+ */
+
+/** Commands that only read already-loaded state and answer in milliseconds. */
+const FAST_READ_TIMEOUT_MS = 15_000;
+const FAST_READS = new Set([
+  "ping",
+  "list_blueprints",
+  "list_blueprint_graphs",
+  "read_blueprint_graph_summary",
+  "read_blueprint_node_detail",
+  "list_components",
+  "list_widgets",
+  "list_struct_fields",
+  "list_enum_entries",
+  "list_assets",
+  "pie_status",
+  "organize_graph",
+]);
+
+/** Anything that mutates an asset: most of these recompile the Blueprint before returning. */
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
- * Commands that legitimately take longer than the default, with why.
- *
- * The bridge runs on Unreal's game thread, so its wall-clock cost is the editor's real cost for
- * the same operation. A Blueprint compile on a large asset, the first project-index build, a level
- * load, or a PIE start can all take tens of seconds on a real project. Timing those out at a flat
- * few seconds is one of the most common ways an MCP integration looks broken when it is merely
- * working: the caller sees a timeout, assumes the connection died, and retries an operation that
- * was in fact about to succeed (or, worse, already succeeded).
+ * Commands that can take far longer still, because their cost is the editor's cost for the same
+ * operation: a cold project-index or node-catalog build, a level load, a compile of a large asset.
  */
-const COMMAND_TIMEOUTS_MS: Record<string, number> = {
-  // Compilation and bulk graph authoring: cost scales with the Blueprint.
-  compile_blueprint: 120_000,
-  build_graph: 120_000,
-  refresh_blueprint: 120_000,
-  create_blueprint: 60_000,
-  create_function: 60_000,
-  save_blueprint: 60_000,
-  delete_asset: 60_000,
-  // First call builds the whole project index (or the engine-wide node catalog) from cold.
+const SLOW_COMMANDS_MS: Record<string, number> = {
+  compile_blueprint: 180_000,
+  build_graph: 180_000,
+  refresh_blueprint: 180_000,
   get_project_overview: 180_000,
   search_project: 180_000,
   find_references: 180_000,
-  find_node: 120_000,
-  get_node_signature: 120_000,
-  // Level and world work: loading and saving a map is disk-bound.
+  find_node: 180_000,
+  get_node_signature: 180_000,
   create_level: 180_000,
   open_level: 180_000,
   save_level: 180_000,
-  spawn_actor: 60_000,
-  // Component and CDO writes recompile the Blueprint.
-  add_component: 60_000,
-  set_component_property: 60_000,
-  set_class_default: 60_000,
-  // PIE: start_pie only requests a session (it begins next tick), but stopping tears down a world.
-  start_pie: 60_000,
-  stop_pie: 60_000,
 };
 
 function timeoutForCommand(cmd: string): number {
-  return COMMAND_TIMEOUTS_MS[cmd] ?? DEFAULT_TIMEOUT_MS;
+  if (SLOW_COMMANDS_MS[cmd] !== undefined) return SLOW_COMMANDS_MS[cmd];
+  if (FAST_READS.has(cmd)) return FAST_READ_TIMEOUT_MS;
+  return DEFAULT_TIMEOUT_MS;
 }
 
 function describeSeconds(ms: number): string {

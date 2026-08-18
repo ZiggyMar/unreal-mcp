@@ -848,6 +848,39 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 
 // =============================== Milestone 2 ===============================
 
+/**
+ * Refuse to create an asset whose name is already taken IN MEMORY.
+ *
+ * FPackageName::DoesPackageExist only answers for what is on disk. FKismetEditorUtilities::
+ * CreateBlueprint asserts on what is in memory:
+ *
+ *   Assertion failed: FindObject<UBlueprint>(Outer, *NewBPName.ToString()) == 0
+ *
+ * and an assert in the editor is not an error a caller can handle, it is the editor gone, with
+ * every unsaved change in it. The two checks disagree in a completely ordinary situation: delete an
+ * asset, then create one with the same name in the same session. The package is off disk, so the
+ * disk check passes; the UObject is still resident, so the engine asserts. This crashed a live
+ * verification run and took the editor with it.
+ *
+ * A tool that can crash the editor from a plain input mistake is worse than one missing the
+ * feature, so every create path checks this first.
+ */
+static bool EnsureAssetNameIsFree(UPackage* Package, const FString& AssetName, FString& OutError)
+{
+	UObject* Existing = StaticFindObject(nullptr, Package, *AssetName);
+	if (!Existing)
+	{
+		return true;
+	}
+	OutError = FString::Printf(
+		TEXT("asset_name_in_use: '%s' already exists in memory as a %s, even though no package for it is on disk. ")
+		TEXT("This normally means it was deleted earlier in this editor session and the object has not been ")
+		TEXT("garbage collected yet. Pick a different name, or restart the editor to clear it. ")
+		TEXT("(Creating it anyway would assert inside the engine and close the editor.)"),
+		*AssetName, *Existing->GetClass()->GetName());
+	return false;
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PackagePath, ParentClassName;
@@ -886,6 +919,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateBlueprint(const TSharedP
 	if (!Package)
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
+	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
 	}
 
 	UBlueprint* NewBlueprint = FKismetEditorUtilities::CreateBlueprint(
@@ -3510,6 +3548,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateWidgetBlueprint(const TS
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
 	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
+	}
 
 	const FScopedTransaction Transaction(
 		NSLOCTEXT("UnrealMCPBridge", "MCPCreateWidgetBP", "MCP: Create Widget Blueprint"));
@@ -3976,6 +4019,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateStruct(const TSharedPtr<
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
 	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
+	}
 
 	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateStruct", "MCP: Create Struct"));
 
@@ -4130,6 +4178,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateEnum(const TSharedPtr<FJ
 	{
 		return MakeErrorResponse(FString::Printf(TEXT("package_creation_failed: %s"), *PackagePath));
 	}
+	FString NameError;
+	if (!EnsureAssetNameIsFree(Package, AssetName, NameError))
+	{
+		return MakeErrorResponse(NameError);
+	}
 
 	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPCreateEnum", "MCP: Create Enum"));
 
@@ -4140,15 +4193,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateEnum(const TSharedPtr<FJ
 		return MakeErrorResponse(TEXT("create_enum_failed"));
 	}
 
-	// Like a new struct, a new enum arrives with one placeholder entry. Rename it for the first
-	// requested value and append the rest. Display names are what a designer sees and what
-	// Blueprint pins show, so they are set rather than left as NewEnumerator0.
+	// Unlike a new struct, a new enum arrives EMPTY: CreateUserDefinedEnum leaves only the
+	// implicit _MAX sentinel behind. Assuming it came with a placeholder entry (as the struct
+	// path does) silently produced one enumerator too few, all of them still named
+	// NewEnumeratorN, because every SetEnumeratorDisplayName landed on an index that did not
+	// exist yet and did nothing. Nothing failed; the asset was simply wrong. Add first, then name.
 	for (int32 i = 0; i < Entries.Num(); ++i)
 	{
-		if (i > 0)
-		{
-			FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
-		}
+		FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
 		FEnumEditorUtils::SetEnumeratorDisplayName(Enum, i, FText::FromString(Entries[i]));
 	}
 
@@ -4158,7 +4210,16 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateEnum(const TSharedPtr<FJ
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("path"), Enum->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
-	Result->SetNumberField(TEXT("entryCount"), Entries.Num());
+	// Read the count back off the enum rather than echoing the request: an echo reports success
+	// even when nothing was written, which is precisely how the bug above stayed invisible.
+	// NumEnums() includes the implicit _MAX sentinel.
+	const int32 ActualCount = Enum->NumEnums() > 0 ? Enum->NumEnums() - 1 : 0;
+	Result->SetNumberField(TEXT("entryCount"), ActualCount);
+	if (ActualCount != Entries.Num())
+	{
+		Result->SetStringField(TEXT("warning"), FString::Printf(
+			TEXT("asked for %d entries, the enum has %d"), Entries.Num(), ActualCount));
+	}
 	Result->SetStringField(TEXT("useAs"), FString::Printf(TEXT("enum:%s"), *AssetName));
 	return MakeOkResponse(Result);
 }

@@ -372,6 +372,53 @@ component / PIE surface, and the maintenance tools.
 
 The default is `full`. The active profile and tool count are printed to stderr on startup.
 
+### Live verification: `npm run verify:live`
+
+Compiling proves the plugin builds. Running it against a real editor is the only thing that proves
+a command works, and this project keeps being reminded of the difference. With an editor open on a
+project that has the plugin enabled:
+
+```bash
+npm run verify:live             # creates assets under /Game/MCPLiveVerify/ and deletes them again
+npm run verify:live -- --keep   # leave them behind to inspect
+```
+
+30 checks covering structs, enums, `struct:`/`enum:` variable types, the whole UMG surface, and the
+error paths (a wrong type, a native struct, a second child on a Button, an unknown parent), because
+wrong-input behaviour is half the product.
+
+Its first run found three real bugs that compiling could not have:
+
+1. **`create_enum` silently produced the wrong asset.** A new enum arrives *empty*, unlike a new
+   struct, which arrives with one placeholder member. The code assumed the struct behaviour, so
+   every `SetEnumeratorDisplayName` landed on an index that did not exist yet and did nothing.
+   Nothing failed. The result was one enumerator too few, all still named `NewEnumeratorN`. The
+   command also reported success by echoing the requested entry count back, which is precisely how
+   it stayed invisible; it now reads the count off the asset.
+2. **New commands inherited an 8s timeout.** `add_widget` recompiles the Widget Blueprint and was
+   being cut off mid-call. See C8 in the complaint matrix: the policy is now inverted, so cheap
+   reads are the enumerated list and everything else gets a generous default.
+3. **`create_blueprint` could hard-crash the editor.** See below.
+
+### The crash worth naming
+
+`FPackageName::DoesPackageExist` answers for the **disk**. `FKismetEditorUtilities::CreateBlueprint`
+asserts on **memory**:
+
+```
+Assertion failed: FindObject<UBlueprint>(Outer, *NewBPName.ToString()) == 0
+```
+
+Those two disagree in a completely ordinary situation: delete an asset, then create one with the
+same name in the same session. The package is off disk so the guard passes; the `UObject` is still
+resident so the engine asserts. An assert is not an error a caller can handle, it is the editor
+gone, taking every unsaved change with it. This closed the editor during a live verification run.
+
+All four create paths now check memory first and return `asset_name_in_use` with an explanation,
+and the exact create-delete-create sequence is a regression check that also asserts the editor is
+still answering afterwards. A tool that can crash the editor from a plain input mistake is worse
+than one missing the feature.
+
 ### Tool parity is enforced, not assumed
 
 Every command the C++ bridge dispatches must have a matching MCP tool, and every MCP tool must

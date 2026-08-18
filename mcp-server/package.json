@@ -14,7 +14,8 @@
     "dev": "tsc -p tsconfig.json --watch",
     "check:parity": "node scripts/check-tool-parity.mjs",
     "test": "npm run typecheck && npm run check:parity && npm run test:unit",
-    "test:unit": "node --test \"test/*.test.mjs\""
+    "test:unit": "node --test \"test/*.test.mjs\"",
+    "verify:live": "node scripts/live-verify.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
