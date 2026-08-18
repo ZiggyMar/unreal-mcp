@@ -56,22 +56,32 @@ const RUNS = Number(valueOf("--runs", "1"));
  * Tasks are chosen to be ordinary, not clever. If a cheap model cannot do these, the tooling has
  * not solved the problem it claims to solve.
  */
+// A fresh name per run. Deleting an asset frees it from disk, but the editor's undo buffer keeps a
+// reference to the object, so garbage collection cannot reclaim the NAME until the editor restarts.
+// That is correct engine behaviour and the bridge reports it clearly - but across many benchmark
+// runs it accumulates, and a model then spends every step colliding with its own history instead of
+// doing the task. Unique names remove a confound that is not what is being measured.
+const RUN_ID = () => Math.floor(Date.now() / 1000) % 1000000;
+let currentRunId = RUN_ID();
+
 const TASKS = {
   health: {
-    request:
-      "In the Unreal project, create a Blueprint called BP_BenchTarget in /Game/Bench, based on Actor. " +
-      "Give it a float variable called Health with a default of 100. Then compile it and save it.",
+    name: () => `BP_BenchTarget${currentRunId}`,
+    request: () =>
+      `In the Unreal project, create a Blueprint called BP_BenchTarget${currentRunId} in /Game/Bench, based on ` +
+      "Actor. Give it a float variable called Health with a default of 100. Then compile it and save it.",
     // Checked against the project, not against what the model said it did.
     async verify() {
       const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
-      if (!listed.includes("BP_BenchTarget")) return { done: false, why: "BP_BenchTarget does not exist" };
+      const target = `BP_BenchTarget${currentRunId}`;
+      if (!listed.includes(target)) return { done: false, why: `${target} does not exist` };
       // The index updates asynchronously, so a search issued the instant a variable is added can
       // miss it. This project documents that caveat; the first version of this check ignored it
       // and reported the model had failed when it had not.
       for (const delay of [0, 500, 1000, 2000]) {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         const search = await probeCall("search_project", { query: "Health" });
-        if (search.includes("BP_BenchTarget")) {
+        if (search.includes(`BP_BenchTarget${currentRunId}`)) {
           return { done: true, why: "Blueprint exists with a Health variable" };
         }
       }
@@ -87,16 +97,17 @@ const TASKS = {
    * batch builder. It is where a small model is expected to struggle, which is the point.
    */
   graph: {
-    request:
-      "In the Unreal project, create a Blueprint called BP_BenchGraph in /Game/Bench based on Actor. " +
-      "Then add graph logic to its EventGraph so that when the game starts it prints the message " +
-      '"hello" to the screen. Compile it when done.',
+    name: () => `BP_BenchGraph${currentRunId}`,
+    request: () =>
+      `In the Unreal project, create a Blueprint called BP_BenchGraph${currentRunId} in /Game/Bench based on Actor. ` +
+      'Then add graph logic to its EventGraph so that when the game starts it prints the message "hello" to the ' +
+      "screen. Compile it when done.",
     async verify() {
       // Models rename around a collision, so check whichever variant they actually made rather
       // than the name the task suggested. Judging the model on my own leftover debris would be
       // measuring the harness.
       const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
-      const made = [...listed.matchAll(/"(BP_BenchGraph[0-9_]*)"/g)].map((m) => m[1]);
+      const made = [...listed.matchAll(new RegExp(`"(BP_BenchGraph${currentRunId}[0-9_]*)"`, "g"))].map((m) => m[1]);
       if (made.length === 0) return { done: false, why: "no BP_BenchGraph was created" };
       const name = made[made.length - 1];
       const summary = await probeCall("read_blueprint_graph_summary", {
@@ -364,7 +375,7 @@ async function main() {
   }
 
   console.log(`model: ${MODEL} (profile ${PROFILE}, context ${NUM_CTX})`);
-  console.log(`task:  ${task.request}`);
+  console.log(`task:  ${task.request()}`);
   console.log("");
 
   const server = startServer();
@@ -398,7 +409,8 @@ async function main() {
     if (RUNS > 1) {
       console.log(`--- run ${run} of ${RUNS} ---`);
     }
-    // Start from a known state. A run that inherits the previous run's assets is measuring debris.
+    // A fresh name per run, then a sweep of anything left from earlier runs.
+    currentRunId = RUN_ID() + run;
     await clearBench();
 
     const stats = {
@@ -423,7 +435,7 @@ async function main() {
           '"/Game/Folder/BP_Name" and the object path adds the name again: "/Game/Folder/BP_Name.BP_Name". ' +
           "When the task is complete, reply with the single word DONE.",
       },
-      { role: "user", content: task.request },
+      { role: "user", content: task.request() },
     ];
 
     for (let step = 0; step < MAX_STEPS; step++) {
