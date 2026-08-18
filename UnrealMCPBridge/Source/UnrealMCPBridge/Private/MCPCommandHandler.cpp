@@ -71,6 +71,7 @@
 #include "Materials/MaterialExpressionMultiply.h"
 #include "SceneTypes.h"
 #include "Engine/Texture.h"
+#include "EngineUtils.h"
 #include "ObjectTools.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -600,6 +601,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("list_material_parameters"))
 	{
 		Response = HandleListMaterialParameters(Params);
+	}
+	else if (Cmd == TEXT("list_actors"))
+	{
+		Response = HandleListActors(Params);
+	}
+	else if (Cmd == TEXT("set_actor_property"))
+	{
+		Response = HandleSetActorProperty(Params);
+	}
+	else if (Cmd == TEXT("delete_actor"))
+	{
+		Response = HandleDeleteActor(Params);
 	}
 	else
 	{
@@ -3026,6 +3039,32 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 			}
 		}
 	}
+	// Deleting the level that is currently OPEN hangs the editor: the delete path puts up a modal
+	// the game thread then waits on, so the bridge stops answering entirely and the caller sees a
+	// timeout on a command that will never complete. Found by live verification, which tried to
+	// clean up a level it had just opened. Refuse it with the fix instead.
+	if (UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr)
+	{
+		const FString OpenLevelPackage = EditorWorld->GetOutermost()->GetName();
+		for (const FString& Candidate : Paths)
+		{
+			FString CandidatePackage = Candidate;
+			int32 DotIndex;
+			if (CandidatePackage.FindLastChar('.', DotIndex))
+			{
+				CandidatePackage.LeftInline(DotIndex);
+			}
+			if (CandidatePackage == OpenLevelPackage)
+			{
+				return MakeErrorResponse(FString::Printf(
+					TEXT("cannot_delete_open_level: '%s' is the level currently open in the editor. Deleting it ")
+					TEXT("would block the editor on a modal dialog and stop the bridge answering entirely. ")
+					TEXT("Open a different level first with open_level, then delete this one."),
+					*OpenLevelPackage));
+			}
+		}
+	}
+
 	if (Paths.Num() == 0)
 	{
 		return MakeErrorResponse(TEXT("missing_param: path or paths[] is required"));
@@ -3088,6 +3127,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 	}
 
 	const int32 Deleted = ObjectTools::DeleteAssets(ToDelete, /*bShowConfirmation=*/false);
+
+	// Collect garbage so the names are actually free again.
+	//
+	// Without this, a deleted asset's UObject stays resident until the next collection, and
+	// creating something with the same name in the same session is refused by the in-memory guard
+	// in EnsureAssetNameIsFree - which is correct (creating it anyway asserts and closes the
+	// editor) but leaves the caller stuck on a name that looks deleted and is not. Delete then
+	// recreate is an ordinary thing to want, and it should simply work.
+	if (Deleted > 0)
+	{
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+	}
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetNumberField(TEXT("requested"), Paths.Num());
@@ -4484,6 +4535,34 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateMaterial(const TSharedPt
 		}
 	}
 
+	// Resolve every texture BEFORE creating anything. Creating the material first and validating
+	// afterwards leaves a half-built asset behind on failure, which then blocks the name until the
+	// next garbage collection - found by running live verification twice in one editor session.
+	// Validate, then create, is the same rule create_struct already follows.
+	UTexture* BaseTexture = nullptr;
+	FString BaseTexturePath;
+	if (Params->TryGetStringField(TEXT("baseColorTexture"), BaseTexturePath) && !BaseTexturePath.IsEmpty())
+	{
+		BaseTexture = LoadObject<UTexture>(nullptr, *BaseTexturePath);
+		if (!BaseTexture)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("texture_not_found: %s. Check the path with list_assets className=Texture2D. ")
+				TEXT("Nothing was created."), *BaseTexturePath));
+		}
+	}
+	UTexture* NormalTexture = nullptr;
+	FString NormalTexturePath;
+	if (Params->TryGetStringField(TEXT("normalTexture"), NormalTexturePath) && !NormalTexturePath.IsEmpty())
+	{
+		NormalTexture = LoadObject<UTexture>(nullptr, *NormalTexturePath);
+		if (!NormalTexture)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("texture_not_found: %s (normalTexture). Nothing was created."), *NormalTexturePath));
+		}
+	}
+
 	const FString AssetName = FPackageName::GetShortName(PackagePath);
 	const FString PackageDir = FPackageName::GetLongPackagePath(PackagePath);
 	UPackage* Package = CreatePackage(*PackagePath);
@@ -4525,21 +4604,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateMaterial(const TSharedPt
 	// for it. That one multiply is the difference between "instances can recolour this material"
 	// and "instances can only replace the texture", and it costs one expression.
 	UMaterialExpressionTextureSampleParameter2D* BaseTextureExpression = nullptr;
-	FString BaseTexturePath;
-	if (Params->TryGetStringField(TEXT("baseColorTexture"), BaseTexturePath) && !BaseTexturePath.IsEmpty())
+	if (BaseTexture)
 	{
-		UTexture* Texture = LoadObject<UTexture>(nullptr, *BaseTexturePath);
-		if (!Texture)
-		{
-			return MakeErrorResponse(FString::Printf(
-				TEXT("texture_not_found: %s. Check the path with list_assets className=Texture2D."), *BaseTexturePath));
-		}
 		BaseTextureExpression = Cast<UMaterialExpressionTextureSampleParameter2D>(
 			UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -800, -200));
 		if (BaseTextureExpression)
 		{
 			BaseTextureExpression->ParameterName = TEXT("BaseColorTexture");
-			BaseTextureExpression->Texture = Texture;
+			BaseTextureExpression->Texture = BaseTexture;
 			BaseTextureExpression->SamplerType = SAMPLERTYPE_Color;
 			Parameters.Add(MakeShared<FJsonValueString>(TEXT("BaseColorTexture (texture)")));
 		}
@@ -4565,21 +4637,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateMaterial(const TSharedPt
 		UMaterialEditingLibrary::ConnectMaterialProperty(ColorExpression, FString(), MP_BaseColor);
 	}
 
-	FString NormalTexturePath;
-	if (Params->TryGetStringField(TEXT("normalTexture"), NormalTexturePath) && !NormalTexturePath.IsEmpty())
+	if (NormalTexture)
 	{
-		UTexture* Normal = LoadObject<UTexture>(nullptr, *NormalTexturePath);
-		if (!Normal)
-		{
-			return MakeErrorResponse(FString::Printf(
-				TEXT("texture_not_found: %s (normalTexture)."), *NormalTexturePath));
-		}
 		UMaterialExpressionTextureSampleParameter2D* NormalExpression = Cast<UMaterialExpressionTextureSampleParameter2D>(
 			UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -800, 320));
 		if (NormalExpression)
 		{
 			NormalExpression->ParameterName = TEXT("NormalTexture");
-			NormalExpression->Texture = Normal;
+			NormalExpression->Texture = NormalTexture;
 			// Normal maps must be sampled as normals, or the surface lights completely wrong.
 			NormalExpression->SamplerType = SAMPLERTYPE_Normal;
 			UMaterialEditingLibrary::ConnectMaterialProperty(NormalExpression, TEXT("RGB"), MP_Normal);
@@ -4856,5 +4921,229 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListMaterialParameters(const T
 	Result->SetBoolField(TEXT("isInstance"), Cast<UMaterialInstanceConstant>(MaterialInterface) != nullptr);
 	Result->SetArrayField(TEXT("parameters"), Entries);
 	Result->SetNumberField(TEXT("count"), Entries.Num());
+	return MakeOkResponse(Result);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Reading and editing what is already in a level
+//
+// The bridge could spawn actors into a level and never see what was already there. That is the
+// same blindness that made Blueprints unworkable before map_system: an agent that cannot read the
+// level either duplicates what exists or edits around it, and on a level someone has spent months
+// dressing, both are worse than doing nothing.
+//
+// Levels are also where the "it looks wrong" bugs live. A door that never opens is usually not a
+// broken Blueprint, it is a placed instance with the wrong property override, and until now none
+// of that was visible or fixable.
+// ---------------------------------------------------------------------------------------------
+
+/** Find one actor in the open level, by label or by name, with a useful error if it is not there. */
+static AActor* FindActorInLevel(UWorld* World, const FString& Identifier, FString& OutError)
+{
+	TArray<FString> Available;
+	AActor* Found = nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor)
+		{
+			continue;
+		}
+		// Labels are what a human sees in the World Outliner; names are what survives a rename.
+		// Accept either, because a caller reading the outliner and a caller reading our own output
+		// will reasonably use different ones.
+		if (Actor->GetActorLabel() == Identifier || Actor->GetName() == Identifier)
+		{
+			Found = Actor;
+			break;
+		}
+		if (Available.Num() < 25)
+		{
+			Available.Add(Actor->GetActorLabel());
+		}
+	}
+	if (!Found)
+	{
+		OutError = FString::Printf(TEXT("actor_not_found: '%s' is not in the open level (some that are: %s). ")
+			TEXT("Use list_actors to see what is there, and open_level if you meant a different level."),
+			*Identifier, *FString::Join(Available, TEXT(", ")));
+	}
+	return Found;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleListActors(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return MakeErrorResponse(TEXT("no_editor_world: open a level first with open_level"));
+	}
+
+	FString ClassFilter;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("classFilter"), ClassFilter);
+	}
+	int32 MaxResults = 200;
+	double MaxRaw = 0;
+	if (Params.IsValid() && Params->TryGetNumberField(TEXT("maxResults"), MaxRaw))
+	{
+		MaxResults = FMath::Clamp(static_cast<int32>(MaxRaw), 1, 2000);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	int32 Total = 0;
+	TMap<FString, int32> ByClass;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor)
+		{
+			continue;
+		}
+		const FString ClassName = Actor->GetClass()->GetName();
+		Total++;
+		ByClass.FindOrAdd(ClassName)++;
+
+		if (!ClassFilter.IsEmpty() && !ClassName.Contains(ClassFilter))
+		{
+			continue;
+		}
+		if (Entries.Num() >= MaxResults)
+		{
+			continue;
+		}
+
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("label"), Actor->GetActorLabel());
+		Entry->SetStringField(TEXT("name"), Actor->GetName());
+		Entry->SetStringField(TEXT("class"), ClassName);
+		const FVector Location = Actor->GetActorLocation();
+		// Rounded: a level report is for orientation, and six decimal places of float noise per
+		// actor is pure token cost on a level with hundreds of them.
+		Entry->SetStringField(TEXT("location"), FString::Printf(TEXT("%.0f,%.0f,%.0f"),
+			Location.X, Location.Y, Location.Z));
+		// Blueprint instances are the ones with logic behind them, and the ones worth reading next.
+		if (UBlueprintGeneratedClass* AsBlueprint = Cast<UBlueprintGeneratedClass>(Actor->GetClass()))
+		{
+			Entry->SetStringField(TEXT("blueprint"), AsBlueprint->GetPathName());
+		}
+		Entries.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	// A per-class census makes a big level legible without listing every actor in it.
+	ByClass.ValueSort([](int32 A, int32 B) { return A > B; });
+	TArray<TSharedPtr<FJsonValue>> ClassCounts;
+	int32 Reported = 0;
+	for (const TPair<FString, int32>& Pair : ByClass)
+	{
+		if (Reported++ >= 20)
+		{
+			break;
+		}
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("class"), Pair.Key);
+		Entry->SetNumberField(TEXT("count"), Pair.Value);
+		ClassCounts.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("level"), World->GetOutermost()->GetName());
+	Result->SetNumberField(TEXT("totalActors"), Total);
+	Result->SetNumberField(TEXT("returned"), Entries.Num());
+	Result->SetBoolField(TEXT("truncated"), Entries.Num() >= MaxResults);
+	Result->SetArrayField(TEXT("byClass"), ClassCounts);
+	Result->SetArrayField(TEXT("actors"), Entries);
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetActorProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Identifier, PropertyName, Value;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("actor"), Identifier) ||
+		!Params->TryGetStringField(TEXT("property"), PropertyName) ||
+		!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		return MakeErrorResponse(TEXT("missing_param: actor, property, value are required"));
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return MakeErrorResponse(TEXT("no_editor_world: open a level first with open_level"));
+	}
+
+	FString FindError;
+	AActor* Actor = FindActorInLevel(World, Identifier, FindError);
+	if (!Actor)
+	{
+		return MakeErrorResponse(FindError);
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetActorProp", "MCP: Set Actor Property"));
+	Actor->Modify();
+
+	TSharedRef<FJsonObject> Response = SetPropertyFromString(
+		Actor, PropertyName, Value, &MakeOkResponse, &MakeErrorResponse);
+	if (Response->GetBoolField(TEXT("ok")))
+	{
+		// This is a per-instance override, not a change to the Blueprint. Say so: the difference
+		// between "this one door opens wider" and "every door opens wider" is exactly the thing a
+		// caller gets wrong, and it is invisible in the response otherwise.
+		Actor->PostEditChange();
+		Actor->MarkPackageDirty();
+		const TSharedPtr<FJsonObject>* ResultObj = nullptr;
+		if (Response->TryGetObjectField(TEXT("result"), ResultObj) && ResultObj->IsValid())
+		{
+			(*ResultObj)->SetStringField(TEXT("scope"),
+				TEXT("This changed ONLY this placed instance, not the Blueprint it came from. To change every "
+					"instance, use set_class_default on the Blueprint instead."));
+			(*ResultObj)->SetStringField(TEXT("actor"), Actor->GetActorLabel());
+		}
+	}
+	return Response;
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteActor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Identifier;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("actor"), Identifier))
+	{
+		return MakeErrorResponse(TEXT("missing_param: actor"));
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return MakeErrorResponse(TEXT("no_editor_world: open a level first with open_level"));
+	}
+
+	FString FindError;
+	AActor* Actor = FindActorInLevel(World, Identifier, FindError);
+	if (!Actor)
+	{
+		return MakeErrorResponse(FindError);
+	}
+
+	const FString Label = Actor->GetActorLabel();
+	const FString ClassName = Actor->GetClass()->GetName();
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPDeleteActor", "MCP: Delete Actor"));
+	const bool bDestroyed = World->EditorDestroyActor(Actor, /*bShouldModifyLevel=*/true);
+	if (!bDestroyed)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("delete_failed: %s could not be destroyed. Some actors are locked or owned by another system."),
+			*Label));
+	}
+	World->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("deleted"), Label);
+	Result->SetStringField(TEXT("class"), ClassName);
+	Result->SetStringField(TEXT("note"),
+		TEXT("Removed from the level in memory only. Call save_level to persist, or Ctrl+Z in the editor to undo."));
 	return MakeOkResponse(Result);
 }

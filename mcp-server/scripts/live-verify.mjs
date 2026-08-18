@@ -391,6 +391,81 @@ async function main() {
     "bad_color"
   );
 
+  // --- Levels and actors -----------------------------------------------------------------------
+  section("levels and actors");
+  const levelPath = `${ROOT}/L_MCPVerify`;
+  await check("create_level and open it", async () => {
+    // The level is the one asset this script cannot clean up (it is open at the end), so a repeat
+    // run finds it already there. Re-running a verification script must not fail because the last
+    // run succeeded.
+    let created = "reused existing";
+    try {
+      await bridge.send("create_level", { packagePath: levelPath });
+      created = "created";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("already_exists")) throw err;
+    }
+    const r = await bridge.send("open_level", { path: levelPath });
+    if (!JSON.stringify(r).includes("L_MCPVerify")) {
+      throw new Error(`open_level did not switch to the verification level: ${JSON.stringify(r)}`);
+    }
+    return `${created}, opened ${JSON.stringify(r)}`;
+  });
+
+  await check("spawn actors into it", async () => {
+    await bridge.send("spawn_actor", { actorClass: "PlayerStart", label: "MCPStart", locZ: 100 });
+    const r = await bridge.send("spawn_actor", { actorClass: "PointLight", label: "MCPLight", locZ: 300 });
+    return `${r.actor} (${r.class})`;
+  });
+
+  await check("list_actors reads back what is there", async () => {
+    const r = await bridge.send("list_actors", {});
+    const labels = r.actors.map((a) => a.label);
+    for (const expected of ["MCPStart", "MCPLight"]) {
+      if (!labels.includes(expected)) throw new Error(`${expected} missing from ${labels.join(", ")}`);
+    }
+    if (!Array.isArray(r.byClass) || r.byClass.length === 0) throw new Error("no per-class census");
+    return `${r.totalActors} actors, classes: ${r.byClass.map((c) => c.class).slice(0, 3).join(", ")}`;
+  });
+
+  await check("classFilter narrows a level", async () => {
+    const r = await bridge.send("list_actors", { classFilter: "PointLight" });
+    if (r.actors.some((a) => !a.class.includes("PointLight"))) throw new Error("filter leaked other classes");
+    if (r.actors.length === 0) throw new Error("filter matched nothing");
+    // The census must still describe the whole level, or a filtered read would misrepresent it.
+    if (r.totalActors <= r.actors.length) throw new Error("census should cover the whole level, not the filtered subset");
+    return `${r.actors.length} of ${r.totalActors}`;
+  });
+
+  await check("set_actor_property changes one instance, and says so", async () => {
+    const r = await bridge.send("set_actor_property", { actor: "MCPLight", property: "bHidden", value: "true" });
+    const text = JSON.stringify(r);
+    if (!text.includes("ONLY this placed instance")) throw new Error(`scope not explained: ${text}`);
+    return text.slice(0, 90);
+  });
+
+  await expectFailure(
+    "an unknown actor lists some that do exist",
+    "set_actor_property",
+    { actor: "NoSuchActor", property: "bHidden", value: "true" },
+    "actor_not_found"
+  );
+
+  await expectFailure(
+    "deleting the OPEN level is refused rather than hanging the editor",
+    "delete_asset",
+    { paths: [`${levelPath}.L_MCPVerify`], force: true },
+    "cannot_delete_open_level"
+  );
+
+  await check("delete_actor removes it", async () => {
+    await bridge.send("delete_actor", { actor: "MCPLight" });
+    const r = await bridge.send("list_actors", {});
+    if (r.actors.some((a) => a.label === "MCPLight")) throw new Error("the actor is still there");
+    return `${r.totalActors} actors remain`;
+  });
+
   // --- the crash that this script found ------------------------------------------------------
   section("create-after-delete (regression: this used to assert and close the editor)");
   const reusePath = `${ROOT}/BP_MCPReuse`;
@@ -426,11 +501,17 @@ async function main() {
           `${reusePath}.BP_MCPReuse`,
           `${instPath}.MI_MCPVerify`,
           `${matPath}.M_MCPVerify`,
+
           `${ROOT}/M_MCPTextured.M_MCPTextured`,
         ],
         force: true,
       });
       return JSON.stringify(r);
+    });
+    await check("the verification level is left behind, deliberately and visibly", async () => {
+      // It is the open level, so it cannot be deleted from this run without opening another one
+      // and leaving THAT behind instead. Reporting it beats a silent leftover.
+      return `${levelPath} remains (it is the open level); delete it by hand or open another level first`;
     });
   }
 
