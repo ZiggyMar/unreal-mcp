@@ -28,6 +28,7 @@ import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const serverPath = join(here, "..", "dist", "index.js");
 const NEWLINE = String.fromCharCode(10);
+const TRACE = process.argv.includes("--trace");
 
 const args = process.argv.slice(2);
 const valueOf = (flag, fallback) => {
@@ -75,17 +76,16 @@ const TASKS = {
       const listed = await probeCall("list_blueprints", { pathPrefix: "/Game/Bench" });
       const target = `BP_BenchTarget${currentRunId}`;
       if (!listed.includes(target)) return { done: false, why: `${target} does not exist` };
-      // The index updates asynchronously, so a search issued the instant a variable is added can
-      // miss it. This project documents that caveat; the first version of this check ignored it
-      // and reported the model had failed when it had not.
-      for (const delay of [0, 500, 1000, 2000]) {
-        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-        const search = await probeCall("search_project", { query: "Health" });
-        if (search.includes(`BP_BenchTarget${currentRunId}`)) {
-          return { done: true, why: "Blueprint exists with a Health variable" };
-        }
+      // Read the variables directly. This used to search the project index, which updates
+      // asynchronously, so a query issued right after a write could report "no" about a variable
+      // that was plainly there - the benchmark spent several runs blaming the model for that. A
+      // benchmark that reports false failures is worse than no benchmark, since it sends you off
+      // fixing something that was never broken.
+      const variables = await probeCall("list_variables", { path: `/Game/Bench/${target}.${target}` });
+      if (!/"name":"Health"/.test(variables)) {
+        return { done: false, why: "Blueprint exists but the Health variable was never added" };
       }
-      return { done: false, why: "Blueprint exists but the Health variable was never added" };
+      return { done: true, why: "Blueprint exists with a Health variable" };
     },
     async cleanup() {
       await clearBench();
@@ -158,13 +158,12 @@ const TASKS = {
       if (prints < 2) return { done: false, why: `only ${prints} Print String node(s); both handlers should print` };
       if (!/linkedTo":\[\{/.test(summary)) return { done: false, why: "nodes exist but nothing is wired" };
 
-      // A variable too, since the whole point is doing several kinds of thing in one go.
-      for (const delay of [0, 500, 1500]) {
-        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-        const search = await probeCall("search_project", { query: "Health" });
-        if (search.includes(name)) return { done: true, why: "component, variable and both handlers present and wired" };
-      }
-      return { done: false, why: "everything but the Health variable" };
+      // A variable too, since the whole point is doing several kinds of thing in one go. Read it
+      // directly rather than through the project index, which lags a write and produced false
+      // failures here before list_variables existed.
+      const variables = await probeCall("list_variables", { path: `/Game/Bench/${name}.${name}` });
+      if (!/"name":"Health"/.test(variables)) return { done: false, why: "everything but the Health variable" };
+      return { done: true, why: "component, variable and both handlers present and wired" };
     },
     async cleanup() {
       await clearBench();
@@ -555,6 +554,14 @@ async function main() {
             content: `There is no tool called "${name}". Available: ${[...toolNames].join(", ")}`,
           });
           continue;
+        }
+
+        // --trace prints what the model actually called. A benchmark that only reports PASS/FAIL
+        // tells you a regression happened; it does not tell you which call went missing, and that
+        // was the first question asked the first time this suite went red.
+        if (TRACE) {
+          const shown = JSON.stringify(argumentsObject);
+          console.log(`    -> ${name} ${shown.length > 300 ? shown.slice(0, 300) + "..." : shown}`);
         }
 
         const result = await callTool(name, argumentsObject);

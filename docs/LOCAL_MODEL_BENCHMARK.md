@@ -14,7 +14,7 @@ transcript**.
 | --- | --- |
 | Model | `qwen2.5-coder:7b` (4.7 GB, Q4) via Ollama |
 | GPU | RTX 3060 12 GB, **shared with the running Unreal Editor** |
-| Profile | `UNREAL_MCP_PROFILE=lazy` (23 tools, ~7.3k tokens of definitions) |
+| Profile | `UNREAL_MCP_PROFILE=lazy` (26 tools, ~9.5k tokens of definitions) |
 | Mode | `standard` |
 
 ## Results
@@ -23,9 +23,13 @@ A local 7B builds working Blueprints reliably, once the tools are shaped for it.
 
 | Task | Before | After |
 | --- | --- | --- |
-| Create a Blueprint, add a typed variable, compile, save | **0/5** | **5/5** (10/10 across two sets) |
+| Create a Blueprint, add a typed variable, compile, save | **0/5** | **5/5** |
 | Create a Blueprint and wire BeginPlay to a Print String | **0/5** | **5/5** |
 | A component with a property, a variable, and **two** wired handlers | — | **5/5** |
+
+Re-measured after the tool surface changed, which is the only reason those numbers can be trusted:
+a passing benchmark that is never run again is a claim, not a measurement. Re-running it found
+three real defects and one false one — see [What re-running it found](#what-re-running-it-found).
 
 Same model, same hardware, same prompts. The graph task had never passed once.
 
@@ -65,6 +69,70 @@ It does not show that a 7B can design a system. Both tasks are single features w
 description. The earlier finding still stands: a small model cannot hold a plan across turns. What
 changed is that it no longer has to.
 
+## What re-running it found
+
+The suite had been green for a while. Re-running it after four tools were added took the
+three-part feature task from **5/5 to 0/3**, and chasing that down produced three genuine bugs and
+one lesson about the benchmark itself.
+
+### 1. A profile that offered a way to fail
+
+The trace showed every failing run doing the same thing: calling `unreal_create_blueprint`, which
+makes an **empty** Blueprint, and then looping compile/save/review without ever adding the
+component it had been asked for. It could not have added one — `add_component` is not in the `lazy`
+surface either, so a Blueprint created that way has no route to a component at all.
+
+This project had already written the rule down when `minimal` was built, and then applied it only
+there:
+
+> A profile built for weak models should contain the **best path for each job, not every path.**
+> Offering a worse-but-familiar option is offering a way to fail.
+
+`lazy` still offered both. Removing `create_blueprint` from it took the feature task to **3/3**, and
+from 16 calls to 9. It is still reachable through `unreal_enable_tools`, and `full` still has it.
+
+### 2. A folder path silently became an asset
+
+Removing that tool then broke the *simplest* task, which is the sort of result worth reading
+carefully rather than reverting. The trace showed the model calling:
+
+```
+unreal_scaffold_blueprint {"packagePath":"/Game/Bench", ...}
+```
+
+`/Game/Bench` is the **folder**. The asset name had been dropped — "create BP_Thing in /Game/Bench"
+is one sentence containing two things, and the model split it wrongly. Every validation passed: it
+is a valid long package name whose short name is `Bench`. So an asset called `Bench` was created
+next to the folder `Bench`, the intended Blueprint never existed, and every later call against it
+failed with `blueprint_not_found`.
+
+That is a product defect, not a model quirk — nothing stops a person making the same mistake, and
+the result is a junk asset and a confusing error. A folder on disk at that exact path is
+unambiguous evidence, since you cannot mean to create an asset *at* a directory, only inside one.
+`path_is_a_folder` now refuses it and names the fix. The check lives in the shared path validator,
+so it protects Blueprints, structs, enums, materials, levels and Data Tables at once.
+
+### 3. An error message with no next action
+
+`blueprint_not_found: /Game/Bench/BP_X.BP_X` is true and useless. Measured behaviour: **twenty
+consecutive identical `add_variable` calls** against a Blueprint that was never created, until the
+step limit stopped it. The same lesson this project learned on pin names, in a new place — *a
+message that **contains** the answer is not the same as a message a caller can **act on***, except
+this one did not even contain it. It now names both possible causes and what to do about each.
+
+### 4. The benchmark was blaming the model for its own bug
+
+Some "failures" were not failures. The verifier confirmed a variable by searching the project
+index, which updates **asynchronously**, so a query issued right after a write could report "no"
+about a variable that was plainly there.
+
+That is worse than a missing test, because it sends you off fixing something that was never broken
+— which is exactly what it did here for two runs. The cause was a real gap: components were
+listable and variables were not, so there was no direct way to ask. `list_variables` fixes both the
+gap and the verifier.
+
+**After all four: 5/5, 5/5, 5/5**, fifteen consecutive passes.
+
 ## Which model tier actually works
 
 Three models, on the same 12 GB card:
@@ -78,10 +146,10 @@ Three models, on the same 12 GB card:
 Three separate findings, each actionable:
 
 **A 14B is capped by context, not just by size.** It loads at 4096 and 8192 and fails outright at
-16384 on a 12 GB card. That matters enormously here, because the `lazy` profile is ~8.8k tokens of
+16384 on a 12 GB card. That matters enormously here, because the `lazy` profile is ~9.5k tokens of
 tool definitions *by itself* — the tool list alone would consume the entire budget a 14B has
 available. **Tool payload size does not merely cost tokens; it decides which models you can run at
-all.** That measurement is what the `minimal` profile (10 tools, ~3.1k tokens) exists for.
+all.** That measurement is what the `minimal` profile (10 tools, ~3.6k tokens) exists for.
 
 **The 27B has no tool template**, so Ollama rejects the request outright: `does not support tools`.
 The harness falls back to describing tools in the prompt, which is what a user of such a model has

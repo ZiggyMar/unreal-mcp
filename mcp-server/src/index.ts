@@ -136,7 +136,18 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_read_blueprint_summary",
   "unreal_find_node",
   "unreal_get_node_signature",
-  "unreal_create_blueprint",
+  // unreal_create_blueprint is deliberately ABSENT, exactly as it is from `minimal`.
+  //
+  // It makes an EMPTY Blueprint, and it is the familiar name, so a small model reaches for it and
+  // then cannot finish: add_component is not in this set either, so a Blueprint created that way
+  // has no route to a component at all. Measured, not theorised - the three-part feature task went
+  // from 5/5 to 0/3, and the trace shows every failing run picking create_blueprint and then
+  // looping compile/save/review without ever adding the component it was asked for.
+  //
+  // The principle was already written down when `minimal` was built and only applied there: a
+  // profile for weak models should contain the best path for each job, not every path. Offering a
+  // worse-but-familiar option is offering a way to fail. It is still reachable through
+  // unreal_enable_tools, and `full` still has it.
   "unreal_scaffold_blueprint",
   "unreal_create_function",
   "unreal_add_variable",
@@ -165,6 +176,10 @@ const CORE_PROFILE_TOOLS = new Set([
  */
 const TOOL_GROUPS: Record<string, string[]> = {
   edit: [
+    // Reachable but not offered by default. It makes an EMPTY Blueprint, and a weak model reaches
+    // for the familiar name over scaffold_blueprint and then cannot finish - measured, see
+    // CORE_PROFILE_TOOLS. A caller that genuinely wants an empty Blueprint can enable it.
+    "unreal_create_blueprint",
     "unreal_read_node_detail",
     "unreal_add_node",
     "unreal_connect_pins",
@@ -200,6 +215,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_delete_actor",
     "unreal_save_level",
     "unreal_add_component",
+    "unreal_list_variables",
     "unreal_list_components",
     "unreal_set_component_property",
     "unreal_set_class_default",
@@ -1266,6 +1282,28 @@ register(
     try {
       const result = await bridge.send("add_component", { path, componentClass, name, parent });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_list_variables",
+  {
+    title: "Read a Blueprint's variables",
+    description:
+      "Lists the variables a Blueprint declares, with type, default, category and whether a designer can set each " +
+      "one per instance. **Use this to see what state a Blueprint holds** - it is usually the first question worth " +
+      "asking about an unfamiliar one. " +
+      "This is a direct read, so unlike unreal_search_project it cannot lag behind a write you just made.",
+    inputSchema: {
+      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      return jsonResult(await bridge.send("list_variables", { path }));
     } catch (err) {
       return errorResult(err);
     }

@@ -87,6 +87,7 @@ private:
 
 	// --- Components and class defaults (challenge tooling, part B) ---
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleListVariables(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListComponents(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetComponentProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
