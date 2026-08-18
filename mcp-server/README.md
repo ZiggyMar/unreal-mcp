@@ -351,112 +351,45 @@ nodes, unhandled cast failures, and leftover debug prints compiles perfectly.
 Every check is deliberately conservative. A false positive teaches a model to distrust the whole
 report, which costs more than a missed finding.
 
-### Tool profiles, for small-context models
+### Tool profiles: paying only for what you use
 
 Tool definitions are paid for on every request, before the user's message is read. The full set is
-49 tools and roughly 15.0k tokens of standing cost. On a 200k-context model that is noise; on an
-8k or 32k local model it is the difference between usable and unusable.
+50 tools and roughly 15.4k tokens of standing cost. On a 200k-context model that is noise; on an 8k
+or 32k local model it is the difference between usable and unusable.
 
-The instructive descriptions are not the thing to cut, because they are why a weaker model
-succeeds at all. So rather than making every user's tools worse, set:
+The obvious fix is to write shorter descriptions. That was measured and rejected: tool descriptions
+are 41% of the payload and they are the teaching a weaker model leans on, while parameter prose is
+another 17%, so even aggressive editing buys about a tenth of the total and makes every model worse
+at sequencing. The bytes are not the problem. **Sending tools the caller will never touch is the
+problem.**
 
-```
-UNREAL_MCP_PROFILE=core
-```
+| `UNREAL_MCP_PROFILE` | Starts at | Reaches |
+| --- | --- | --- |
+| `full` (default) | 50 tools, ~15.4k tokens | everything, immediately |
+| `lazy` | 18 tools, ~5.7k tokens (**63% less**) | everything, on request |
+| `core` | 18 tools, ~5.7k tokens | only those 18, permanently |
 
-which exposes 17 tools for about 5.3k tokens, a 65% reduction, and still keeps a straight line
-through the whole job: orient, search, read, find the exact node, create the Blueprint, add
-variables and functions, build the graph, compile, lay out, review, save. What it drops is the
-single-node editing tools (`unreal_build_graph` does that job in one call), the level / actor /
-component / PIE surface, and the maintenance tools.
+**`lazy` is the one to reach for.** Every tool is registered with its full schema, but the optional
+groups start switched off. When the model needs one it calls `unreal_enable_tools`, the group
+switches on, and the SDK notifies the client that the tool list changed. Nothing is dumbed down or
+collapsed behind a dispatcher; the definitions simply arrive when they are wanted. A session that
+never builds UI never pays for the UMG tools.
 
-The default is `full`. The active profile and tool count are printed to stderr on startup.
+The groups are `edit` (single-node graph surgery), `ui` (UMG), `data` (structs, enums, asset
+lookup), `scene` (levels, actors, components, class defaults, input, PIE), and `maintenance`
+(references, deletion, Refresh Nodes).
 
-### Live verification: `npm run verify:live`
+What stays on always is the whole straight-line authoring path: orient, search, read, find the
+exact node, create the Blueprint, add variables and functions, build the graph, compile, lay out,
+review, save, plus `unreal_doctor`. A model can complete an entire feature without enabling
+anything.
 
-Compiling proves the plugin builds. Running it against a real editor is the only thing that proves
-a command works, and this project keeps being reminded of the difference. With an editor open on a
-project that has the plugin enabled:
+`core` remains for clients that do not act on `tools/list_changed`: same small footprint, but the
+other tools are unreachable rather than deferred. The active profile and the enabled/registered
+counts are printed to stderr at startup.
 
-```bash
-npm run verify:live             # creates assets under /Game/MCPLiveVerify/ and deletes them again
-npm run verify:live -- --keep   # leave them behind to inspect
-```
-
-30 checks covering structs, enums, `struct:`/`enum:` variable types, the whole UMG surface, and the
-error paths (a wrong type, a native struct, a second child on a Button, an unknown parent), because
-wrong-input behaviour is half the product.
-
-Its first run found three real bugs that compiling could not have:
-
-1. **`create_enum` silently produced the wrong asset.** A new enum arrives *empty*, unlike a new
-   struct, which arrives with one placeholder member. The code assumed the struct behaviour, so
-   every `SetEnumeratorDisplayName` landed on an index that did not exist yet and did nothing.
-   Nothing failed. The result was one enumerator too few, all still named `NewEnumeratorN`. The
-   command also reported success by echoing the requested entry count back, which is precisely how
-   it stayed invisible; it now reads the count off the asset.
-2. **New commands inherited an 8s timeout.** `add_widget` recompiles the Widget Blueprint and was
-   being cut off mid-call. See C8 in the complaint matrix: the policy is now inverted, so cheap
-   reads are the enumerated list and everything else gets a generous default.
-3. **`create_blueprint` could hard-crash the editor.** See below.
-
-### Crash sweep: `npm run fuzz:crash`
-
-An assert or access violation inside the editor is not an error a caller can handle or retry. It
-is the editor gone, along with every unsaved change in the user's project. A wrong answer costs a
-retry; a crash costs them their work. So crashes get their own sweep, separate from correctness
-testing:
-
-```bash
-npm run fuzz:crash                 # with an editor open
-npm run fuzz:crash -- --limit 800  # place more of the catalog
-```
-
-Two passes, 477 attempts on the standard run:
-
-1. **Every node type the bridge places directly**, valid and invalid, plus **300 real functions
-   taken from the running engine's own catalog** and placed into a scratch graph.
-2. **Adversarial input on every create path**: empty, 512 characters, unicode, emoji, embedded
-   dots and slashes, `../..` traversal, quotes, `None`, a leading digit.
-
-A structured refusal counts as a **pass** - the tool said no instead of dying. Only a dead
-connection counts as a failure. Because a crash also ends the run, progress is written after every
-single attempt, so the sweep resumes past the input that killed the editor and names it in the
-report.
-
-Result on the current build: **364 accepted, 113 refused cleanly, 0 crashes**, including all 300
-catalog functions.
-
-The sweep found this, which is the second crash of the family and the reason the pass exists:
-
-```
-Assertion failed: false [UnrealNames.cpp:3278]
-FName's 1023 max length exceeded. Got 1039 characters excluding null-terminator
-```
-
-A 512-character asset name closed the editor. The doubling is the trap: the object path is
-`<package>.<name>`, so the name is counted twice and 512 sails past 1023. Every create path now
-validates the path first - length caps well below the engine's limit, `IsValidLongPackageName`,
-and `IsValidXName` - because there is no error to catch once `FName` asserts.
-
-### The crash worth naming
-
-`FPackageName::DoesPackageExist` answers for the **disk**. `FKismetEditorUtilities::CreateBlueprint`
-asserts on **memory**:
-
-```
-Assertion failed: FindObject<UBlueprint>(Outer, *NewBPName.ToString()) == 0
-```
-
-Those two disagree in a completely ordinary situation: delete an asset, then create one with the
-same name in the same session. The package is off disk so the guard passes; the `UObject` is still
-resident so the engine asserts. An assert is not an error a caller can handle, it is the editor
-gone, taking every unsaved change with it. This closed the editor during a live verification run.
-
-All four create paths now check memory first and return `asset_name_in_use` with an explanation,
-and the exact create-delete-create sequence is a regression check that also asserts the editor is
-still answering afterwards. A tool that can crash the editor from a plain input mistake is worse
-than one missing the feature.
+A test asserts that no tool is stranded outside core and every group, so a tool added in future
+cannot silently become unreachable in `lazy`.
 
 ### Tool parity is enforced, not assumed
 

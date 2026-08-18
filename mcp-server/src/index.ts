@@ -65,6 +65,7 @@ const server = new McpServer({
 const CORE_PROFILE_TOOLS = new Set([
   "unreal_ping",
   "unreal_doctor",
+  "unreal_enable_tools",
   "unreal_get_project_overview",
   "unreal_search_project",
   "unreal_list_blueprints",
@@ -82,8 +83,67 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_review_blueprint",
 ]);
 
+/**
+ * Tool groups, for the "lazy" profile.
+ *
+ * Trimming descriptions was measured and rejected as the answer to context bloat: tool
+ * descriptions are 41% of the payload and they are the teaching a weaker model relies on, and
+ * parameter prose is only another 17%, so aggressive editing buys around a tenth of the total
+ * while making every model worse at sequencing. The bytes are not the problem. Sending tools the
+ * caller will never touch is the problem.
+ *
+ * So "lazy" registers everything, with full schemas, and leaves every non-core group DISABLED.
+ * A session that never builds UI never pays for the UMG tools. When the model needs a group it
+ * calls unreal_enable_tools, the group switches on, and the SDK notifies the client that the tool
+ * list changed. Nothing is dumbed down; it just arrives when it is wanted.
+ */
+const TOOL_GROUPS: Record<string, string[]> = {
+  edit: [
+    "unreal_read_node_detail",
+    "unreal_add_node",
+    "unreal_connect_pins",
+    "unreal_set_pin_default_value",
+    "unreal_remove_node",
+    "unreal_organize_graph",
+  ],
+  ui: ["unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
+  data: [
+    "unreal_create_struct",
+    "unreal_add_struct_field",
+    "unreal_list_struct_fields",
+    "unreal_create_enum",
+    "unreal_list_enum_entries",
+    "unreal_list_assets",
+  ],
+  scene: [
+    "unreal_create_level",
+    "unreal_open_level",
+    "unreal_spawn_actor",
+    "unreal_save_level",
+    "unreal_add_component",
+    "unreal_list_components",
+    "unreal_set_component_property",
+    "unreal_set_class_default",
+    "unreal_set_game_settings",
+    "unreal_add_input_mapping",
+    "unreal_start_pie",
+    "unreal_stop_pie",
+    "unreal_pie_status",
+  ],
+  maintenance: ["unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint"],
+};
+
+const GROUP_SUMMARY: Record<string, string> = {
+  edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
+  ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
+  data: "Structs, Enums, and asset lookup",
+  scene: "Levels, actors, components, class defaults, project settings, input mappings, Play In Editor",
+  maintenance: "reference lookup, asset deletion, Refresh Nodes repair",
+};
+
 const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
 const registeredToolNames: string[] = [];
+const toolHandles = new Map<string, { enable(): void; disable(): void; enabled: boolean }>();
 
 /**
  * registerTool, gated by the active profile.
@@ -97,8 +157,24 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
     return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
   }
   registeredToolNames.push(name);
-  return server.registerTool(name, config, handler);
+  const handle = server.registerTool(name, config, handler);
+  toolHandles.set(name, handle as unknown as { enable(): void; disable(): void; enabled: boolean });
+  return handle;
 }) as typeof server.registerTool;
+
+/** Switch a group on. Returns the tool names that became available. */
+function enableGroup(group: string): string[] {
+  const names = TOOL_GROUPS[group] ?? [];
+  const turnedOn: string[] = [];
+  for (const name of names) {
+    const handle = toolHandles.get(name);
+    if (handle && !handle.enabled) {
+      handle.enable();
+      turnedOn.push(name);
+    }
+  }
+  return turnedOn;
+}
 
 function jsonResult(value: unknown) {
   return {
@@ -1601,10 +1677,63 @@ register(
   }
 );
 
+register(
+  "unreal_enable_tools",
+  {
+    title: "Turn on a group of Unreal tools",
+    description:
+      "This server starts with a small set of always-available tools and keeps the rest switched off until asked, " +
+      "so a session that never builds UI never pays the context cost of the UI tools. Call this the moment you " +
+      "need something from a group, then use those tools normally. Groups:\n" +
+      '  - "edit": single-node graph editing (add/remove one node, wire one pin, set one default, move and comment ' +
+      "nodes). You usually do NOT need this: unreal_build_graph places whole graphs in one call and auto-lays them " +
+      "out. Enable it to adjust an existing graph surgically.\n" +
+      '  - "ui": UMG. Create Widget Blueprints, build the widget tree, set widget and layout-slot properties.\n' +
+      '  - "data": Structs, Enums, and asset lookup by class.\n' +
+      '  - "scene": Levels, actors, components, class defaults (including replication), project settings, input ' +
+      "mappings, and Play In Editor.\n" +
+      '  - "maintenance": what references an asset, deleting assets safely, and the Refresh Nodes repair.\n\n' +
+      "Enabling is cheap, immediate, and permanent for the session, and enabling a group you turn out not to need " +
+      "costs nothing but its definitions. Ask for every group the job plausibly needs in one call rather than " +
+      "discovering them one at a time. If your client does not appear to pick up the new tools, the response lists " +
+      "exactly what was turned on, and re-calling is harmless.",
+    inputSchema: {
+      groups: z
+        .array(z.enum(["edit", "ui", "data", "scene", "maintenance"]))
+        .describe('Groups to turn on, e.g. ["ui","data"].'),
+    },
+  },
+  async ({ groups }) => {
+    const enabled: string[] = [];
+    for (const group of groups) {
+      enabled.push(...enableGroup(group));
+    }
+    const available = [...toolHandles.entries()].filter(([, h]) => h.enabled).map(([name]) => name);
+    return jsonResult({
+      requested: groups,
+      newlyEnabled: enabled,
+      alreadyOn: enabled.length === 0,
+      availableTools: available.sort(),
+      note:
+        enabled.length > 0
+          ? "These tools are now available. Your client has been notified that the tool list changed."
+          : "Nothing new to enable; those groups were already on.",
+    });
+  }
+);
+
 async function main() {
   // `unreal-mcp-server --doctor` runs the same diagnosis from a terminal, with no MCP client
   // involved. When the complaint is "my AI tool cannot see Unreal", removing the AI tool from the
   // picture is the fastest way to find out which half is broken.
+  // "lazy": everything is registered with full schemas, but only the core group is switched on.
+  // The rest arrive when unreal_enable_tools asks for them.
+  if (PROFILE === "lazy") {
+    for (const [name, handle] of toolHandles) {
+      if (!CORE_PROFILE_TOOLS.has(name)) handle.disable();
+    }
+  }
+
   if (process.argv.includes("--doctor")) {
     const report = await runDoctor(bridge, { host: BRIDGE_HOST, port: BRIDGE_PORT });
     console.log(formatDoctorReport(report));
@@ -1615,10 +1744,12 @@ async function main() {
   await server.connect(transport);
   console.error(
     `unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}; ` +
-      `profile "${PROFILE}" with ${registeredToolNames.length} tools`
+      `profile "${PROFILE}" with ${[...toolHandles.values()].filter((h) => h.enabled).length}/${registeredToolNames.length} tools enabled`
   );
-  if (PROFILE !== "core" && PROFILE !== "full") {
-    console.error(`unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: core, full.`);
+  if (PROFILE !== "core" && PROFILE !== "full" && PROFILE !== "lazy") {
+    console.error(
+      `unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: core, lazy, full.`
+    );
   }
 }
 
