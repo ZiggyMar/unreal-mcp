@@ -16,6 +16,7 @@ import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
+import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { auditProject } from "./audit.js";
 import { guardWithAuthority } from "./authorityGuard.js";
 import { RepeatGuard } from "./repeatGuard.js";
@@ -235,7 +236,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_stop_pie",
     "unreal_pie_status",
   ],
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
 };
 
 const GROUP_SUMMARY: Record<string, string> = {
@@ -401,6 +402,59 @@ register(
   async () => {
     try {
       const result = await bridge.send<PingResult>("ping");
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_read_runtime_errors",
+  {
+    title: "Read what went wrong when you pressed Play",
+    description:
+      "Reads the Unreal Editor's own log and reports what actually failed during the last Play In Editor session, " +
+      "grouped and ranked. **This is the only tool here that sees runtime problems** - everything else reads the " +
+      "graph, and the most common Unreal bug of all does not exist until the game runs: " +
+      "\"Accessed None trying to read property X\". Those lines name the exact Blueprint, graph and node, and this " +
+      "returns them as fields rather than as text. One null reference on Tick writes the same line thousands of " +
+      "times, so identical messages are grouped: a session with 2,000 error lines is usually a dozen real problems. " +
+      "Engine noise (callstack dumps, Steam not running) is counted separately rather than mixed in. Use it after " +
+      "unreal_start_pie, or when someone says the game printed errors - it reads the session that already happened.",
+    inputSchema: {
+      wholeLog: z
+        .boolean()
+        .optional()
+        .describe("Read the entire log instead of only the most recent Play In Editor session. Defaults to false."),
+      includeWarnings: z
+        .boolean()
+        .optional()
+        .describe("Include warnings as well as errors. Defaults to false - there are usually thousands."),
+      limit: z.number().int().optional().describe("How many distinct problems to detail. Defaults to 15."),
+      logFile: z
+        .string()
+        .optional()
+        .describe("Read a specific log file instead of the open project's. Rarely needed."),
+    },
+  },
+  async ({ wholeLog, includeWarnings, limit, logFile }) => {
+    try {
+      // Asked of the editor rather than configured, so this cannot read one project's log while
+      // editing another - which is exactly the confusion that wastes an afternoon.
+      const ping = await bridge.send<PingResult & { projectFile?: string }>("ping");
+      if (!ping.projectFile && !logFile) {
+        throw new Error(
+          "no_project_file: the plugin did not report which project is open, so the log cannot be located. " +
+            "Update the plugin, or pass logFile."
+        );
+      }
+      const result = await readRuntimeLogForProject(ping.projectFile ?? "", {
+        wholeLog,
+        includeWarnings,
+        limit,
+        logFile,
+      });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

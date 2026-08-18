@@ -171,6 +171,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_session_changes` | *(server-side log; touches the editor not at all)* | Everything this session changed, grouped by asset, in plain language, with deletions and failures called out. |
 | `unreal_undo_history` | `undo_history` | The editor's real undo stack, newest first, marking which entries this bridge made. |
 | `unreal_refresh_blueprint` | `refresh_blueprint` | The "right-click > Refresh Nodes" repair: every node re-reads its backing signature. The fix for the whole `in use pin no longer exists` family after a C++ change. |
+| `unreal_read_runtime_errors` | *(reads the editor log)* | What actually failed when you pressed Play, grouped and ranked. The only tool here that sees runtime problems: `Accessed None trying to read property X` names the exact Blueprint, graph and node, and comes back as fields. 2,000 error lines from one session is usually a dozen real causes. |
 | `unreal_delete_asset` | `delete_asset` | Delete assets by path, **blocked by default** if anything outside the delete set still references them, with the blocking referencers reported. |
 
 ### Scene, actors, components, project settings, and runtime
