@@ -22,7 +22,8 @@
     "measure:cost": "node scripts/measure-cost.mjs",
     "verify:restart": "node scripts/verify-restart.mjs",
     "bench:local": "node scripts/bench-local-model.mjs",
-    "check:profiles": "node scripts/measure-profiles.mjs"
+    "check:profiles": "node scripts/measure-profiles.mjs",
+    "stress": "node scripts/stress-build.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

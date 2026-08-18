@@ -271,6 +271,97 @@ const TASKS = {
     },
   },
 
+  /**
+   * The one people actually have: a Blueprint that grew for months.
+   *
+   * `brownfield` proves a model can extend something small that already exists. This asks the same
+   * question of something big - a player Blueprint carrying a dozen systems and several hundred
+   * nodes - because that is where the interesting failure lives. Not "can it write the feature",
+   * but "can it still find its way around, and does it break the eleven systems it was not asked
+   * about".
+   *
+   * Scored on survival first. Adding the feature and destroying the Blueprint is a worse outcome
+   * than doing nothing.
+   */
+  heavy: {
+    name: () => `BP_BenchHeavy${currentRunId}`,
+    async setup() {
+      const name = `BP_BenchHeavy${currentRunId}`;
+      const path = `/Game/Bench/${name}.${name}`;
+      await probeCall("create_blueprint", { packagePath: `/Game/Bench/${name}`, parentClass: "Character", save: false });
+
+      // Twelve systems, each an event with a branch and work down both arms - roughly the shape of
+      // a player Blueprint nobody has refactored.
+      for (const system of [
+        "Movement", "Sprint", "Health", "Damage", "Death", "Inventory",
+        "Interact", "Weapon", "Reload", "Stamina", "Camera", "Score",
+      ]) {
+        await probeCall("add_variable", { path, variableName: `b${system}Active`, type: "bool" });
+        await probeCall("build_graph", {
+          path,
+          graphName: "EventGraph",
+          nodes: [
+            { ref: "evt", nodeType: "CustomEvent", eventName: `Sys_${system}` },
+            { ref: "br", nodeType: "Branch" },
+            { ref: "set1", nodeType: "VariableSet", variableName: `b${system}Active` },
+            { ref: "c1", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+            { ref: "c2", nodeType: "CallFunction", functionName: "PrintString", className: "KismetSystemLibrary" },
+          ],
+          connections: [
+            { from: "evt.then", to: "br.execute" },
+            { from: "br.then", to: "set1.execute" },
+            { from: "set1.then", to: "c1.execute" },
+            { from: "br.else", to: "c2.execute" },
+          ],
+          pinDefaults: [
+            { node: "c1", pin: "In String", value: `${system} on` },
+            { node: "c2", pin: "In String", value: `${system} skipped` },
+          ],
+        });
+      }
+      await probeCall("compile_blueprint", { path });
+      await probeCall("save_blueprint", { path });
+    },
+    request: () =>
+      `The Blueprint /Game/Bench/BP_BenchHeavy${currentRunId} is a player character with about a dozen systems ` +
+      "already in it. Add one more: a float variable called ShieldValue with a default of 50, and a custom event " +
+      'called Sys_Shield that prints "shield on". Do not change or remove any of the systems that are already ' +
+      "there.",
+    async verify() {
+      const name = `BP_BenchHeavy${currentRunId}`;
+      const path = `/Game/Bench/${name}.${name}`;
+
+      const variables = await probeCall("list_variables", { path });
+      // Survival first: adding the feature and breaking the rest is worse than doing nothing.
+      for (const system of ["Movement", "Health", "Inventory", "Weapon", "Score"]) {
+        if (!new RegExp(`"name":"b${system}Active"`).test(variables)) {
+          return { done: false, why: `DESTRUCTIVE: the existing b${system}Active variable is gone` };
+        }
+      }
+
+      let summary;
+      try {
+        summary = JSON.parse(await probeCall("read_blueprint_graph_summary", { path, graphName: "EventGraph" }));
+      } catch {
+        return { done: false, why: "the event graph could not be read" };
+      }
+      const titles = (summary.nodes ?? []).map((n) => n.title ?? "");
+      const survivors = ["Sys_Movement", "Sys_Health", "Sys_Inventory", "Sys_Weapon", "Sys_Score"].filter((s) =>
+        titles.some((t) => t.includes(s))
+      );
+      if (survivors.length < 5) {
+        return { done: false, why: `DESTRUCTIVE: only ${survivors.length}/5 sampled systems survived` };
+      }
+
+      if (!/"name":"ShieldValue"/.test(variables)) return { done: false, why: "ShieldValue was not added" };
+      if (!titles.some((t) => t.includes("Sys_Shield"))) return { done: false, why: "no Sys_Shield event was added" };
+      return { done: true, why: `Sys_Shield and ShieldValue added, all ${survivors.length} sampled systems intact` };
+    },
+    async cleanup() {
+      await clearBench();
+    },
+  },
+
   feature: {
     name: () => `BP_BenchFeature${currentRunId}`,
     request: () =>
@@ -598,7 +689,12 @@ async function main() {
 
   const callTool = async (name, argumentsObject) => {
     const res = await server.request("tools/call", { name, arguments: argumentsObject });
-    return res.result?.content?.[0]?.text ?? JSON.stringify(res.error ?? {});
+    // Join every text part, not just the first. A result is allowed to carry several, and a real
+    // client shows them all - this read only content[0], so anything a tool appended to its own
+    // answer was invisible here. That silently discarded the repeat-loop notice and would have
+    // made it look like the notice did not work.
+    const parts = (res.result?.content ?? []).filter((c) => typeof c?.text === "string").map((c) => c.text);
+    return parts.length > 0 ? parts.join(String.fromCharCode(10)) : JSON.stringify(res.error ?? {});
   };
 
   const runResults = [];

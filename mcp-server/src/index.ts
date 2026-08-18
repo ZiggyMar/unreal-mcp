@@ -16,6 +16,7 @@ import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
+import { RepeatGuard } from "./repeatGuard.js";
 import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -252,7 +253,20 @@ const GROUP_SUMMARY: Record<string, string> = {
  * attach behaviour, compile, review, save. Everything else arrives through unreal_enable_tools.
  */
 const MINIMAL_PROFILE_TOOLS = new Set([
-  "unreal_doctor",
+  // unreal_doctor is deliberately ABSENT, for the same reason unreal_create_blueprint is.
+  //
+  // It answers "why is this not working" during setup, and a model mid-task has no use for it -
+  // but it takes NO ARGUMENTS, which makes it the easiest thing in the world to emit when you have
+  // finished and not realised it. Measured: a 7B completed a task in one call and then called
+  // doctor nineteen more times until the step limit stopped it.
+  //
+  // Two attempts to fix that by explaining failed. doctor's healthy verdict was changed to say
+  // outright that calling it again returns the same answer: no effect. A general repeat notice was
+  // added to every tool result: no effect either, though it is verified to be delivered. Removing
+  // the tool from this profile took the same tasks from 20 calls to 3-6, immediately.
+  //
+  // The pattern is now three for three: a weak model does not act on being told, and does act on
+  // not being offered. It is still in core, lazy and full, and reachable via unreal_enable_tools.
   "unreal_enable_tools",
   "unreal_list_blueprints",
   "unreal_find_node",
@@ -286,6 +300,25 @@ const toolHandles = new Map<string, { enable(): void; disable(): void; enabled: 
  * and handler arguments; a skipped tool returns an inert handle rather than being special-cased
  * at each of the 39 call sites.
  */
+const repeatGuard = new RepeatGuard();
+
+/**
+ * Append the repeat notice to a tool result, without disturbing its shape.
+ *
+ * The notice goes on the END of the existing text rather than replacing it, because the result is
+ * still the real result - the caller may well be reading it correctly and simply be stuck on what
+ * to do next.
+ */
+function withRepeatNotice(result: unknown, notice: string | null): unknown {
+  if (!notice || typeof result !== "object" || result === null) return result;
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return result;
+  return {
+    ...(result as object),
+    content: [...content, { type: "text", text: notice }],
+  };
+}
+
 const register: typeof server.registerTool = ((name: string, config: never, handler: never) => {
   if (PROFILE === "core" && !CORE_PROFILE_TOOLS.has(name)) {
     return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
@@ -294,7 +327,15 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
     return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
   }
   registeredToolNames.push(name);
-  const handle = server.registerTool(name, config, handler);
+  // Wrap every handler so an identical repeated call is answered differently from the first. This
+  // sits here rather than in each tool because the looping failure has appeared in three unrelated
+  // tools already; fixing it per-tool fixed three symptoms and no causes.
+  const guarded = (async (args: never, extra: never) => {
+    const verdict = repeatGuard.record(name, args);
+    const result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
+    return withRepeatNotice(result, verdict.notice);
+  }) as never;
+  const handle = server.registerTool(name, config, guarded);
   toolHandles.set(name, handle as unknown as { enable(): void; disable(): void; enabled: boolean });
   return handle;
 }) as typeof server.registerTool;

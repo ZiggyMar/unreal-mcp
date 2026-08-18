@@ -123,6 +123,73 @@ never opened, and neither alone is enough.
 
 Both were found by pointing the suite at a real project for one afternoon.
 
+## The heavy Blueprint, built on purpose
+
+The real project's largest graph is 104 nodes. A player Blueprint that has absorbed a dozen systems
+is several times that, so `npm run stress` builds one deliberately — many independent systems, each
+an event with a branch and state — and measures what reading it costs. It scales with `--systems`,
+so the numbers can be plotted rather than asserted once.
+
+| Graph | Structure | Explained (text) | Ratio |
+| --- | --- | --- | --- |
+| 104 nodes (real, `BP_VacuumPlayer`) | 8,838 tok | 357 tok | 24.8x |
+| 171 nodes (12 systems) | 12,358 tok | 689 tok | 17.9x |
+| 423 nodes (60 systems) | 30,768 tok | 1,693 tok | 18.2x |
+
+The per-node rate is what matters, and it is stable: **~73 tokens per node structurally, ~4 tokens
+per node explained.** So a 1,000-node monster costs roughly 73,000 tokens to read and roughly 4,000
+to understand. One of those fits on a 12 GB card and one does not.
+
+## Can a 7B edit a Blueprint that big?
+
+A `heavy` benchmark task builds a twelve-system player Blueprint and asks for one more system,
+without touching the rest.
+
+**It never broke anything.** Across every run, at every success rate below, the twelve existing
+systems and their variables survived intact. The failures were always "did not finish", never "took
+something out" — which is the failure mode that matters, since a feature not added costs an
+afternoon and a system silently removed costs a week.
+
+## Three attempts to stop a model looping, and the one that worked
+
+The same failure has now been measured four times, in four unrelated tools: `add_variable` called
+20 times against a Blueprint that did not exist, `doctor` 19 times after the work was done,
+`plan_feature` 20 times with byte-identical arguments, and `doctor` again on the smallest profile.
+
+**Attempt 1 — say it in the tool.** `doctor`'s healthy verdict was changed to state outright that
+calling it again returns the same answer. **No effect.**
+
+**Attempt 2 — say it everywhere.** A general repeat guard now watches every tool call and appends a
+notice when the same call is made with identical arguments twice: *"you have made this exact call
+twice and received the same answer; act on it or stop."* Verified end to end — the notice is
+emitted from the second call onward and reaches the client. **No effect on the 7B whatsoever.**
+
+Verifying that took a fourth harness bug of the same family: the benchmark read only
+`content[0].text`, so anything a tool appended to its own result was silently discarded. The notice
+had been invisible.
+
+**Attempt 3 — remove the tool.** `doctor` takes no arguments, which makes it the easiest thing in
+the world to emit when a model has finished and not realised it. Taking it out of the `minimal`
+profile — where a model mid-task has no use for it anyway — moved the same tasks from **20 calls to
+3-6**, immediately, with no change in pass rate.
+
+> A weak model does not act on being told, and does act on not being offered. Three for three now:
+> `create_blueprint`, the UMG composite, and this.
+
+The repeat guard is kept, with a kill switch and its own tests, because it is correct and a stronger
+model may well use it. But it is recorded as **measured to do nothing here**, not as a fix.
+
+Setup diagnosis did not disappear with it: `node dist/index.js --doctor` is the documented path, and
+it is a thing a human runs before the agent starts rather than a tool a model reaches for mid-task.
+
+## A confound worth naming
+
+The first version of this comparison was invalid. Benchmark numbers from earlier in the day were
+taken on a small 5.6 test project, and the new ones on the 5.8 copy of the real project — different
+engine, different project size, different node titles. Comparing across them measured the
+environment, not the change. Every number above was re-taken on the 5.6 project that every prior
+number came from.
+
 ## What this does not show
 
 It does not show a local model doing any of this end to end. These are measurements of the tools,
