@@ -669,6 +669,12 @@ problem.**
 | `core` | 26 tools, ~9.5k tokens | only those, permanently |
 | `minimal` | **10 tools, ~3.6k tokens** | only those, permanently |
 
+**On a small local model, use `minimal`.** Measured across three benchmark tasks, it completes each
+in a single tool call with no failed calls, while `lazy` needs up to sixteen calls and seven
+failures for the same outcome. Fewer tools means fewer wrong paths to try first, so the smaller
+surface is cheaper and more reliable at once — see
+[the benchmark](../docs/LOCAL_MODEL_BENCHMARK.md).
+
 Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
 fails if a profile grows past the ceiling its intended model can hold. They were hand-measured once
 before that existed and were wrong within a few commits, which is the argument for the script.

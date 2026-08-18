@@ -62,6 +62,11 @@ export interface ScaffoldResult {
   saved: boolean;
   /** Steps that failed, with what went wrong. The rest still happened. */
   failures: Array<{ step: string; error: string }>;
+  /**
+   * Nothing further is required. Stated as a field as well as in the summary because a weak model
+   * that cannot tell it has finished will keep calling tools until something stops it.
+   */
+  complete: boolean;
   summary: string;
 }
 
@@ -77,6 +82,7 @@ export async function scaffoldBlueprint(bridge: BridgeLike, spec: ScaffoldSpec):
     handlersBuilt: [],
     saved: false,
     failures: [],
+    complete: false,
     summary: "",
   };
 
@@ -183,10 +189,28 @@ export async function scaffoldBlueprint(bridge: BridgeLike, spec: ScaffoldSpec):
     `${result.componentsAdded.length} component(s)`,
     `${result.handlersBuilt.length} handler(s)`,
   ];
+
+  // `complete` says outright that nothing further is required.
+  //
+  // This began as a fix for a 7B that built the whole Blueprint in one call and then called
+  // unreal_doctor nineteen more times until the step limit. That turned out to be a bug in the
+  // benchmark, not the model: its DONE regex contained a literal backspace byte, so every DONE was
+  // ignored and the model was repeatedly told to keep going. With that fixed the task takes one
+  // call, and an A/B showed this field and sentence change nothing there - the harness decides
+  // completion by inspecting the project, so it can never be influenced by what a result says.
+  //
+  // It is kept because the harness is the unusual case. A real client has no verifier: the model
+  // itself decides when to stop, and "did that finish the job" is then a real question with no
+  // other answer available. Kept deliberately short, since it is paid on every scaffold call.
+  result.complete = result.failures.length === 0;
   result.summary =
     `Built ${objectPath} with ${parts.join(", ")}` +
     `${result.saved ? ", saved" : ""}` +
-    `${result.failures.length > 0 ? `. ${result.failures.length} step(s) failed - see failures.` : "."}`;
+    `${
+      result.failures.length > 0
+        ? `. ${result.failures.length} step(s) failed - see failures, then fix only those.`
+        : ". Complete; nothing further is needed."
+    }`;
 
   return result;
 }
