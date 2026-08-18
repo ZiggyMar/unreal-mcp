@@ -149,6 +149,57 @@ copy; no client ever sees it; the bug reports as "it works for the host". `unrea
 checks for exactly this and names the variable, because it is invisible to every other signal you
 get - it compiles, it reviews clean everywhere else, and one-player testing cannot reveal it.
 
+### Moving another player over the network
+
+The bug that looks like lag and is not.
+
+A character being pushed, pulled, dragged or launched by something else stutters and rubber-bands on
+every machine except the host. People reach for "netcode is hard" or blame their connection. It is
+almost always this:
+
+**Character movement is predicted on the owning client.** The client simulates its own movement
+immediately and the server corrects it when they disagree. That is what makes normal movement feel
+instant. It also means that if a force is applied to a character **only on the server**, the owning
+client predicts standing still, the server says otherwise, and the client is snapped back several
+times a second. The visible result is a stuttering camera and a sliding model - exactly what a bad
+connection looks like, on a LAN with no packet loss at all.
+
+The trap is that the movement code itself is usually correct. What is missing is on the other side:
+
+```
+Event Tick -> DraggedByVacuum -> Branch -> Branch -> Add Force
+                                   ^         ^
+                       reads VaccumDragStrength and LocationDragged
+                       ...both of which are not replicated
+```
+
+Tick runs everywhere, so this LOOKS like it runs on the client too. It does - and does nothing,
+because the values it branches on are still at their defaults there. Only the server has them, so
+only the server applies the force.
+
+**What to check, in order:**
+
+1. Every variable the movement branches on or scales by - is it replicated? If the client cannot
+   see the inputs, it cannot predict the movement.
+2. Where the force is applied. Server-only means guaranteed correction.
+3. Whether the state that says "I am being dragged" is replicated at all. If it lives in a component
+   as a plain array, clients do not know the drag is happening.
+
+**Ways to fix it, cheapest first:**
+
+- **Replicate the inputs.** If the owning client can see the same drag strength and target, its Tick
+  applies the same force, and prediction agrees with the server. Smallest change, and usually enough
+  to remove the gross rubber-banding.
+- **Drive it through a replicated state change** - a replicated bool with `OnRep`, or a custom
+  movement mode - rather than a per-frame force that only one machine knows about.
+- **For a one-off shove, use LaunchCharacter on the owning client as well as the server.** A single
+  impulse both sides agree on beats a per-frame force only one side applies.
+
+The general rule, which is worth more than the specific fix:
+
+> **If the client cannot see the inputs, it cannot predict the outcome, and it will be corrected.**
+> Replicate what the movement reads, not just what the movement did.
+
 ## 8. Performance judgment
 
 Blueprint execution cost is real but it is almost never the node count. It is:
