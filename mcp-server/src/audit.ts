@@ -106,12 +106,22 @@ export interface AuditOptions {
   limit?: number;
   /** Examples reported per finding kind. */
   examplesPerGroup?: number;
+  /**
+   * How many groups come back with their explanation and fix attached.
+   *
+   * Beyond this, groups return name, count and cost only. Nobody works on the thirteenth most
+   * expensive category today, and carrying its prose costs the caller tokens on every call - on the
+   * real project the explanations were most of the reply. Detailed at the top and terse below is
+   * what a plan looks like; uniform detail is what a list looks like.
+   */
+  detailedGroups?: number;
 }
 
 export async function auditProject(bridge: BridgeLike, options: AuditOptions = {}): Promise<AuditResult> {
   const pathPrefix = options.pathPrefix ?? "/Game";
   const limit = Math.max(1, Math.min(options.limit ?? 150, 2000));
   const examplesPerGroup = Math.max(1, Math.min(options.examplesPerGroup ?? 3, 10));
+  const detailedGroups = Math.max(1, Math.min(options.detailedGroups ?? 4, 30));
 
   const listed = await bridge.send<{ blueprints?: Array<{ name: string; path: string }> }>("list_blueprints", {
     pathPrefix,
@@ -209,19 +219,25 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   }
 
   const groups: AuditGroup[] = [...byCheck.entries()]
-    .map(([check, list]) => ({
-      check,
-      count: list.length,
-      cost: FINDING_COST[check] ?? 1,
-      why: WHY_IT_COSTS[check],
-      examples: list.slice(0, examplesPerGroup).map((f) => ({
-        blueprint: f.blueprint,
-        graph: f.graph,
-        message: f.message,
-      })),
-      fix: list[0].fix,
-    }))
-    .sort((a, b) => b.cost - a.cost || b.count - a.count);
+    .map(([check, list]) => ({ check, list }))
+    .sort((a, b) => (FINDING_COST[b.check] ?? 1) - (FINDING_COST[a.check] ?? 1) || b.list.length - a.list.length)
+    .map(({ check, list }, index) => {
+      const detailed = index < detailedGroups;
+      return {
+        check,
+        count: list.length,
+        cost: FINDING_COST[check] ?? 1,
+        why: detailed ? WHY_IT_COSTS[check] : undefined,
+        examples: detailed
+          ? list.slice(0, examplesPerGroup).map((f) => ({
+              blueprint: f.blueprint,
+              graph: f.graph,
+              message: f.message,
+            }))
+          : [],
+        fix: detailed ? list[0].fix : "",
+      };
+    });
 
   const costByBlueprint = new Map<string, { cost: number; findings: number }>();
   for (const finding of findings) {

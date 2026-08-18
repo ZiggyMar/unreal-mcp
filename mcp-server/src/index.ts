@@ -257,6 +257,11 @@ const GROUP_SUMMARY: Record<string, string> = {
  * attach behaviour, compile, review, save. Everything else arrives through unreal_enable_tools.
  */
 const MINIMAL_PROFILE_TOOLS = new Set([
+  // The one tool for "something is wrong, find it". Its reply is the largest of any tool here, so
+  // it is measured rather than assumed: ~1,300 tokens by default against a 385-finding project,
+  // because detail is top-weighted - the leading groups carry their explanation and the rest are a
+  // name and a count. On this profile's target (a 14B at 8k) that leaves room to think.
+  "unreal_audit_project",
   // unreal_doctor is deliberately ABSENT, for the same reason unreal_create_blueprint is.
   //
   // It answers "why is this not working" during setup, and a model mid-task has no use for it -

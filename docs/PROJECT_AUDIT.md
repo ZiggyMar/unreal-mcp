@@ -109,6 +109,26 @@ cost, and ends with a single next action.
 
 That is the shape of the answer to *"my game has bugs and a deadline"*: not a list, a plan.
 
+### Detail at the top, counts below
+
+The first version returned every group with its explanation and fix attached, which on the real
+project meant the prose was most of the reply. Nobody works on the thirteenth most expensive
+category today, so carrying its explanation is a cost with no reader.
+
+| Setting | Reply |
+| --- | --- |
+| every group detailed (the old shape) | 2,601 tok |
+| **top 4 detailed, rest name and count (now the default)** | **1,346 tok** |
+| leanest useful setting | 896 tok |
+
+Same 385 findings, same ranking, half the tokens. Detailed at the top and terse below is what a plan
+looks like; uniform detail is what a list looks like.
+
+That made it affordable for the `minimal` profile - the one that exists for a 14B capped at 8k
+context - which now carries it at 3,883 tokens of tool definitions against a 4,000 ceiling. Measured
+rather than assumed, on both counts: the profile budget holds, and a 7B on that profile finds and
+uses the tool 3/3, with all five other tasks still passing.
+
 ## Every command was costing a third of a second, and it was a checkbox
 
 Auditing 339 Blueprints took twelve minutes, which is far too slow for a tool whose whole argument
