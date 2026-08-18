@@ -17,7 +17,8 @@
     "test:unit": "node --test \"test/*.test.mjs\"",
     "verify:live": "node scripts/live-verify.mjs",
     "fuzz:crash": "node scripts/fuzz-nodes.mjs",
-    "check:docs": "node scripts/check-docs.mjs"
+    "check:docs": "node scripts/check-docs.mjs",
+    "verify:handbook": "node scripts/verify-handbook.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

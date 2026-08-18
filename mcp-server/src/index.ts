@@ -1774,11 +1774,11 @@ const WORKFLOW_FALLBACK =
   "anything is done, and act on what it says; unreal_auto_layout_graph to make it readable; then " +
   "save. Full text: docs/AGENT_WORKFLOW.md in the unreal-mcp repository.";
 
-function loadWorkflowGuide(): string {
+function loadDoc(fileName: string, fallback: string): string {
   // dist/index.js -> mcp-server/dist -> mcp-server -> repo root
   const candidates = [
-    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", "AGENT_WORKFLOW.md"),
-    join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "AGENT_WORKFLOW.md"),
+    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", fileName),
+    join(dirname(fileURLToPath(import.meta.url)), "..", "docs", fileName),
   ];
   for (const path of candidates) {
     try {
@@ -1787,8 +1787,56 @@ function loadWorkflowGuide(): string {
       /* try the next one */
     }
   }
-  return WORKFLOW_FALLBACK;
+  return fallback;
 }
+
+function loadWorkflowGuide(): string {
+  return loadDoc("AGENT_WORKFLOW.md", WORKFLOW_FALLBACK);
+}
+
+/**
+ * Handbooks, for a model that can program but was never trained on Unreal.
+ *
+ * This is the difference between a local model being unusable and being useful. Qwen, DeepSeek and
+ * friends can write logic perfectly well; what they lack is Unreal's vocabulary, its class
+ * hierarchy, and the dozen traps that each cost a failed call to discover. That is a gap a document
+ * can close, and it costs nothing until asked for.
+ *
+ * Every function name in the recipes is machine-checked against the running engine by
+ * `npm run verify:handbook`, because a handbook of plausible-looking node names is worse than none:
+ * the models least able to spot an invented name are exactly the ones relying on this.
+ */
+server.registerPrompt(
+  "unreal_handbook",
+  {
+    title: "Unreal for a model that was never trained on it",
+    description:
+      "The engine-specific knowledge a capable programmer is missing: the Blueprint mental model (exec wires versus " +
+      "data pins), the class hierarchy and how to choose a parent, how to get a reference to another actor, " +
+      "interfaces, the type descriptors this server takes, multiplayer in one page, performance judgment, and the " +
+      "specific traps that each cost one failed call. Pull this in at the start of a session if you are not certain " +
+      "of Unreal's conventions - and if you are running a local or smaller model, pull it in always.",
+  },
+  () => ({
+    messages: [{ role: "user", content: { type: "text", text: loadDoc("BLUEPRINT_HANDBOOK.md", "See docs/BLUEPRINT_HANDBOOK.md in the unreal-mcp repository.") } }],
+  })
+);
+
+server.registerPrompt(
+  "unreal_recipes",
+  {
+    title: "Verified builds of the systems people ask for",
+    description:
+      "Complete, step-by-step builds for health and damage via an interface, interaction by line trace, pickups, a " +
+      "HUD bound to a value, timers instead of Tick, spawning, and save/load - each with the exact tool call order " +
+      "and the exact node names. Every function name is verified against the running engine, and the guide names " +
+      "the nodes that are NOT functions (Branch, Cast, Create Widget, Spawn Actor) which no amount of searching the " +
+      "function catalog will ever find. Pull this in before building any common system.",
+  },
+  () => ({
+    messages: [{ role: "user", content: { type: "text", text: loadDoc("RECIPES.md", "See docs/RECIPES.md in the unreal-mcp repository.") } }],
+  })
+);
 
 server.registerPrompt(
   "unreal_workflow",

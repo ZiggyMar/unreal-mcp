@@ -99,8 +99,15 @@ test("the full profile exposes every tool", async () => {
 
 test("the lazy profile starts small but still carries the whole authoring path", async () => {
   const names = toolsFrom(await callServer("lazy", [listRequest(2)]), 2);
+  const full = toolsFrom(await callServer("full", [listRequest(2)]), 2);
 
-  assert.ok(names.length < 20, `lazy should start small, got ${names.length}`);
+  // Expressed as a ratio rather than a fixed count: the point is that lazy is substantially
+  // cheaper than full, and a hardcoded number just needs bumping every time a core tool is added,
+  // which quietly turns the check into a formality.
+  assert.ok(
+    names.length <= full.length * 0.45,
+    `lazy should be well under half of full; got ${names.length} of ${full.length}`
+  );
   for (const essential of [
     "unreal_ping",
     "unreal_doctor",
@@ -187,18 +194,35 @@ test("every tool is reachable: none is stranded outside core and every group", a
   assert.ok(lazyStart.length < full.length);
 });
 
-test("the workflow guide is served as a prompt, in every profile", async () => {
+test("all three guides are served as prompts, in every profile", async () => {
+  const GUIDES = [
+    { name: "unreal_workflow", mustMention: "unreal_review_blueprint" },
+    { name: "unreal_handbook", mustMention: "exec pins" },
+    { name: "unreal_recipes", mustMention: "K2_DestroyActor" },
+  ];
   for (const profile of ["full", "lazy", "core"]) {
     const messages = await callServer(profile, [
       { jsonrpc: "2.0", id: 2, method: "prompts/list" },
       { jsonrpc: "2.0", id: 3, method: "prompts/get", params: { name: "unreal_workflow" } },
+      { jsonrpc: "2.0", id: 4, method: "prompts/get", params: { name: "unreal_handbook" } },
+      { jsonrpc: "2.0", id: 5, method: "prompts/get", params: { name: "unreal_recipes" } },
     ]);
 
     const listed = messages.find((m) => m.id === 2)?.result?.prompts ?? [];
-    assert.ok(
-      listed.some((p) => p.name === "unreal_workflow"),
-      `${profile} does not offer the workflow prompt`
-    );
+    for (const guide of GUIDES) {
+      assert.ok(
+        listed.some((p) => p.name === guide.name),
+        `${profile} does not offer ${guide.name}`
+      );
+    }
+
+    // A model with no Unreal training depends on these arriving intact, so check content, not
+    // just that something came back.
+    for (const [id, guide] of [[4, GUIDES[1]], [5, GUIDES[2]]]) {
+      const text = messages.find((m) => m.id === id)?.result?.messages?.[0]?.content?.text ?? "";
+      assert.ok(text.length > 3000, `${guide.name} served only ${text.length} chars in ${profile}`);
+      assert.ok(text.includes(guide.mustMention), `${guide.name} is missing "${guide.mustMention}"`);
+    }
 
     const text = messages.find((m) => m.id === 3)?.result?.messages?.[0]?.content?.text ?? "";
     // The fallback string exists so a missing file degrades instead of breaking; if we are
