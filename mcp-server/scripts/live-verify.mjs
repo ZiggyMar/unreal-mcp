@@ -354,6 +354,36 @@ async function main() {
     "material_instance_not_found"
   );
 
+  await check("create_material with a base colour texture and a normal map", async () => {
+    // Use a texture that ships with the engine, so this works in any project.
+    const engineTexture = "/Engine/EngineResources/DefaultTexture.DefaultTexture";
+    const r = await bridge.send("create_material", {
+      packagePath: `${ROOT}/M_MCPTextured`,
+      baseColor: "1,1,1",
+      baseColorTexture: engineTexture,
+      normalTexture: engineTexture,
+    });
+    const names = r.parameters.join(", ");
+    if (!names.includes("BaseColorTexture")) throw new Error(`no texture parameter: ${names}`);
+    if (!names.includes("NormalTexture")) throw new Error(`no normal parameter: ${names}`);
+    return names;
+  });
+
+  await check("the textured material's parameters are all instanceable", async () => {
+    const r = await bridge.send("list_material_parameters", { path: `${ROOT}/M_MCPTextured.M_MCPTextured` });
+    const byKind = r.parameters.reduce((acc, p) => ({ ...acc, [p.kind]: (acc[p.kind] ?? 0) + 1 }), {});
+    // Texture parameters are what let an instance swap the texture without a new material.
+    if (!byKind.texture) throw new Error(`no texture parameters exposed: ${JSON.stringify(byKind)}`);
+    return JSON.stringify(byKind);
+  });
+
+  await expectFailure(
+    "a texture path that does not resolve is refused rather than silently skipped",
+    "create_material",
+    { packagePath: `${ROOT}/M_NoTex`, baseColorTexture: "/Game/Nope/NotATexture.NotATexture" },
+    "texture_not_found"
+  );
+
   await expectFailure(
     "a malformed colour is refused",
     "create_material",
@@ -396,6 +426,7 @@ async function main() {
           `${reusePath}.BP_MCPReuse`,
           `${instPath}.MI_MCPVerify`,
           `${matPath}.M_MCPVerify`,
+          `${ROOT}/M_MCPTextured.M_MCPTextured`,
         ],
         force: true,
       });

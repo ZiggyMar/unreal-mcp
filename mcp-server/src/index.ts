@@ -1835,7 +1835,8 @@ register(
   {
     title: "Create a Material",
     description:
-      "Creates a master Material with BaseColor, Metallic and Roughness (and optionally EmissiveColor) exposed as " +
+      "Creates a master Material with BaseColor, Metallic and Roughness (and optionally EmissiveColor, a base colour " +
+      "texture and a normal map) exposed as " +
       "PARAMETERS rather than baked-in constants. That matters: a parameterised master material can be instanced, " +
       "which is how a real project gets fifty variations without fifty material graphs, and it is what lets the " +
       "look be adjusted later without rebuilding anything.\n\n" +
@@ -1849,6 +1850,22 @@ register(
       metallic: z.number().optional().describe("0 for non-metal (plastic, wood, stone), 1 for bare metal. Values in between are rarely physically correct. Defaults to 0."),
       roughness: z.number().optional().describe("0 is a mirror, 1 is completely matte. Most real surfaces sit between 0.2 and 0.8. Defaults to 0.5."),
       emissiveColor: z.string().optional().describe('Optional glow colour as "R,G,B". Values above 1 glow brighter, e.g. "0,5,10" for a bright blue glow. Omit for non-glowing surfaces.'),
+      baseColorTexture: z
+        .string()
+        .optional()
+        .describe(
+          'Optional texture asset path for the surface colour. When given, the material becomes texture x tint: ' +
+            'baseColor acts as a colour multiplier over the texture rather than replacing it, which is how a master ' +
+            'material stays recolourable per instance. Verify the path with unreal_list_assets className=Texture2D.'
+        ),
+      normalTexture: z
+        .string()
+        .optional()
+        .describe(
+          "Optional normal map asset path, sampled as a normal map and wired to the Normal input. This is what gives " +
+            "a flat surface visible bumps and detail under lighting, and is most of the difference between a surface " +
+            "that reads as a real material and one that reads as coloured plastic."
+        ),
     },
   },
   async ({ packagePath, baseColor, metallic, roughness, emissiveColor }) => {
