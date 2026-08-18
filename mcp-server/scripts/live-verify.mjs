@@ -510,6 +510,48 @@ async function main() {
     }
   });
 
+  await check("a read-only asset is refused with the source-control explanation, not 'save_failed'", async () => {
+    // Perforce and friends mark un-checked-out files read-only, and a Blueprint is a binary asset
+    // that cannot be text-merged. This is the exact point where an agent quietly loses work on a
+    // real team project, so it is reproduced here with a genuinely read-only file.
+    const bp = `${ROOT}/BP_ReadOnly`;
+    await freshBlueprint(bp, "BP_ReadOnly");
+    try {
+      await bridge.send("save_blueprint", { path: `${bp}.BP_ReadOnly` });
+      const created = await bridge.send("list_blueprints", { pathPrefix: ROOT });
+      if (!JSON.stringify(created).includes("BP_ReadOnly")) throw new Error("setup failed: asset not created");
+
+      // Make the .uasset read-only the way source control would.
+      const { execFileSync } = await import("node:child_process");
+      const projectDir = process.env.UNREAL_MCP_PROJECT_DIR;
+      if (!projectDir) return "skipped (set UNREAL_MCP_PROJECT_DIR to exercise this)";
+      const file = `${projectDir}/Content/${ROOT.replace("/Game/", "")}/BP_ReadOnly.uasset`;
+      execFileSync("attrib", ["+R", file.replace(/\//g, String.fromCharCode(92))]);
+
+      try {
+        await bridge.send("add_variable", { path: `${bp}.BP_ReadOnly`, variableName: "X", type: "float" });
+        let message = "";
+        try {
+          await bridge.send("save_blueprint", { path: `${bp}.BP_ReadOnly` });
+        } catch (err) {
+          message = err instanceof Error ? err.message : String(err);
+        }
+        if (!message) throw new Error("a read-only file was saved over, which source control would not allow");
+        if (!/read_only|checkout_failed/.test(message)) {
+          throw new Error(`refused, but not with the source-control explanation: ${firstLine(message)}`);
+        }
+        if (!/still live in the editor|still in the editor/.test(message)) {
+          throw new Error("the message does not tell the caller their work is not lost");
+        }
+        return firstLine(message).slice(0, 120);
+      } finally {
+        execFileSync("attrib", ["-R", file.replace(/\//g, String.fromCharCode(92))]);
+      }
+    } finally {
+      await bridge.send("delete_asset", { paths: [`${bp}.BP_ReadOnly`], force: true }).catch(() => {});
+    }
+  });
+
   // --- claims audit -----------------------------------------------------------------------------
   // Several rows in docs/COMPLAINTS_SOLVED.md were written from reasoning rather than from running
   // anything. These check the load-bearing ones. A safety guarantee nobody has exercised is a

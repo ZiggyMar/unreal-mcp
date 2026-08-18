@@ -83,6 +83,7 @@ const REQUIRED_README_SECTIONS = [
   "### When something is wrong",
   "### The quality gate",
   "### Security: what this bridge does and does not protect you from",
+  "### Team projects: source control and binary assets",
   "### Two editors open: the silent wrong-project edit",
   "### Knowing what the agent touched",
   "### Cost modes",

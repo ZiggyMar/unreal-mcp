@@ -711,6 +711,28 @@ its own is not a control. A human choosing it is a decision; anything else is an
 
 Losing a project asset is a bad afternoon. Losing your engine install is a reinstall.
 
+### Team projects: source control and binary assets
+
+A Blueprint is a **binary** `.uasset`. It cannot be text-merged, which is why Unreal teams rely on
+checkout locking rather than merging, and why source control marks a file you have not checked out
+as **read-only on disk**.
+
+That combination is where an agent quietly loses work on a real project: it makes the edits, the
+save fails, and the caller is told `save_failed` with no idea why.
+
+Saving now checks first:
+
+- **read-only and source control connected** — the file is checked out automatically, then saved
+- **read-only and source control unavailable** — the save is refused, and the message says what is
+  actually wrong and that **the edits are still live in the editor**, so nothing has to be redone
+- **checked out by someone else** — refused, and the message says why two people cannot safely edit
+  one Blueprint
+
+`unreal_ping` reports whether source control is enabled and connected, and `unreal_doctor` warns
+when it is enabled but disconnected — before the work, rather than after the failed save.
+
+Verified against a genuinely read-only `.uasset`, since that is exactly what Perforce produces.
+
 ### Two editors open: the silent wrong-project edit
 
 The bridge binds one port. If you have **two Unreal Editors open** with this plugin enabled, only one
