@@ -652,6 +652,12 @@ register(
       "unreal_add_variable). Inherited variables from a parent class are not yet supported.\n" +
       '  - "Branch": an if/else on a bool. Pins: execute, Condition, then, else. No other params.\n' +
       '  - "Sequence": executes its output pins in order (then_0, then_1). No other params.\n' +
+      '  - "CallParent": the "Parent: BeginPlay" node - right-click an overridden event in the editor and ' +
+      'choose "Add call to parent function". functionName required, written as the editor shows it on the ' +
+      'event node ("BeginPlay", "Tick", "EndPlay") - the Receive- prefix is added for you. Adding an event to ' +
+      "a child Blueprint REPLACES the parent's rather than extending it, and nothing warns, so whatever the " +
+      "parent set up simply never happens. This is the fix for the parent-event-not-called finding: wire it " +
+      "FIRST in that chain.\n" +
       '  - "Cast": targetClass required (short name or full path); pure optional (default false = has exec pins). ' +
       "Pins: execute, Object, then, CastFailed, As<Class>.\n" +
       '  - "Macro": macroName required, from the engine\'s standard macro library: ForEachLoop, ForLoop, WhileLoop, ' +
@@ -663,7 +669,7 @@ register(
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
-      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro"]),
+      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
       functionName: z.string().optional().describe("Required for nodeType CallFunction."),
       className: z.string().optional().describe("Optional owning class for nodeType CallFunction."),
@@ -1055,7 +1061,7 @@ register(
         .array(
           z.object({
             ref: z.string().describe("Your short handle for this node, unique in the batch, no dots."),
-            nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro"]),
+            nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
             eventName: z.string().optional(),
             functionName: z.string().optional(),
             className: z.string().optional(),

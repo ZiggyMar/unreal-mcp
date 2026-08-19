@@ -42,6 +42,15 @@ export interface AuthorityUnit {
   name: string;
   /** The entry node, so its replication can be read only if it is ever reached. */
   entryId: string;
+  /**
+   * The entry node's type.
+   *
+   * Only a custom event can be a Server RPC. A function has no replication mode, and an overridden
+   * engine event (BeginPlay, Tick) cannot be one either - so asking the editor about those is a
+   * bridge call whose answer is known in advance. On a real project that distinction is the
+   * difference between a few dozen questions and several thousand.
+   */
+  entryType?: string;
   /** Nodes belonging to this unit. */
   nodes: FlowNode[];
 }

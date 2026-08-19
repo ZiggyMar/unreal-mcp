@@ -15,6 +15,7 @@
 #include "K2Node_Event.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CallParentFunction.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_IfThenElse.h"
@@ -1701,6 +1702,47 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	{
 		// Executes outputs in order. Allocates two output pins by default (then_0, then_1).
 		NewNode = NewObject<UK2Node_ExecutionSequence>(Graph);
+	}
+	else if (NodeType == TEXT("CallParent"))
+	{
+		// The "Parent: BeginPlay" node - right-click an overridden event and choose
+		// "Add call to parent function".
+		//
+		// This exists because the audit can find the mistake and could not fix it. Adding
+		// Event BeginPlay to a child Blueprint does not extend the parent's, it replaces it,
+		// and nothing warns. On a real project that left the component an entire feature
+		// depended on null for every player, and the log said "Accessed None" 54 times a
+		// session.
+		FString FunctionName;
+		if (!Params->TryGetStringField(TEXT("functionName"), FunctionName) || FunctionName.IsEmpty())
+		{
+			return MakeErrorResponse(TEXT("missing_param: functionName is required for nodeType=CallParent, e.g. \"BeginPlay\""));
+		}
+
+		UClass* ParentClass = Blueprint->ParentClass;
+		if (!ParentClass)
+		{
+			return MakeErrorResponse(TEXT("no_parent_class: this Blueprint has no parent class to call into."));
+		}
+
+		// Blueprint-facing events are named Receive* on the C++ side: what a person calls
+		// "BeginPlay" is ReceiveBeginPlay. Accept either, because nobody types the second one.
+		UFunction* ParentFunction = ParentClass->FindFunctionByName(FName(*FunctionName));
+		if (!ParentFunction && !FunctionName.StartsWith(TEXT("Receive")))
+		{
+			ParentFunction = ParentClass->FindFunctionByName(FName(*(TEXT("Receive") + FunctionName)));
+		}
+		if (!ParentFunction)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("parent_function_not_found: %s has no function \"%s\" (also tried Receive%s). ")
+				TEXT("Use the name as the editor shows it on the event node."),
+				*ParentClass->GetName(), *FunctionName, *FunctionName));
+		}
+
+		UK2Node_CallParentFunction* ParentCall = NewObject<UK2Node_CallParentFunction>(Graph);
+		ParentCall->SetFromFunction(ParentFunction);
+		NewNode = ParentCall;
 	}
 	else if (NodeType == TEXT("Cast"))
 	{

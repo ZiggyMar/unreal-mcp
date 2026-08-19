@@ -300,11 +300,13 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
           const isEventGraph = /^EventGraph$/i.test(graph.graphName);
           const name = isEventGraph ? chain.entry.replace(/^Event\s+/i, "").trim() : graph.graphName;
           const chainNodes = nodes.filter((n) => chain.nodeIds.includes(n.id) || n.id === chain.entryId);
+          const entryNode = nodes.find((n) => n.id === chain.entryId);
           units.push({
             key: `${bp.name}::${name}`,
             blueprint: bp.name,
             name,
             entryId: chain.entryId,
+            entryType: entryNode?.type,
             nodes: chainNodes as never,
           });
           uiCandidates.push({
@@ -365,10 +367,18 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const unitIndex = new Map(units.map((u) => [u.key, u]));
   const callers = buildCallers(units);
   const netModeCache = new Map<string, boolean>();
+  // One lookup instead of a scan: this is asked once per unit met on every backward walk, and a
+  // linear search here turned the whole audit quadratic.
+  const ownerOfUnit = new Map<string, (typeof uiCandidates)[number]>();
+  for (const candidate of uiCandidates) if (!ownerOfUnit.has(candidate.unitKey)) ownerOfUnit.set(candidate.unitKey, candidate);
+
   const isServerRpc = async (unit: AuthorityUnit): Promise<boolean> => {
+    // Only a custom event can be a Server RPC. Asking the editor about a function entry or an
+    // overridden engine event is a bridge call whose answer is already known.
+    if (unit.entryType && unit.entryType !== "K2Node_CustomEvent") return false;
     const cached = netModeCache.get(unit.key);
     if (cached !== undefined) return cached;
-    const owner = uiCandidates.find((c) => c.unitKey === unit.key);
+    const owner = ownerOfUnit.get(unit.key);
     let server = false;
     if (owner) {
       const detail = await bridge
