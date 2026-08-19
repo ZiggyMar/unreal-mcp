@@ -16,6 +16,8 @@ export interface BlueprintReview {
    * one bridge call per Blueprint - across a real project that is hundreds.
    */
   variables?: Array<{ name: string; type?: string; replicated?: boolean; repNotify?: string }>;
+  /** What this Blueprint derives from, for the checks that compare a child against its parent. */
+  parentClass?: string;
   /**
    * Findings about the Blueprint as a whole rather than about one graph: where its state lives, and
    * whether what the server writes will ever reach a client.
@@ -79,6 +81,7 @@ export async function reviewBlueprint(
   // from one a team can extend. It is allowed to fail silently: a review that refuses to run
   // because one optional check could not gather its data is worse than a review missing that check.
   let variables: BlueprintReview["variables"] = [];
+  let parentClass = "";
   let stateFindings: StateFinding[] = [];
   let mpFindings: MpFinding[] = [];
   try {
@@ -89,6 +92,7 @@ export async function reviewBlueprint(
     stateFindings = reviewStatePlacement(state.parentClass ?? "", state.variables ?? []);
     mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? []);
     variables = state.variables ?? [];
+    parentClass = state.parentClass ?? "";
   } catch {
     stateFindings = [];
     mpFindings = [];
@@ -142,6 +146,7 @@ export async function reviewBlueprint(
     // Only when the caller already asked for the raw nodes: an ordinary review has no use for the
     // variable list and should not pay to carry it.
     variables: options.includeGraphNodes ? variables : undefined,
+    parentClass: options.includeGraphNodes ? parentClass : undefined,
     graphNodes: options.includeGraphNodes ? graphNodes : undefined,
     blueprint: extraFindings.map(({ check, severity, message, fix }) => ({ check, severity, message, fix })),
     nextAction,

@@ -31,6 +31,7 @@ import { findServerOnlyCasts } from "./multiplayer.js";
 import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
+import { findUncalledParentEvents } from "./parentCalls.js";
 import { explainGraph } from "./explainGraph.js";
 
 /** What each finding is likely to cost, and why it sits where it does. */
@@ -43,6 +44,9 @@ export const FINDING_COST: Record<string, number> = {
   // Same tier as the casts that only fail on clients, and for the same reason: on a listen server
   // the host IS the server, so it works on the machine the developer is looking at.
   "server-event-touches-widget": 95,
+  // The parent's work simply does not happen, on every machine, and nothing warns. The child's own
+  // logic still works, which is what makes it survive.
+  "parent-event-not-called": 95,
   "unhandled-cast-failure": 90,
   "level-sweep-every-frame": 85,
   "spawn-every-frame": 85,
@@ -74,6 +78,8 @@ const WHY_IT_COSTS: Record<string, string> = {
   "level-sweep-every-frame": "Walks every actor in the level, 60+ times a second.",
   "spawn-every-frame": "The most expensive thing a Blueprint can do, repeated per frame.",
   "state-outlives-owner": "Resets on death or respawn, so it looks correct until somebody dies.",
+  "parent-event-not-called":
+    "Adding an event to a child Blueprint silently replaces the parent's. Everything the parent set up is missing, on every machine, while the child's own logic still works - so the Blueprint looks correct.",
   "server-event-touches-widget":
     "A widget exists only on the machine that created it, so this updates the host's screen and nobody else's. The cast succeeds and nothing errors.",
   "repnotify-does-nothing":
@@ -177,6 +183,12 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const unreadable: Array<{ name: string; error: string }> = [];
   const sessionGraphs: SessionGraph[] = [];
   const units: AuthorityUnit[] = [];
+  // Kept per Blueprint so a child can be compared against its parent afterwards: the parent has not
+  // necessarily been read at the moment the child is.
+  const eventGraphs = new Map<
+    string,
+    { parentClass: string; chains: Array<{ entry: string; steps: string[]; nodeIds: string[] }>; titles: string[] }
+  >();
   const uiCandidates: Array<{
     blueprint: string;
     path: string;
@@ -263,6 +275,20 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         });
       }
 
+      const eventGraph = (review.graphNodes ?? []).find((g) => /^EventGraph$/i.test(g.graphName));
+      if (eventGraph) {
+        const evNodes = (eventGraph.nodes ?? []) as Array<{ id: string; title?: string }>;
+        eventGraphs.set(bp.name, {
+          parentClass: (review.parentClass ?? "").replace(/_C$/, ""),
+          chains: explainGraph({ nodes: evNodes } as never).chains.map((c) => ({
+            entry: c.entry,
+            steps: c.steps,
+            nodeIds: c.nodeIds,
+          })),
+          titles: evNodes.map((n) => String(n.title ?? "")),
+        });
+      }
+
       // Collected here and judged after the loop: whether a chain runs on the server can depend on
       // a Server RPC in a different Blueprint, which has not necessarily been read yet.
       for (const graph of review.graphNodes ?? []) {
@@ -307,6 +333,30 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     } catch (err) {
       // One unreadable Blueprint must not cost the caller the audit.
       unreadable.push({ name: bp.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
+    }
+  }
+
+  // A child against its parent. Both have to have been read, which is why this waits until here.
+  for (const [name, child] of eventGraphs) {
+    const parent = eventGraphs.get(child.parentClass);
+    if (!parent) continue;
+    for (const finding of findUncalledParentEvents({
+      blueprint: name,
+      parentBlueprint: child.parentClass,
+      childChains: child.chains,
+      childNodeTitles: child.titles,
+      parentChains: parent.chains,
+    })) {
+      findings.push({
+        blueprint: name,
+        path: (blueprints.find((b) => b.name === name) ?? { path: pathPrefix }).path,
+        graph: "EventGraph",
+        check: finding.check,
+        severity: finding.severity,
+        message: finding.message,
+        fix: finding.fix,
+        cost: FINDING_COST[finding.check] ?? 1,
+      });
     }
   }
 

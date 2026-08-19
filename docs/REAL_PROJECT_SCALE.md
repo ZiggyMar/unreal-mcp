@@ -210,6 +210,7 @@ Five new findings, all computed from reads that were already happening:
 | `session-host-paths-disagree` | warning | more than one live host button, each with its own copy of the settings, already drifted apart |
 | `server-event-touches-widget` | error | a Server RPC that creates, removes or casts to a widget - it lands on the host's screen and nowhere else |
 | `repnotify-does-nothing` | warning | a variable replicated with RepNotify whose OnRep function is empty |
+| `parent-event-not-called` | error | a child overrides a lifecycle event without calling the parent's, so everything the parent set up is missing |
 
 The last one is the judgment question: **a pawn is destroyed and recreated when the player dies, so
 anything that must outlive the body does not belong on the body.** Score on a Character reads as
@@ -610,3 +611,31 @@ on the other end is a runtime fact - so any implementer counts as a possible cal
 safe direction: it can suggest authority a particular instance would not have, and it will not miss
 one. A timer bound through a `Create Event` node is invisible, because the bound function's name is
 not in the node.
+
+## The check that came from a log rather than a graph
+
+`unreal_read_runtime_errors` was built because somebody pressed Play and got a wall of errors. The
+top entry was the same line 54 times:
+
+    Accessed None trying to read (real) property VacuumableComp in BP_BaseCharacter_C.
+    Node: RemovePlayer  Graph: EventGraph  Blueprint: BP_Player
+
+Following it took four reads. `VacuumableComp` is an unreplicated object variable, set in one place:
+`BP_BaseCharacter`'s BeginPlay, by `Add Component by Class`. And `BP_Player` overrides `Event
+BeginPlay` without calling `Parent: BeginPlay` - so that never ran, on any machine, and the
+component the entire vacuum feature depends on was null for every player.
+
+The same project has `Parent: Tick` and `Parent: SetGameplayTagMC` elsewhere, so this was an
+oversight rather than a decision. That is exactly the shape worth a check: legal, silent, and
+invisible in the graph that contains the mistake - the child's own logic is perfect, and the missing
+thing is in a different asset.
+
+`parent-event-not-called` reports it, and always names what is being skipped:
+
+> BP_Player overrides Event BeginPlay but never calls Parent: BeginPlay, so BP_BaseCharacter's Event
+> BeginPlay never runs - including Add Component by Class -> Set VacuumableComp.
+
+It is limited to lifecycle events (BeginPlay, EndPlay, Possessed, Destroyed and friends), where
+losing the parent's work is both silent and expensive, and it stays quiet when the parent's
+implementation is only a debug print. Overriding on purpose is a real thing people do; the finding
+is the override of a parent that *does work*, which is a different claim and one worth making.
