@@ -27,3 +27,7 @@ Thumbs.db
 
 # crash-sweep resume state (per-machine, regenerated on every run)
 mcp-server/.fuzz/
+
+# scratch scripts used to drive the bridge by hand during debugging
+mcp-server/t.mjs
+mcp-server/audit-check.mjs
