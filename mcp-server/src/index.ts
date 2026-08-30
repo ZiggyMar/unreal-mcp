@@ -781,9 +781,12 @@ register(
   {
     title: "Read a Blueprint graph summary",
     description:
-      "Reads a compact summary of one graph in a Blueprint: every node's id, type, and title, plus which pins are " +
-      "connected to which other nodes. Deliberately omits node position/cosmetic metadata and unconnected pins to stay " +
-      "token-lean. Use unreal_read_node_detail afterward for full pin/property detail on a specific node id from this result.",
+      "Reads a compact summary of one graph: each node's id, type, title, and its wiring as one line per " +
+      "connected pin, e.g. \"out then -> 3C03B7C2.execute\" (direction, pin name, then the nodes it reaches). " +
+      "Node ids are abbreviated to the shortest prefix unique in this graph, and every tool that takes a node " +
+      "id accepts that prefix. Type names have their K2Node_ prefix stripped. Positions, cosmetic metadata and " +
+      "unconnected pins are omitted. " +
+      "Use unreal_read_node_detail for the full pin and property detail of one node id from this result.",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),

@@ -1097,6 +1097,21 @@ ambiguous_node_id: 'A' matches 45 nodes in this graph (A0B1A6EB..., ADDE6CA3...,
 Single-node replies elsewhere still carry the whole GUID, where one identifier costs nothing and
 being able to quote it anywhere is worth more.
 
+**And 65% of what was left was JSON keys.** With the ids shortened, the same 807-node graph measured
+52,469 tokens of which only **18,461 were data** — the rest was punctuation and repeated key names,
+mostly because every link is its own `{"node":..,"pin":..}` object, so the words `node` and `pin`
+appeared 1,642 times to carry two short strings each. Wiring is flattened to one line per pin:
+
+```json
+{"id":"3C03B7C2","type":"CustomEvent","title":"HealthRegen","pins":["out then -> 53A3335B.execute"]}
+```
+
+That is cheaper *and* easier to read than the nested form it replaces, which is the rare case where
+those two pull the same way. The `K2Node_` prefix is stripped too — every node in a Blueprint graph
+has it, so it identified nothing and cost 1,400 tokens of the same seven characters.
+
+**The default read of that graph is now 3,110 tokens. It started the day at 126,477.**
+
 **The other two big reads got the same treatment**, and the breakdown decided the fix in each case
 rather than a guess:
 

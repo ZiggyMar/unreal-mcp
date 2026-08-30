@@ -18,10 +18,42 @@ function bigGraph(count = 807) {
   return { path: "/Game/X.X", graphName: "EventGraph", nodes };
 }
 
-test("a small graph is returned exactly as it was, with no bookkeeping added", () => {
+test("a small graph carries no truncation bookkeeping, but is still compacted", () => {
   const small = { path: "/Game/X.X", graphName: "EventGraph", nodes: [node("a", "K2Node_Event", "Event BeginPlay")] };
   const out = capGraphSummary(small);
-  assert.deepEqual(out, small, "an ordinary graph must not start carrying truncation fields");
+  assert.equal(out.truncated, undefined, "nothing was cut, so nothing should claim it was");
+  assert.equal(out.totalNodes, undefined);
+  assert.equal(out.path, "/Game/X.X");
+  // Compaction is not about size-per-graph, it is about shape: the wiring form costs the same per
+  // node whether there are five of them or eight hundred, so it applies either way.
+  assert.equal(out.nodes[0].type, "Event", "the K2Node_ prefix identifies nothing and is stripped");
+});
+
+test("wiring is flattened to one readable line per pin", () => {
+  // Measured: 65% of a real graph reply was JSON keys and punctuation, mostly because every link is
+  // its own {"node":..,"pin":..} object - "node" and "pin" repeated 1,642 times to carry two short
+  // strings each.
+  const wired = {
+    nodes: [
+      {
+        id: "aaaaaaaa",
+        type: "K2Node_Event",
+        title: "Event BeginPlay",
+        connectedPins: [
+          { pin: "then", direction: "out", linkedTo: [{ node: "bbbbbbbb", pin: "execute" }] },
+          { pin: "unused", direction: "out", linkedTo: [] },
+        ],
+      },
+    ],
+  };
+  const out = capGraphSummary(wired);
+  assert.deepEqual(out.nodes[0].pins, ["out then -> bbbbbbbb.execute", "out unused"]);
+  assert.equal(out.nodes[0].connectedPins, undefined, "the nested form should not also be carried");
+});
+
+test("a node with no connections carries no pins field at all", () => {
+  const out = capGraphSummary({ nodes: [node("a", "K2Node_Event", "Event BeginPlay")] });
+  assert.equal(out.nodes[0].pins, undefined, "an empty array would cost tokens to say nothing");
 });
 
 test("a huge graph is capped, and says so rather than looking complete", () => {
@@ -38,10 +70,11 @@ test("a huge graph is capped, and says so rather than looking complete", () => {
 test("entry points are never the nodes that get dropped", () => {
   // A cap that loses the events leaves a list of function calls belonging to nothing.
   const out = capGraphSummary(bigGraph(), { maxNodes: 5 });
+  // Types come back with the K2Node_ prefix stripped.
   const kinds = out.nodes.map((n) => n.type);
-  assert.ok(kinds.includes("K2Node_Event"), "events must survive the cap");
-  assert.ok(kinds.includes("K2Node_CustomEvent"), "custom events too");
-  assert.equal(out.nodes.filter((n) => n.type === "K2Node_Event").length, 2, "both events, not just one");
+  assert.ok(kinds.includes("Event"), "events must survive the cap");
+  assert.ok(kinds.includes("CustomEvent"), "custom events too");
+  assert.equal(out.nodes.filter((n) => n.type === "Event").length, 2, "both events, not just one");
 });
 
 test("match answers a specific question for a fraction of the nodes", () => {
