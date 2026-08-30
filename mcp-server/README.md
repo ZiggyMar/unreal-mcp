@@ -987,8 +987,15 @@ before that existed and were wrong within a few commits, which is the argument f
 **`search` is the one to reach for on a capable model**, and it is what `--print-config` now writes
 for Claude Desktop, Claude Code, and Cursor. Only four tools stand: `unreal_ping`, `unreal_doctor`,
 `unreal_list_tools`, and `unreal_enable_tools`. Everything else is registered with its full schema
-and switched off. `unreal_list_tools` names every tool with a one-line summary and no schema, so
-even discovery is cheap; one `unreal_enable_tools` call then brings back whatever the job needs.
+and switched off. `unreal_list_tools` names tools with a one-line summary and no schema, so even
+discovery is cheap; one `unreal_enable_tools` call then brings back whatever the job needs.
+
+**Discovery is itself budgeted, which took one measurement to notice.** Listing all 88 tools cost
+**5,523 tokens** — more than four times the entire `search` profile it exists to protect. A discovery
+mechanism that costs more than the thing it discovers defeats its own purpose, and a model on
+`search` was paying it on the first call of every session. With no filter `unreal_list_tools` now
+returns a **group census** at ~338 tokens; `group` or `match` returns real tools (`match: "data table"`
+is 141); `all: true` still gives everything, for the rare case that is genuinely wanted.
 
 **Be precise about what that saves, because the headline number is only the first turn.** 1.2k is
 what `tools/list` costs before anything is enabled. A model that then asks for the whole `core` group

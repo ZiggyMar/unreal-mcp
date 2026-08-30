@@ -348,3 +348,41 @@ test("groups still work, and both can be asked for at once", async () => {
   assert.ok(listed.includes("unreal_create_material"), "the group should be on");
   assert.ok(listed.includes("unreal_build_graph"), "the named tool should be on");
 });
+
+test("list_tools answers with a census, not every tool, unless asked", async () => {
+  // Measured and embarrassing: listing all 88 tools cost 5,523 tokens - more than four times the
+  // entire `search` profile this tool exists to protect. A discovery mechanism that costs more than
+  // the thing it discovers defeats its own purpose, and a model on `search` paid it on the first
+  // call of every session.
+  const messages = await callServer("search", [
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "unreal_list_tools", arguments: {} } },
+    { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "unreal_list_tools", arguments: { all: true } } },
+  ]);
+
+  const census = JSON.parse(messages.find((m) => m.id === 2).result.content[0].text);
+  const everything = JSON.parse(messages.find((m) => m.id === 3).result.content[0].text);
+
+  assert.ok(Array.isArray(census.groups), "the default answer is the groups");
+  assert.equal(census.tools, undefined, "the default answer must not carry every tool");
+  assert.ok(census.totalTools > 50, `the census still reports the total, got ${census.totalTools}`);
+  assert.match(census.next, /match/, "and says how to narrow");
+
+  assert.ok(Array.isArray(everything.tools), "all:true still lists every tool");
+  assert.ok(everything.tools.length > 50);
+
+  const censusSize = JSON.stringify(census).length;
+  const fullSize = JSON.stringify(everything).length;
+  assert.ok(
+    censusSize * 5 < fullSize,
+    `the census must be dramatically cheaper: ${censusSize} vs ${fullSize} chars`
+  );
+});
+
+test("filtering list_tools still returns actual tools", async () => {
+  const messages = await callServer("search", [
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "unreal_list_tools", arguments: { match: "data table" } } },
+  ]);
+  const body = JSON.parse(messages.find((m) => m.id === 2).result.content[0].text);
+  assert.ok(Array.isArray(body.tools) && body.tools.length > 0, "a filter means you want the tools");
+  assert.ok(body.tools.every((t) => /data|table/i.test(t.name + t.summary)));
+});

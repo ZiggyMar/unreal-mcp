@@ -2650,11 +2650,47 @@ register(
         .string()
         .optional()
         .describe('Only tools in this group: core, edit, ui, materials, data, scene, maintenance.'),
+      all: z
+        .boolean()
+        .optional()
+        .describe("Every tool at once (~5.5k tokens). Without a filter you get a group census instead, which is cheaper and usually enough."),
     },
   },
-  async ({ match, group }) => {
+  async ({ match, group, all }) => {
     const needle = (match ?? "").trim().toLowerCase();
     const wanted = (group ?? "").trim().toLowerCase();
+
+    // With no filter, answer with the GROUPS rather than all 88 tools.
+    //
+    // Measured, and it was embarrassing: listing everything cost 5,523 tokens - more than four times
+    // the entire `search` profile this tool exists to protect. A discovery mechanism that costs more
+    // than the thing it is discovering defeats its own purpose, and a model on `search` would have
+    // paid it on the first call every session. The census is about 250 tokens and says where to look
+    // next, which is what "what exists here" actually needs to answer.
+    if (needle.length === 0 && wanted.length === 0 && all !== true) {
+      const byGroup = new Map<string, number>();
+      for (const [, meta] of toolCatalog) {
+        byGroup.set(meta.group, (byGroup.get(meta.group) ?? 0) + 1);
+      }
+      const enabledNow = [...toolHandles.values()].filter((h) => h.enabled).length;
+      return jsonResult({
+        totalTools: toolCatalog.size,
+        enabled: enabledNow,
+        groups: [...byGroup.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([name, count]) => ({
+            group: name,
+            count,
+            what:
+              GROUP_SUMMARY[name] ??
+              "the authoring spine: read a project, find a function, scaffold, build a graph, compile, review, save",
+          })),
+        next:
+          "Call again with a `group` to list the tools in it, or `match` to search names and summaries " +
+          '(e.g. {"match":"data table"}). Listing every tool costs about 5.5k tokens and is rarely ' +
+          "what you want - pass all:true if it genuinely is.",
+      });
+    }
     const rows = [...toolCatalog.entries()]
       .filter(([, meta]) => wanted.length === 0 || meta.group === wanted)
       .filter(
