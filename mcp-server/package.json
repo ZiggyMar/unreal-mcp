@@ -31,7 +31,8 @@
     "check:replies": "node scripts/check-response-budgets.mjs",
     "measure:reads": "node scripts/measure-reads.mjs",
     "trial:feature": "node scripts/trial-feature.mjs",
-    "check:engines": "node scripts/build-engines.mjs --isolated"
+    "check:engines": "node scripts/build-engines.mjs --isolated",
+    "measure:groups": "node scripts/measure-groups.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

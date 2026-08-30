@@ -1168,6 +1168,33 @@ read with no bound at all. Nothing legitimate returns 25k tokens from one call.
 Write costs are measured by `npm run measure:cost`: a five-node build response is ~110 tokens on
 `fast`, ~194 on `standard`, ~697 on `max`.
 
+**`npm run measure:groups` measures what turning a group ON costs**, which is the number the
+`search` profile's whole premise rests on and which nothing had ever checked. Measured:
+
+| group | tools | ~tokens added |
+|---|---|---|
+| core | 28 | 10,427 |
+| scene | 21 | 5,616 |
+| data | 13 | 3,610 |
+| edit | 8 | 3,153 |
+| ui | 5 | 1,942 |
+| maintenance | 5 | 1,513 |
+| materials | 4 | 1,411 |
+
+The uncomfortable result is the first row. `search` stands at ~1,244 tokens, so a model that follows
+`enable_tools`' own advice and turns on `core` is at ~11,671 — which is what `lazy` costs standing,
+without the extra call. **The search profile saves nothing for a job that needs `core`**; it saves a
+great deal for one that needs `ui` or `materials` and nothing else. That is worth stating plainly
+rather than leaving as an implication, because "enable only what you need" reads like a saving in
+every case and is one in some.
+
+`unreal_list_tools` now reports `costTokens` per group so the choice is made with the price visible.
+Those numbers are generated into `src/groupCosts.ts` by `measure:groups --write`, and the plain
+command fails when they drift — a hand-written number would rot, which this repo has already had
+happen once when four tools were added to `lazy` and the documented size stayed put. They are in a
+reply rather than in `enable_tools`' description because replies cost nothing until called, and
+because `enable_tools` sits in the `minimal` profile, which is at exactly its 4,000-token ceiling.
+
 **`npm run build:engines` guards the other claim this project makes**: that one source tree supports
 UE 5.6 and 5.8. Dual-version support is the kind of claim that rots silently - a 5.8-only API slips
 into a handler, 5.8 keeps building, and nobody finds out until a 5.6 user compiles - so it is one
