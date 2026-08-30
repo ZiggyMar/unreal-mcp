@@ -1025,6 +1025,21 @@ receive all of it.
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+**`unreal_list_variables` got filtering rather than a cap, and the measurement is why.** 84 variables
+came to 4,117 tokens with *no single field dominating* — unlike the graph read, there was no fat to
+cut, and a cap would simply have hidden state at random. What a caller actually wants is not "fewer
+variables" but a specific set:
+
+| call | tokens | variables |
+| --- | --- | --- |
+| everything (unchanged) | 5,744 | 84 |
+| `match: "Health"` | **354** | 5 |
+| `replicatedOnly: true` | **1,133** | 15 |
+
+`replicatedOnly` earns its place because *"what can a client actually see"* is the question behind
+this project's highest-cost audit finding — a server writing to an unreplicated variable works
+perfectly on the machine the developer is looking at.
+
 **Replies are budgeted too, by `npm run check:replies`.** `check:profiles` guards the standing cost —
 what the tool *definitions* cost before a conversation starts. Nothing guarded what a tool costs when
 it *answers*, and that gap was not hypothetical: `unreal_list_tools`, whose entire purpose is keeping

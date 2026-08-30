@@ -1736,11 +1736,49 @@ register(
       "This is a direct read, so unlike unreal_search_project it cannot lag behind a write you just made.",
     inputSchema: {
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      match: z
+        .string()
+        .optional()
+        .describe('Only variables whose name, type or category contains this, e.g. "Health".'),
+      replicatedOnly: z
+        .boolean()
+        .optional()
+        .describe("Only replicated variables. The fastest way to reason about what a client can actually see."),
     },
   },
-  async ({ path }) => {
+  async ({ path, match, replicatedOnly }) => {
     try {
-      return jsonResult(await bridge.send("list_variables", { path }));
+      const result = await bridge.send<{ variables?: Array<Record<string, unknown>> }>("list_variables", { path });
+      const all = result.variables ?? [];
+      const needle = (match ?? "").trim().toLowerCase();
+
+      // Filtering rather than truncating, and the measurement is why. 84 variables came to 4,117
+      // tokens with no single field dominating - unlike the graph read, there is no fat to cut and a
+      // cap would just hide state at random. What a caller usually wants is not "fewer variables",
+      // it is "the ones about health", or "the ones a client can see", and those are cheap to ask
+      // for and expensive to guess at from a truncated list.
+      let filtered = all;
+      if (needle) {
+        filtered = filtered.filter((v) =>
+          `${v.name ?? ""} ${v.type ?? ""} ${v.subType ?? ""} ${v.category ?? ""}`.toLowerCase().includes(needle)
+        );
+      }
+      if (replicatedOnly === true) {
+        filtered = filtered.filter((v) => v.replicated === true);
+      }
+
+      if (filtered.length === all.length) {
+        return jsonResult(result);
+      }
+      return jsonResult({
+        ...result,
+        variables: filtered,
+        totalVariables: all.length,
+        matched: filtered.length,
+        ...(filtered.length === 0
+          ? { note: `None of the ${all.length} variables match. Call again without a filter to see them all.` }
+          : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }
