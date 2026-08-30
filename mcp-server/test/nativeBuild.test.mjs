@@ -141,3 +141,32 @@ test("a full build gets no unity note, because unity is exactly what a full buil
   const errs = [{ file: "A.cpp", line: 1, code: "C2065", message: "'X': undeclared identifier", severity: "error" }];
   assert.equal(unityNote(undefined, errs), undefined);
 });
+
+test("paths are shortened the same way whatever machine this runs on", () => {
+  // CI caught this on the first Linux run: node:path answers questions about the platform it is
+  // RUNNING on, so isAbsolute("M:/Proj/X.cpp") is false on Linux and relative() treated the whole
+  // string as a filename. Every diagnostic came back with its full path instead of a project-relative
+  // one - correct on the machine that wrote it, wrong everywhere else. The shortening is now plain
+  // string work, so both shapes resolve identically on any host.
+  const B = String.fromCharCode(92); // a literal backslash, spelled out so no escaping layer eats it
+  const tail = "(1): error C2065: 'x': undeclared identifier";
+
+  const windows = parseBuildOutput(`M:${B}Proj${B}Source${B}MyGame${B}A.cpp${tail}`, `M:${B}Proj`);
+  assert.equal(windows.errors[0].file, "Source/MyGame/A.cpp");
+
+  const posix = parseBuildOutput(`/proj/Source/MyGame/A.cpp${tail}`, "/proj");
+  assert.equal(posix.errors[0].file, "Source/MyGame/A.cpp");
+
+  // Mixed separators, which is what UBT emits when the -Project argument used forward slashes.
+  const mixed = parseBuildOutput(`M:/Proj${B}Source${B}MyGame${B}A.cpp${tail}`, "M:/Proj");
+  assert.equal(mixed.errors[0].file, "Source/MyGame/A.cpp");
+
+  // Case, because Windows does not care and UBT does report m:\proj for a project at M:\Proj.
+  const cased = parseBuildOutput(`m:${B}proj${B}Source${B}MyGame${B}A.cpp${tail}`, `M:${B}Proj`);
+  assert.equal(cased.errors[0].file, "Source/MyGame/A.cpp");
+
+  // And an engine header, which is not under the project and must stay absolute rather than climb
+  // out with a row of "..".
+  const engine = parseBuildOutput(`M:${B}Unreal${B}UE_5.6${B}Engine${B}X.h${tail}`, `M:${B}Proj`);
+  assert.match(engine.errors[0].file, /^M:\/Unreal\/UE_5\.6\//);
+});

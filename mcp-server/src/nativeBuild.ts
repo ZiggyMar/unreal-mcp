@@ -25,7 +25,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface NativeDiagnostic {
   /** Project-relative where possible, so it is stable to quote and cheap to read. */
@@ -75,12 +75,25 @@ export function parseBuildOutput(output: string, projectDir?: string): {
   const warnings: NativeDiagnostic[] = [];
   const seen = new Set<string>();
 
+  // Deliberately string work rather than node:path. UnrealBuildTool emits Windows paths with
+  // backslashes, and node:path answers questions about the platform it is RUNNING on: on Linux
+  // isAbsolute("M:/Proj/X.cpp") is false and relative() treats the whole thing as a filename, so
+  // every diagnostic came back with its full path instead of a project-relative one. CI caught that
+  // on the first Linux run of these tests, which is exactly what CI is for - it had been correct on
+  // the one machine that wrote it.
+  //
+  // Case-insensitive because Windows is, and a project at M:\Proj reporting m:\proj\... in a
+  // diagnostic is a real thing UBT does.
+  const root = (projectDir ?? "").split("\\").join("/").replace(/\/+$/, "");
   const shorten = (file: string) => {
-    const trimmed = file.trim();
-    if (!projectDir || !isAbsolute(trimmed)) return trimmed.split(sep).join("/");
-    const rel = relative(projectDir, trimmed);
-    // A path that climbs out of the project (engine headers) is clearer left absolute.
-    return rel.startsWith("..") ? trimmed.split(sep).join("/") : rel.split(sep).join("/");
+    const forward = file.trim().split("\\").join("/");
+    if (!root) return forward;
+    if (!forward.toLowerCase().startsWith(`${root.toLowerCase()}/`)) {
+      // Not under the project - an engine header, most often. Clearer left absolute than as a path
+      // that climbs out with a row of "..".
+      return forward;
+    }
+    return forward.slice(root.length + 1);
   };
 
   for (const raw of output.split(/\r?\n/)) {

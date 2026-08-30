@@ -14,6 +14,7 @@ export const GROUP_COST_TOKENS: Record<string, number> = {
   core: 10427,
   cpp: 417,
   anim: 343,
+  ai: 307,
   edit: 3154,
   ui: 1942,
   materials: 1411,
@@ -23,7 +24,7 @@ export const GROUP_COST_TOKENS: Record<string, number> = {
 };
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
-export const ALL_GROUPS_TOKENS = 30732;
+export const ALL_GROUPS_TOKENS = 31039;
 
 /** Naming the eight tools one Blueprint feature needs, instead of enabling the `core` group. */
 export const FEATURE_SET_TOKENS = 4650;
