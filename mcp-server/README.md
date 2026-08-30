@@ -290,6 +290,38 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+#### Finding rows that point at nothing: `unreal_check_data_tables`
+
+Every other audit in this server reads Blueprint graphs. This one exists because a bug reached a
+shipped build that no graph-reading check could ever have seen, because it was not in a graph — it
+was in data.
+
+A wave system read its enemy types from a Data Table. One row's class reference had been cleared to
+`None`. The spawner fed that null straight into `SpawnActorFromClass`, which spawns nothing, raises
+nothing and logs nothing — while the spawned-enemy counter still incremented, so the wave never
+completed and the game simply stopped producing enemies. To a player that reads as "the game is
+broken"; to the developer it read as "works on my machine", because the row *looks* correct in the
+editor: it has a name, a ratio, a wave number, and one empty box among them.
+
+```
+unreal_check_data_tables({})                          # every Data Table under /Game
+unreal_check_data_tables({ pathPrefix: "/Game/Data" })
+```
+
+**How a null is recognised without the bridge reporting property types.** A field is judged to hold
+an asset reference when *some row fills it with an asset path*; a row giving `None` for that same
+field is then a broken reference. The table carries the evidence to convict itself, because a table
+with one broken row necessarily still has the working rows to compare against. Ordinary prose that
+happens to read "None" is never flagged, since nothing in that field ever looks like a path.
+
+The limit is stated rather than left to be discovered: a field empty in **every** row cannot be
+judged this way — there is no filled row to prove it was ever a reference — so those are reported as
+`undecidable` instead of being silently passed. A table that cannot be read at all is reported too,
+never skipped, because a broken row must not be able to hide behind a plugin-version problem.
+
+Findings name the repair directly: `unreal_set_data_table_row`, then `unreal_save_asset`.
+
+
 #### Changing a row that already exists: `unreal_set_data_table_row`
 
 `unreal_add_data_table_row` deliberately refuses when the row is already there, which is right for

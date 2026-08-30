@@ -41,7 +41,7 @@ const aliases = new Map([
 // which is the point: it works while the editor is mid-crash, and it can read the session that
 // already happened - which is the situation somebody is in when they say "I pressed play and got
 // errors".
-const compositeTools = new Set(["read_runtime_errors", "auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature", "cleanup_blueprint", "add_event_handler", "scaffold_blueprint", "scaffold_widget", "explain_graph", "audit_project", "guard_with_authority", "list_tools", "guide", "find_source", "verify_feature"]);
+const compositeTools = new Set(["read_runtime_errors", "auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature", "cleanup_blueprint", "add_event_handler", "scaffold_blueprint", "scaffold_widget", "explain_graph", "audit_project", "guard_with_authority", "list_tools", "guide", "find_source", "verify_feature", "check_data_tables"]);
 
 const covered = new Set();
 for (const tool of registeredTools) {

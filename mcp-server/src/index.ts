@@ -27,6 +27,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findSourceRoots, searchSource } from "./nativeSource.js";
 import { verifyFeature } from "./verifyFeature.js";
+import { auditDataTables } from "./dataTableAudit.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -324,6 +325,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_create_data_table",
     "unreal_add_data_table_row",
     "unreal_set_data_table_row",
+    "unreal_check_data_tables",
     "unreal_list_data_table_rows",
     "unreal_create_struct",
     "unreal_add_struct_field",
@@ -2258,6 +2260,41 @@ register(
   async ({ path, rowName, values }) => {
     try {
       return jsonResult(await bridge.send("add_data_table_row", { path, rowName, values }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_check_data_tables",
+  {
+    title: "Find Data Table rows that point at nothing",
+    description:
+      "Scans Data Tables for asset-reference fields that are empty in some rows and filled in others. " +
+      "This is a silent, expensive class of bug and no other check here can see it: every other audit in " +
+      "this server reads Blueprint graphs, and a cleared reference is not in a graph, it is in data. " +
+      "The engine resolves an empty reference to null, whatever consumes it does nothing, and no error " +
+      "is raised anywhere - a spawner fed a null class simply spawns no actor. The row looks correct in " +
+      "the editor too, because it has a name and its other fields, with one empty box among them. " +
+      "Written after a shipped build lost most of its enemy spawns to exactly this. " +
+      "A field is judged to be a reference when some row fills it with an asset path, so a table with " +
+      "one broken row carries the evidence to convict itself; ordinary text that happens to read " +
+      "\"None\" is never flagged, because nothing in that field ever looks like a path. Fields empty in " +
+      "every row are reported as undecidable rather than passed, since there is no filled row to prove " +
+      "what they should hold.",
+    inputSchema: {
+      paths: z
+        .array(z.string())
+        .optional()
+        .describe("Specific Data Tables to check. Defaults to every Data Table under pathPrefix."),
+      pathPrefix: z.string().optional().describe('Restrict the search, e.g. "/Game/Data". Defaults to /Game.'),
+      limit: z.number().optional().describe("Maximum tables to scan. Defaults to 200."),
+    },
+  },
+  async ({ paths, pathPrefix, limit }) => {
+    try {
+      return jsonResult(await auditDataTables(bridge, { paths, pathPrefix, limit }));
     } catch (err) {
       return errorResult(err);
     }
