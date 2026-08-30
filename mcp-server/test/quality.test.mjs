@@ -233,3 +233,33 @@ test("a genuinely stray node is still reported as dead", () => {
   assert.ok(deadNode, "a stray non-event node was not reported");
   assert.deepEqual(deadNode.nodeIds, ["3"]);
 });
+
+test("UE's greyed-out placeholder events are not reported as events wired to nothing", () => {
+  // Every new Blueprint gets ghost BeginPlay and Tick nodes: real UEdGraphNodes, but placeholders
+  // rather than behaviour. Counting them meant a feature that compiled cleanly still failed
+  // verification for two nodes this server had created itself moments earlier.
+  const withGhosts = [
+    { id: "g1", type: "K2Node_Event", title: "Event BeginPlay", ghost: true, connectedPins: [] },
+    { id: "g2", type: "K2Node_Event", title: "Event Tick", ghost: true, connectedPins: [] },
+    {
+      id: "r1",
+      type: "K2Node_Event",
+      title: "Event ActorBeginOverlap",
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "x", pin: "execute" }] }],
+    },
+  ];
+  const report = reviewGraph("EventGraph", withGhosts);
+  assert.equal(
+    report.findings.filter((f) => f.check === "empty-event").length,
+    0,
+    "placeholders are events nobody has written yet, not events wired to nothing"
+  );
+});
+
+test("a real event wired to nothing is still reported", () => {
+  // The ghost exemption must not become a blanket one.
+  const report = reviewGraph("EventGraph", [
+    { id: "r1", type: "K2Node_Event", title: "Event ActorBeginOverlap", connectedPins: [] },
+  ]);
+  assert.equal(report.findings.filter((f) => f.check === "empty-event").length, 1);
+});

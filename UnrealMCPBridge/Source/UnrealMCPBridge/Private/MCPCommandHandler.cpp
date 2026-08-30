@@ -1161,6 +1161,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 
 		TSharedRef<FJsonObject> NodeEntry = MakeShared<FJsonObject>();
 		NodeEntry->SetStringField(TEXT("id"), MakeNodeId(Node));
+		// UE places greyed-out BeginPlay / Tick / ActorBeginOverlap placeholders in every new
+		// Blueprint. They are real UEdGraphNodes but they are not behaviour - they are an invitation.
+		// Unmarked, every quality check counted them as events wired to nothing, so a feature that
+		// compiled cleanly still failed verification for two nodes the tool itself had just created.
+		if (Node && Node->IsAutomaticallyPlacedGhostNode())
+		{
+			NodeEntry->SetBoolField(TEXT("ghost"), true);
+		}
 		NodeEntry->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 		NodeEntry->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
 

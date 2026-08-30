@@ -341,6 +341,11 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityR
   // --- Events that lead nowhere. ---
   const emptyEvents = nodes.filter((node) => {
     if (!isEventNode(node)) return false;
+    // A ghost node is UE's greyed-out placeholder - the BeginPlay and Tick that appear in every new
+    // Blueprint before anyone has used them. They are not events wired to nothing, they are events
+    // nobody has written yet, and flagging them meant a feature that compiled cleanly still failed
+    // verification for two nodes this server had created itself moments earlier.
+    if ((node as { ghost?: boolean }).ghost === true) return false;
     return !(node.connectedPins ?? []).some((pin) => pin.direction === "out" && (pin.linkedTo ?? []).length > 0);
   });
   if (emptyEvents.length > 0) {

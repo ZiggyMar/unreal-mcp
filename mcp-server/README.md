@@ -739,6 +739,28 @@ When the complaint is "my AI tool cannot see Unreal", taking the AI tool out of 
 fastest way to learn which half is broken. Exit code 1 if the editor is unreachable, 0 otherwise,
 so it can gate a script.
 
+#### It does not penalise its own scaffolding
+
+Every new Blueprint gets greyed-out `BeginPlay` and `Tick` placeholders. They are real
+`UEdGraphNode`s, so every quality check counted them as *events wired to nothing* — and a health
+pickup that built correctly, compiled 0/0 and did exactly what was asked still came back
+`verdict: fail`, for two nodes the server had created itself moments earlier.
+
+A model acting on that either chases a non-problem or deletes scaffolding it should not touch. The
+bridge marks them (`ghost: true`, via UE's own `IsAutomaticallyPlacedGhostNode()`) and the checks skip
+them: a placeholder is an event nobody has written yet, not an event wired to nothing. A real event
+left dangling is still reported — there is a test for each half, because the exemption must not
+quietly become a blanket one.
+
+What replaced the false finding on that same pickup is worth quoting, because it is the difference
+between noise and use:
+
+```
+[EventGraph] 1 Cast node(s) leave the "Cast Failed" pin unhandled
+```
+
+That is true, and it is the actual design gap — nothing handles a non-player touching the pickup.
+
 #### A review will not hand you a score for something that does not build
 
 Found by running a real feature request end to end and deliberately leaving it half-wired. The
