@@ -35,6 +35,14 @@ const PROFILES = [
     why: "must fit a 14B capped at 8k context with room left to think",
   },
   {
+    name: "search",
+    // Four tools: ping, doctor, list_tools, enable_tools. This is the frontier default, and the
+    // ceiling is low on purpose - the moment anything else is standing here, the profile has
+    // stopped being what it claims to be and the saving it exists for is gone.
+    ceilingTokens: 2_000,
+    why: "the frontier default: everything reachable, almost nothing standing",
+  },
+  {
     name: "core",
     // Deliberately the same ceiling as `lazy`, because they expose the same tools: `core` registers
     // only this set, while `lazy` registers everything and disables all but this set so it can grow

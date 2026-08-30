@@ -656,14 +656,15 @@ Two things worth knowing:
 
 `unreal_doctor` reports the active mode and what it means, since it changes what every call costs.
 
-Combine with `UNREAL_MCP_PROFILE=lazy` for the cheapest useful setup: 20 tools (~6.6k tokens of
-standing cost instead of ~17.7k) and ~110-token build responses.
+Combine with `UNREAL_MCP_PROFILE=search` for the cheapest useful setup: four tools standing
+(~1.2k tokens instead of ~25.5k) and ~110-token build responses.
 
 ### Tool profiles: paying only for what you use
 
-Tool definitions are paid for on every request, before the user's message is read. The full set is
-56 tools and roughly 17.7k tokens of standing cost. On a 200k-context model that is noise; on an 8k
-or 32k local model it is the difference between usable and unusable.
+Tool definitions are paid for on every request, before the user's message is read. All 80 tools cost
+roughly 25.5k tokens of standing cost, every single turn. On an 8k or 32k local model that is the
+difference between usable and unusable — but even on a 200k-context frontier model it is 25k tokens
+a turn spent describing tools the session will never call.
 
 The obvious fix is to write shorter descriptions. That was measured and rejected: tool descriptions
 are 41% of the payload and they are the teaching a weaker model leans on, while parameter prose is
@@ -671,12 +672,33 @@ another 17%, so even aggressive editing buys about a tenth of the total and make
 at sequencing. The bytes are not the problem. **Sending tools the caller will never touch is the
 problem.**
 
-| `UNREAL_MCP_PROFILE` | Starts at | Reaches |
-| --- | --- | --- |
-| `full` (default) | 64 tools, ~20.9k tokens | everything, immediately |
-| `lazy` | 26 tools, ~9.5k tokens | everything, on request |
-| `core` | 26 tools, ~9.5k tokens | only those, permanently |
-| `minimal` | **10 tools, ~3.6k tokens** | only those, permanently |
+| `UNREAL_MCP_PROFILE` | Starts at | Reaches | Meant for |
+| --- | --- | --- | --- |
+| `search` | **4 tools, ~1.2k tokens** | everything, on request | frontier models — what `--print-config` emits |
+| `full` (in-process default) | 80 tools, ~25.5k tokens | everything, immediately | when you want no indirection at all |
+| `lazy` | 28 tools, ~10.1k tokens | everything, on request | mid-size models |
+| `core` | 28 tools, ~10.1k tokens | only those, permanently | clients that ignore `tools/list_changed` |
+| `minimal` | 11 tools, ~4.0k tokens | only those, permanently | small local models |
+
+Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
+fails if a profile grows past the ceiling its intended model can hold. They were hand-measured once
+before that existed and were wrong within a few commits, which is the argument for the script.
+
+**`search` is the one to reach for on a capable model**, and it is what `--print-config` now writes
+for Claude Desktop, Claude Code, and Cursor. Only four tools stand: `unreal_ping`, `unreal_doctor`,
+`unreal_list_tools`, and `unreal_enable_tools`. Everything else is registered with its full schema
+and switched off. `unreal_list_tools` names every tool with a one-line summary and no schema, so
+even discovery is cheap; one `unreal_enable_tools` call then brings back whatever the job needs.
+
+The saving is 95% of the standing cost, and nothing is given up for it. This is deliberately *not* a
+`call_tool(name, json)` dispatcher: enabling a group hands the model the **real, fully typed
+schemas**, so argument validation, enum constraints, and parameter documentation are all intact. The
+model pays one extra call at the start of a session and stops paying 24k tokens on every turn after
+it. Epic's own MCP plugin reached the same conclusion in 5.8 with its Tool Search mode.
+
+The trade is indirection, and that is exactly why the smaller profiles are unchanged: a weak model
+handles indirection badly, and `minimal` beats everything else for it. A frontier model handles it
+without noticing.
 
 **On a small local model, use `minimal`.** Measured across three benchmark tasks, it completes each
 in a single tool call with no failed calls, while `lazy` needs up to sixteen calls and seven
@@ -684,38 +706,31 @@ failures for the same outcome. Fewer tools means fewer wrong paths to try first,
 surface is cheaper and more reliable at once — see
 [the benchmark](../docs/LOCAL_MODEL_BENCHMARK.md).
 
-Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
-fails if a profile grows past the ceiling its intended model can hold. They were hand-measured once
-before that existed and were wrong within a few commits, which is the argument for the script.
-
 **`minimal` exists for a measured reason.** On a 12 GB GPU, a 14B model loads at 8k context and
-fails to load at 16k. The `lazy` profile is ~9.5k tokens of tool definitions by itself, so its tool
+fails to load at 16k. The `lazy` profile is ~10.1k tokens of tool definitions by itself, so its tool
 list alone would consume the entire budget that model has. **Tool payload size does not just cost
 tokens; it decides which models you can run at all.** `minimal` is the authoring spine only - find
 a function, create, add state, attach behaviour, compile, review, save - and everything else
 arrives through `unreal_enable_tools`.
 
-**`lazy` is the one to reach for.** Every tool is registered with its full schema, but the optional
-groups start switched off. When the model needs one it calls `unreal_enable_tools`, the group
-switches on, and the SDK notifies the client that the tool list changed. Nothing is dumbed down or
-collapsed behind a dispatcher; the definitions simply arrive when they are wanted. A session that
-never builds UI never pays for the UMG tools.
+**`lazy` sits between the two.** Every tool is registered with its full schema, but the optional
+groups start switched off, and the always-on set is the whole straight-line authoring path: orient,
+search, read, find the exact node, create the Blueprint, add variables and functions, build the
+graph, compile, lay out, review, save, plus `unreal_doctor`. A model can complete an entire feature
+without enabling anything.
 
-The groups are `edit` (single-node graph surgery), `ui` (UMG), `data` (structs, enums, asset
-lookup), `scene` (levels, actors, components, class defaults, input, PIE), and `maintenance`
-(references, deletion, Refresh Nodes).
-
-What stays on always is the whole straight-line authoring path: orient, search, read, find the
-exact node, create the Blueprint, add variables and functions, build the graph, compile, lay out,
-review, save, plus `unreal_doctor`. A model can complete an entire feature without enabling
-anything.
+The groups are `core` (the authoring spine — the only one `search` users normally need), `edit`
+(single-node graph surgery), `ui` (UMG), `materials` (materials and material instances), `data`
+(structs, enums, asset lookup), `scene` (levels, actors, components, class defaults, input, PIE),
+and `maintenance` (references, deletion, Refresh Nodes).
 
 `core` remains for clients that do not act on `tools/list_changed`: same small footprint, but the
 other tools are unreachable rather than deferred. The active profile and the enabled/registered
 counts are printed to stderr at startup.
 
 A test asserts that no tool is stranded outside core and every group, so a tool added in future
-cannot silently become unreachable in `lazy`.
+cannot silently become unreachable in `lazy` or `search`.
+
 
 ### Security: what this bridge does and does not protect you from
 

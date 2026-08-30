@@ -130,6 +130,10 @@ const server = new McpServer({
 const CORE_PROFILE_TOOLS = new Set([
   "unreal_ping",
   "unreal_doctor",
+  // Cheap (about 150 tokens) and the only way to see what is switched off, so it belongs in every
+  // profile that can defer a tool. Left out of `core`, it would be registered-but-unreachable in
+  // `lazy` - which the stranded-tool test caught immediately.
+  "unreal_list_tools",
   "unreal_enable_tools",
   "unreal_session_changes",
   "unreal_undo_history",
@@ -297,12 +301,47 @@ const MINIMAL_PROFILE_TOOLS = new Set([
   "unreal_save_blueprint",
 ]);
 
+/**
+ * The "search" profile: everything reachable, almost nothing standing.
+ *
+ * The measurement is the whole argument. The tool definitions this server sends before the user has
+ * said a word cost, per request: minimal 3,883 tokens, core and lazy 9,989, full 25,111. A frontier
+ * model has the context to absorb `full` - that is why it is the in-process default - but "can
+ * afford it" is not the same as "should pay it". It is 25k tokens of standing cost on every turn,
+ * most of it describing tools the session will never call.
+ *
+ * Epic's own MCP plugin, shipped experimental in 5.8, hit the same wall and answered it the same
+ * way: its Tool Search mode returns a few meta-tools from tools/list and lets the agent pull in the
+ * rest on demand. That is a poor trade for a weak model, which struggles with the indirection -
+ * which is exactly why `minimal`, `core` and `lazy` are untouched. It is an excellent trade for a
+ * capable one, which will spend one call to buy back 24k tokens on every remaining turn.
+ *
+ * The difference from a generic call_tool proxy matters: enabling a group here hands over the REAL
+ * typed schemas. Nothing is flattened into a stringly-typed passthrough, so nothing is given up in
+ * exchange for the saving, which is the entire point of doing it this way.
+ */
+const SEARCH_PROFILE_TOOLS = new Set([
+  // Is the bridge there, and if not, why not. Both are small, and both are what you reach for first
+  // when nothing works, so neither should need a round trip to switch on.
+  "unreal_ping",
+  "unreal_doctor",
+  // The two that make everything else reachable.
+  "unreal_list_tools",
+  "unreal_enable_tools",
+]);
+
 const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
 
 // How much to spend per build. The floor never moves: every mode still builds atomically, lays the
 // graph out, and compiles. Modes trade polish and paperwork, never correctness.
 const { policy: MODE, warning: MODE_WARNING } = resolveMode(process.env.UNREAL_MCP_MODE);
 const registeredToolNames: string[] = [];
+/** name -> the group that switches it on. Built from TOOL_GROUPS; anything absent is core. */
+const GROUP_OF_TOOL = new Map<string, string>(
+  Object.entries(TOOL_GROUPS).flatMap(([group, names]) => names.map((n) => [n, group] as [string, string]))
+);
+/** name -> what unreal_list_tools says about it, captured at registration so it cannot drift. */
+const toolCatalog = new Map<string, { title: string; summary: string; group: string }>();
 const toolHandles = new Map<string, { enable(): void; disable(): void; enabled: boolean }>();
 
 /**
@@ -339,6 +378,18 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
     return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
   }
   registeredToolNames.push(name);
+  // Captured here rather than maintained by hand, so unreal_list_tools can never fall out of step
+  // with what is actually registered. The summary is the first sentence of the description: enough
+  // to choose a tool, at a fraction of the cost of its schema.
+  {
+    const cfg = config as unknown as { title?: string; description?: string };
+    const first = (cfg.description ?? "").split(". ")[0].trim();
+    toolCatalog.set(name, {
+      title: cfg.title ?? name,
+      summary: first.length > 0 ? (first.endsWith(".") ? first : first + ".") : cfg.title ?? name,
+      group: GROUP_OF_TOOL.get(name) ?? "core",
+    });
+  }
   // Wrap every handler so an identical repeated call is answered differently from the first. This
   // sits here rather than in each tool because the looping failure has appeared in three unrelated
   // tools already; fixing it per-tool fixed three symptoms and no causes.
@@ -354,7 +405,9 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
 
 /** Switch a group on. Returns the tool names that became available. */
 function enableGroup(group: string): string[] {
-  const names = TOOL_GROUPS[group] ?? [];
+  // "core" is not in TOOL_GROUPS - it is the set the other profiles leave on permanently. In the
+  // "search" profile it is switched off like everything else, so it needs a name to ask for.
+  const names = group === "core" ? [...CORE_PROFILE_TOOLS] : TOOL_GROUPS[group] ?? [];
   const turnedOn: string[] = [];
   for (const name of names) {
     const handle = toolHandles.get(name);
@@ -2229,6 +2282,61 @@ register(
 );
 
 register(
+  "unreal_list_tools",
+  {
+    title: "List every Unreal tool, without paying for its schema",
+    description:
+      "Every tool this server has, each with a one-line summary and the group that switches it on - and none of " +
+      "the parameter schemas, which is the whole point: the summaries cost a fraction of what the definitions do. " +
+      "Use this to find the right tool, then call unreal_enable_tools for the group it names to get the real, " +
+      "fully typed definition. Nothing here is a substitute for the schema; it is how you decide which schemas " +
+      "are worth loading. Filter with match or group when you already know roughly what you are after.",
+    inputSchema: {
+      match: z
+        .string()
+        .optional()
+        .describe('Case-insensitive substring, matched against tool names and summaries, e.g. "widget" or "data table".'),
+      group: z
+        .string()
+        .optional()
+        .describe('Only tools in this group: core, edit, ui, materials, data, scene, maintenance.'),
+    },
+  },
+  async ({ match, group }) => {
+    const needle = (match ?? "").trim().toLowerCase();
+    const wanted = (group ?? "").trim().toLowerCase();
+    const rows = [...toolCatalog.entries()]
+      .filter(([, meta]) => wanted.length === 0 || meta.group === wanted)
+      .filter(
+        ([name, meta]) =>
+          needle.length === 0 ||
+          name.toLowerCase().includes(needle) ||
+          meta.summary.toLowerCase().includes(needle)
+      )
+      .map(([name, meta]) => ({
+        name,
+        group: meta.group,
+        on: toolHandles.get(name)?.enabled ?? false,
+        summary: meta.summary,
+      }))
+      .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+
+    const off = [...new Set(rows.filter((r) => !r.on).map((r) => r.group))].sort();
+    return jsonResult({
+      matched: rows.length,
+      of: toolCatalog.size,
+      tools: rows,
+      groupsNotYetOn: off,
+      next:
+        off.length > 0
+          ? `Call unreal_enable_tools with ${JSON.stringify(off)} to get the real schemas for the tools above that are off.`
+          : "Every matching tool is already enabled; call it directly.",
+    });
+  }
+);
+
+
+register(
   "unreal_enable_tools",
   {
     title: "Turn on a group of Unreal tools",
@@ -2236,10 +2344,14 @@ register(
       "This server starts with a small set of always-available tools and keeps the rest switched off until asked, " +
       "so a session that never builds UI never pays the context cost of the UI tools. Call this the moment you " +
       "need something from a group, then use those tools normally. Groups:\n" +
+      '  - "core": the authoring spine - read a project, find a function, scaffold a Blueprint, build a ' +
+      "graph, compile, review, and save. On the \"search\" profile nothing is on until you ask, so this is " +
+      'your first call and often the only one you need: ["core"] alone can carry a whole feature.\n' +
       '  - "edit": single-node graph editing (add/remove one node, wire one pin, set one default, move and comment ' +
       "nodes). You usually do NOT need this: unreal_build_graph places whole graphs in one call and auto-lays them " +
       "out. Enable it to adjust an existing graph surgically.\n" +
       '  - "ui": UMG. Create Widget Blueprints, build the widget tree, set widget and layout-slot properties.\n' +
+      '  - "materials": Materials and Material Instances - create them, parameterise them, override them.\n' +
       '  - "data": Structs, Enums, and asset lookup by class.\n' +
       '  - "scene": Levels, actors, components, class defaults (including replication), project settings, input ' +
       "mappings, and Play In Editor.\n" +
@@ -2250,8 +2362,8 @@ register(
       "exactly what was turned on, and re-calling is harmless.",
     inputSchema: {
       groups: z
-        .array(z.enum(["edit", "ui", "materials", "data", "scene", "maintenance"]))
-        .describe('Groups to turn on, e.g. ["ui","data"].'),
+        .array(z.enum(["core", "edit", "ui", "materials", "data", "scene", "maintenance"]))
+        .describe('Groups to turn on, e.g. ["core","ui"].'),
     },
   },
   async ({ groups }) => {
@@ -3019,6 +3131,15 @@ async function main() {
     }
   }
 
+  // "search": only ping, doctor, and the two meta-tools stand. Everything else is registered with
+  // its full schema and switched off, so tools/list costs about a thousand tokens instead of 25k,
+  // and one unreal_enable_tools call brings back whatever the job actually needs - fully typed.
+  if (PROFILE === "search") {
+    for (const [name, handle] of toolHandles) {
+      if (!SEARCH_PROFILE_TOOLS.has(name)) handle.disable();
+    }
+  }
+
   // `--print-config` emits the exact JSON to paste into a client, with absolute paths already
   // resolved.
   //
@@ -3043,7 +3164,12 @@ async function main() {
       command: process.execPath,
       args: [entry],
       env: {
-        UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "lazy",
+        // "search", not "lazy". Every client this prints for - Claude Desktop, Claude Code, Cursor -
+        // drives a frontier model, and "lazy" was chosen for the opposite case: it still stands 28
+        // tools up front at 9,989 tokens a turn. "search" stands four, and a capable model buys the
+        // rest back in one call with the real schemas intact. Local-model users set the profile
+        // explicitly; they are the ones the smaller profiles were measured for.
+        UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "search",
         UNREAL_MCP_MODE: process.env.UNREAL_MCP_MODE ?? "standard",
       },
     };
@@ -3089,9 +3215,11 @@ async function main() {
   if (MODE_WARNING) {
     console.error(`unreal-mcp-server: ${MODE_WARNING}`);
   }
-  if (PROFILE !== "core" && PROFILE !== "full" && PROFILE !== "lazy" && PROFILE !== "minimal") {
+  const KNOWN_PROFILES = ["minimal", "core", "lazy", "search", "full"];
+  if (!KNOWN_PROFILES.includes(PROFILE)) {
     console.error(
-      `unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". Valid: minimal, core, lazy, full.`
+      `unreal-mcp-server: unknown UNREAL_MCP_PROFILE "${PROFILE}", treated as "full". ` +
+        `Valid: ${KNOWN_PROFILES.join(", ")}.`
     );
   }
 }
