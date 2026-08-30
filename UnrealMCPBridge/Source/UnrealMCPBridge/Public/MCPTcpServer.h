@@ -29,7 +29,8 @@ public:
 private:
 	bool HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint);
 	bool Tick(float DeltaTime);
-	void ProcessClientSocket(class FMCPClientConnection& Client);
+	/** Returns false when the connection must be dropped rather than read from again. */
+	bool ProcessClientSocket(class FMCPClientConnection& Client);
 
 	TUniquePtr<FTcpListener> Listener;
 	TArray<TSharedPtr<class FMCPClientConnection>> Clients;

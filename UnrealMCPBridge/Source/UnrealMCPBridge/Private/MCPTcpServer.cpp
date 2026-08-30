@@ -174,12 +174,27 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 			Clients.RemoveAt(i);
 			continue;
 		}
-		ProcessClientSocket(Client);
+		if (!ProcessClientSocket(Client))
+		{
+			// The connection asked to be closed - malformed framing, or an oversized line. The
+			// destructor closes and destroys the socket.
+			Clients.RemoveAt(i);
+			continue;
+		}
 	}
 	return true; // keep ticking
 }
 
-void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
+/**
+ * The largest single request this server will buffer before giving up on a peer.
+ *
+ * A request is one line, and the largest legitimate ones are whole-graph builds: comfortably under
+ * a megabyte. Without a ceiling, a peer that opens a socket and never sends a newline makes the
+ * editor allocate until it dies, which is a denial of service costing the attacker one connection.
+ */
+static constexpr int32 MCPMaxRequestBytes = 4 * 1024 * 1024;
+
+bool FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 {
 	uint32 PendingSize = 0;
 	while (Client.Socket->HasPendingData(PendingSize) && PendingSize > 0)
@@ -197,6 +212,16 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		Client.RecvBuffer.AppendChars(Converter.Get(), Converter.Length());
 	}
 
+	// A peer that never sends a newline must not be able to grow this without limit.
+	if (Client.RecvBuffer.Len() > MCPMaxRequestBytes)
+	{
+		UE_LOG(LogMCPBridge, Warning,
+			TEXT("UnrealMCPBridge: dropping a connection that sent %d bytes with no newline (limit %d). ")
+			TEXT("A request is a single line of JSON; nothing legitimate reaches this size."),
+			Client.RecvBuffer.Len(), MCPMaxRequestBytes);
+		return false;
+	}
+
 	// Process complete newline-terminated requests.
 	int32 NewlineIndex;
 	while (Client.RecvBuffer.FindChar(TEXT('\n'), NewlineIndex))
@@ -212,6 +237,7 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		TSharedPtr<FJsonObject> RequestObj;
 		TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Line);
 		TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
+		bool bDropConnection = false;
 
 		if (FJsonSerializer::Deserialize(Reader, RequestObj) && RequestObj.IsValid())
 		{
@@ -219,8 +245,33 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		}
 		else
 		{
+			// A line that is not JSON ends the connection. This is a security boundary, not tidiness.
+			//
+			// The protocol is newline-delimited JSON on a plain TCP port, and a web page can open
+			// that port. A cross-origin POST with Content-Type: text/plain is CORS-safelisted, so it
+			// is sent with no preflight and no consent from any site the user happens to be reading:
+			//
+			//     fetch("http://127.0.0.1:8765/", { method: "POST", mode: "no-cors",
+			//       headers: { "Content-Type": "text/plain" },
+			//       body: a newline, then {"cmd":"delete_asset","params":{...}}, then a newline })
+			//
+			// The browser writes an HTTP request line, then headers, then that body, all down the
+			// same socket. While a bad line was merely answered and skipped, the request line and
+			// every header were discarded as invalid_json in turn - and then the body parsed as a
+			// perfectly good command and RAN. Same-origin policy stops the page reading the reply,
+			// which is no comfort at all when the commands on offer include deleting assets.
+			//
+			// Hanging up on the first unparseable line closes that off completely, because every
+			// HTTP request begins with a request line that is not JSON. It costs a legitimate client
+			// nothing: the only thing that speaks this protocol sends whole JSON objects, one per
+			// line, and has no reason to send anything else.
 			Response->SetBoolField(TEXT("ok"), false);
 			Response->SetStringField(TEXT("error"), TEXT("invalid_json"));
+			Response->SetStringField(TEXT("detail"),
+				TEXT("This port speaks newline-delimited JSON, one object per line, and closes the ")
+				TEXT("connection on anything else. If you are a browser or an HTTP client, you are ")
+				TEXT("not talking to a web server."));
+			bDropConnection = true;
 		}
 
 		FString OutStr;
@@ -232,6 +283,18 @@ void FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		FTCHARToUTF8 UTF8Str(*OutStr);
 		int32 BytesSent = 0;
 		Client.Socket->Send(reinterpret_cast<const uint8*>(UTF8Str.Get()), UTF8Str.Length(), BytesSent);
+
+		if (bDropConnection)
+		{
+			// The diagnosis is written first, so a human pointing the wrong tool at this port still
+			// gets told what the port is, and only then hung up on.
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("UnrealMCPBridge: closing a connection that sent a line which is not JSON. ")
+				TEXT("If this was a browser, a page tried to reach the bridge and was refused."));
+			return false;
+		}
 	}
+
+	return true;
 }
 
