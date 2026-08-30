@@ -1144,6 +1144,27 @@ A test asserts that no tool is stranded outside core and every group, so a tool 
 cannot silently become unreachable in `lazy` or `search`.
 
 
+### Rebuilding something you just deleted
+
+Delete-and-rebuild is the ordinary shape of iterating on a feature: build it, look at it, throw it
+away, build it again under the same name. That used to stop at the second build with
+`asset_name_in_use` — the package was off disk but the `UObject` was still resident, and creating
+over it **asserts inside the engine and closes the editor**, so refusing was correct. The remedy
+offered ("pick a different name, or restart the editor") is fine advice for a person and a dead end
+for an agent.
+
+It now reclaims the name instead: a garbage collection first, which usually clears a leftover
+outright, and if something is still holding a reference, the stale object is renamed out of the
+package into the transient one. The name becomes free, the object stays alive for whatever still
+points at it, and the assert — which fires on finding the name in the target package, not on the
+object existing at all — has nothing left to find. Only if both fail does it refuse, and then it says
+that both were tried.
+
+Found by running a real feature request end to end and recording where it stalled, which is worth
+more than it sounds: the trial's own stall detector reported "0 stalls" while three calls had plainly
+failed, because it was pattern-matching for `"error"` with quotes and the real replies said
+`asset_name_in_use` and `Input validation error`.
+
 ### Driving the editor headlessly
 
 Two things learned by doing it for a day, both of which cost time to rediscover:

@@ -1411,10 +1411,44 @@ static bool EnsureAssetNameIsFree(UPackage* Package, const FString& AssetName, F
 	{
 		return true;
 	}
+
+	// Reclaim the name rather than refusing outright.
+	//
+	// The refusal was correct and the remedy was not usable. "Pick a different name, or restart the
+	// editor" is fine advice for a person and a dead end for an agent, because delete-and-rebuild is
+	// the ordinary shape of iterating on a feature: build it, look at it, throw it away, build it
+	// again with the same name. Measured on a real trial run, that is exactly where the loop stopped.
+	//
+	// The caller has already established there is no package on disk, so this object is a leftover
+	// the collector has not reached yet. A collection usually clears it outright.
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, false);
+	Existing = StaticFindObject(nullptr, Package, *AssetName);
+	if (!Existing)
+	{
+		return true;
+	}
+
+	// Still resident, so something is holding a reference. Move it out of the package instead of
+	// deleting it: the name becomes free, the object stays alive for whatever still points at it,
+	// and the engine's assert - which fires on FindObject in the target package, not on the object
+	// existing at all - no longer has anything to find.
+	const FString Parked = MakeUniqueObjectName(GetTransientPackage(), Existing->GetClass(),
+		*FString::Printf(TEXT("MCPReplaced_%s"), *AssetName)).ToString();
+	Existing->Rename(*Parked, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+
+	Existing = StaticFindObject(nullptr, Package, *AssetName);
+	if (!Existing)
+	{
+		UE_LOG(LogMCPCommandHandler, Log,
+			TEXT("UnrealMCPBridge: '%s' was still resident after deletion; parked the stale object as '%s' ")
+			TEXT("so the name could be reused."), *AssetName, *Parked);
+		return true;
+	}
+
 	OutError = FString::Printf(
-		TEXT("asset_name_in_use: '%s' already exists in memory as a %s, even though no package for it is on disk. ")
-		TEXT("This normally means it was deleted earlier in this editor session and the object has not been ")
-		TEXT("garbage collected yet. Pick a different name, or restart the editor to clear it. ")
+		TEXT("asset_name_in_use: '%s' already exists in memory as a %s, even though no package for it is on disk, ")
+		TEXT("and it could not be cleared - a garbage collection and a rename out of the package both left it in ")
+		TEXT("place, so something is holding it open. Pick a different name, or restart the editor. ")
 		TEXT("(Creating it anyway would assert inside the engine and close the editor.)"),
 		*AssetName, *Existing->GetClass()->GetName());
 	return false;
