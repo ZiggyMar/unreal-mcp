@@ -1006,6 +1006,32 @@ Environment variables (all optional):
 - `UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL`: default `8`. Caps how many hits get a live
   enrichment call per `unreal_search_project` invocation (the rest are returned without a
   `summary`, not dropped).
+- `UNREAL_MCP_PROFILE`: default `full` in process, `search` in what `--print-config` writes. See
+  [Tool profiles](#tool-profiles-paying-only-for-what-you-use).
+- `UNREAL_MCP_MODE`: default `standard`. See [Cost modes](#cost-modes-how-much-to-spend-per-build).
+- `UNREAL_MCP_INSTRUCTIONS`: set to `off` to send no server instructions.
+
+### Server instructions: saying it once instead of teaching by failure
+
+MCP lets a server hand the client a block of text before the conversation starts, and this one was
+leaving that field empty. Everything the model needed therefore had to arrive some other way: a
+prompt it had to decide to pull, or a failed call teaching it the hard way. Both are worse than
+saying it once for a few hundred tokens.
+
+What goes in is decided by one rule: it is there only if the model **cannot derive it**. That means
+the call order, because a tool description teaches a tool and never a sequence; and the exact
+strings, because a model that knows Unreal well still cannot know the target pin is spelled `self` —
+it will confidently write `Target` and lose a call to it. Everything long-form stays in the
+`unreal_handbook` and `unreal_recipes` prompts and is pointed at rather than inlined.
+
+The text is profile-aware. On `search` it opens by explaining that the short tool list is deliberate
+and that one `unreal_enable_tools({groups:["core"]})` call brings back the whole authoring path with
+real schemas — without which a model could reasonably conclude the server is broken or crippled.
+
+It measures about 770 tokens. Combined with `search` that is roughly 2.0k of standing cost against
+the 25.5k a `full` session pays, and the model arrives already knowing how to work rather than
+spending its first calls finding out. `UNREAL_MCP_INSTRUCTIONS=off` suppresses it, which is the
+right call on `minimal`, where context is the scarce resource the profile exists to protect.
 
 ## Pointing an MCP client at this server
 

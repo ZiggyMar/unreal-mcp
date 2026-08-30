@@ -106,10 +106,97 @@ const bridge = {
   },
 };
 
-const server = new McpServer({
-  name: "unreal-mcp-server",
-  version: "0.1.0",
-});
+const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
+
+/**
+ * What the client is told about this server before the conversation starts.
+ *
+ * MCP has a field for exactly this and it was empty, so everything the model needed to know had to
+ * arrive some other way: a prompt it had to choose to pull, or a failed call teaching it the hard
+ * way. Both are worse than saying it once, up front, for a few hundred tokens.
+ *
+ * The content is chosen by one rule: it is here only if the model cannot derive it. Call order,
+ * because tool descriptions teach a tool and not a sequence; and the exact strings, because a model
+ * that knows Unreal well still cannot know that the target pin is spelled `self` - it will confidently
+ * write "Target" and lose a call to it. Everything long-form stays in the prompts and is pointed at
+ * rather than inlined.
+ */
+function buildInstructions(profile: string): string {
+  const lines: string[] = [];
+
+  lines.push(
+    "Unreal Engine, driven through a live editor bridge. Read this before your first call.",
+    ""
+  );
+
+  if (profile === "search") {
+    lines.push(
+      "THE TOOL LIST IS DELIBERATELY SHORT.",
+      "Only four tools are listed, because the full set costs about 25k tokens of context on every",
+      "turn and most of it goes unused. Everything else is registered and switched off. Call",
+      'unreal_enable_tools({ groups: ["core"] }) as your first action and the whole authoring path',
+      "arrives with its real, fully typed schemas - nothing is dumbed down or proxied. Add \"ui\",",
+      '"data", "scene", "materials", "edit" or "maintenance" when the job needs them, and use',
+      "unreal_list_tools to see what exists without paying for the schemas.",
+      ""
+    );
+  }
+
+  lines.push(
+    "HOW TO WORK",
+    "1. Anything broken: unreal_doctor. It names which half is wrong and the remedy.",
+    "2. Orient before writing. unreal_get_project_overview, then unreal_search_project and",
+    "   unreal_list_blueprints to find what already exists. Assume the project is to be extended,",
+    "   not rebuilt: match what is there.",
+    "3. unreal_plan_feature before building anything non-trivial. It reads the real project and",
+    "   returns concrete steps, so the structure is not guesswork.",
+    "4. Check exact names before writing: unreal_find_node for functions, unreal_describe_class for",
+    "   members, unreal_list_assets for paths. Never guess a function or pin name. The engine will",
+    "   tell you, and a guess costs a failed call.",
+    "5. Build whole graphs with unreal_build_graph, in one call. Do not place nodes one at a time,",
+    "   and do not pass x/y - it lays out what it places.",
+    "6. unreal_compile_blueprint, then unreal_review_blueprint, and act on what it says BEFORE",
+    "   reporting the work as done. Compiling is not the same as being correct.",
+    "7. unreal_save_blueprint / unreal_save_asset. Nothing reaches disk until you do.",
+    "",
+    "GROUND TRUTH YOU CANNOT DERIVE",
+    "Exact strings this server requires. Getting these wrong is the most common failed call, and",
+    "knowing Unreal well does not help - they are not guessable:",
+    "- The target pin is `self`, even though the editor labels it \"Target\".",
+    "- Exec pins are not uniform. Ordinary nodes: `execute` in, `then` out. Branch: `then` and",
+    "  `else`. Sequence: `then_0`, `then_1`. Loop macros (ForEachLoop, WhileLoop): `Exec`, capital E.",
+    "- Struct pin defaults are comma triples: \"0, -90, 0\", never \"(Pitch=0,Yaw=-90)\". Rotator order",
+    "  is Pitch, Yaw, Roll.",
+    "- Enum pin defaults take the entry name: \"SnapToTarget\".",
+    "- Static library functions need their className: PrintString is on KismetSystemLibrary.",
+    "- A variable must exist before a Get or Set node can reference it.",
+    "- Branch, Sequence, Cast, Create Widget and Spawn Actor are `nodeType` values, not functions.",
+    "  Searching the function catalogue for them will never find them.",
+    "",
+    "WHEN YOU NEED MORE",
+    "The unreal_handbook prompt is the full engine guide; unreal_recipes has verified end-to-end",
+    "builds of the systems people usually ask for; unreal_workflow is the long form of the order",
+    "above. Pull in the handbook before your first write of a session: being confident about",
+    "Unreal's exact strings and being right about them are different things.",
+    "",
+    "Set UNREAL_MCP_INSTRUCTIONS=off to suppress this text."
+  );
+
+  return lines.join("\n");
+}
+
+const server = new McpServer(
+  {
+    name: "unreal-mcp-server",
+    version: "0.1.0",
+  },
+  {
+    // Off is a supported answer: on the minimal profile the whole point is that context is
+    // the scarce resource, and several hundred tokens of preamble is a real cost there.
+    instructions:
+      process.env.UNREAL_MCP_INSTRUCTIONS === "off" ? undefined : buildInstructions(PROFILE),
+  }
+);
 
 /**
  * Tool profile: which tools this server exposes.
@@ -330,7 +417,7 @@ const SEARCH_PROFILE_TOOLS = new Set([
   "unreal_enable_tools",
 ]);
 
-const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
+// PROFILE is resolved above, next to the server it configures.
 
 // How much to spend per build. The floor never moves: every mode still builds atomically, lays the
 // graph out, and compiles. Modes trade polish and paperwork, never correctness.
@@ -2439,13 +2526,16 @@ function loadWorkflowGuide(): string {
 server.registerPrompt(
   "unreal_handbook",
   {
-    title: "Unreal for a model that was never trained on it",
+    title: "Unreal ground truth and this server's exact wire format",
     description:
-      "The engine-specific knowledge a capable programmer is missing: the Blueprint mental model (exec wires versus " +
-      "data pins), the class hierarchy and how to choose a parent, how to get a reference to another actor, " +
-      "interfaces, the type descriptors this server takes, multiplayer in one page, performance judgment, and the " +
-      "specific traps that each cost one failed call. Pull this in at the start of a session if you are not certain " +
-      "of Unreal's conventions - and if you are running a local or smaller model, pull it in always.",
+      "The engine facts and exact strings that cannot be recalled reliably from training, whatever model you are: " +
+      "the target pin is named `self`, exec pin names differ per node kind (`execute`/`then`, Branch's `then`/`else`, " +
+      "Sequence's `then_0`, and `Exec` with a capital E on loop macros), struct pin defaults are comma triples, enum " +
+      "defaults take the entry name, static library functions need their className, and Branch/Cast/Sequence/Create " +
+      "Widget/Spawn Actor are node types rather than functions the catalogue can find. Also the Blueprint mental " +
+      "model, choosing a parent class, cross-actor references, interfaces, multiplayer in one page, and where state " +
+      "belongs. Pull this in before the first write of any session. Being confident about Unreal's exact strings and " +
+      "being right about them are different things, and every one of these costs a failed call to learn the hard way.",
   },
   () => ({
     messages: [{ role: "user", content: { type: "text", text: loadDoc("BLUEPRINT_HANDBOOK.md", "See docs/BLUEPRINT_HANDBOOK.md in the unreal-mcp repository.") } }],

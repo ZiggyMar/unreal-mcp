@@ -250,7 +250,13 @@ test("--print-config emits a usable client config with absolute paths", async ()
   // relative path silently does not resolve, and a bare "node" may not be on the client's PATH.
   // None of that should be typed by someone whose goal is to make a game.
   const { execFileSync } = await import("node:child_process");
-  const out = execFileSync(process.execPath, [serverPath, "--print-config"], { encoding: "utf8" });
+  // Scrubbed, not inherited. These tests assert on the DEFAULT the server chooses, and a developer
+  // machine that happens to export UNREAL_MCP_PROFILE would otherwise fail them for a reason that
+  // has nothing to do with the code.
+  const env = { ...process.env };
+  delete env.UNREAL_MCP_PROFILE;
+  delete env.UNREAL_MCP_MODE;
+  const out = execFileSync(process.execPath, [serverPath, "--print-config"], { encoding: "utf8", env });
 
   const json = JSON.parse(out.slice(out.indexOf("{")));
   const server = json.mcpServers?.unreal;
@@ -263,7 +269,15 @@ test("--print-config emits a usable client config with absolute paths", async ()
     server.args[0].includes(":") || server.args[0].startsWith("/"),
     `the script path must be absolute, got ${server.args[0]}`
   );
-  assert.ok(server.env.UNREAL_MCP_PROFILE, "a profile should be set rather than left to chance");
+  // Not merely "some profile is set". This asserts WHICH one, because the defect this guards was
+  // exactly that: a truthy check passed happily for years while the printed config handed every
+  // frontier client "lazy", a profile measured and chosen for small local models. The value here is
+  // a decision about who the default install is for, and it should not be changeable by accident.
+  assert.equal(
+    server.env.UNREAL_MCP_PROFILE,
+    "search",
+    "the printed config is what Claude Desktop, Claude Code and Cursor users actually run"
+  );
 
   // The instructions must mention the step everyone misses.
   assert.match(out, /FULLY QUIT/i);
