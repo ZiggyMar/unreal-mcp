@@ -278,11 +278,29 @@ was confident:
    construction scripts and overrides of a parent or interface function. Those are seeded as callable
    now.
 
-**The two tracers compose, and neither is sufficient alone.** `trace_function_calls` says what is
-*callable*; `trace_variable` says whether the variable that triggers it is ever *written*. On this
-project `ApplySelectedMesh` is callable — its RepNotify is engine-called — but `SelectedMeshIndex` is
-written by nobody, so it never fires. Callable and live are different questions, and you need both
-answers to tell an abandoned system from a working one.
+**Callable and live are different questions**, and the gap between them is where this tool went
+wrong. A RepNotify is engine-called, so a call graph says its function is live — but `OnRep_Foo` only
+fires when `Foo` *replicates*, and a `Foo` nobody writes never does. On this project
+`ApplySelectedMesh` sits in a RepNotify and looks perfectly live; `SelectedMeshIndex` is written by
+nobody, so it has never run.
+
+That case is checked automatically now, in the same pass: every variable written anywhere is
+collected while the call graph is built, and a RepNotify whose variable is never written is not
+seeded as callable. The reply says exactly that — *"it is the RepNotify for X, and nothing anywhere
+writes that variable, so it never replicates and this never fires"* — rather than leaving a reader to
+run a second tool and join the two answers themselves.
+
+The result on the project that produced the mistake, in **one call, three seconds, 361 tokens**:
+
+```text
+RUNS:  BP_Player.OnRep_SkinData          <- the live system
+DEAD:  BP_Player.ApplySelectedMesh (x2)
+       BP_Player.AttemptSkinUpdate
+```
+
+`trace_variable` remains the right tool for the other direction — *"who writes this, and who reads
+it"* — and the two still answer different questions. What changed is that the commonest way to get
+this wrong no longer requires the reader to notice it.
 
 The same failure improved `trace_variable`'s verdict. It had reported `ServerSkinMemory` as *"read
 but never written — the half-built feature"*, and that reading was half the story: **written by

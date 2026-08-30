@@ -5108,9 +5108,12 @@ struct FMCPCallSite
 struct FMCPGraphInfo
 {
 	bool bIsEventGraph = false;
-	/** The engine can call this without any Blueprint node doing so: a RepNotify, a construction
-	 *  script, or an override of a parent or interface function. */
+	/** The engine can call this without any Blueprint node doing so: a construction script, or an
+	 *  override of a parent or interface function. */
 	bool bEngineCalled = false;
+	/** For an OnRep_Foo graph, the "Foo" it fires for. Decided after the scan, because a RepNotify
+	 *  only ever runs when its variable replicates and a variable nobody writes never does. */
+	FString RepNotifyVariable;
 	/** Function names this graph calls at a reachable call site. A set: a graph calling the same
 	 *  function forty times only needs to say so once, and the walk below reads these repeatedly. */
 	TSet<FString> CallsWhenLive;
@@ -5166,6 +5169,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 	TArray<FMCPCallSite> Matches;
 	int32 Scanned = 0;
 
+	// Every variable anything writes, gathered in the same walk. This closes the one gap that made
+	// the two tracers unsafe to use apart: a RepNotify is engine-called, so a call graph says its
+	// function is live - but OnRep_Foo only ever fires when Foo REPLICATES, and a Foo nobody writes
+	// never replicates. That is exactly the pair that misled this tool once: ApplySelectedMesh sits
+	// in a RepNotify and looks live, and SelectedMeshIndex is written by nobody, so it never runs.
+	TSet<FString> WrittenVariables;
+
 	for (const FAssetData& Asset : Assets)
 	{
 		UBlueprint* Blueprint = Cast<UBlueprint>(Asset.GetAsset());
@@ -5205,7 +5215,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 				// solve: the first version of this called OnRep_SkinData a replaced system and told
 				// the reader not to fix it, about the one path that actually runs.
 				const FString GraphName = Graph->GetName();
-				const bool bRepNotify = GraphName.StartsWith(TEXT("OnRep_"));
+				if (GraphName.StartsWith(TEXT("OnRep_")))
+				{
+					Info.RepNotifyVariable = GraphName.RightChop(6);
+				}
 				const bool bConstruction = GraphName == TEXT("UserConstructionScript");
 
 				// An override of something declared on a parent or an interface: the engine calls it,
@@ -5226,7 +5239,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 						}
 					}
 				}
-				if (bRepNotify || bConstruction || bOverride)
+				if (bConstruction || bOverride)
 				{
 					Info.bEngineCalled = true;
 				}
@@ -5237,6 +5250,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
+				if (const UK2Node_VariableSet* SetNode = Cast<UK2Node_VariableSet>(Node))
+				{
+					WrittenVariables.Add(SetNode->VariableReference.GetMemberName().ToString());
+				}
+
 				UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node);
 				if (!CallNode)
 				{
@@ -5270,6 +5288,29 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 					Matches.Add(Site);
 				}
 			}
+		}
+	}
+
+	// A RepNotify is engine-called, but only when its variable actually replicates. Decided here
+	// rather than during the scan, because "is this variable written anywhere" is a whole-project
+	// question and the scan is what answers it.
+	TMap<FString, FString> DeadRepNotifyReason;
+	for (TPair<FString, FMCPGraphInfo>& Pair : Graphs)
+	{
+		if (Pair.Value.RepNotifyVariable.IsEmpty())
+		{
+			continue;
+		}
+		if (WrittenVariables.Contains(Pair.Value.RepNotifyVariable))
+		{
+			Pair.Value.bEngineCalled = true;
+		}
+		else
+		{
+			DeadRepNotifyReason.Add(Pair.Key, FString::Printf(
+				TEXT("it is the RepNotify for \"%s\", and nothing anywhere writes that variable, so it never ")
+				TEXT("replicates and this never fires"),
+				*Pair.Value.RepNotifyVariable));
 		}
 	}
 
@@ -5330,9 +5371,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 		}
 		else
 		{
+			const FString* RepReason = DeadRepNotifyReason.Find(Site.GraphKey);
 			Entry->SetStringField(TEXT("why"),
-				!bGraphRuns ? TEXT("nothing calls the function this sits in")
-							: TEXT("no execution path reaches it inside its own graph"));
+				RepReason ? **RepReason
+						  : (!bGraphRuns ? TEXT("nothing calls the function this sits in")
+										 : TEXT("no execution path reaches it inside its own graph")));
 			Dead.Add(MakeShared<FJsonValueObject>(Entry));
 		}
 	}
