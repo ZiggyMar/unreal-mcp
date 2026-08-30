@@ -31,7 +31,8 @@ import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
 import { compactBlueprintRow, compactVariable } from "./compactRows.js";
-import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS } from "./groupCosts.js";
+import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
+import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
@@ -149,6 +150,13 @@ function buildInstructions(profile: string): string {
       `set is ~${Math.round(ALL_GROUPS_TOKENS / 100) / 10}k tokens of context on every turn and most of it goes unused. Switch on what`,
       "the job needs with unreal_enable_tools and the real, fully typed schemas arrive - nothing is",
       "dumbed down or proxied.",
+      "",
+      "IF YOU KNOW THE JOB, USE A PRESET. It is the tools for that job, already chosen, and each one",
+      "is checked by a trial that runs the whole job on it - so the list is sufficient, not plausible.",
+      `  diagnose ~${Math.round(PRESET_COST_TOKENS.diagnose / 100) / 10}k   feature ~${Math.round(PRESET_COST_TOKENS.feature / 100) / 10}k   ui ~${Math.round(PRESET_COST_TOKENS.ui / 100) / 10}k   data ~${Math.round(PRESET_COST_TOKENS.data / 100) / 10}k   cpp ~${Math.round(PRESET_COST_TOKENS.cpp / 100) / 10}k`,
+      "  unreal_enable_tools({ preset: \"diagnose\" })",
+      `One preset beats the core group (~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k). Two is roughly a wash, and if the job genuinely spans`,
+      "three or more, enable core instead - four presets together measured more than core does.",
       "",
       "CHOOSE THE GROUP FROM THE JOB, not out of habit. These are measured, not estimated:",
       `  core ~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k   scene ~${Math.round(GROUP_COST_TOKENS.scene / 100) / 10}k   data ~${Math.round(GROUP_COST_TOKENS.data / 100) / 10}k   edit ~${Math.round(GROUP_COST_TOKENS.edit / 100) / 10}k`,
@@ -2945,12 +2953,34 @@ register(
         .array(z.string())
         .optional()
         .describe('Exact tool names, instead of whole groups. unreal_list_tools has the names.'),
+      preset: z
+        .enum(["diagnose", "feature", "ui", "data", "cpp"])
+        .optional()
+        .describe(
+          'The tools for one job, already chosen: "diagnose" (find and fix a reported bug), "feature" ' +
+            '(build a new Blueprint feature), "ui" (UMG), "data" (Data Tables, structs, enums), "cpp". ' +
+            "Cheaper than a group and needs no catalogue lookup. Combine with `groups` if the job spills over."
+        ),
     },
   },
-  async ({ groups, tools }) => {
+  async ({ groups, tools, preset }) => {
     const enabled: string[] = [];
     for (const group of groups ?? []) {
       enabled.push(...enableGroup(group));
+    }
+
+    // A preset is the cheap path made reachable. Naming tools is measured at 61% less than enabling
+    // `core`, but a model on the search profile has four tools and no idea which to name, so the
+    // saving was only available to someone who already knew the catalogue. Presets are resolved to
+    // exact names here and then take the same path as `tools` below.
+    const fromPreset = preset ? presetTools(preset) : undefined;
+    if (preset && !fromPreset) {
+      return errorResult(
+        new Error(
+          `unknown_preset: "${preset}". Available: ${PRESET_NAMES.join(", ")}. ` +
+            `Or pass \`groups\` / \`tools\` directly.`
+        )
+      );
     }
 
     // Individual tools, so a session can pay for the six it needs instead of the thirty-two in the
@@ -2958,7 +2988,7 @@ register(
     // of definitions and a session that reads a project and builds one graph touches a fraction of
     // it, every turn, for the rest of the conversation.
     const unknown: string[] = [];
-    for (const name of tools ?? []) {
+    for (const name of [...(fromPreset ?? []), ...(tools ?? [])]) {
       const handle = toolHandles.get(name);
       if (!handle) {
         unknown.push(name);

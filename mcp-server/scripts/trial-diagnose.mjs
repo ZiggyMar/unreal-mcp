@@ -15,7 +15,12 @@
 // The defect is planted rather than borrowed from the open project, because a trial that depends on
 // a particular project's mistakes stops working the moment somebody fixes them.
 //
-// Usage: node scripts/trial-diagnose.mjs      (needs an editor open)
+// Usage: node scripts/trial-diagnose.mjs               (needs an editor open)
+//        node scripts/trial-diagnose.mjs --by-preset   (same trial, on the "diagnose" preset alone)
+//
+// --by-preset is how the preset earns the word "sufficient". A curated tool list always LOOKS
+// complete; the only way to know is to run the whole loop with nothing else switched on and see
+// whether it finishes. If a tool is missing, this fails on the step that needed it.
 
 import { startAndInitialize } from "./lib/mcpStdio.mjs";
 
@@ -23,7 +28,33 @@ const NL = String.fromCharCode(10);
 const PKG = "/Game/__MCPDiagnoseTrial/BP_DiagnoseTrial";
 const PATH = `${PKG}.BP_DiagnoseTrial`;
 
-const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "trial-diagnose");
+const byPreset = process.argv.includes("--by-preset");
+const server = await startAndInitialize(
+  { UNREAL_MCP_PROFILE: byPreset ? "search" : "full" },
+  "trial-diagnose"
+);
+
+if (byPreset) {
+  const size = async () => {
+    const listed = await server.request("tools/list", {});
+    return Math.round(JSON.stringify(listed?.result?.tools ?? []).length / 4);
+  };
+  const before = await size();
+  const r = await server.request("tools/call", {
+    name: "unreal_enable_tools",
+    // The preset plus this trial's own scaffolding. Planting a defect means creating a Blueprint and
+    // throwing it away afterwards, and neither is part of diagnosing anything - a preset that
+    // included them would be claiming a job it does not do. Every step BETWEEN them runs on the
+    // preset alone, which is what is being tested.
+    arguments: { preset: "diagnose", tools: ["unreal_create_blueprint", "unreal_delete_asset"] },
+  });
+  if (r?.result?.isError) {
+    console.error("the diagnose preset would not enable:", JSON.stringify(r.result).slice(0, 200));
+    process.exit(1);
+  }
+  console.log(`diagnose preset + 2 harness tools: ${await size()} tokens standing (search baseline ${before}); core would be 11666`);
+  console.log("");
+}
 const stalls = [];
 let calls = 0;
 let tokens = 0;

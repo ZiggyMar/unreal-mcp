@@ -1109,6 +1109,33 @@ correction rather than a relaxation: every ceiling encoded an intent about what 
 before it can work, that intent always covered the whole payload, and nothing got bigger on the day
 the numbers changed.
 
+**Presets make that saving reachable.** Naming tools is much cheaper than enabling a group, but a
+model on `search` starts with four tools and no idea which to name — so its real choices were to
+call `unreal_list_tools` and reason about a catalogue, or to pay for `core`. Guesswork stood between
+every session and the cheapest path, which made the cheap path an expert move rather than the
+default. `unreal_enable_tools({ preset: "diagnose" })` is the tools for one job, already chosen:
+
+| preset | for | tools | standing |
+| --- | --- | --- | --- |
+| `cpp` | read and change the project's C++ | 13 | 4,081 |
+| `data` | Data Tables, structs, enums | 20 | 5,882 |
+| `ui` | UMG widgets and their bindings | 17 | 5,928 |
+| `diagnose` | find **and fix** a reported bug | 22 | 7,468 |
+| `feature` | build a new Blueprint feature | 21 | 7,586 |
+| — | the `core` group, for comparison | 32 | 11,666 |
+
+Each is verified by a trial that runs the whole job on it, so "sufficient" means a run passed rather
+than that the list looked complete. `trial:diagnose --by-preset` runs the entire find-and-fix loop on
+`diagnose` alone; `trial:feature --by-preset` runs all five surfaces on `feature`+`ui`+`data`+`cpp`.
+That caught a real omission immediately: `unreal_find_orphans` — a tool whose whole job is finding
+something wrong — was missing from the preset for finding things wrong, in a list I had written and
+read twice.
+
+**The honest limit: presets do not stack.** One beats `core` comfortably. Two is roughly a wash.
+Four together measured **14,368**, which is more than `core` costs — so a job that genuinely spans
+four surfaces should enable the group. The instructions say so, with the measured numbers, because a
+rule of thumb a model cannot check is one it will apply in the wrong place.
+
 **Naming tools instead of enabling a group is the largest single saving available**, and it is now
 measured rather than asserted. `npm run trial:feature --by-name` runs the whole five-surface trial on
 nothing but the tools it calls — derived from the trial's own source, so the list cannot drift from

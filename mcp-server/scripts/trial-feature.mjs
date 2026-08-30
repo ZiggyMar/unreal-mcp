@@ -41,6 +41,7 @@ const PKG = "/Game/__MCPFeatureTrial/BP_TrialPickup";
 const PATH = `${PKG}.BP_TrialPickup`;
 
 const byName = process.argv.includes("--by-name");
+const byPreset = process.argv.includes("--by-preset");
 
 // Derived from this file rather than written down: a hand-kept list would drift the first time a
 // step was added, and would then be measuring a set the trial does not use.
@@ -49,7 +50,7 @@ const TOOLS_USED = [
 ];
 
 const child = spawn(process.execPath, [serverPath], {
-  env: { ...process.env, UNREAL_MCP_PROFILE: byName ? "search" : "full" },
+  env: { ...process.env, UNREAL_MCP_PROFILE: byName || byPreset ? "search" : "full" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 let buf = "";
@@ -92,6 +93,31 @@ child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initia
 
 // Enable exactly what this trial uses, and price it against the group a model would otherwise reach
 // for. The comparison is the point: if the named set is not much cheaper, the advice is wrong.
+
+// The five presets have to be sufficient for the jobs they name, and a curated list always looks
+// sufficient. This trial spans Blueprints, components, data tables, C++ and UMG, so it runs on the
+// four presets that cover those - plus create_blueprint and delete_asset, which are the harness's
+// own scaffolding and belong to no preset.
+if (byPreset) {
+  const sizeOf = async () => {
+    const listed = await rpc("tools/list", {});
+    return Math.round(JSON.stringify(listed?.result?.tools ?? []).length / 4);
+  };
+  for (const preset of ["feature", "ui", "data", "cpp"]) {
+    const r = await rpc("tools/call", { name: "unreal_enable_tools", arguments: { preset } });
+    if (r?.result?.isError) {
+      console.error(`preset "${preset}" would not enable:`, JSON.stringify(r.result).slice(0, 200));
+      process.exit(1);
+    }
+  }
+  await rpc("tools/call", {
+    name: "unreal_enable_tools",
+    arguments: { tools: ["unreal_create_blueprint", "unreal_delete_asset"] },
+  });
+  console.log(`four presets + 2 harness tools: ${await sizeOf()} tokens standing; core would be ${CORE_TOKENS}`);
+  console.log("");
+}
+
 if (byName) {
   const sizeOf = async () => {
     const listed = await rpc("tools/list", {});
