@@ -26,6 +26,7 @@
  */
 
 import type { BridgeLike } from "./autoLayout.js";
+import { auditDataTables } from "./dataTableAudit.js";
 import { reviewBlueprint } from "./review.js";
 import { findServerOnlyCasts } from "./multiplayer.js";
 import { reviewSessions, type SessionGraph } from "./sessions.js";
@@ -126,6 +127,14 @@ export interface AuditResult {
   /** The Blueprints worth opening first, by accumulated cost. */
   worstBlueprints: Array<{ name: string; cost: number; findings: number }>;
   unreadable: Array<{ name: string; error: string }>;
+  /**
+   * Data Table rows whose asset reference is empty while sibling rows fill it in.
+   *
+   * Kept out of `groups` on purpose: those are per-Blueprint findings ranked by cost, and a table
+   * row is neither a Blueprint nor a graph. Filing it under one would be a lie of the same kind the
+   * review already refuses to tell.
+   */
+  dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
   truncated: boolean;
   nextAction: string;
 }
@@ -494,10 +503,34 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     .sort((a, b) => b.cost - a.cost)
     .slice(0, 10);
 
+  // Data Tables are swept too, because "my game has bugs, where do I look" is exactly the question
+  // this tool answers and the most expensive bug it has seen was not in a graph at all: a row's
+  // class reference cleared to None, resolved to null by the engine and silently ignored by the
+  // thing that consumed it. An audit that reads only Blueprints looks straight past it.
+  const dataTableNulls: AuditResult["dataTableNulls"] = [];
+  try {
+    const tables = await auditDataTables(bridge, { pathPrefix: options.pathPrefix });
+    for (const n of tables.nullReferences) {
+      dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field });
+    }
+  } catch {
+    /* a bridge too old to read Data Tables must not lose the Blueprint half of the audit */
+  }
+
   const worst = groups[0];
-  const nextAction = worst
-    ? `Start with ${worst.check} (${worst.count} found). ${worst.fix}`
-    : "Nothing found worth reporting. Either the project is in good shape or the prefix matched nothing.";
+  // A null reference leads, whatever the graph findings say. It is not a matter of taste: those are
+  // things that make a Blueprint worse, and this is a thing that does not happen at all at runtime,
+  // with no error to notice.
+  const nextAction =
+    dataTableNulls.length > 0
+      ? `Start with ${dataTableNulls.length} empty Data Table reference(s), beginning with ` +
+        `${dataTableNulls[0].table} row "${dataTableNulls[0].rowName}" (${dataTableNulls[0].field}). ` +
+        `The engine resolves an empty reference to null and whatever consumes it silently does ` +
+        `nothing - no error, no log. Fix with unreal_set_data_table_row.` +
+        (worst ? ` Then ${worst.check} (${worst.count} found).` : "")
+      : worst
+        ? `Start with ${worst.check} (${worst.count} found). ${worst.fix}`
+        : "Nothing found worth reporting. Either the project is in good shape or the prefix matched nothing.";
 
   return {
     blueprintsScanned: blueprints.length,
@@ -506,6 +539,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     groups,
     worstBlueprints,
     unreadable,
+    dataTableNulls,
     truncated: all.length > blueprints.length,
     nextAction,
   };

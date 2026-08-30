@@ -143,3 +143,45 @@ test("an empty project says so rather than inventing work", async () => {
   assert.equal(result.truncated, false);
   assert.match(result.nextAction, /Nothing found|matched nothing/i);
 });
+
+test("the audit looks at Data Tables too, and leads with a null reference", async () => {
+  // "My game has bugs, where do I look" is the question this tool answers, and the most expensive
+  // bug it has seen was not in a graph: a row's class reference cleared to None. An audit that reads
+  // only Blueprints looks straight past it, which is exactly what happened.
+  const bridge = {
+    async send(cmd, params = {}) {
+      if (cmd === "list_blueprints") return { blueprints: [] };
+      if (cmd === "list_assets") return { assets: ["/Game/Data/DT_Enemies.DT_Enemies"] };
+      if (cmd === "list_data_table_rows") {
+        return {
+          rows: [
+            { rowName: "ILY", values: { EnemyType: "/Game/E/BP_Basic.BP_Basic_C", Ratio: "6" } },
+            { rowName: "Fly", values: { EnemyType: "None", Ratio: "1" } },
+          ],
+        };
+      }
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTableNulls.length, 1);
+  assert.equal(r.dataTableNulls[0].rowName, "Fly");
+  assert.equal(r.dataTableNulls[0].field, "EnemyType");
+  assert.match(r.nextAction, /Data Table reference/);
+  assert.match(r.nextAction, /unreal_set_data_table_row/);
+});
+
+test("a bridge that cannot read Data Tables still returns the Blueprint half", async () => {
+  // An older plugin has no list_data_table_rows. Losing the whole audit over the half it cannot do
+  // would make upgrading the server before the plugin actively worse than not upgrading.
+  const bridge = {
+    async send(cmd) {
+      if (cmd === "list_blueprints") return { blueprints: [] };
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+  const r = await auditProject(bridge, {});
+  assert.deepEqual(r.dataTableNulls, []);
+  assert.equal(typeof r.nextAction, "string");
+});

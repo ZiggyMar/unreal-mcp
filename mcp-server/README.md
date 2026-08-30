@@ -163,7 +163,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_organize_graph` | `organize_graph` | Node comments, comment boxes, and node positions, so a generated graph reads like a careful human built it. |
 | `unreal_auto_layout_graph` | *(composed: `read_blueprint_graph_summary` + `organize_graph`)* | Lay out a whole graph and wrap each execution chain in a comment box titled after its event. No coordinates required from the caller. |
 | `unreal_review_blueprint` | *(composed: `list_blueprint_graphs` + `read_blueprint_graph_summary`)* | The quality gate: dead nodes, unhandled cast failures, leftover debug prints, placeholder names, heavy Tick, unlabelled sections. Returns findings with fixes, a score, and one `nextAction`. |
-| `unreal_audit_project` | *(composite)* | Audit every Blueprint and rank what to fix, by likely cost. The "my game has bugs, where do I look" tool. |
+| `unreal_audit_project` | *(composite)* | Audit every Blueprint **and Data Table** and rank what to fix, by likely cost. The "my game has bugs, where do I look" tool. |
 | `unreal_project_health` | `project_health` | Where the whole project needs attention: oversized graphs, oversized Blueprints, cast-heavy Blueprints. Costs no asset reads. |
 | `unreal_guard_with_authority` | *(composite)* | Put a node behind a HasAuthority branch, keeping its chain. The fix for a client-side GameMode cast. |
 | `unreal_cleanup_blueprint` | *(composed: review + `remove_node` + layout)* | Applies the review fixes that cannot change behaviour, and lists what it left for you with reasons. |
@@ -316,9 +316,11 @@ at `unreal_find_references` — before you save, while it is still only a change
 
 #### Finding rows that point at nothing: `unreal_check_data_tables`
 
-Every other audit in this server reads Blueprint graphs. This one exists because a bug reached a
-shipped build that no graph-reading check could ever have seen, because it was not in a graph — it
-was in data.
+This check exists because a bug reached a shipped build that no graph-reading check could ever have
+seen, because it was not in a graph — it was in data. `unreal_audit_project` and
+`unreal_verify_feature` both call it now, so the two questions a model actually asks — *"where are
+the bugs"* and *"is this finished"* — both cover data. It remains callable on its own when the
+Data Tables are the thing you want to look at.
 
 A wave system read its enemy types from a Data Table. One row's class reference had been cleared to
 `None`. The spawner fed that null straight into `SpawnActorFromClass`, which spawns nothing, raises
@@ -344,6 +346,13 @@ judged this way — there is no filled row to prove it was ever a reference — 
 never skipped, because a broken row must not be able to hide behind a plugin-version problem.
 
 Findings name the repair directly: `unreal_set_data_table_row`, then `unreal_save_asset`.
+
+When the audit runs it, an empty reference **leads** the ranked list, ahead of every graph finding.
+That is not a preference: a graph finding is something that makes a Blueprint *worse*, while an empty
+asset reference is something that does not happen **at all** at runtime, with no error and no log.
+Run against a real 339-Blueprint project it surfaced three empty `UpgradeClass` rows ahead of 278
+graph findings — in the same project, in the same week its enemy spawns broke for exactly that
+reason, which the Blueprint-only version had walked straight past.
 
 
 #### Changing a row that already exists: `unreal_set_data_table_row`
