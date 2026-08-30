@@ -262,3 +262,32 @@ test("a current plugin reports no missing features", async () => {
   const features = check(report, "plugin features");
   assert.equal(features.status, "ok");
 });
+
+// --- the session token check --------------------------------------------------------------------
+
+test("a session token that was found is reported with the file it came from", async () => {
+  const report = await runDoctor(fakeBridge(), CONN, undefined, () => ({
+    token: "abc",
+    path: "/home/u/.config/Epic/UnrealMCPBridge/session-8765.json",
+  }));
+  const check = report.checks.find((c) => c.name === "session token");
+  assert.equal(check.status, "ok");
+  assert.match(check.detail, /session-8765\.json/);
+});
+
+test("no session token is reported as normal, because with enforcement off it is", async () => {
+  // Enforcement is opt-in, so today every correct installation in existence has no token file. A
+  // warning here would put all of them in "degraded" and teach people to skim past this report,
+  // which costs more than it could ever catch. What it must still do is print where it looked.
+  const report = await runDoctor(fakeBridge(), CONN, undefined, () => null);
+  const check = report.checks.find((c) => c.name === "session token");
+  assert.equal(check.status, "ok");
+  assert.equal(report.verdict, "ready", "a healthy bridge without a token is healthy");
+  assert.match(check.detail, /session-8765\.json/, "the paths searched are the whole point of the check");
+  assert.match(check.detail, /-MCPRequireAuth/, "and what would make this fatal");
+});
+
+test("the paths searched survive into the formatted report a human actually reads", async () => {
+  const report = await runDoctor(fakeBridge(), CONN, undefined, () => null);
+  assert.match(formatDoctorReport(report), /session-8765\.json/);
+});

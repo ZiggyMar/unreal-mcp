@@ -139,7 +139,7 @@ public:
  * connected to anything. Keying it by project would need a connection to learn the project, which
  * would need the token, and the bootstrap would not close.
  */
-static FString MCPSessionTokenPath(int32 Port)
+FString FMCPTcpServer::DefaultSessionFilePath(int32 Port)
 {
 	return FPaths::Combine(
 		FPlatformProcess::UserSettingsDir(),
@@ -242,6 +242,15 @@ static void DisableBackgroundThrottlingForAgentUse()
 
 bool FMCPTcpServer::Start(int32 Port)
 {
+	FMCPServerOptions Options;
+	Options.Port = Port;
+	return Start(Options);
+}
+
+bool FMCPTcpServer::Start(const FMCPServerOptions& Options)
+{
+	int32 Port = Options.Port;
+
 	DisableBackgroundThrottlingForAgentUse();
 
 	// -MCPBridgePort=<n>. This flag has been documented for a while - it is what the server's own
@@ -249,7 +258,7 @@ bool FMCPTcpServer::Start(int32 Port)
 	// run two editors side by side therefore did nothing at all: the second editor still tried 8765,
 	// still lost the bind, and the agent still quietly edited the first project.
 	int32 PortOverride = 0;
-	if (FParse::Value(FCommandLine::Get(), TEXT("MCPBridgePort="), PortOverride))
+	if (Options.bAllowCommandLineOverrides && FParse::Value(FCommandLine::Get(), TEXT("MCPBridgePort="), PortOverride))
 	{
 		if (PortOverride >= 1024 && PortOverride <= 65535)
 		{
@@ -302,9 +311,13 @@ bool FMCPTcpServer::Start(int32 Port)
 	// client, and switching it on cannot then discover that the other half was never wired up -
 	// which is exactly how the original proposal would have failed.
 	SessionToken = MCPGenerateSessionToken();
-	bRequireAuth = FParse::Param(FCommandLine::Get(), TEXT("MCPRequireAuth"));
+	bRequireAuth = Options.bRequireAuth.IsSet()
+		? Options.bRequireAuth.GetValue()
+		: (Options.bAllowCommandLineOverrides && FParse::Param(FCommandLine::Get(), TEXT("MCPRequireAuth")));
 
-	SessionFilePath = MCPSessionTokenPath(ListenPort);
+	const FString IntendedSessionFilePath =
+		Options.SessionFilePath.IsSet() ? Options.SessionFilePath.GetValue() : DefaultSessionFilePath(ListenPort);
+	SessionFilePath = IntendedSessionFilePath;
 	TSharedRef<FJsonObject> Session = MakeShared<FJsonObject>();
 	Session->SetNumberField(TEXT("port"), ListenPort);
 	Session->SetStringField(TEXT("token"), SessionToken);
@@ -332,7 +345,7 @@ bool FMCPTcpServer::Start(int32 Port)
 		UE_LOG(LogMCPBridge, Warning,
 			TEXT("UnrealMCPBridge: could not write the session token file to %s. Clients will connect ")
 			TEXT("without a token%s."),
-			*MCPSessionTokenPath(ListenPort),
+			*IntendedSessionFilePath,
 			bRequireAuth ? TEXT(", and -MCPRequireAuth will therefore refuse every one of them") : TEXT(""));
 	}
 
@@ -567,6 +580,27 @@ bool FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 					TEXT("This editor was launched with -MCPRequireAuth. The MCP server reads the token ")
 					TEXT("from the session file this bridge writes at startup; if it cannot, the editor's ")
 					TEXT("Output Log names the exact path on the line beginning 'session token written to'."));
+
+				// Name the file, so a client that looked in the wrong place can be told the right
+				// one rather than left to fail forever.
+				//
+				// mcp-server/src/sessionToken.ts works out where this file is by mirroring UE's
+				// per-platform settings directory by hand, and nothing on that side can check the
+				// mirroring: it is decided by FPlatformProcess::UserSettingsDir(), which needs a
+				// build to observe. When the mirror is wrong the client finds no token and every
+				// call fails with no way to diagnose it. So the refusal carries the answer, and the
+				// client reads that path and retries once.
+				//
+				// This discloses a per-user path to a peer that has not authenticated. That peer is
+				// already running as this user, since nothing else can reach loopback here, so it
+				// can already read the file and already knows the username. The exchange is a fact
+				// it has for a failure mode that would otherwise be silent and total. What keeps
+				// the hint from becoming a file-read primitive is on the client: it will only
+				// follow a path named session-<port>.json inside a known settings directory.
+				if (!SessionFilePath.IsEmpty())
+				{
+					Response->SetStringField(TEXT("session_file"), SessionFilePath);
+				}
 
 				// Echo the id, exactly as the two existing guard sites do. Returning without it
 				// breaks the response contract, and was one of the concrete defects in the patch

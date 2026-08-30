@@ -1887,12 +1887,24 @@ Stated plainly, because a vague security claim is worse than none:
   and it cannot then discover the other half was never wired up.
 
   The plugin **compiles against both engines** — UE 5.8 (499s) and UE 5.6 (292s), via
-  `npm run build:engines`. What has not happened yet is a *runtime* check: nobody has confirmed that
-  `FPlatformProcess::UserSettingsDir()` resolves to a directory `sessionToken.ts` actually looks in.
-  That mirroring is done by hand per platform, and if it is wrong the client silently finds no token
-  and every call fails the moment enforcement is switched on. Compiling proves the code is valid; it
-  does not prove the two halves agree on a path. Run one editor with `-MCPRequireAuth`, confirm the
-  tools still work, and then the default can move.
+  `npm run build:engines`. What has still not happened is a *runtime* check: nobody has confirmed
+  that `FPlatformProcess::UserSettingsDir()` resolves to a directory `sessionToken.ts` actually
+  looks in. That mirroring is done by hand per platform, and if it is wrong the client silently
+  finds no token and every call fails the moment enforcement is switched on. Compiling proves the
+  code is valid; it does not prove the two halves agree on a path.
+
+  Three things now stand between that and a silent failure. The client searches both the bare
+  settings root and its `Epic` subdirectory, since UE's own config lands under an `Epic` segment on
+  some platforms and not others. A refusal from the bridge **names the session file it wrote**, and
+  the client reads that path and retries once, so a wrong guess costs a round trip instead of the
+  whole integration (it will only follow a path named `session-<port>.json` inside a known settings
+  directory, because that hint arrives from a peer that has not authenticated). And
+  `unreal_doctor` prints every path it searched.
+
+  To settle it rather than hedge it, run `npm run test:bridge` on a machine with an engine: it runs
+  the bridge's own automation tests against every target in `build-targets.json` and fails loudly if
+  the path the bridge writes is not one the client searches. Once that passes on both versions, the
+  default can move. See `docs/SESSION_AUTH.md`.
 - **No arbitrary code execution.** There is no `execute_python`, no shell, no eval. Every command is
   a typed operation over engine APIs, so there is nothing to inject *into*.
 - **Writes are confined to `/Game`.** Creating, modifying and deleting are refused for anything

@@ -10,6 +10,30 @@ class FTcpListener;
 class FInternetAddr;
 
 /**
+ * How to start the bridge, for the cases where the command line is not the answer.
+ *
+ * The editor starts one server, on a fixed port, configured by launch flags, and every field here
+ * is unset for it. A test starts several, on ports it has to be free to choose, with authentication
+ * forced on and a token file that must not be the real user's, and cannot express any of that
+ * through FCommandLine. The alternative to this struct is a test that either edits the process
+ * command line or writes over the developer's own session file, and neither belongs anywhere near
+ * an automation run.
+ */
+struct FMCPServerOptions
+{
+	int32 Port = 8765;
+
+	/** False for a test, whose chosen port must not be moved by whatever flags the editor was launched with. */
+	bool bAllowCommandLineOverrides = true;
+
+	/** Unset: read -MCPRequireAuth, as the editor does. */
+	TOptional<bool> bRequireAuth;
+
+	/** Unset: DefaultSessionFilePath(Port). Set by a test to keep out of the real user settings directory. */
+	TOptional<FString> SessionFilePath;
+};
+
+/**
  * Minimal single-threaded, line-delimited JSON TCP server.
  * Listens on localhost only. Accepts one request per line, writes one JSON
  * response per line (newline-terminated) back on the same connection.
@@ -24,8 +48,21 @@ public:
 	FMCPTcpServer();
 	~FMCPTcpServer();
 
+	bool Start(const FMCPServerOptions& Options);
+	/** The editor's path: a port, and everything else from the command line. */
 	bool Start(int32 Port);
 	void Stop();
+
+	/**
+	 * Where this bridge writes its session file for a given port, with nothing overridden.
+	 *
+	 * Public because it is the one value in this feature that cannot be checked from the Node side:
+	 * it is whatever FPlatformProcess::UserSettingsDir() returns on this platform and engine
+	 * version, and mcp-server/src/sessionToken.ts has to mirror that by hand. An automation test
+	 * logs this so scripts/run-automation.mjs can compare it against the paths the client actually
+	 * searches, which turns "we think the mirroring is right" into something a machine reports.
+	 */
+	static FString DefaultSessionFilePath(int32 Port);
 
 private:
 	bool HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint);
