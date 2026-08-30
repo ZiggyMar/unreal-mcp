@@ -370,7 +370,9 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_screenshot",
     "unreal_find_orphans",
   ],
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  // trace_variable sits with find_references because they are the same question asked of different
+  // things - "where is this used" - and a caller reaching for one usually wants the other.
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -1886,6 +1888,33 @@ register(
 );
 
 register(
+  "unreal_trace_variable",
+  {
+    title: "Find everywhere a variable is read or written",
+    description:
+      "**Start here when a value is not what it should be.** Every Get and Set of a variable across the whole " +
+      "project, with the Blueprint and graph each sits in, and where it is declared. Project-wide because a " +
+      "variable is routinely reached from another Blueprint through a cast, so scanning the asset that declares " +
+      "it - or the one showing the symptom - misses the answer silently.\n\n" +
+      "It names three shapes that are bugs in themselves: **read but never written** (every reader sees the " +
+      "default forever - the half-built feature, which compiles and takes the fallback branch every time), " +
+      "**written but never read**, and **declared but never used**. A few seconds, against opening every " +
+      "Blueprint one at a time.",
+    inputSchema: {
+      variable: z.string().describe('Exact variable name, e.g. "ServerSkinMemory". Case-insensitive.'),
+      pathPrefix: z.string().optional().describe('Scope the scan, e.g. "/Game/AntiVirusSquad". Defaults to "/Game".'),
+    },
+  },
+  async ({ variable, pathPrefix }) => {
+    try {
+      return jsonResult(await bridge.send("trace_variable", { variable, pathPrefix }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_read_behavior_tree",
   {
     title: "Read a Behavior Tree and its blackboard",
@@ -1923,10 +1952,9 @@ register(
       "Blueprints and Anim Blueprints answer different halves of that question. A Blueprint sets a Speed variable; " +
       "the state machine decides that Speed > 10 means Run. Reading only the first half is how a model concludes " +
       "the logic is fine while the character stands still.\n\n" +
-      "Two things it names outright because both are invisible until you look: a state **nothing leaves**, and a " +
-      "transition whose rule graph is **empty**, which looks wired and behaves like a wall. An Anim Blueprint with " +
-      "no state machines is normal, not a fault - many blend poses directly from variables - and the reply says so " +
-      "rather than returning a bare empty list.",
+      "It names two things that are invisible until you look: a state **nothing leaves**, and a transition whose " +
+      "rule graph is **empty**, which looks wired and behaves like a wall. An Anim Blueprint with no state " +
+      "machines is normal rather than a fault, and the reply says so.",
     inputSchema: {
       path: z.string().describe('Anim Blueprint path, e.g. "/Game/Characters/ABP_Player.ABP_Player".'),
       match: z.string().optional().describe("Only states or machines whose name contains this."),
@@ -3404,19 +3432,15 @@ register(
   {
     title: "Compile the project's C++ and get the errors",
     description:
-      "**Call this after editing a .cpp or .h.** unreal_find_source shows you where the C++ is; this tells you " +
-      "whether your change built. Without it a model can locate a symbol, edit the file, and then has no way to " +
-      "know if the edit compiles - in a client with no shell that is a hard stop, and guessing at C++ is how a " +
-      "confident wrong answer gets delivered.\n\n" +
-      "Pass a `file` and it compiles that one translation unit and skips linking. That is the default because it " +
-      "is what you almost always want: it takes seconds rather than minutes, and it works while the editor is " +
-      "running. Omit `file` for a full editor build, but read the warning below first.\n\n" +
-      "**A full build fails while the editor is open**, and not because your code is wrong: the running editor " +
-      "holds the module DLL open so the link step cannot replace it. The bridge lives inside that editor, so it " +
-      "cannot close it for you. If you get a failure with no diagnostics, that is what happened - compile a single " +
-      "file instead.\n\n" +
-      "Errors come back structured - file, line, code and message, project-relative paths, duplicates removed - " +
-      "not as build output. A UnrealBuildTool run emits megabytes and the answer is usually one line of it.",
+      "**Call this after editing a .cpp or .h.** find_source shows where the C++ is; this says whether your " +
+      "change built. Without it a model edits a file and guesses - and in a client with no shell there is no " +
+      "other way to find out.\n\n" +
+      "Pass a `file` to compile that one translation unit without linking: seconds rather than minutes, and it " +
+      "works while the editor runs. **A full build (omit `file`) fails while the editor is open** - it holds the " +
+      "module DLL, so the link cannot replace it, and the bridge lives inside that editor so it cannot close it. " +
+      "A failure with no diagnostics is almost always that.\n\n" +
+      "Errors come back structured - file, line, code, message, project-relative, duplicates removed - because a " +
+      "UnrealBuildTool run emits megabytes and the answer is usually one line of it.",
     inputSchema: {
       file: z
         .string()

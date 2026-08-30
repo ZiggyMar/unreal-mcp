@@ -242,6 +242,33 @@ string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, a
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
 
+### The bug-hunting primitive: `unreal_trace_variable`
+
+This one was earned rather than designed. The report was *"the skin you pick in the lobby is not the
+one you get in the match."* The answer was a single fact — `ServerSkinMemory` is **read in one place
+and written in none**, so the lookup deciding which skin you keep always misses and every player
+takes the fallback branch. Establishing that fact took **nine round trips**: open a Blueprint, grep
+its graphs, repeat. A frontier model would have paid the same nine for the same one sentence.
+
+```text
+unreal_trace_variable({ variable: "ServerSkinMemory" })
+```
+
+One call returns every Get and every Set across the project, with the Blueprint and graph each sits
+in, and where it is declared. It cannot be narrowed to the declaring asset: `GM_Gameplay` reaches
+that variable on `AVS_GameInstance` **through a cast**, so a scan of the owner — or of the Blueprint
+showing the symptom — would have reported zero of everything and been confidently wrong.
+
+It names the three shapes that are bugs in themselves:
+
+- **read but never written** — every reader sees the default forever, so a branch that depends on it
+  always goes the same way. This is what a half-built feature looks like: the reading side exists,
+  compiles, and silently takes the fallback. Nothing in Unreal warns about it.
+- **written but never read** — either something is missing that should read it, or it is left over.
+- **declared and never used at all.**
+
+A few seconds to scan every Blueprint, against the alternative of opening them one at a time.
+
 ### AI: `unreal_read_behavior_tree`
 
 The bug that started this project's most urgent day was *"none of the enemies are spawning, and the

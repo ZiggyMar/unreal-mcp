@@ -73,6 +73,9 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // "The enemies are not following me" is an AI question, and a Behavior Tree is not a Blueprint
       // - without this the diagnose preset cannot see what the pawn was actually told to do.
       "unreal_read_behavior_tree",
+      // The primitive that turns "this value is wrong" into one call instead of opening every
+      // Blueprint that might touch it. Earned its place on a real hunt that took nine reads.
+      "unreal_trace_variable",
       // The fix half. A preset that can only diagnose leaves the model to enable more before it can
       // act on what it just found, which is the round trip this is meant to remove.
       "unreal_build_graph",

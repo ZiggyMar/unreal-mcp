@@ -70,7 +70,18 @@ const PROFILES = [
   },
   {
     name: "full",
-    ceilingTokens: 32_000,
+    // Raised from 32,000 once, loudly, with the argument the header asks for.
+    //
+    // That number was set when `full` exposed 80 tools. It now exposes 95, and the growth is
+    // capability rather than prose: C++ compilation, Data Asset properties, class defaults, Anim
+    // Blueprints, Behavior Trees, project-wide variable tracing. The number that says whether
+    // descriptions are bloating is the per-tool average, and it is flat - about 320 tokens a tool
+    // then, about 330 now, after trimming the three newest descriptions that had drifted long.
+    //
+    // 34,000 is 17% of a 200k window, for the profile whose whole premise is "everything, for a
+    // model that can afford it". Anything that cannot afford it has `search` and the presets, which
+    // is where the real work on this went.
+    ceilingTokens: 34_000,
     why: "everything, for frontier models that can afford it",
   },
 ];
@@ -117,8 +128,8 @@ async function main() {
   }
 
   console.log("Standing context by profile - what a model holds before its first call" + NEWLINE);
-  console.log("  profile   tools   ~tools   ~instrs   standing   ceiling   ");
-  console.log("  --------  ------  -------  --------  ---------  ----------");
+  console.log("  profile   tools   ~tools   ~instrs   standing   per tool   ceiling   ");
+  console.log("  --------  ------  -------  --------  ---------  ---------  ----------");
   const problems = [];
   for (const result of results) {
     const spec = PROFILES.find((p) => p.name === result.profile);
@@ -128,6 +139,10 @@ async function main() {
       `  ${result.profile.padEnd(8)}  ${String(result.toolCount).padStart(6)}  ` +
         `${String(result.tokens).padStart(7)}  ${String(result.instructionTokens).padStart(8)}  ` +
         `${String(result.standingTokens).padStart(9)}  ` +
+        // Per-tool is the number that says whether DESCRIPTIONS are growing. The total also grows
+        // when the surface grows, which is not the same thing and should not read as the same
+        // problem: adding a capability is meant to cost something.
+        `${String(Math.round(result.tokens / Math.max(result.toolCount, 1))).padStart(9)}  ` +
         `${String(spec.ceilingTokens).padStart(8)}  ${over ? "OVER" : "ok"}`
     );
   }

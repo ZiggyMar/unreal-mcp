@@ -32,6 +32,8 @@
 #include "BehaviorTree/BTCompositeNode.h"
 #include "BehaviorTree/BTDecorator.h"
 #include "BehaviorTree/BTTaskNode.h"
+#include "K2Node_Variable.h"
+#include "K2Node_VariableSet.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_IfThenElse.h"
@@ -719,7 +721,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
-		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"),
+		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("trace_variable"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -950,6 +952,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("spawn_actor"))
 	{
 		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("trace_variable"))
+	{
+		Response = HandleTraceVariable(Params);
 	}
 	else if (Cmd == TEXT("read_behavior_tree"))
 	{
@@ -4859,6 +4865,144 @@ static void DescribeBTNode(const UBTNode* Node, int32 Depth, TArray<TSharedPtr<F
 			DescribeBTNode(Child.ChildTask, Depth + 1, Out);
 		}
 	}
+}
+
+// Every place a variable is read or written, across the whole project.
+//
+// This exists because of a real bug hunt that should have been one call and was nine. The report was
+// "the skin you pick in the lobby is not the one you get in the match". The answer turned out to be a
+// single fact - ServerSkinMemory is READ in one place and WRITTEN in none, so the lookup that decides
+// which skin you keep always misses - and establishing that fact meant opening nine Blueprints one at
+// a time and grepping each one's graphs. A frontier model would have paid the same nine round trips
+// for the same one sentence.
+//
+// "Written nowhere but read somewhere" is a whole class of bug on its own: the half-built feature.
+// The reading side exists, looks finished, compiles, and silently takes the fallback branch forever.
+// Nothing in Unreal warns about it, and it is invisible from any single asset - which is exactly why
+// it needs a project-wide answer rather than a per-Blueprint one.
+//
+// Cast-and-set is why this cannot be narrowed to the declaring Blueprint and its children: GM_Gameplay
+// reaches AVS_GameInstance's variable through a cast, and any scan that only looked at the owner would
+// have reported zero of everything and been confidently wrong.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceVariable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString VariableName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("variable"), VariableName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: variable"));
+	}
+
+	FString PathPrefix = TEXT("/Game");
+	Params->TryGetStringField(TEXT("pathPrefix"), PathPrefix);
+
+	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	FARFilter Filter;
+	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	Filter.PackagePaths.Add(FName(*PathPrefix));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	Registry.Get().GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Reads;
+	TArray<TSharedPtr<FJsonValue>> Writes;
+	TArray<TSharedPtr<FJsonValue>> DeclaredIn;
+	int32 Scanned = 0;
+
+	for (const FAssetData& Asset : Assets)
+	{
+		UBlueprint* Blueprint = Cast<UBlueprint>(Asset.GetAsset());
+		if (!Blueprint)
+		{
+			continue;
+		}
+		++Scanned;
+
+		// Where it is declared, which is not the same question as where it is used and is worth
+		// answering in the same breath - a name that is declared nowhere is a typo, not a bug.
+		for (const FBPVariableDescription& Description : Blueprint->NewVariables)
+		{
+			if (Description.VarName.ToString().Equals(VariableName, ESearchCase::IgnoreCase))
+			{
+				TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
+				Entry->SetStringField(TEXT("type"), UEdGraphSchema_K2::TypeToText(Description.VarType).ToString());
+				DeclaredIn.Add(MakeShared<FJsonValueObject>(Entry));
+			}
+		}
+
+		TArray<UEdGraph*> Graphs;
+		Blueprint->GetAllGraphs(Graphs);
+		for (UEdGraph* Graph : Graphs)
+		{
+			if (!Graph)
+			{
+				continue;
+			}
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UK2Node_Variable* VariableNode = Cast<UK2Node_Variable>(Node);
+				if (!VariableNode)
+				{
+					continue;
+				}
+				const FName Member = VariableNode->VariableReference.GetMemberName();
+				if (!Member.ToString().Equals(VariableName, ESearchCase::IgnoreCase))
+				{
+					continue;
+				}
+
+				TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
+				Entry->SetStringField(TEXT("graph"), Graph->GetName());
+				Entry->SetStringField(TEXT("nodeId"), MakeShortNodeId(Node, 8));
+
+				if (Cast<UK2Node_VariableSet>(Node))
+				{
+					Writes.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+				else
+				{
+					Reads.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+			}
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("variable"), VariableName);
+	Result->SetNumberField(TEXT("blueprintsScanned"), Scanned);
+	Result->SetArrayField(TEXT("declaredIn"), DeclaredIn);
+	Result->SetArrayField(TEXT("writes"), Writes);
+	Result->SetArrayField(TEXT("reads"), Reads);
+
+	// The verdicts worth spelling out, because each one is a different kind of wrong and a caller
+	// staring at two empty arrays should not have to work out which.
+	if (DeclaredIn.Num() == 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("No Blueprint declares a variable by this name. Check the spelling, or it may live on a "
+				 "native C++ class - find_source will say."));
+	}
+	else if (Writes.Num() == 0 && Reads.Num() > 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Read but never written. Whatever reads it always sees the default, so every branch that "
+				 "depends on it always goes the same way. This is what a half-built feature looks like: the "
+				 "reading side exists, compiles, and silently takes the fallback forever."));
+	}
+	else if (Reads.Num() == 0 && Writes.Num() > 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Written but never read. Either something is missing that should read it, or the variable "
+				 "is left over. Not a replication problem: replicating it would send a value nobody reads."));
+	}
+	else if (Reads.Num() == 0 && Writes.Num() == 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Declared and never used at all, in any Blueprint."));
+	}
+	return MakeOkResponse(Result);
 }
 
 // Read a Behavior Tree.
