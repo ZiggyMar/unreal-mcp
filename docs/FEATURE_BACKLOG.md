@@ -206,6 +206,12 @@ mean. 38 asset classes are present; these are the ones that matter, with what th
 | LevelSequence | 9 | none |
 | BehaviorTree / Blackboard | 3 | none |
 
+**Animation was the largest gap and the read half is now closed** — `unreal_read_anim_blueprint`
+returns state machines, states and the conditions on every transition, verified against this
+project's `ABP_NewPlayer` (2 machines, 15 states, 1,807 tokens). What remains unread is Montages (27)
+and Blend Spaces (29) as assets in their own right, and nothing can AUTHOR animation at all. The
+original note follows.
+
 **The largest remaining gap is animation: 62 assets across AnimBlueprints, Montages and Blend
 Spaces, and nothing can read any of them.** For a game whose enemies walk, "the enemy is not
 animating" is a question this bridge cannot even look at — it can see the Blueprint that sets a

@@ -20,6 +20,13 @@
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
+#include "Animation/AnimBlueprint.h"
+#include "AnimGraphNode_StateMachine.h"
+#include "AnimationStateMachineGraph.h"
+#include "AnimStateNode.h"
+#include "AnimStateNodeBase.h"
+#include "AnimStateTransitionNode.h"
+#include "Algo/Reverse.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_IfThenElse.h"
@@ -707,7 +714,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
-		TEXT("read_class_defaults"),
+		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -938,6 +945,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("spawn_actor"))
 	{
 		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("read_anim_blueprint"))
+	{
+		Response = HandleReadAnimBlueprint(Params);
 	}
 	else if (Cmd == TEXT("read_class_defaults"))
 	{
@@ -4578,6 +4589,192 @@ static void DescribeEditableProperties(UObject* Object, const FString& MatchFilt
 		}
 		OutProperties.Add(MakeShared<FJsonValueObject>(Entry));
 	}
+}
+
+// Summarise a transition rule as the condition it expresses, not as the nodes that express it.
+//
+// A rule graph is a Result node fed by a comparison fed by a variable. Listing four nodes to say
+// "Speed > 10" is the whole failure this project exists to avoid, and the node titles are close
+// enough to the condition already: Unreal titles them "Speed", "float > float", "Result". Reading
+// them back in wiring order gives a line a person can act on.
+static FString DescribeTransitionRule(UEdGraph* RuleGraph)
+{
+	if (!RuleGraph)
+	{
+		return TEXT("(no rule)");
+	}
+
+	TArray<FString> Terms;
+	for (UEdGraphNode* Node : RuleGraph->Nodes)
+	{
+		if (!Node)
+		{
+			continue;
+		}
+		// The Result node is the graph's plumbing, not part of the condition a person would state.
+		const FString Title = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+		if (Title.IsEmpty() || Title.Contains(TEXT("Result")))
+		{
+			continue;
+		}
+		Terms.Add(Title.Replace(TEXT("\n"), TEXT(" ")).TrimStartAndEnd());
+	}
+
+	if (Terms.Num() == 0)
+	{
+		// A rule graph with nothing in it means the transition never fires. That is worth saying
+		// outright: it looks like a wired transition in the editor and behaves like a wall.
+		return TEXT("empty - this transition can never fire");
+	}
+	// Reversed because Unreal walks the graph from the Result backwards, so the sources come last.
+	Algo::Reverse(Terms);
+	return FString::Join(Terms, TEXT(" "));
+}
+
+// Read an Animation Blueprint's state machines.
+//
+// Counted on the real project this is developed on: 6 AnimBlueprints, 27 AnimMontages, 29 Blend
+// Spaces - 62 animation assets, and not one tool could read any of them. For a game whose enemies
+// walk, "the enemy is not animating" was a question this bridge could not look at. It could see the
+// Blueprint that sets a speed variable and not the state machine that reads it, which is the half
+// where the answer usually is.
+//
+// Read-only, and states-and-transitions rather than every node. An anim graph is mostly pose
+// plumbing - blend nodes, caches, a final pose - and dumping it would cost a great deal to say
+// little. What a person actually asks is "which states exist, and what moves between them", and the
+// transition CONDITION is the part that decides whether an animation ever plays. So the condition's
+// graph is summarised to its comparisons rather than listed as nodes: "Speed > 10" is the answer,
+// and the four nodes that spell it are not.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *Path));
+	if (!AnimBP)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("anim_blueprint_not_found: %s. list_assets with className \"AnimBlueprint\" finds the real ")
+			TEXT("paths; note that an asset path repeats the name, as in /Game/Folder/ABP_Thing.ABP_Thing."),
+			*Path));
+	}
+
+	FString MatchFilter;
+	Params->TryGetStringField(TEXT("match"), MatchFilter);
+
+	TArray<UEdGraph*> AllGraphs;
+	AnimBP->GetAllGraphs(AllGraphs);
+
+	TArray<TSharedPtr<FJsonValue>> Machines;
+	int32 TotalStates = 0;
+
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph)
+		{
+			continue;
+		}
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			UAnimGraphNode_StateMachine* MachineNode = Cast<UAnimGraphNode_StateMachine>(Node);
+			if (!MachineNode || !MachineNode->EditorStateMachineGraph)
+			{
+				continue;
+			}
+
+			UAnimationStateMachineGraph* MachineGraph = MachineNode->EditorStateMachineGraph;
+			const FString MachineName = MachineGraph->GetName();
+
+			TArray<TSharedPtr<FJsonValue>> States;
+			for (UEdGraphNode* Inner : MachineGraph->Nodes)
+			{
+				UAnimStateNode* StateNode = Cast<UAnimStateNode>(Inner);
+				if (!StateNode)
+				{
+					continue;
+				}
+				++TotalStates;
+				const FString StateName = StateNode->GetStateName();
+				if (!MatchFilter.IsEmpty() && !StateName.Contains(MatchFilter) && !MachineName.Contains(MatchFilter))
+				{
+					continue;
+				}
+
+				// Where this state can go, and on what condition. A state with no way out is the
+				// commonest animation bug there is, and it is invisible until someone looks.
+				TArray<TSharedPtr<FJsonValue>> Transitions;
+				for (UEdGraphNode* MaybeTransition : MachineGraph->Nodes)
+				{
+					UAnimStateTransitionNode* Transition = Cast<UAnimStateTransitionNode>(MaybeTransition);
+					if (!Transition || Transition->GetPreviousState() != StateNode)
+					{
+						continue;
+					}
+
+					TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+					if (UAnimStateNodeBase* Next = Transition->GetNextState())
+					{
+						Entry->SetStringField(TEXT("to"), Next->GetStateName());
+					}
+					if (Transition->bAutomaticRuleBasedOnSequencePlayerInState)
+					{
+						Entry->SetStringField(TEXT("rule"), TEXT("automatic: when the sequence in this state finishes"));
+					}
+					else if (Transition->BoundGraph)
+					{
+						Entry->SetStringField(TEXT("rule"), DescribeTransitionRule(Transition->BoundGraph));
+					}
+					if (Transition->CrossfadeDuration > 0.f)
+					{
+						Entry->SetNumberField(TEXT("blendSeconds"), Transition->CrossfadeDuration);
+					}
+					Transitions.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+
+				TSharedRef<FJsonObject> StateEntry = MakeShared<FJsonObject>();
+				StateEntry->SetStringField(TEXT("state"), StateName);
+				if (Transitions.Num() > 0)
+				{
+					StateEntry->SetArrayField(TEXT("transitions"), Transitions);
+				}
+				else
+				{
+					// Said explicitly rather than left as an absent field. A state nothing leaves is
+					// usually the bug, and "no transitions out" is the sentence that finds it.
+					StateEntry->SetStringField(TEXT("transitions"), TEXT("none - nothing leaves this state"));
+				}
+				States.Add(MakeShared<FJsonValueObject>(StateEntry));
+			}
+
+			TSharedRef<FJsonObject> MachineEntry = MakeShared<FJsonObject>();
+			MachineEntry->SetStringField(TEXT("stateMachine"), MachineName);
+			MachineEntry->SetArrayField(TEXT("states"), States);
+			Machines.Add(MakeShared<FJsonValueObject>(MachineEntry));
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	if (AnimBP->TargetSkeleton)
+	{
+		Result->SetStringField(TEXT("skeleton"), AnimBP->TargetSkeleton->GetName());
+	}
+	Result->SetStringField(TEXT("parentClass"),
+		AnimBP->ParentClass ? AnimBP->ParentClass->GetName() : TEXT("AnimInstance"));
+	Result->SetArrayField(TEXT("stateMachines"), Machines);
+	Result->SetNumberField(TEXT("totalStates"), TotalStates);
+	if (Machines.Num() == 0)
+	{
+		// Not an error, and worth saying plainly: plenty of Anim Blueprints blend without a state
+		// machine at all, and a caller that gets an empty list should not go looking for a fault.
+		Result->SetStringField(TEXT("note"),
+			TEXT("This Anim Blueprint has no state machines. That is normal - many blend poses directly, ")
+			TEXT("driven by variables the owning Blueprint sets. Read those with list_variables on this asset."));
+	}
+	return MakeOkResponse(Result);
 }
 
 // Read a Blueprint's class defaults.

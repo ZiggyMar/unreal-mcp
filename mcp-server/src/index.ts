@@ -382,10 +382,14 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // find_source also earns its place in the spine: called with no symbol it answers "does this
   // project have C++ at all", which is orientation, not C++ work.
   cpp: ["unreal_compile_cpp"],
+  // Animation is its own group: 62 of the assets on the project this was measured against, and
+  // irrelevant to a project that has none.
+  anim: ["unreal_read_anim_blueprint"],
 };
 
 const GROUP_SUMMARY: Record<string, string> = {
   cpp: "compile a C++ source file to see whether an edit built (find_source, which locates it, is in core)",
+  anim: "Animation Blueprints: state machines, their states, and the conditions that move between them",
   edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
   materials: "Materials and Material Instances: create them, parameterise them, override them",
@@ -1878,6 +1882,35 @@ register(
 );
 
 register(
+  "unreal_read_anim_blueprint",
+  {
+    title: "Read an Animation Blueprint's state machines",
+    description:
+      "**The tool for \"the character is not animating\".** Returns each state machine, its states, and what moves " +
+      "between them - the transition and the CONDITION that fires it, which is the part that decides whether an " +
+      "animation ever plays.\n\n" +
+      "Blueprints and Anim Blueprints answer different halves of that question. A Blueprint sets a Speed variable; " +
+      "the state machine decides that Speed > 10 means Run. Reading only the first half is how a model concludes " +
+      "the logic is fine while the character stands still.\n\n" +
+      "Two things it names outright because both are invisible until you look: a state **nothing leaves**, and a " +
+      "transition whose rule graph is **empty**, which looks wired and behaves like a wall. An Anim Blueprint with " +
+      "no state machines is normal, not a fault - many blend poses directly from variables - and the reply says so " +
+      "rather than returning a bare empty list.",
+    inputSchema: {
+      path: z.string().describe('Anim Blueprint path, e.g. "/Game/Characters/ABP_Player.ABP_Player".'),
+      match: z.string().optional().describe("Only states or machines whose name contains this."),
+    },
+  },
+  async ({ path, match }) => {
+    try {
+      return jsonResult(await bridge.send("read_anim_blueprint", { path, match }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_read_class_defaults",
   {
     title: "Read a Blueprint's class defaults",
@@ -3023,7 +3056,7 @@ register(
       "one at a time; re-calling is harmless.",
     inputSchema: {
       groups: z
-        .array(z.enum(["core", "cpp", "edit", "ui", "materials", "data", "scene", "maintenance"]))
+        .array(z.enum(["core", "cpp", "anim", "edit", "ui", "materials", "data", "scene", "maintenance"]))
         .optional()
         .describe('Whole groups to turn on, e.g. ["core","ui"].'),
       tools: z

@@ -35,6 +35,10 @@ public class UnrealMCPBridge : ModuleRules
 			"UMG",
 			"UMGEditor",
 			"MaterialEditor",
+			// For reading Anim Blueprint state machines. AnimGraph is the editor module that owns
+			// UAnimGraphNode_StateMachine, UAnimStateNode and UAnimStateTransitionNode; this plugin
+			// is editor-only already, so it costs a runtime dependency on nothing.
+			"AnimGraph",
 			"SourceControl"
 		});
 

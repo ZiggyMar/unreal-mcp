@@ -242,6 +242,35 @@ string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, a
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
 
+### Animation: `unreal_read_anim_blueprint`
+
+The largest gap the asset inventory turned up, and the one behind a sentence people actually say.
+The project this is developed against holds **6 Anim Blueprints, 27 Montages and 29 Blend Spaces —
+62 animation assets — and nothing here could read any of them.** For a game whose enemies walk,
+*"the enemy is not animating"* was a question this bridge could not look at: it could see the
+Blueprint that sets a `Speed` variable and not the state machine that decides `Speed > 10` means
+Run. Reading only the first half is exactly how a model concludes the logic is fine while the
+character stands still.
+
+```text
+unreal_read_anim_blueprint({ path: "/Game/Characters/ABP_Enemy.ABP_Enemy" })
+```
+
+It returns each state machine, its states, and what moves between them — including the **condition**
+on each transition, because that is the part that decides whether an animation ever plays. Rules are
+summarised to the condition rather than listed as nodes: `Speed > 10` is the answer, and the four
+nodes that spell it are not.
+
+Two things it names outright, because both look fine in the editor until someone checks: a state
+**nothing leaves**, and a transition whose rule graph is **empty** — which looks wired and behaves
+like a wall. An Anim Blueprint with no state machines at all is normal rather than a fault, and the
+reply says so instead of returning a bare empty list, so a caller does not go hunting for a problem
+that is not there.
+
+Read-only, and states-and-transitions rather than every node: an anim graph is mostly pose plumbing,
+and dumping it would cost a great deal to say little. It lives in its own **`anim` group**, so a
+project without animation never pays for it.
+
 ### The other half of "data": `unreal_read_asset_properties` / `unreal_set_asset_property`
 
 Counted rather than assumed. Asking the real project this is developed on what it is made of turned
