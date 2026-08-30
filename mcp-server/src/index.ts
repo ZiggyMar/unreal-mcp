@@ -390,12 +390,16 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // AI is its own group for the same reason animation is: a project without Behavior Trees should
   // not carry the definition, and a project built around them wants it in the diagnose set.
   ai: ["unreal_read_behavior_tree"],
+  // VFX is its own group for the same reason animation and AI are: a project without Niagara should
+  // not carry the definition.
+  vfx: ["unreal_read_niagara_system"],
 };
 
 const GROUP_SUMMARY: Record<string, string> = {
   cpp: "compile a C++ source file to see whether an edit built (find_source, which locates it, is in core)",
   anim: "Animation Blueprints: state machines, their states, and the conditions that move between them",
   ai: "Behavior Trees and their blackboards: what the AI is actually told to do, and what guards each branch",
+  vfx: "Niagara systems: their emitters, and the user parameters a Blueprint is allowed to set",
   edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
   materials: "Materials and Material Instances: create them, parameterise them, override them",
@@ -2034,6 +2038,34 @@ register(
 );
 
 register(
+  "unreal_read_niagara_system",
+  {
+    title: "Read a Niagara system's emitters and user parameters",
+    description:
+      "**The tool for \"the effect does not play\", or plays and never changes.** Returns the system's emitters " +
+      "and the user parameters a Blueprint is allowed to set on it.\n\n" +
+      "The parameters are the point. Set Niagara Variable takes the parameter name as a **string**, so a name the " +
+      "system does not expose is not an error - it is a silent no-op. The node sits there wired and compiling, " +
+      "addressing nothing, and nothing about the Blueprint shows it.\n\n" +
+      "Names come back as a Blueprint must spell them, with Niagara's internal `User.` prefix removed - reporting " +
+      "the internal form would hand you a string that silently does nothing.\n\n" +
+      "A **disabled emitter** is called out, because that is a part of the effect that never runs in a system that " +
+      "otherwise looks entirely correct. A system with no emitters at all, or with every emitter disabled, is " +
+      "named outright: both spawn silently and look like valid assets.",
+    inputSchema: {
+      path: z.string().describe('Niagara system path, e.g. "/Game/VFX/NS_Explosion.NS_Explosion".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      return jsonResult(await bridge.send("read_niagara_system", { path }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_read_behavior_tree",
   {
     title: "Read a Behavior Tree and its blackboard",
@@ -3167,15 +3199,13 @@ register(
           "Call again with a `group` to list the tools in it, or `match` to search names and summaries " +
           '(e.g. {"match":"data table"}). Listing every tool costs about 5.5k tokens and is rarely ' +
           "what you want - pass all:true if it genuinely is.\n\n" +
-          `costTokens is what unreal_enable_tools adds to every later request once that group is on. ` +
-          `Enabling everything is ~${ALL_GROUPS_TOKENS} tokens; \`core\` alone is ~${GROUP_COST_TOKENS.core}, ` +
-          `which is most of it, so "just enable core" is not the cheap option it sounds like. Turn on what ` +
-          `the job needs and add more later - enabling is immediate and re-calling is harmless.\n\n` +
+          `costTokens is what enabling that group adds to every later request. Everything is ` +
+          `~${ALL_GROUPS_TOKENS}; \`core\` alone is ~${GROUP_COST_TOKENS.core}, most of it - "just enable core" ` +
+          `is not the cheap option it sounds like. Re-calling is harmless, so turn on what the job needs.\n\n` +
           // A model that reaches list_tools rather than reading the instructions still has to learn
           // that presets exist, or it will hand-pick from this catalogue and pay for the privilege.
-          `If the job has a name, a preset is cheaper than any group and needs no picking from this list: ` +
-          PRESET_NAMES.map((n) => `${n} ~${PRESET_COST_TOKENS[n]}`).join(", ") +
-          `. Each is verified by a trial that runs that whole job on it.`,
+          `If the job has a name, a preset beats any group and needs no picking from this list: ` +
+          PRESET_NAMES.map((n) => `${n} ~${PRESET_COST_TOKENS[n]}`).join(", ") + `.`,
       });
     }
     const rows = [...toolCatalog.entries()]
@@ -3234,7 +3264,7 @@ register(
       "one at a time; re-calling is harmless.",
     inputSchema: {
       groups: z
-        .array(z.enum(["core", "cpp", "anim", "ai", "edit", "ui", "materials", "data", "scene", "maintenance"]))
+        .array(z.enum(["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"]))
         .optional()
         .describe('Whole groups to turn on, e.g. ["core","ui"].'),
       tools: z

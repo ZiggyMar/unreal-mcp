@@ -33,6 +33,8 @@
 #include "BehaviorTree/BTCompositeNode.h"
 #include "BehaviorTree/BTDecorator.h"
 #include "BehaviorTree/BTTaskNode.h"
+#include "NiagaraSystem.h"
+#include "NiagaraEmitterHandle.h"
 #include "K2Node_Variable.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_VariableGet.h"
@@ -847,7 +849,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
-		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("trace_variable"), TEXT("trace_function_calls"),
+		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("read_niagara_system"), TEXT("trace_variable"), TEXT("trace_function_calls"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -1086,6 +1088,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("trace_variable"))
 	{
 		Response = HandleTraceVariable(Params);
+	}
+	else if (Cmd == TEXT("read_niagara_system"))
+	{
+		Response = HandleReadNiagaraSystem(Params);
 	}
 	else if (Cmd == TEXT("read_behavior_tree"))
 	{
@@ -5651,6 +5657,98 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceVariable(const TSharedPtr
 	{
 		Result->SetStringField(TEXT("verdict"),
 			TEXT("Declared and never used at all, in any Blueprint."));
+	}
+	return MakeOkResponse(Result);
+}
+
+// Read a Niagara system: its emitters, and the parameters a Blueprint is allowed to set on it.
+//
+// The user parameters are the point. A Blueprint drives an effect with Set Niagara Variable (Float),
+// which takes the parameter name as a STRING - so a name that does not exist on the system is not an
+// error, it is a silent no-op. "The effect does not play" and "the effect plays but never changes"
+// are both usually that, and neither is visible from the Blueprint side: the node is there, wired,
+// compiling, and addressing nothing.
+//
+// A disabled emitter is the other quiet one. The system looks correct and one part of the effect
+// simply never runs, exactly the way a state machine's unreachable state does.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadNiagaraSystem(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(StaticLoadObject(UNiagaraSystem::StaticClass(), nullptr, *Path));
+	if (!System)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("niagara_system_not_found: %s. list_assets with className \"NiagaraSystem\" finds the real paths."),
+			*Path));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Emitters;
+	int32 DisabledCount = 0;
+	for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("emitter"), Handle.GetName().ToString());
+		if (!Handle.GetIsEnabled())
+		{
+			// Said outright rather than as a flag among many: a disabled emitter is a part of the
+			// effect that never runs, in a system that otherwise looks entirely correct.
+			Entry->SetBoolField(TEXT("disabled"), true);
+			++DisabledCount;
+		}
+		Emitters.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TArray<FNiagaraVariable> UserVars;
+	System->GetExposedParameters().GetParameters(UserVars);
+
+	TArray<TSharedPtr<FJsonValue>> Exposed;
+	for (const FNiagaraVariable& Var : UserVars)
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		// The name as a Blueprint must spell it. Niagara prefixes user parameters internally with
+		// "User."; the Set Niagara Variable nodes take the bare name, so reporting the internal form
+		// would hand a caller a string that silently does nothing.
+		FString Name = Var.GetName().ToString();
+		Name.RemoveFromStart(TEXT("User."));
+		Entry->SetStringField(TEXT("parameter"), Name);
+		Entry->SetStringField(TEXT("type"), Var.GetType().GetName());
+		Exposed.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetArrayField(TEXT("emitters"), Emitters);
+	Result->SetArrayField(TEXT("userParameters"), Exposed);
+
+	if (Emitters.Num() == 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("This system has no emitters, so it renders nothing at all. That is not a normal state - it "
+				 "looks like a valid asset in the content browser and spawns silently."));
+	}
+	else if (DisabledCount == Emitters.Num())
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Every emitter in this system is disabled, so spawning it produces nothing visible."));
+	}
+	else if (DisabledCount > 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			FString::Printf(TEXT("%d of %d emitters are disabled. If part of the effect is missing, that is "
+								 "where to look first."),
+				DisabledCount, Emitters.Num()));
+	}
+
+	if (Exposed.Num() == 0)
+	{
+		Result->SetStringField(TEXT("note"),
+			TEXT("No user parameters. A Blueprint calling Set Niagara Variable on this system is addressing a "
+				 "name that does not exist, which is a silent no-op rather than an error."));
 	}
 	return MakeOkResponse(Result);
 }

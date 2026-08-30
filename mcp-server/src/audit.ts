@@ -34,6 +34,7 @@ import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { findUncalledParentEvents } from "./parentCalls.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
+import { findNiagaraFaults } from "./niagaraAudit.js";
 import { explainGraph } from "./explainGraph.js";
 
 /** What each finding is likely to cost, and why it sits where it does. */
@@ -47,6 +48,9 @@ export const FINDING_COST: Record<string, number> = {
   // A state nothing leaves freezes the character in one pose for the rest of the round, and the
   // machine looks finished in the editor because the state IS wired - just not outward.
   "anim-state-no-exit": 80,
+  // A system that can render nothing, spawned by a Blueprint that looks correct.
+  "niagara-system-empty": 60,
+  "niagara-all-emitters-disabled": 60,
   // Draws exactly like a working transition and behaves like a wall.
   "anim-transition-never-fires": 70,
   // Costs the most that any of these can cost: the game builds, hosts, searches, reports no error,
@@ -88,6 +92,10 @@ const WHY_IT_COSTS: Record<string, string> = {
     "Usually fine: if the referenced Actor replicates itself, clients already see it and the variable is just the server's handle. Worth one look, not a rewrite.",
   "anim-state-no-exit":
     "The character enters the pose and stays in it. Reads as 'he freezes after the dodge', and nothing warns.",
+  "niagara-system-empty":
+    "The spawn call succeeds and nothing appears. Reads as 'the effect doesn't play', with no error to search for.",
+  "niagara-all-emitters-disabled":
+    "Same as an empty system in practice: it spawns, and renders nothing.",
   "anim-transition-never-fires":
     "An empty rule graph draws like a working transition. The destination state is simply unreachable through it.",
   "unhandled-cast-failure":
@@ -409,6 +417,37 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   } catch {
     // An older bridge has no read_anim_blueprint. The rest of the audit is still worth returning,
     // and a hard failure here would make upgrading the server a prerequisite for auditing at all.
+  }
+
+  // VFX. Same reasoning as the animation pass: a NiagaraSystem is not a Blueprint, so list_blueprints
+  // never returned one and the audit could not see a single effect in the project.
+  try {
+    const vfx = await bridge.send<{ assets?: Array<{ name: string; path: string }> }>("list_assets", {
+      className: "NiagaraSystem",
+      maxResults: 200,
+    });
+    for (const asset of vfx.assets ?? []) {
+      try {
+        const system = await bridge.send<Record<string, unknown>>("read_niagara_system", { path: asset.path });
+        for (const finding of findNiagaraFaults(system, asset.name)) {
+          findings.push({
+            blueprint: asset.name,
+            path: asset.path,
+            graph: "(system)",
+            check: finding.check,
+            severity: finding.severity,
+            message: finding.message,
+            ...(finding.observed ? { observed: finding.observed } : {}),
+            fix: finding.fix,
+            cost: FINDING_COST[finding.check] ?? 1,
+          });
+        }
+      } catch (err) {
+        unreadable.push({ name: asset.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
+      }
+    }
+  } catch {
+    // An older bridge has no read_niagara_system; the rest of the audit is still worth returning.
   }
 
   // A child against its parent. Both have to have been read, which is why this waits until here.

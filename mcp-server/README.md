@@ -360,6 +360,36 @@ It names the three shapes that are bugs in themselves:
 
 A few seconds to scan every Blueprint, against the alternative of opening them one at a time.
 
+### VFX: `unreal_read_niagara_system`
+
+Same shape of gap as animation and AI: 17 Niagara systems in the project this is developed against,
+and nothing here could read one. *"The effect doesn't play"* was a question the bridge could not look
+at — it could see the Blueprint that spawns the system and nothing about the system itself.
+
+```text
+unreal_read_niagara_system({ path: "/Game/VFX/NS_Explosion.NS_Explosion" })
+```
+
+**The user parameters are the point.** `Set Niagara Variable (Float)` takes the parameter name as a
+**string**, so a name the system does not expose is not an error — it is a silent no-op. The node
+sits there wired and compiling, addressing nothing, and nothing on the Blueprint side shows it. Names
+come back as a Blueprint must spell them, with Niagara's internal `User.` prefix stripped; reporting
+the internal form would hand a caller a string that quietly does nothing.
+
+Two states are named outright rather than left as flags: a **disabled emitter**, which is a part of
+the effect that never runs in a system that otherwise looks correct, and a system with **no emitters
+at all** — or every emitter disabled — which spawns silently and looks like a perfectly valid asset
+in the content browser.
+
+**`unreal_audit_project` scans Niagara too**, and deliberately narrowly. A *disabled emitter* is not
+reported: turning one off is ordinary authoring, and on this project `NS_Wind_Swirl` has three of six
+disabled on purpose. A check that fired on that would fire on every VFX project and be ignored on all
+of them - the same trap the animation checks avoid by leaving single-state machines alone. What is
+always wrong is a system that can render **nothing**: no emitters, or every emitter disabled. Both
+look like valid assets, spawn without complaint, and produce nothing.
+
+Its own **`vfx` group** at 328 tokens, so a project without Niagara never pays for it.
+
 ### AI: `unreal_read_behavior_tree`
 
 The bug that started this project's most urgent day was *"none of the enemies are spawning, and the

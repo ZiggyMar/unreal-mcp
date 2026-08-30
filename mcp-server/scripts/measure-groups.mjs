@@ -38,7 +38,7 @@ const TOLERANCE_TOKENS = 150;
 const NEWLINE = String.fromCharCode(10);
 
 /** The groups unreal_enable_tools offers. Kept in the order its description lists them. */
-const GROUPS = ["core", "cpp", "anim", "ai", "edit", "ui", "materials", "data", "scene", "maintenance"];
+const GROUPS = ["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"];
 
 /**
  * A ceiling on the whole surface, not on any one group.
