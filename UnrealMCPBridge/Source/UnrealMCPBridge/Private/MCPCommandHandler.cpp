@@ -5028,22 +5028,118 @@ static bool IsReachableFromEntry(UEdGraphNode* Node, int32 Depth = 0)
 	return false;
 }
 
-// Every place a function is called, across the whole project - and whether each call can actually run.
+// Which graphs in this project can actually run.
 //
-// This exists because of a mistake worth writing down. Asked to fix a skin system, this tool searched
-// for the word "Skin", found a system whose names matched, and spent an afternoon on it. It was the
-// OLD system: replaced months earlier because it handled mid-round joins badly, and left on the
-// canvas with its front end unplugged. Everything about it read like working code.
+// The first version of this answered "can execution reach this node from an entry", which is the
+// right question inside one graph and the wrong one across a project: a FUNCTION graph always has an
+// entry node, so every call inside it read as reachable even when nothing in the project called that
+// function. Measured on a real project, that reported four live call sites where two of them were in
+// functions nobody calls.
 //
-// Names are the weakest thing to search on. A system can be called anything - character selection,
-// randomisation, loadout - and two systems that do the same job will have similar names, with only
-// one of them live. What cannot be renamed is the ENGINE function the system must eventually call:
-// whatever changes a character's appearance ends up at SetSkeletalMeshAsset. So the reliable question
-// is not "where is the skin system" but "what calls SetSkeletalMeshAsset, and which of those callers
-// can actually be reached".
+// So reachability is computed to a fixpoint instead:
 //
-// Hence `reachable` on every hit. A call nothing can reach is the signature of a replaced system, and
-// it is the difference between a bug to fix and code to leave alone.
+//   - an Event Graph is live (its events can fire),
+//   - a function graph is live if some LIVE graph calls it at a call site that is itself reachable,
+//   - repeat until nothing new becomes live.
+//
+// Timers are why this also reads pin defaults. Set Timer by Function Name passes its target as a
+// STRING, so a call graph built only from CallFunction nodes cannot see it - AttemptSkinUpdate on a
+// real project showed as called by nobody when a timer starts it every tick. Recovering that edge
+// from the pin's default text turns an invisible caller into a visible one.
+//
+// What this still cannot see, and it is written here rather than pretended away: events bound to
+// delegates at runtime, anything called only from C++, and a Custom Event that nothing ever calls
+// still counts its graph as live because it lives in an Event Graph.
+// Every node in a graph that execution can reach, in one forward pass.
+//
+// The first version asked "can this node be reached" per call node, walking exec wires backwards
+// each time. Correct, and far too slow: on a 339-Blueprint project it ran a recursive walk for every
+// CallFunction node in the project and blew through the bridge's 60 second budget, so the answer
+// never arrived. Marking the whole graph once and then testing membership is the same answer for a
+// fraction of the work.
+static void MarkReachableNodes(UEdGraph* Graph, TSet<const UEdGraphNode*>& Out)
+{
+	if (!Graph)
+	{
+		return;
+	}
+	TArray<UEdGraphNode*> Frontier;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (Node && (Node->IsA<UK2Node_Event>() || Node->IsA<UK2Node_CustomEvent>() || Node->IsA<UK2Node_FunctionEntry>()))
+		{
+			Out.Add(Node);
+			Frontier.Add(Node);
+		}
+	}
+	while (Frontier.Num() > 0)
+	{
+		UEdGraphNode* Node = Frontier.Pop(EAllowShrinking::No);
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin || Pin->Direction != EGPD_Output || Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+			{
+				continue;
+			}
+			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				UEdGraphNode* Next = Linked ? Linked->GetOwningNode() : nullptr;
+				if (Next && !Out.Contains(Next))
+				{
+					Out.Add(Next);
+					Frontier.Add(Next);
+				}
+			}
+		}
+	}
+}
+
+struct FMCPCallSite
+{
+	FString Blueprint;
+	FString Graph;
+	FString Called;
+	FString NodeId;
+	bool bReachableInGraph = false;
+	/** "BP.Graph" - the graph this call sits in, used to look its liveness up. */
+	FString GraphKey;
+};
+
+struct FMCPGraphInfo
+{
+	bool bIsEventGraph = false;
+	/** The engine can call this without any Blueprint node doing so: a RepNotify, a construction
+	 *  script, or an override of a parent or interface function. */
+	bool bEngineCalled = false;
+	/** Function names this graph calls at a reachable call site. A set: a graph calling the same
+	 *  function forty times only needs to say so once, and the walk below reads these repeatedly. */
+	TSet<FString> CallsWhenLive;
+};
+
+// The engine's own timer entry points. Both take the target function as a plain string.
+static bool IsTimerByName(const FString& FunctionName)
+{
+	return FunctionName == TEXT("K2_SetTimer") || FunctionName == TEXT("K2_SetTimerDelegate") ||
+		   FunctionName.Contains(TEXT("SetTimerByFunctionName")) || FunctionName == TEXT("K2_SetTimerForNextTick");
+}
+
+/** The string a timer node was given as its target, if it has one. */
+static FString TimerTargetFromPins(const UK2Node_CallFunction* Node)
+{
+	if (!Node)
+	{
+		return FString();
+	}
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Input && Pin->PinName == TEXT("FunctionName"))
+		{
+			return Pin->DefaultValue;
+		}
+	}
+	return FString();
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FunctionName;
@@ -5064,8 +5160,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 	TArray<FAssetData> Assets;
 	Registry.Get().GetAssets(Filter, Assets);
 
-	TArray<TSharedPtr<FJsonValue>> Live;
-	TArray<TSharedPtr<FJsonValue>> Unreachable;
+	// One pass over the project builds the call graph; the fixpoint below decides what runs.
+	TMap<FString, FMCPGraphInfo> Graphs;
+	TMap<FString, TArray<FString>> GraphsImplementing; // function name -> graph keys that implement it
+	TArray<FMCPCallSite> Matches;
 	int32 Scanned = 0;
 
 	for (const FAssetData& Asset : Assets)
@@ -5077,14 +5175,66 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 		}
 		++Scanned;
 
-		TArray<UEdGraph*> Graphs;
-		Blueprint->GetAllGraphs(Graphs);
-		for (UEdGraph* Graph : Graphs)
+		TArray<UEdGraph*> AllGraphs;
+		Blueprint->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
 		{
 			if (!Graph)
 			{
 				continue;
 			}
+			const FString GraphKey = FString::Printf(TEXT("%s.%s"), *Blueprint->GetName(), *Graph->GetName());
+			FMCPGraphInfo& Info = Graphs.FindOrAdd(GraphKey);
+
+			// An Event Graph is one whose entries are events rather than a function entry. Ubergraphs
+			// are named EventGraph, EventGraph_1 and so on, so the node kinds are the honest test.
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (Node && (Node->IsA<UK2Node_Event>() || Node->IsA<UK2Node_CustomEvent>()))
+				{
+					Info.bIsEventGraph = true;
+					break;
+				}
+			}
+			if (!Info.bIsEventGraph)
+			{
+				GraphsImplementing.FindOrAdd(Graph->GetName()).Add(GraphKey);
+
+				// Functions the ENGINE calls, which no Blueprint node ever will. Without these the
+				// fixpoint reports live code as dead, which is worse than the problem it was built to
+				// solve: the first version of this called OnRep_SkinData a replaced system and told
+				// the reader not to fix it, about the one path that actually runs.
+				const FString GraphName = Graph->GetName();
+				const bool bRepNotify = GraphName.StartsWith(TEXT("OnRep_"));
+				const bool bConstruction = GraphName == TEXT("UserConstructionScript");
+
+				// An override of something declared on a parent or an interface: the engine calls it,
+				// or the parent's code does. Either way nothing in this project has to.
+				bool bOverride = false;
+				if (UClass* Parent = Blueprint->ParentClass)
+				{
+					bOverride = Parent->FindFunctionByName(FName(*GraphName)) != nullptr;
+				}
+				if (!bOverride)
+				{
+					for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
+					{
+						if (Interface.Interface && Interface.Interface->FindFunctionByName(FName(*GraphName)))
+						{
+							bOverride = true;
+							break;
+						}
+					}
+				}
+				if (bRepNotify || bConstruction || bOverride)
+				{
+					Info.bEngineCalled = true;
+				}
+			}
+
+			TSet<const UEdGraphNode*> Reachable;
+			MarkReachableNodes(Graph, Reachable);
+
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
 				UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node);
@@ -5092,27 +5242,98 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 				{
 					continue;
 				}
-				const FName Member = CallNode->FunctionReference.GetMemberName();
-				if (!Member.ToString().Contains(FunctionName))
+				const FString Called = CallNode->FunctionReference.GetMemberName().ToString();
+				const bool bReachable = Reachable.Contains(Node);
+				if (bReachable)
 				{
-					continue;
+					Info.CallsWhenLive.Add(Called);
+					// A timer's target is a string in a pin, invisible to the call graph otherwise.
+					if (IsTimerByName(Called))
+					{
+						const FString Target = TimerTargetFromPins(CallNode);
+						if (!Target.IsEmpty())
+						{
+							Info.CallsWhenLive.Add(Target);
+						}
+					}
 				}
 
-				TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
-				Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
-				Entry->SetStringField(TEXT("graph"), Graph->GetName());
-				Entry->SetStringField(TEXT("calls"), Member.ToString());
-				Entry->SetStringField(TEXT("nodeId"), MakeShortNodeId(Node, 8));
-
-				if (IsReachableFromEntry(Node))
+				if (Called.Contains(FunctionName))
 				{
-					Live.Add(MakeShared<FJsonValueObject>(Entry));
-				}
-				else
-				{
-					Unreachable.Add(MakeShared<FJsonValueObject>(Entry));
+					FMCPCallSite Site;
+					Site.Blueprint = Blueprint->GetName();
+					Site.Graph = Graph->GetName();
+					Site.Called = Called;
+					Site.NodeId = MakeShortNodeId(Node, 8);
+					Site.bReachableInGraph = bReachable;
+					Site.GraphKey = GraphKey;
+					Matches.Add(Site);
 				}
 			}
+		}
+	}
+
+	// Fixpoint by worklist rather than by re-scanning. The first version copied the whole live set
+	// on every round, which on a 339-Blueprint project took longer than the bridge's 60 second budget
+	// and timed out - a correct answer nobody receives is not an answer.
+	TSet<FString> LiveGraphs;
+	TArray<FString> Worklist;
+	for (const TPair<FString, FMCPGraphInfo>& Pair : Graphs)
+	{
+		if (Pair.Value.bIsEventGraph || Pair.Value.bEngineCalled)
+		{
+			LiveGraphs.Add(Pair.Key);
+			Worklist.Add(Pair.Key);
+		}
+	}
+	while (Worklist.Num() > 0)
+	{
+		const FString Key = Worklist.Pop(EAllowShrinking::No);
+		const FMCPGraphInfo* Info = Graphs.Find(Key);
+		if (!Info)
+		{
+			continue;
+		}
+		for (const FString& Called : Info->CallsWhenLive)
+		{
+			const TArray<FString>* Implementors = GraphsImplementing.Find(Called);
+			if (!Implementors)
+			{
+				continue;
+			}
+			for (const FString& Implementor : *Implementors)
+			{
+				bool bAlready = false;
+				LiveGraphs.Add(Implementor, &bAlready);
+				if (!bAlready)
+				{
+					Worklist.Add(Implementor);
+				}
+			}
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Live;
+	TArray<TSharedPtr<FJsonValue>> Dead;
+	for (const FMCPCallSite& Site : Matches)
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("blueprint"), Site.Blueprint);
+		Entry->SetStringField(TEXT("graph"), Site.Graph);
+		Entry->SetStringField(TEXT("calls"), Site.Called);
+		Entry->SetStringField(TEXT("nodeId"), Site.NodeId);
+
+		const bool bGraphRuns = LiveGraphs.Contains(Site.GraphKey);
+		if (bGraphRuns && Site.bReachableInGraph)
+		{
+			Live.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		else
+		{
+			Entry->SetStringField(TEXT("why"),
+				!bGraphRuns ? TEXT("nothing calls the function this sits in")
+							: TEXT("no execution path reaches it inside its own graph"));
+			Dead.Add(MakeShared<FJsonValueObject>(Entry));
 		}
 	}
 
@@ -5120,9 +5341,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 	Result->SetStringField(TEXT("function"), FunctionName);
 	Result->SetNumberField(TEXT("blueprintsScanned"), Scanned);
 	Result->SetArrayField(TEXT("reachable"), Live);
-	Result->SetArrayField(TEXT("unreachable"), Unreachable);
+	Result->SetArrayField(TEXT("unreachable"), Dead);
+	Result->SetStringField(TEXT("blindSpots"),
+		TEXT("Counted as callable without a Blueprint caller: Event Graphs, RepNotify functions, construction "
+			 "scripts, and overrides of a parent or interface function - the engine calls those. Timers started "
+			 "with Set Timer by Function Name are followed by reading the target out of the pin. Still invisible: "
+			 "events bound to delegates at runtime, calls from C++, and a Custom Event nobody ever calls."));
 
-	if (Live.Num() == 0 && Unreachable.Num() == 0)
+	if (Live.Num() == 0 && Dead.Num() == 0)
 	{
 		Result->SetStringField(TEXT("verdict"),
 			TEXT("Nothing in any Blueprint calls a function whose name contains this. Check the spelling, or it "
@@ -5131,15 +5357,15 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 	else if (Live.Num() == 0)
 	{
 		Result->SetStringField(TEXT("verdict"),
-			TEXT("Every call is unreachable: no execution path leads to any of them from an event or function "
-				 "entry. That is what a REPLACED system looks like - the front end was unplugged and the rest "
-				 "left on the canvas. Do not fix it; find what took over."));
+			TEXT("Every call is dead: either nothing calls the function it sits in, or no execution path reaches "
+				 "it. That is what a REPLACED system looks like - the front end was unplugged and the rest left "
+				 "on the canvas. Do not fix it; find what took over."));
 	}
-	else if (Unreachable.Num() > 0)
+	else if (Dead.Num() > 0)
 	{
 		Result->SetStringField(TEXT("verdict"),
-			TEXT("Some calls are live and some cannot be reached. The unreachable ones are usually an older "
-				 "version of the same system that was unplugged rather than deleted; work on the reachable ones."));
+			TEXT("Some calls run and some cannot. The dead ones are usually an older version of the same system, "
+				 "unplugged rather than deleted. Work on the ones under `reachable`."));
 	}
 	return MakeOkResponse(Result);
 }

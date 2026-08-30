@@ -260,9 +260,29 @@ changes a character's appearance ends up at `SetSkeletalMeshAsset`.
 unreal_trace_function_calls({ function: "SetSkeletalMeshAsset" })
 ```
 
-Every hit comes back as `reachable` or `unreachable`, decided by walking exec wires back to an event
-or a function entry. **A call nothing can reach is the signature of a replaced system** — and it is
-not a bug to fix, it means look elsewhere for what took over.
+Every hit comes back as `reachable` or `unreachable`. **A call nothing can reach is the signature of a
+replaced system** — not a bug to fix, but a sign to look elsewhere for what took over.
+
+Getting that verdict right took three attempts, and each wrong answer is worth recording because each
+was confident:
+
+1. **Reachable within its own graph.** Wrong: a function graph always has an entry node, so every
+   call inside one read as live even when nothing called that function.
+2. **A project-wide fixpoint** — event graphs run, and whatever a running graph calls runs. Correct
+   in shape, and it recomputed the whole live set every round: on 339 Blueprints it exceeded the
+   bridge's 60-second budget, so the answer never arrived. An answer nobody receives is not an
+   answer. Now a worklist, with reachability marked once per graph by a forward pass instead of a
+   backward walk per node.
+3. **Too strict.** It reported `OnRep_SkinData` — the one path that actually runs — as a replaced
+   system, and told the reader not to fix it. **A RepNotify is called by the engine**, and so are
+   construction scripts and overrides of a parent or interface function. Those are seeded as callable
+   now.
+
+**The two tracers compose, and neither is sufficient alone.** `trace_function_calls` says what is
+*callable*; `trace_variable` says whether the variable that triggers it is ever *written*. On this
+project `ApplySelectedMesh` is callable — its RepNotify is engine-called — but `SelectedMeshIndex` is
+written by nobody, so it never fires. Callable and live are different questions, and you need both
+answers to tell an abandoned system from a working one.
 
 The same failure improved `trace_variable`'s verdict. It had reported `ServerSkinMemory` as *"read
 but never written — the half-built feature"*, and that reading was half the story: **written by
