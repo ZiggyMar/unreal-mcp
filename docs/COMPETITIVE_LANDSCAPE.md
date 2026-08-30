@@ -263,25 +263,81 @@ user-facing side effects baked into agent-facing setup instructions.
 
 ---
 
-## The UE 5.8 first-party plugin (comparison point, not a competitor)
+## The UE 5.8 first-party plugin (comparison point, and the one worth learning from)
 
 UE 5.8 ships an official, **Experimental**, opt-in "Unreal MCP" plugin that runs an MCP server
-inside the editor process itself (local HTTP link), built around a "Toolset Registry" that lets
-C++ (`UToolsetDefinition`) or Python (`unreal.ToolsetDefinition`) code register engine
-functionality as MCP tools. Confirmed from Epic's own documentation
-([dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor?lang=en-US)):
-explicitly experimental ("use caution when shipping with it"), must be manually enabled ("split
-across three modules" that each need enabling), not designed for remote use, and, as of this
-survey, has no described capability for reading, analyzing, or summarizing existing Blueprint
-graph structure (its documented examples are all spawn/configure/run-automation actions), no
-discussion of token budgets or response compaction, and no persistent asset index or
-dependency/reference search. It is UE-5.8-only, with no 5.6 equivalent, so it cannot serve 5.6
-users regardless of capability. Net effect on our positioning: it validates that Epic itself sees
-value in an in-editor MCP surface, but as surveyed it doesn't compete with either of our stated
-differentiators, and it doesn't exist at all for 5.6, which we also target.
+inside the editor process itself over local HTTP + SSE (no stdio, no WebSocket), built around a
+**Toolset Registry**: a subsystem that discovers classes deriving from `UToolsetDefinition` (C++)
+or `unreal.ToolsetDefinition` (Python) and wraps each method marked `AICallable` / `tool_call` as
+an MCP tool. Shipped toolsets include `SceneTools`, `ActorTools`, `MaterialInstanceTools` and
+`ObjectTools`. It binds loopback-only at `127.0.0.1:8000/mcp`, rejects non-loopback `Origin`
+headers, and has no authentication layer.
+
+As of 20 August 2026 the same plugin, and the same Toolset Registry, also ships in **Unreal Editor
+for Fortnite**, with UEFN-specific toolsets.
+
+### Correcting what this document said before
+
+An earlier revision of this section claimed the first-party plugin had "no discussion of token
+budgets or response compaction". **That was wrong**, and it was wrong about the single most
+important thing Epic did. The plugin ships **Tool Search mode, and it is the default**:
+`tools/list` returns three meta-tools — `list_toolsets`, `describe_toolset`, `call_tool` — instead
+of advertising every schema, and the agent pulls in what it needs. Epic's own guidance is to prefer
+it because "it keeps schema tokens out of every API call". There is also a
+`ModelContextProtocol.PaginationPageSize` console variable for capping response items.
+
+That is the same problem this project measures obsessively, reached independently, and Epic made
+the aggressive choice the default. It is direct evidence that the standing cost of tool definitions
+is a first-order design concern and not a niche worry about small models — which is how this
+project had been framing it, right up until `full` was quietly costing every frontier session
+25.5k tokens a turn.
+
+**Adopted.** The `search` profile is this idea, with one deliberate difference: Epic routes every
+call through a generic `call_tool(name, args)`, which means the agent works from a schema it
+fetched separately rather than from a validated tool definition. `search` instead registers every
+tool with its real schema and merely leaves it switched off, so `unreal_enable_tools` hands back
+fully typed definitions with enums and constraints intact. Same saving, no loss of type fidelity.
+Measured: 4 tools / ~1.2k tokens standing, against 80 / ~25.5k for `full`.
+
+### What it still does not do, and we do
+
+- **Reading an existing project.** Its documented tools are spawn/configure/run-automation actions.
+  There is no tiered Blueprint summarisation, no persistent asset index, no `find_references`, and
+  no dependency search. Understanding a project you did not write is the harder half of this
+  problem and it is the half this project is built around.
+- **Blueprint graph authoring.** No documented equivalent of placing a whole graph atomically,
+  laying it out, and compiling with structured errors.
+- **UE 5.6.** It is 5.8-only. There is no first-party equivalent for 5.6, which this project also
+  targets from one source tree.
+- **MCP Resources and Prompts.** Not advertised by the shipped toolsets.
+
+### What it does that we do not
+
+- **Third-party extensibility.** Anyone can add a toolset in C++ or Python and it appears as MCP
+  tools with no changes to the server. Our 81 tools are a fixed, hand-curated surface. That is a
+  deliberate trade — every tool here is documented, parity-checked and measured — but it does mean
+  a studio with its own pipeline cannot expose it through this bridge without patching the repo.
+- **Screenshot capture, and image results generally.** Epic's toolsets can hand an agent an image.
+  This bridge is text-only and gives a model no way to *see* anything: not the viewport, not a
+  graph, not a material preview. For a multimodal frontier model that is a real missing sense, and
+  it is the most interesting gap in this list.
+- **Agent Skills.** Instruction bundles (`AgentSkill`, `AgentSkillToolset`) that teach an agent how
+  to use a toolset correctly — workflow steps, pitfalls, safety constraints, verification steps —
+  shipped as assets rather than prose. We cover the same ground with the server `instructions`
+  field, the three guide prompts and `unreal_guide`, and arguably cover it better because ours
+  arrives automatically rather than needing to be asked for. Worth watching rather than copying.
+- **Console-command lifecycle.** `StartServer` / `StopServer` / `RefreshTools` /
+  `GenerateClientConfig` from inside the editor. Our equivalent of the last one is
+  `--print-config`; we have no in-editor control surface at all.
+
+Net effect on positioning: the first-party plugin validates the in-editor MCP surface and, on token
+discipline, was ahead of us — that is now fixed and credited. It still does not compete on reading
+and editing an existing project's Blueprints, and it does not exist for 5.6.
 
 Sources:
 [Unreal MCP in Unreal Editor (Epic Developer Community)](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor?lang=en-US),
+[Unreal MCP is now available in UEFN (fortnite.com, 20 Aug 2026)](https://www.fortnite.com/news/unreal-mcp-is-now-available-in-uefn),
+[Extending Unreal Engine MCP: Toolsets, AI Callable Methods, and Skills (buckley-builds.com)](https://buckley-builds.com/blog/extending-unreal-engine-mcp/),
 [Unreal Engine 5.8 Embeds an MCP Server So AI Agents Can Drive the Editor (vp-land.com)](https://www.vp-land.com/p/unreal-engine-5-8-embeds-an-mcp-server-so-ai-agents-can-drive-the-editor)
 
 ---

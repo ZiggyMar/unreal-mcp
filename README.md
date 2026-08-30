@@ -25,12 +25,15 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
 ## What's different about this one
 
-There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic ships its own experimental first-party MCP plugin (5.8 only, opt-in, requires manually enabling an "Editor Toolset"). Worth being direct about where this project actually differs, rather than just claiming "better":
+There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic ships its own experimental first-party MCP plugin (5.8 only, opt-in). Worth being direct about where this project actually differs, rather than just claiming "better":
 
 - **Built around reading, not just writing.** Most existing projects are strong at creating and manipulating Blueprints from a prompt, but don't address what happens when the model needs to *understand a large, already-built* project first. Reading is the first-class citizen here: tiered summaries before full detail, node IDs you can reference without re-fetching.
 - **A persistent, incrementally-updated project index.** The bridge indexes Blueprints, functions, variables, and cross-asset references once, caches it to disk, and updates it from `AssetRegistry` delegates as you edit, instead of rescanning the project on every query. `find_references` answers "what actually uses this Blueprint" without the model having to enumerate the project itself.
-- **An optional local-model hook for indexing.** If you point `UNREAL_MCP_LOCAL_LLM_URL` at a local model (Ollama or anything OpenAI-compatible), indexing summaries are generated there instead of spending Claude's tokens on mechanical scanning work. Fully optional. The index works without it.
+- **A tool surface that costs ~1.2k tokens instead of ~25k.** Tool definitions are paid for on *every* request, before your message is read. The `search` profile stands up four tools and switches the other 77 off — and because they are switched off rather than hidden behind a generic dispatcher, `unreal_enable_tools` hands back their **real, fully typed schemas**. One extra call at the start of a session, nothing given up, and 24k tokens a turn saved for the rest of it. The numbers are measured by `npm run check:profiles`, which fails the build if a profile grows past its budget.
+- **The server tells the model how to work before it starts.** MCP's `instructions` field carries the call order and the exact strings no model can recall reliably — the target pin is `self`, Sequence's outputs are `then_0`/`then_1` — so the model arrives knowing them instead of spending failed calls discovering them. `unreal_guide` then lets it look anything else up mid-task, a section at a time.
 - **Targets both 5.6 and 5.8 from one codebase**, where several existing projects are pinned to a single engine version.
+
+Small local models are still supported and still measured — the `minimal` profile exists because a 14B on a 12 GB card loads at 8k context and fails at 16k — but they are now an explicit opt-in rather than what the install path quietly hands everyone. There is also an optional local-model hook for indexing (`UNREAL_MCP_LOCAL_LLM_URL`), which generates search summaries off your context budget. Fully optional; the index works without it.
 
 Full survey of the existing ecosystem (licenses, architectures, what each one does well) is in [docs/COMPETITIVE_LANDSCAPE.md](docs/COMPETITIVE_LANDSCAPE.md).
 

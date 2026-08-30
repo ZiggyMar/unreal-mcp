@@ -1050,35 +1050,32 @@ right call on `minimal`, where context is the scarce resource the profile exists
 
 ## Pointing an MCP client at this server
 
-### Claude Code
+**Do not hand-write this.** Run `--print-config` and paste what it prints:
 
 ```bash
-claude mcp add unreal -- node "F:/!Projects/UnrealMCP/mcp-server/dist/index.js"
+node dist/index.js --print-config                      # Claude Desktop
+node dist/index.js --print-config --client cursor      # Cursor
+node dist/index.js --print-config --client claude-code # Claude Code
 ```
 
-(Adjust the path if you've moved the repo. Run `npm run build` first so `dist/index.js`
-exists.)
+It resolves the absolute path to `dist/index.js` on this machine, uses the interpreter that is
+actually running it rather than a bare `node` that may not be on the client's PATH, and sets the
+profile and mode. Every one of those is a way client setup silently fails with the same symptom —
+the server never starts and there is nothing to read.
 
-Verify it's registered with `claude mcp list`, and check tool availability inside a
-session with `/mcp`.
+Run `npm run build` first, so `dist/index.js` exists.
+
+### Claude Code
+
+Register with `claude mcp add-json unreal '<the JSON it printed>'`, then verify with
+`claude mcp list` and check tool availability inside a session with `/mcp`.
 
 ### Claude Desktop
 
-Edit your `claude_desktop_config.json` (Settings -> Developer -> Edit Config) and add:
-
-```json
-{
-  "mcpServers": {
-    "unreal": {
-      "command": "node",
-      "args": ["F:/!Projects/UnrealMCP/mcp-server/dist/index.js"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop after saving. The `unreal_*` tools should then appear in the tool
-picker for any chat.
+Paste the printed JSON into `claude_desktop_config.json` (Settings -> Developer -> Edit Config).
+If the file already has an `mcpServers` block, add the `unreal` entry inside it rather than
+replacing it. Then **fully quit** Claude Desktop and reopen it — closing the window is not enough.
+The `unreal_*` tools should then appear in the tool picker for any chat.
 
 ## Recommended agent workflow
 
