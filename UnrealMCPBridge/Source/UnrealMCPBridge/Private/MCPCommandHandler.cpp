@@ -621,7 +621,26 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	OutType.ContainerType = EPinContainerType::None;
 	OutType.bIsReference = false;
 
-	const FString Lower = TypeStr.ToLower();
+	// Containers, spelled the way a person writes them. Until this existed there was no way to make
+	// an array variable through this bridge at all - only single values - which rules out most of
+	// what a real Blueprint holds: an inventory, a spawn list, a set of players. Found by needing an
+	// array of names to hold "which skins are still free" and having nowhere to put it.
+	//
+	// The suffix is stripped and the rest resolved as normal, so every element type works for free
+	// and always will, including ones added later.
+	FString Bare = TypeStr.TrimStartAndEnd();
+	if (Bare.EndsWith(TEXT("[]")))
+	{
+		OutType.ContainerType = EPinContainerType::Array;
+		Bare = Bare.LeftChop(2).TrimEnd();
+	}
+	else if (Bare.EndsWith(TEXT("<set>")))
+	{
+		OutType.ContainerType = EPinContainerType::Set;
+		Bare = Bare.LeftChop(5).TrimEnd();
+	}
+
+	const FString Lower = Bare.ToLower();
 
 	if (Lower == TEXT("bool") || Lower == TEXT("boolean"))
 	{
@@ -678,7 +697,7 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower.StartsWith(TEXT("object:")))
 	{
-		const FString ClassName = TypeStr.Mid(7);
+		const FString ClassName = Bare.Mid(7);
 		FString ClassError;
 		UClass* Class = ResolveClassByName(ClassName, ClassError);
 		if (!Class)
@@ -691,7 +710,7 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower.StartsWith(TEXT("class:")))
 	{
-		const FString ClassName = TypeStr.Mid(6);
+		const FString ClassName = Bare.Mid(6);
 		FString ClassError;
 		UClass* Class = ResolveClassByName(ClassName, ClassError);
 		if (!Class)
@@ -704,7 +723,7 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower.StartsWith(TEXT("struct:")))
 	{
-		const FString StructName = TypeStr.Mid(7);
+		const FString StructName = Bare.Mid(7);
 		FString StructError;
 		UScriptStruct* Struct = ResolveStructByName(StructName, StructError);
 		if (!Struct)
@@ -717,7 +736,7 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	}
 	else if (Lower.StartsWith(TEXT("enum:")))
 	{
-		const FString EnumName = TypeStr.Mid(5);
+		const FString EnumName = Bare.Mid(5);
 		FString EnumError;
 		UEnum* Enum = ResolveEnumByName(EnumName, EnumError);
 		if (!Enum)

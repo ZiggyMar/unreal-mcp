@@ -63,6 +63,32 @@ pawn's `InitialSetup`) or hiding the mesh until `SkinData` arrives — not fixin
   Server, Executes on Owning Client`. Correct as written. This hypothesis was tested before anything
   was changed, and it was wrong.
 
+## Fixed: uniqueness now holds for players who never passed through the lobby
+
+`BP_Player.ResolveUniqueSkin(Requested) -> Resolved`, called by `UpdatePlayerSkin` **on the server**
+before the Data Table lookup:
+
+```text
+clear my own CurrentSkinRow          so my previous claim does not block me
+FreeSkins = DT_SkinData row names
+for each BP_Player in the world:     cast, then Remove Item(FreeSkins, their CurrentSkinRow)
+if FreeSkins contains Requested   -> CurrentSkinRow = Requested
+else                              -> CurrentSkinRow = a random remaining free skin
+return CurrentSkinRow
+```
+
+It runs on the authority, so it covers **every** way a player can arrive - lobby, rejoin, mid-round
+join, respawn - rather than only the lobby path. A player who picked a free skin keeps exactly what
+they picked; a player whose skin is already taken, or who arrives with none, gets a free one instead
+of a duplicate.
+
+`CurrentSkinRow` is the server's record of what each player is wearing, and it is what makes the
+check possible: before it existed there was nothing to compare against.
+
+Verified with the tool: `ResolveUniqueSkin` is **LIVE** in `BP_Player.EventGraph` (not another
+unused function), BP_Player compiles 0 errors, and the build left the 808-node EventGraph untouched -
+`nodesMoved: 0, skipped: true`.
+
 ## Still open
 
 Uniqueness is enforced **in the lobby only** (`GetRandomValidSkin` against `AvailableSkins`). Nothing

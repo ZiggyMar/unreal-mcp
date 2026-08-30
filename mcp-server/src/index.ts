@@ -1124,7 +1124,10 @@ register(
       variableName: z.string().describe("New variable name."),
       type: z
         .string()
-        .describe('Compact type descriptor, e.g. "bool", "float", "string", "vector", "object:StaticMeshComponent".'),
+        .describe(
+          'Compact type descriptor, e.g. "bool", "float", "string", "vector", "object:StaticMeshComponent". ' +
+            'Append "[]" for an array - "name[]", "object:Actor[]" - which is what most real Blueprint state is.'
+        ),
       category: z.string().optional().describe("Optional category for grouping in the editor's My Blueprint panel."),
       defaultValue: z.string().optional().describe("Optional literal default value, string-serialized."),
     },
