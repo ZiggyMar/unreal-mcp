@@ -29,6 +29,7 @@ import { findSourceRoots, searchSource } from "./nativeSource.js";
 import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
+import { capActorList, type ActorListLike } from "./actorList.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -3583,9 +3584,13 @@ register(
   {
     title: "Read what is already in the open level",
     description:
-      "**Call this before changing anything in a level.** Returns every actor in the currently open level with its " +
-      "label, name, class, rounded location, and the Blueprint behind it where there is one, plus a per-class " +
-      "census so a large level is legible without listing all of it.\n\n" +
+      "**Call this before changing anything in a level.** Returns a per-class census of the whole level, plus the " +
+      "actors themselves with label, name, class, rounded location, and the Blueprint behind them where there is " +
+      "one.\n\n" +
+      "Unfiltered, this is the show-me-around reply: the census covers everything, and the actors listed are the " +
+      "ones carrying logic plus one of each remaining class. A 900-actor level is mostly meshes and lights, and " +
+      "listing them costs thousands of tokens to say the level has scenery in it. Pass `classFilter` and you get " +
+      "the actual actors, because at that point you have asked something specific.\n\n" +
       "Spawning into a level you have not read is how an agent ends up with two PlayerStarts, a second directional " +
       "light fighting the first, or a duplicate of something that was already there under a different name. On a " +
       "level someone has spent months dressing, that is worse than doing nothing.\n\n" +
@@ -3595,13 +3600,16 @@ register(
       "different one.",
     inputSchema: {
       classFilter: z.string().optional().describe('Only return actors whose class name contains this, e.g. "Light", "PlayerStart", "BP_".'),
-      maxResults: z.number().optional().describe("Cap on actors returned. Defaults to 200. The per-class census always covers the whole level regardless."),
+      maxResults: z.number().optional().describe("Cap on actors returned. Defaults to 40 unfiltered, 200 with a classFilter. The per-class census always covers the whole level regardless."),
     },
   },
   async ({ classFilter, maxResults }) => {
     try {
-      const result = await bridge.send("list_actors", { classFilter, maxResults });
-      return jsonResult(result);
+      // Ask the bridge for the whole level and choose in the tool layer. Which 40 actors are worth
+      // showing cannot be decided by a LIMIT the engine applies in level order, and the actors the
+      // bridge sends over a loopback socket cost nothing - only what this returns is paid for.
+      const result = await bridge.send("list_actors", { classFilter, maxResults: 100000 });
+      return jsonResult(capActorList(result as ActorListLike, { classFilter, maxResults }));
     } catch (err) {
       return errorResult(err);
     }
