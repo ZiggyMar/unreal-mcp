@@ -3,6 +3,11 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/App.h"
+#include "Misc/Guid.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/FileManager.h"
 #include "MCPCommandHandler.h"
 
 #include "Sockets.h"
@@ -107,6 +112,61 @@ public:
 	bool bDropAfterFlush = false;
 	double LastActivitySeconds = 0.0;
 };
+
+/**
+ * The session token, and the file both halves read.
+ *
+ * Loopback is not a trust boundary. Refusing non-JSON lines closed the browser route into this port,
+ * but any other process running as the same user - an npm postinstall script, a downloaded plugin, a
+ * game mod, a second desktop session over RDP - can still open 127.0.0.1:8765 and speak the protocol
+ * directly, and this bridge deletes assets and writes levels.
+ *
+ * The automated patch that raised this proposed an environment variable compared inside Dispatch.
+ * The fatal flaw was not the comparison, it was the configuration: the MCP server had no concept of
+ * the field, so setting the variable did not harden the bridge, it broke all 83 tools. Any scheme
+ * where a human puts the same secret in two places has a state where it is on and broken, and that
+ * is the state people actually reach.
+ *
+ * So the editor generates the token and writes it somewhere the client can find without being told:
+ * a per-user, per-PORT file, because the port is the only thing a client knows before it has
+ * connected to anything. Keying it by project would need a connection to learn the project, which
+ * would need the token, and the bootstrap would not close.
+ */
+static FString MCPSessionTokenPath(int32 Port)
+{
+	return FPaths::Combine(
+		FPlatformProcess::UserSettingsDir(),
+		TEXT("UnrealMCPBridge"),
+		FString::Printf(TEXT("session-%d.json"), Port));
+}
+
+/** 256 bits from two GUIDs. Long enough that guessing is not the attack worth worrying about. */
+static FString MCPGenerateSessionToken()
+{
+	return FGuid::NewGuid().ToString(EGuidFormats::Digits) + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+}
+
+/**
+ * Compare without leaking where the mismatch was.
+ *
+ * Over loopback against an attacker who can already run code as this user, a timing side channel is
+ * not the weak link and this is close to ceremony. It is here because the alternative is writing the
+ * naive comparison and then having to argue that it is fine, which is a worse use of a reader's
+ * attention than four lines.
+ */
+static bool MCPTokensMatch(const FString& A, const FString& B)
+{
+	if (A.Len() != B.Len() || A.Len() == 0)
+	{
+		return false;
+	}
+	uint32 Diff = 0;
+	for (int32 i = 0; i < A.Len(); ++i)
+	{
+		Diff |= static_cast<uint32>(A[i]) ^ static_cast<uint32>(B[i]);
+	}
+	return Diff == 0;
+}
 
 /**
  * The largest single request this server will buffer before giving up on a peer.
@@ -230,6 +290,45 @@ bool FMCPTcpServer::Start(int32 Port)
 
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FMCPTcpServer::Tick));
 
+	// The token exists whether or not it is enforced, and the client sends it whenever it can read
+	// one. That ordering is deliberate: enforcement can be switched on later without touching the
+	// client, and switching it on cannot then discover that the other half was never wired up -
+	// which is exactly how the original proposal would have failed.
+	SessionToken = MCPGenerateSessionToken();
+	bRequireAuth = FParse::Param(FCommandLine::Get(), TEXT("MCPRequireAuth"));
+
+	SessionFilePath = MCPSessionTokenPath(ListenPort);
+	TSharedRef<FJsonObject> Session = MakeShared<FJsonObject>();
+	Session->SetNumberField(TEXT("port"), ListenPort);
+	Session->SetStringField(TEXT("token"), SessionToken);
+	Session->SetStringField(TEXT("project"), FApp::GetProjectName());
+	Session->SetStringField(TEXT("projectFile"), FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()));
+	Session->SetNumberField(TEXT("pid"), static_cast<int32>(FPlatformProcess::GetCurrentProcessId()));
+
+	FString SessionJson;
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> SessionWriter =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&SessionJson);
+	FJsonSerializer::Serialize(Session, SessionWriter);
+
+	if (FFileHelper::SaveStringToFile(SessionJson, *SessionFilePath))
+	{
+		UE_LOG(LogMCPBridge, Log,
+			TEXT("UnrealMCPBridge: session token written to %s (auth %s). The MCP server reads this ")
+			TEXT("file itself; there is nothing to configure."),
+			*SessionFilePath, bRequireAuth ? TEXT("REQUIRED") : TEXT("offered but not enforced"));
+	}
+	else
+	{
+		// Not fatal while auth is opt-in, and it must be loud if it ever becomes required, because
+		// a client that cannot read a token it is then asked for has no way to diagnose itself.
+		SessionFilePath.Empty();
+		UE_LOG(LogMCPBridge, Warning,
+			TEXT("UnrealMCPBridge: could not write the session token file to %s. Clients will connect ")
+			TEXT("without a token%s."),
+			*MCPSessionTokenPath(ListenPort),
+			bRequireAuth ? TEXT(", and -MCPRequireAuth will therefore refuse every one of them") : TEXT(""));
+	}
+
 	UE_LOG(LogMCPBridge, Log, TEXT("UnrealMCPBridge: listening on 127.0.0.1:%d for project '%s'"),
 		Port, FApp::GetProjectName());
 	return true;
@@ -257,6 +356,14 @@ void FMCPTcpServer::Stop()
 	}
 
 	Clients.Empty();
+
+	// A token file outlives its editor only to mislead the next client that reads it.
+	if (!SessionFilePath.IsEmpty())
+	{
+		IFileManager::Get().Delete(*SessionFilePath, false, false, true);
+		SessionFilePath.Empty();
+	}
+	SessionToken.Empty();
 }
 
 bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint)
@@ -435,7 +542,39 @@ bool FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 
 		if (FJsonSerializer::Deserialize(Reader, RequestObj) && RequestObj.IsValid())
 		{
-			Response = FMCPCommandHandler::Dispatch(RequestObj.ToSharedRef());
+			FString ProvidedToken;
+			RequestObj->TryGetStringField(TEXT("auth_token"), ProvidedToken);
+
+			if (bRequireAuth && !MCPTokensMatch(ProvidedToken, SessionToken))
+			{
+				// Logged, because an unexplained refusal is the least diagnosable failure this
+				// server can produce, and the original proposal for this feature logged nothing.
+				UE_LOG(LogMCPBridge, Warning,
+					TEXT("UnrealMCPBridge: refused an unauthorized request (%s). The expected token is in %s."),
+					ProvidedToken.IsEmpty() ? TEXT("no auth_token supplied") : TEXT("auth_token did not match"),
+					SessionFilePath.IsEmpty() ? TEXT("(no session file was written)") : *SessionFilePath);
+
+				Response->SetBoolField(TEXT("ok"), false);
+				Response->SetStringField(TEXT("error"), TEXT("unauthorized"));
+				Response->SetStringField(TEXT("detail"),
+					TEXT("This editor was launched with -MCPRequireAuth. The MCP server reads the token ")
+					TEXT("from the session file this bridge writes at startup; if it cannot, the editor's ")
+					TEXT("Output Log names the exact path on the line beginning 'session token written to'."));
+
+				// Echo the id, exactly as the two existing guard sites do. Returning without it
+				// breaks the response contract, and was one of the concrete defects in the patch
+				// that proposed this feature.
+				TSharedPtr<FJsonValue> IdValue = RequestObj->TryGetField(TEXT("id"));
+				if (IdValue.IsValid())
+				{
+					Response->SetField(TEXT("id"), IdValue);
+				}
+				bDropConnection = true;
+			}
+			else
+			{
+				Response = FMCPCommandHandler::Dispatch(RequestObj.ToSharedRef());
+			}
 		}
 		else
 		{

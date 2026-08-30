@@ -1,6 +1,7 @@
 import { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
+import { SessionTokenCache } from "./sessionToken.js";
 
 export interface BridgeRequest {
   cmd: string;
@@ -100,6 +101,12 @@ export class UnrealBridgeClient {
   private readonly host: string;
   private readonly port: number;
   private readonly timeoutOverrideMs?: number;
+  /**
+   * Read from the file the editor writes at startup, so there is nothing for anyone to configure.
+   * Absent is a normal state - an older plugin build writes no file - and the bridge decides
+   * whether it minds, which is what stops this breaking every existing install on the day it ships.
+   */
+  private readonly tokens = new SessionTokenCache();
 
   constructor(options: BridgeClientOptions = {}) {
     this.host = options.host ?? "127.0.0.1";
@@ -124,7 +131,11 @@ export class UnrealBridgeClient {
 
   async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
     const id = randomUUID();
-    const requestLine = JSON.stringify({ id, cmd, params: params ?? {} }) + "\n";
+    const session = this.tokens.get(this.port);
+    const requestLine =
+      JSON.stringify(
+        session ? { id, cmd, params: params ?? {}, auth_token: session.token } : { id, cmd, params: params ?? {} }
+      ) + "\n";
     const timeoutMs = this.timeoutOverrideMs ?? timeoutForCommand(cmd);
 
     return await new Promise<T>((resolve, reject) => {
@@ -234,6 +245,23 @@ export class UnrealBridgeClient {
             // separate documents.
             const { ok: _ok, error: _error, id: _id, result: _result, ...context } = parsed as unknown as Record<string, unknown>;
             const extras = Object.keys(context).length > 0 ? ` ${JSON.stringify(context)}` : "";
+            if (typeof parsed.error === "string" && parsed.error.startsWith("unauthorized")) {
+              // Most likely the editor restarted and issued a new token. Drop the cached one so the next
+              // call re-reads the file, and name the file that was used: a token mismatch is otherwise
+              // the least diagnosable failure in the whole system.
+              this.tokens.forget(this.port);
+              fail(
+                new Error(
+                  "The UnrealMCPBridge rejected this call as unauthorized. " +
+                    (session
+                      ? `The token used came from ${session.path}. `
+                      : "No session token file was found for this port. ") +
+                    "That usually means the editor restarted since the last call. The stale token has been " +
+                    "discarded, so calling again normally succeeds; if it does not, run unreal_doctor."
+                )
+              );
+              return;
+            }
             fail(new Error(`${parsed.error ?? `UnrealMCPBridge returned an error for '${cmd}'`}${extras}`));
             return;
           }

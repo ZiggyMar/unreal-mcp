@@ -45,5 +45,18 @@ private:
 	TQueue<TSharedPtr<class FMCPClientConnection>, EQueueMode::Spsc> PendingClients;
 	FTSTicker::FDelegateHandle TickHandle;
 	int32 ListenPort = 0;
+
+	/** Per-session secret, written to SessionFilePath so the MCP server can read it without being told. */
+	FString SessionToken;
+	FString SessionFilePath;
+	/**
+	 * -MCPRequireAuth. Off by default, deliberately and temporarily.
+	 *
+	 * The token is always generated and always offered, so turning enforcement on is a launch flag
+	 * rather than a code change, and cannot then discover that the client half was never wired up.
+	 * It stays off by default until the mechanism has been exercised against a real editor build,
+	 * because a fail-closed control that is wrong takes the whole integration down with it.
+	 */
+	bool bRequireAuth = false;
 };
 
