@@ -814,6 +814,34 @@ reply names a file that already exists rather than one that is coming; a path re
 file is written is a race the caller cannot win.
 
 
+### A compile error that names the node
+
+A failed compile used to arrive as prose and nothing else — *"The type of Object is undetermined"* —
+naming a node title that may occur nine times in the graph and giving no way to reach any of them.
+The only move left was to re-read the whole graph and guess, which is expensive when it works and
+wrong when two nodes share a title.
+
+`FCompilerResultsLog` has known which node each message came from all along; it is in the message's
+own tokens as an `FEdGraphToken`. Reading it costs nothing:
+
+```json
+{ "severity": "error", "nodeId": "F7063DC4...", "nodeTitle": "Cast To Pawn",
+  "graphName": "EventGraph", "pinName": "Object",
+  "text": "The type of Object is undetermined..." }
+```
+
+`nodeId` is the same persistent GUID `unreal_read_blueprint_summary` returns, so it goes straight
+back into `unreal_read_node_detail` or `unreal_remove_node`. `pinName` is frequently the whole answer
+— "not connected" is about one pin, and naming it saves reading every pin on the node. `unreal_build_graph`
+additionally returns a `nodeIds` array on the compile result, so the refs you wrote can be mapped
+back to the nodes that failed.
+
+All three places that report compile output share one helper, which also repaired a drift nobody had
+noticed: `compile_blueprint` reported four severities while `build_graph` and `refresh_blueprint`
+collapsed everything through an error-or-warning ternary, so a performance warning arrived labelled
+`warning` and an info arrived the same way — both contradicting the four-value type the server
+declares.
+
 ### The quality gate: compiling is not the bar
 
 `unreal_review_blueprint` reports what a senior Unreal developer would flag in review, computed

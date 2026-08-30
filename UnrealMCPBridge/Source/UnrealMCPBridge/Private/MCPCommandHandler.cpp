@@ -1,5 +1,7 @@
 #include "MCPCommandHandler.h"
 #include "ImageUtils.h"
+#include "EdGraphToken.h"
+#include "Logging/TokenizedMessage.h"
 #include "UnrealClient.h"
 #include "MCPProjectIndex.h"
 #include "MCPNodeCatalog.h"
@@ -130,6 +132,92 @@ namespace
 		return (Node && Node->NodeGuid.IsValid())
 			? Node->NodeGuid.ToString(EGuidFormats::Digits)
 			: FString(TEXT("?"));
+	}
+
+	/**
+	 * Compile messages, each carrying the node it is actually about.
+	 *
+	 * A compile failure used to arrive as prose and nothing else - "Cast To BP_Player: the pin Object
+	 * is not connected" - which names a node title that may occur nine times in the graph and gives
+	 * no way to reach any of them. The model's only move was to re-read the whole graph and guess,
+	 * which is expensive when it works and wrong when two nodes share a title.
+	 *
+	 * FCompilerResultsLog already knows exactly which node each message came from: it is in the
+	 * message's own tokens, as an FEdGraphToken. Reading it costs nothing and turns "something in
+	 * this graph is wrong" into a node id that can be passed straight back to read_node_detail or
+	 * remove_node.
+	 *
+	 * Shared by all three sites that report compile output. They had drifted: compile_blueprint
+	 * reported four severities while build_graph and refresh_blueprint collapsed everything to
+	 * error-or-warning with a ternary, so a performance warning arrived labelled "warning" and an
+	 * info arrived the same way - both contradicting the four-value type the server declares.
+	 * One helper is why that cannot drift again.
+	 */
+	TArray<TSharedPtr<FJsonValue>> CompileMessagesToJson(const FCompilerResultsLog& Log, TArray<FString>& OutNodeIds)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const TSharedRef<FTokenizedMessage>& Message : Log.Messages)
+		{
+			FString Severity;
+			switch (Message->GetSeverity())
+			{
+			case EMessageSeverity::Error:
+				Severity = TEXT("error");
+				break;
+			case EMessageSeverity::PerformanceWarning:
+				Severity = TEXT("performance_warning");
+				break;
+			case EMessageSeverity::Warning:
+				Severity = TEXT("warning");
+				break;
+			default:
+				Severity = TEXT("info");
+				break;
+			}
+
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("severity"), Severity);
+			Entry->SetStringField(TEXT("text"), Message->ToText().ToString());
+
+			for (const TSharedRef<IMessageToken>& Token : Message->GetMessageTokens())
+			{
+				if (Token->GetType() != EMessageToken::EdGraph)
+				{
+					continue;
+				}
+				const FEdGraphToken& GraphToken = static_cast<const FEdGraphToken&>(Token.Get());
+
+				const UEdGraphNode* Node = Cast<UEdGraphNode>(GraphToken.GetGraphObject());
+				if (const UEdGraphPin* Pin = GraphToken.GetPin())
+				{
+					// The pin is often the whole answer: "not connected" is about one pin, and
+					// naming it saves reading every pin on the node to work out which.
+					Entry->SetStringField(TEXT("pinName"), Pin->PinName.ToString());
+					if (!Node)
+					{
+						Node = Pin->GetOwningNodeUnchecked();
+					}
+				}
+				if (!Node)
+				{
+					continue;
+				}
+
+				const FString NodeId = MakeNodeId(Node);
+				Entry->SetStringField(TEXT("nodeId"), NodeId);
+				Entry->SetStringField(TEXT("nodeTitle"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+				if (const UEdGraph* Graph = Node->GetGraph())
+				{
+					Entry->SetStringField(TEXT("graphName"), Graph->GetName());
+				}
+				OutNodeIds.AddUnique(NodeId);
+				// The first graph token is the subject of the message; later ones are context.
+				break;
+			}
+
+			Out.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		return Out;
 	}
 
 	// Saves a Blueprint's package to disk in place. Used by create_blueprint (when
@@ -2216,31 +2304,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCompileBlueprint(const TShared
 	FCompilerResultsLog ResultsLog;
 	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &ResultsLog);
 
-	TArray<TSharedPtr<FJsonValue>> MessageArray;
-	for (const TSharedRef<FTokenizedMessage>& Message : ResultsLog.Messages)
-	{
-		FString Severity;
-		switch (Message->GetSeverity())
-		{
-		case EMessageSeverity::Error:
-			Severity = TEXT("error");
-			break;
-		case EMessageSeverity::PerformanceWarning:
-			Severity = TEXT("performance_warning");
-			break;
-		case EMessageSeverity::Warning:
-			Severity = TEXT("warning");
-			break;
-		default:
-			Severity = TEXT("info");
-			break;
-		}
-
-		TSharedRef<FJsonObject> MsgEntry = MakeShared<FJsonObject>();
-		MsgEntry->SetStringField(TEXT("severity"), Severity);
-		MsgEntry->SetStringField(TEXT("text"), Message->ToText().ToString());
-		MessageArray.Add(MakeShared<FJsonValueObject>(MsgEntry));
-	}
+	TArray<FString> FailingNodeIds;
+	TArray<TSharedPtr<FJsonValue>> MessageArray = CompileMessagesToJson(ResultsLog, FailingNodeIds);
 
 	FString StatusStr;
 	switch (Blueprint->Status)
@@ -3168,16 +3233,21 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 		CompileObj->SetBoolField(TEXT("success"), CompileResults.NumErrors == 0);
 		if (CompileResults.NumErrors > 0 || CompileResults.NumWarnings > 0)
 		{
-			TArray<TSharedPtr<FJsonValue>> Messages;
-			for (const TSharedRef<FTokenizedMessage>& Message : CompileResults.Messages)
+			TArray<FString> FailingNodeIds;
+			CompileObj->SetArrayField(TEXT("messages"), CompileMessagesToJson(CompileResults, FailingNodeIds));
+			// The ids of the nodes the compiler actually complained about, collected once. build_graph
+			// knows which ref it gave each node, so the caller can turn these straight back into the
+			// refs it wrote - which is the difference between "this graph is broken" and "these two
+			// nodes are".
+			if (FailingNodeIds.Num() > 0)
 			{
-				TSharedRef<FJsonObject> MsgObj = MakeShared<FJsonObject>();
-				MsgObj->SetStringField(TEXT("severity"),
-					Message->GetSeverity() == EMessageSeverity::Error ? TEXT("error") : TEXT("warning"));
-				MsgObj->SetStringField(TEXT("text"), Message->ToText().ToString());
-				Messages.Add(MakeShared<FJsonValueObject>(MsgObj));
+				TArray<TSharedPtr<FJsonValue>> IdJson;
+				for (const FString& Id : FailingNodeIds)
+				{
+					IdJson.Add(MakeShared<FJsonValueString>(Id));
+				}
+				CompileObj->SetArrayField(TEXT("nodeIds"), IdJson);
 			}
-			CompileObj->SetArrayField(TEXT("messages"), Messages);
 		}
 		Result->SetObjectField(TEXT("compile"), CompileObj);
 	}
@@ -3633,16 +3703,21 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRefreshBlueprint(const TShared
 		CompileObj->SetBoolField(TEXT("success"), CompileResults.NumErrors == 0);
 		if (CompileResults.NumErrors > 0 || CompileResults.NumWarnings > 0)
 		{
-			TArray<TSharedPtr<FJsonValue>> Messages;
-			for (const TSharedRef<FTokenizedMessage>& Message : CompileResults.Messages)
+			TArray<FString> FailingNodeIds;
+			CompileObj->SetArrayField(TEXT("messages"), CompileMessagesToJson(CompileResults, FailingNodeIds));
+			// The ids of the nodes the compiler actually complained about, collected once. build_graph
+			// knows which ref it gave each node, so the caller can turn these straight back into the
+			// refs it wrote - which is the difference between "this graph is broken" and "these two
+			// nodes are".
+			if (FailingNodeIds.Num() > 0)
 			{
-				TSharedRef<FJsonObject> MsgObj = MakeShared<FJsonObject>();
-				MsgObj->SetStringField(TEXT("severity"),
-					Message->GetSeverity() == EMessageSeverity::Error ? TEXT("error") : TEXT("warning"));
-				MsgObj->SetStringField(TEXT("text"), Message->ToText().ToString());
-				Messages.Add(MakeShared<FJsonValueObject>(MsgObj));
+				TArray<TSharedPtr<FJsonValue>> IdJson;
+				for (const FString& Id : FailingNodeIds)
+				{
+					IdJson.Add(MakeShared<FJsonValueString>(Id));
+				}
+				CompileObj->SetArrayField(TEXT("nodeIds"), IdJson);
 			}
-			CompileObj->SetArrayField(TEXT("messages"), Messages);
 		}
 		Result->SetObjectField(TEXT("compile"), CompileObj);
 	}
