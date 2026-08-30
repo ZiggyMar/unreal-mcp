@@ -323,6 +323,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_save_asset",
     "unreal_create_data_table",
     "unreal_add_data_table_row",
+    "unreal_set_data_table_row",
     "unreal_list_data_table_rows",
     "unreal_create_struct",
     "unreal_add_struct_field",
@@ -2257,6 +2258,38 @@ register(
   async ({ path, rowName, values }) => {
     try {
       return jsonResult(await bridge.send("add_data_table_row", { path, rowName, values }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_data_table_row",
+  {
+    title: "Change fields on a Data Table row that already exists",
+    description:
+      "Edits a row in place. `unreal_add_data_table_row` deliberately refuses when the row is already " +
+      "there, which is right for creation and left no way to CHANGE one - so a table could be read " +
+      "through this server and not repaired through it.\n\n" +
+      "Partial by design: only the fields you name are touched. The common case is exactly one wrong " +
+      "field in an otherwise correct row, and resending every field to fix one is an opportunity to get " +
+      "the other five wrong.\n\n" +
+      "The reply reports `before` and `after` for each field it changed, so the edit can be checked " +
+      "rather than taken on trust, and a value the engine coerced or rejected is visible instead of " +
+      "being echoed back as though it had been stored. The row is left dirty in memory - call " +
+      "unreal_save_asset, or nothing reaches a packaged build.",
+    inputSchema: {
+      path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
+      rowName: z.string().describe('The existing row key to change, e.g. "Potion".'),
+      values: z
+        .record(z.string())
+        .describe('Only the fields to change, by name, e.g. {"Value":"30"}. Others are left alone.'),
+    },
+  },
+  async ({ path, rowName, values }) => {
+    try {
+      return jsonResult(await bridge.send("set_data_table_row", { path, rowName, values }));
     } catch (err) {
       return errorResult(err);
     }

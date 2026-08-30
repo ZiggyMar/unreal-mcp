@@ -290,6 +290,37 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+#### Changing a row that already exists: `unreal_set_data_table_row`
+
+`unreal_add_data_table_row` deliberately refuses when the row is already there, which is right for
+creation — and left no way at all to **change** one. That gap was found the hard way, on a real
+shipped build: an enemy row's class reference had been cleared to `None`, so the wave system queued
+a null class and those spawns silently did nothing. The table could be *read* through this bridge
+and not *repaired* through it, which meant the one tool that could see the bug could not fix it.
+
+```
+unreal_set_data_table_row({ path: "/Game/.../DT_Enemies.DT_Enemies",
+                            rowName: "Fly",
+                            values: { EnemyType: "/Game/.../BP_FlyingEnemy.BP_FlyingEnemy_C" } })
+```
+
+It is **partial by design**: only the fields you name are touched. The common case is exactly one
+wrong field in an otherwise correct row, and making the caller resend every field to fix one is an
+opportunity to get the other five wrong.
+
+The reply reports `before` and `after` for each field it changed:
+
+```json
+"changed": { "EnemyType": { "before": "None",
+                            "after": "/Game/.../BP_FlyingEnemy.BP_FlyingEnemy_C" } }
+```
+
+so the edit can be checked rather than taken on trust, and a value the engine coerced or rejected is
+visible instead of being echoed back as though it had been stored. Field names are validated before
+anything is written, so a typo refuses the change rather than half-applying it. The row is left
+dirty in memory — call `unreal_save_asset`, or nothing reaches a packaged build.
+
+
 ### Tested with a local 7B: 0/5 to 5/5
 
 "Works with any model" is claimed by everything in this space and demonstrated by none of it.

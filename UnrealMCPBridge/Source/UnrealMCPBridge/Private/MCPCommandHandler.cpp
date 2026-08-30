@@ -812,6 +812,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleAddDataTableRow(Params);
 	}
+	else if (Cmd == TEXT("set_data_table_row"))
+	{
+		Response = HandleSetDataTableRow(Params);
+	}
 	else if (Cmd == TEXT("list_data_table_rows"))
 	{
 		Response = HandleListDataTableRows(Params);
@@ -5086,6 +5090,147 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddDataTableRow(const TSharedP
 	// Read the row back rather than echoing the input. A value the engine rejected or coerced would
 	// otherwise be reported as if it had been stored exactly as sent.
 	Result->SetObjectField(TEXT("values"), DescribeDataTableRow(Table->RowStruct, RowData));
+	if (Problems.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> ProblemJson;
+		for (const FString& Problem : Problems)
+		{
+			ProblemJson.Add(MakeShared<FJsonValueString>(Problem));
+		}
+		Result->SetArrayField(TEXT("fieldsNotSet"), ProblemJson);
+	}
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Change fields on a row that already exists.
+ *
+ * add_data_table_row deliberately refuses when the row is already there, which is right for
+ * creation and left no way at all to CHANGE one. That gap was found the hard way: a shipped build
+ * had an enemy row whose class reference had been cleared to None, so the wave system queued a null
+ * class and those spawns silently did nothing. The table could be read through this bridge and not
+ * repaired through it, which meant the one tool that could see the bug could not fix it.
+ *
+ * Partial by design: only the fields named in `values` are touched, because the common case is
+ * exactly one wrong field in an otherwise correct row, and requiring the caller to resend every
+ * field would turn a one-field fix into an opportunity to get the other five wrong.
+ *
+ * The reply reports before and after for each field it changed. A write tool that only says
+ * "ok" cannot be checked, and a value the engine coerced or rejected would otherwise be reported as
+ * though it had been stored exactly as sent.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, RowName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("rowName"), RowName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and rowName are required"));
+	}
+
+	FString TableError;
+	UDataTable* Table = ResolveDataTable(Path, TableError);
+	if (!Table)
+	{
+		return MakeErrorResponse(TableError);
+	}
+
+	uint8* RowData = Table->FindRowUnchecked(FName(*RowName));
+	if (!RowData)
+	{
+		TArray<FString> Names;
+		for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+		{
+			Names.Add(Pair.Key.ToString());
+		}
+		return MakeErrorResponse(FString::Printf(
+			TEXT("row_not_found: %s has no row named '%s' (rows: %s). Use add_data_table_row to create it."),
+			*Path, *RowName, *FString::Join(Names, TEXT(", "))));
+	}
+
+	// Every field name is checked before anything is written. A half-applied change is worse than a
+	// refusal, because it looks correct in the editor until the one wrong field is noticed in play.
+	const TSharedPtr<FJsonObject>* ValuesObj = nullptr;
+	TArray<TPair<FProperty*, FString>> Pending;
+	if (Params->TryGetObjectField(TEXT("values"), ValuesObj) && ValuesObj && ValuesObj->IsValid())
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*ValuesObj)->Values)
+		{
+			FProperty* Property = nullptr;
+			for (TFieldIterator<FProperty> It(Table->RowStruct); It; ++It)
+			{
+				if (DataTableUtils::GetPropertyExportName(*It).Equals(Pair.Key, ESearchCase::IgnoreCase) ||
+					It->GetName().Equals(Pair.Key, ESearchCase::IgnoreCase))
+				{
+					Property = *It;
+					break;
+				}
+			}
+			if (!Property)
+			{
+				TArray<FString> Available;
+				for (TFieldIterator<FProperty> It(Table->RowStruct); It; ++It)
+				{
+					Available.Add(DataTableUtils::GetPropertyExportName(*It));
+				}
+				return MakeErrorResponse(FString::Printf(
+					TEXT("unknown_field: '%s' is not a field of row struct %s (available: %s)"),
+					*Pair.Key, *Table->RowStruct->GetName(), *FString::Join(Available, TEXT(", "))));
+			}
+			FString AsString;
+			if (!Pair.Value->TryGetString(AsString))
+			{
+				AsString = Pair.Value->Type == EJson::Boolean
+					? (Pair.Value->AsBool() ? TEXT("true") : TEXT("false"))
+					: FString::SanitizeFloat(Pair.Value->AsNumber());
+			}
+			Pending.Add(TPair<FProperty*, FString>(Property, AsString));
+		}
+	}
+
+	if (Pending.Num() == 0)
+	{
+		return MakeErrorResponse(TEXT("missing_param: values must name at least one field to change"));
+	}
+
+	FDataTableEditorUtils::BroadcastPreChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowData);
+
+	TArray<FString> Problems;
+	TSharedRef<FJsonObject> Changed = MakeShared<FJsonObject>();
+	for (const TPair<FProperty*, FString>& Entry : Pending)
+	{
+		FString Before;
+		Entry.Key->ExportText_InContainer(0, Before, RowData, RowData, nullptr, PPF_None);
+
+		const FString Error = DataTableUtils::AssignStringToProperty(Entry.Value, Entry.Key, RowData);
+		if (!Error.IsEmpty())
+		{
+			Problems.Add(FString::Printf(TEXT("%s: %s"), *Entry.Key->GetName(), *Error));
+			continue;
+		}
+
+		FString After;
+		Entry.Key->ExportText_InContainer(0, After, RowData, RowData, nullptr, PPF_None);
+
+		TSharedRef<FJsonObject> Delta = MakeShared<FJsonObject>();
+		Delta->SetStringField(TEXT("before"), Before);
+		Delta->SetStringField(TEXT("after"), After);
+		Changed->SetObjectField(DataTableUtils::GetPropertyExportName(Entry.Key), Delta);
+	}
+
+	FDataTableEditorUtils::BroadcastPostChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowData);
+	Table->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("rowName"), RowName);
+	Result->SetObjectField(TEXT("changed"), Changed);
+	// Read the whole row back rather than echoing the input, for the same reason add does.
+	Result->SetObjectField(TEXT("values"), DescribeDataTableRow(Table->RowStruct, RowData));
+	Result->SetBoolField(TEXT("unsaved"), true);
+	Result->SetStringField(TEXT("next"),
+		TEXT("The table is changed in memory and marked dirty. Call save_asset to write it to disk; ")
+		TEXT("nothing reaches a packaged build until you do."));
 	if (Problems.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ProblemJson;

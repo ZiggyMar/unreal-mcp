@@ -100,6 +100,7 @@ private:
 	static TSharedRef<FJsonObject> HandleSaveAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateDataTable(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListDataTableRows(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateStruct(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleAddStructField(const TSharedPtr<FJsonObject>& Params);
