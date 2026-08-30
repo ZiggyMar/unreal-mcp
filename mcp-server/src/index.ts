@@ -385,11 +385,15 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // Animation is its own group: 62 of the assets on the project this was measured against, and
   // irrelevant to a project that has none.
   anim: ["unreal_read_anim_blueprint"],
+  // AI is its own group for the same reason animation is: a project without Behavior Trees should
+  // not carry the definition, and a project built around them wants it in the diagnose set.
+  ai: ["unreal_read_behavior_tree"],
 };
 
 const GROUP_SUMMARY: Record<string, string> = {
   cpp: "compile a C++ source file to see whether an edit built (find_source, which locates it, is in core)",
   anim: "Animation Blueprints: state machines, their states, and the conditions that move between them",
+  ai: "Behavior Trees and their blackboards: what the AI is actually told to do, and what guards each branch",
   edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
   materials: "Materials and Material Instances: create them, parameterise them, override them",
@@ -1882,6 +1886,33 @@ register(
 );
 
 register(
+  "unreal_read_behavior_tree",
+  {
+    title: "Read a Behavior Tree and its blackboard",
+    description:
+      "**The tool for \"the enemies are not doing anything\".** A Behavior Tree is not a Blueprint, so " +
+      "unreal_list_blueprints never returns one and the whole AI subsystem sits outside every other tool here. " +
+      "This reads the tree and the blackboard it runs on.\n\n" +
+      "The reply is indented, and the indentation IS the behaviour: a Selector runs its children until one " +
+      "succeeds, so the second branch only ever runs when the first fails. Decorators are listed against the " +
+      "child they guard, because a decorator is usually why a branch does or does not run - \"they stop chasing " +
+      "at the firewall\" is a decorator on the chase branch far more often than it is anything in the task.\n\n" +
+      "Blackboard keys come back with it. A task reads `TargetActor`; whether anything ever WRITES it is the other " +
+      "half of the question, and the key list is where to start looking.",
+    inputSchema: {
+      path: z.string().describe('Behavior Tree path, e.g. "/Game/AI/BT_Enemy.BT_Enemy".'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      return jsonResult(await bridge.send("read_behavior_tree", { path }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_read_anim_blueprint",
   {
     title: "Read an Animation Blueprint's state machines",
@@ -3056,7 +3087,7 @@ register(
       "one at a time; re-calling is harmless.",
     inputSchema: {
       groups: z
-        .array(z.enum(["core", "cpp", "anim", "edit", "ui", "materials", "data", "scene", "maintenance"]))
+        .array(z.enum(["core", "cpp", "anim", "ai", "edit", "ui", "materials", "data", "scene", "maintenance"]))
         .optional()
         .describe('Whole groups to turn on, e.g. ["core","ui"].'),
       tools: z

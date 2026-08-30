@@ -70,6 +70,9 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // "The character is not animating" starts as a diagnosis, and a Blueprint only holds half the
       // answer: it sets the Speed variable, and the state machine decides what Speed means.
       "unreal_read_anim_blueprint",
+      // "The enemies are not following me" is an AI question, and a Behavior Tree is not a Blueprint
+      // - without this the diagnose preset cannot see what the pawn was actually told to do.
+      "unreal_read_behavior_tree",
       // The fix half. A preset that can only diagnose leaves the model to enable more before it can
       // act on what it just found, which is the round trip this is meant to remove.
       "unreal_build_graph",

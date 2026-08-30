@@ -242,6 +242,33 @@ string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, a
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
 
+### AI: `unreal_read_behavior_tree`
+
+The bug that started this project's most urgent day was *"none of the enemies are spawning, and the
+ones that do only start walking when you are past the outer firewalls."* The spawning half turned out
+to be a null class in a Data Table. The walking half was an AI question — and a Behavior Tree is not
+a Blueprint, so `unreal_list_blueprints` never returned one and the entire AI subsystem sat outside
+every tool here.
+
+```text
+unreal_read_behavior_tree({ path: "/Game/AI/BT_Enemy.BT_Enemy" })
+```
+
+The reply is indented, and **the indentation is the behaviour**: a Selector runs its children until
+one succeeds, so the second branch only ever runs when the first fails. Flattening that would destroy
+the one thing a reader needs.
+
+Decorators are listed against the child they guard, because a decorator is usually *why* a branch
+does or does not run — "they stop chasing at the firewall" is a decorator on the chase branch far
+more often than it is anything in the task. And the blackboard comes back with the tree: a task reads
+`TargetActor`, and whether anything ever **writes** it is the other half of the question.
+
+A tree with no root node is called out rather than returned as an empty list. It is not a normal
+state, and it looks perfectly fine in the content browser.
+
+Its own **`ai` group**, and in the `diagnose` preset — because "the enemies are not doing anything"
+arrives as a diagnosis, not as a request to open a specific asset.
+
 ### Animation: `unreal_read_anim_blueprint`
 
 The largest gap the asset inventory turned up, and the one behind a sentence people actually say.

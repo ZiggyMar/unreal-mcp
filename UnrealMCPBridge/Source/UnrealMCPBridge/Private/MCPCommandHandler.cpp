@@ -27,6 +27,11 @@
 #include "AnimStateNodeBase.h"
 #include "AnimStateTransitionNode.h"
 #include "Algo/Reverse.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/BTCompositeNode.h"
+#include "BehaviorTree/BTDecorator.h"
+#include "BehaviorTree/BTTaskNode.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_IfThenElse.h"
@@ -714,7 +719,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
-		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"),
+		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -945,6 +950,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("spawn_actor"))
 	{
 		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("read_behavior_tree"))
+	{
+		Response = HandleReadBehaviorTree(Params);
 	}
 	else if (Cmd == TEXT("read_anim_blueprint"))
 	{
@@ -4773,6 +4782,135 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAnimBlueprint(const TShare
 		Result->SetStringField(TEXT("note"),
 			TEXT("This Anim Blueprint has no state machines. That is normal - many blend poses directly, ")
 			TEXT("driven by variables the owning Blueprint sets. Read those with list_variables on this asset."));
+	}
+	return MakeOkResponse(Result);
+}
+
+// Describe one Behavior Tree node and everything under it.
+//
+// A Behavior Tree is read top-down and left-to-right, and that order IS the behaviour: a Selector
+// runs its children until one succeeds, so the second child only ever runs when the first fails.
+// Flattening it would destroy the one thing a reader needs. So this indents, and the indentation is
+// the answer.
+//
+// Decorators are listed with their node because a decorator is why a branch does or does not run -
+// "enemies stop chasing at the firewall" is a decorator on the chase branch far more often than it
+// is anything in the task itself.
+static void DescribeBTNode(const UBTNode* Node, int32 Depth, TArray<TSharedPtr<FJsonValue>>& Out)
+{
+	if (!Node || Depth > 12)
+	{
+		return;
+	}
+
+	TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+	Entry->SetNumberField(TEXT("depth"), Depth);
+	Entry->SetStringField(TEXT("node"), Node->GetNodeName());
+	Entry->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+
+	const UBTCompositeNode* Composite = Cast<UBTCompositeNode>(Node);
+	if (const UBTTaskNode* Task = Cast<UBTTaskNode>(Node))
+	{
+		Entry->SetStringField(TEXT("kind"), TEXT("task"));
+		(void)Task;
+	}
+	else if (Composite)
+	{
+		Entry->SetStringField(TEXT("kind"), TEXT("composite"));
+	}
+
+	Out.Add(MakeShared<FJsonValueObject>(Entry));
+
+	if (!Composite)
+	{
+		return;
+	}
+
+	for (const FBTCompositeChild& Child : Composite->Children)
+	{
+		// The decorators guarding this child, named on the child itself. A decorator that fails is
+		// the commonest reason a branch "does nothing", and it is invisible from the task's name.
+		if (Child.Decorators.Num() > 0)
+		{
+			TArray<FString> Names;
+			for (const UBTDecorator* Decorator : Child.Decorators)
+			{
+				if (Decorator)
+				{
+					Names.Add(Decorator->GetNodeName());
+				}
+			}
+			if (Names.Num() > 0)
+			{
+				TSharedRef<FJsonObject> Guard = MakeShared<FJsonObject>();
+				Guard->SetNumberField(TEXT("depth"), Depth + 1);
+				Guard->SetStringField(TEXT("kind"), TEXT("decorators"));
+				Guard->SetStringField(TEXT("node"), FString::Join(Names, TEXT(" AND ")));
+				Out.Add(MakeShared<FJsonValueObject>(Guard));
+			}
+		}
+
+		if (Child.ChildComposite)
+		{
+			DescribeBTNode(Child.ChildComposite, Depth + 1, Out);
+		}
+		else if (Child.ChildTask)
+		{
+			DescribeBTNode(Child.ChildTask, Depth + 1, Out);
+		}
+	}
+}
+
+// Read a Behavior Tree.
+//
+// "The enemies are not following me" is an AI question, and until now this bridge could see the
+// Blueprint that possesses the pawn and nothing about what the pawn was actually told to do. A
+// Behavior Tree is where that lives, and it is not a Blueprint - list_blueprints never returned one,
+// so the whole subsystem was outside the door.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBehaviorTree(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	UBehaviorTree* Tree = Cast<UBehaviorTree>(StaticLoadObject(UBehaviorTree::StaticClass(), nullptr, *Path));
+	if (!Tree)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("behavior_tree_not_found: %s. list_assets with className \"BehaviorTree\" finds the real paths."),
+			*Path));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Nodes;
+	DescribeBTNode(Tree->RootNode, 0, Nodes);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+
+	// The blackboard is half the answer. A task reads "TargetActor"; whether anything ever writes it
+	// is the other half, and the key list is where a reader starts looking.
+	if (Tree->BlackboardAsset)
+	{
+		Result->SetStringField(TEXT("blackboard"), Tree->BlackboardAsset->GetName());
+		TArray<TSharedPtr<FJsonValue>> Keys;
+		for (const FBlackboardEntry& Key : Tree->BlackboardAsset->Keys)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("key"), Key.EntryName.ToString());
+			Entry->SetStringField(TEXT("type"), Key.KeyType ? Key.KeyType->GetClass()->GetName() : TEXT("?"));
+			Keys.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("blackboardKeys"), Keys);
+	}
+
+	Result->SetArrayField(TEXT("tree"), Nodes);
+	if (Nodes.Num() == 0)
+	{
+		Result->SetStringField(TEXT("note"),
+			TEXT("This Behavior Tree has no root node, so running it does nothing at all. That is not a ")
+			TEXT("normal state - an asset saved before its root was set will look fine in the browser."));
 	}
 	return MakeOkResponse(Result);
 }

@@ -39,6 +39,9 @@ public class UnrealMCPBridge : ModuleRules
 			// UAnimGraphNode_StateMachine, UAnimStateNode and UAnimStateTransitionNode; this plugin
 			// is editor-only already, so it costs a runtime dependency on nothing.
 			"AnimGraph",
+			// For reading Behavior Trees. AIModule is runtime, not editor: a Behavior Tree is a
+			// cooked asset, and reading one needs no editor machinery at all.
+			"AIModule",
 			"SourceControl"
 		});
 
