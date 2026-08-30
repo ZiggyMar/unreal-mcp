@@ -23,14 +23,18 @@ struct FMCPServerOptions
 {
 	int32 Port = 8765;
 
-	/** False for a test, whose chosen port must not be moved by whatever flags the editor was launched with. */
+	/**
+	 * True for the editor: -MCPBridgePort and -MCPRequireAuth are read and win.
+	 * False for a test, whose chosen port and auth setting must not be moved by whatever flags the
+	 * editor running the test happened to be launched with.
+	 */
 	bool bAllowCommandLineOverrides = true;
 
-	/** Unset: read -MCPRequireAuth, as the editor does. */
-	TOptional<bool> bRequireAuth;
+	/** Consulted only when bAllowCommandLineOverrides is false; otherwise -MCPRequireAuth decides. */
+	bool bRequireAuth = false;
 
-	/** Unset: DefaultSessionFilePath(Port). Set by a test to keep out of the real user settings directory. */
-	TOptional<FString> SessionFilePath;
+	/** Empty means DefaultSessionFilePath(Port). Set by a test to stay out of the real user settings directory. */
+	FString SessionFilePath;
 };
 
 /**

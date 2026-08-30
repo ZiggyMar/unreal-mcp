@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { judgeRun, parseAutomationLog, samePath, editorCommandPath } from "../scripts/run-automation.mjs";
+import { judgeRun, parseAutomationLog, samePath, editorCommandPath, formatSummary } from "../scripts/run-automation.mjs";
 
 // The half of scripts/run-automation.mjs that can be checked without an Unreal install: what it
 // concludes from a log, and what it concludes from a path. The other half, actually launching an
@@ -98,4 +98,29 @@ test("the probe is read even when the log is noisy around it", () => {
     "LogTemp: something\nLogMCPBridgeAuthTest: Display: MCPSessionPathProbe: /home/d/.config/Epic/UnrealMCPBridge/session-8765.json\nLogTemp: after\n"
   );
   assert.equal(parsed.probedPath, "/home/d/.config/Epic/UnrealMCPBridge/session-8765.json");
+});
+
+test("the run renders as one block somebody can paste into a pull request", () => {
+  // The person who can run this is not the person who needs the answer, so a result that has to be
+  // summarised by hand before it can be shared is a result that gets shared wrong, or not at all.
+  const passing = judgeRun({ status: 0, log: PASSING_LOG, candidates: WINDOWS_CANDIDATES });
+  const block = formatSummary([{ target: { name: "5.6" }, ...passing }], WINDOWS_CANDIDATES);
+
+  assert.match(block, /^```/, "fenced, so it survives being pasted into a comment");
+  assert.match(block, /PASS {2}5\.6/);
+  assert.match(block, /session file written: C:\/Users\/dev\/AppData\/Local\/UnrealMCPBridge\/session-8765\.json/);
+  assert.match(block, /matches a path the client searches: yes/);
+  assert.match(block, /ok {4}UnrealMCPBridge\.Auth\.ValidToken/);
+  assert.match(block, /client searches \(port 8765\)/);
+});
+
+test("a path mismatch says NO in the pasteable block, not just in the detail", () => {
+  const mismatch = judgeRun({
+    status: 0,
+    log: PASSING_LOG,
+    candidates: ["C:\\Users\\dev\\AppData\\Local\\Epic\\UnrealMCPBridge\\session-8765.json"],
+  });
+  const block = formatSummary([{ target: { name: "5.8" }, ...mismatch }], ["C:\\Users\\dev\\AppData\\Local\\Epic\\UnrealMCPBridge\\session-8765.json"]);
+  assert.match(block, /FAIL {2}5\.8/);
+  assert.match(block, /matches a path the client searches: NO/);
 });

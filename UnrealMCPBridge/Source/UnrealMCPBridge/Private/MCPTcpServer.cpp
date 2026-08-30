@@ -311,12 +311,12 @@ bool FMCPTcpServer::Start(const FMCPServerOptions& Options)
 	// client, and switching it on cannot then discover that the other half was never wired up -
 	// which is exactly how the original proposal would have failed.
 	SessionToken = MCPGenerateSessionToken();
-	bRequireAuth = Options.bRequireAuth.IsSet()
-		? Options.bRequireAuth.GetValue()
-		: (Options.bAllowCommandLineOverrides && FParse::Param(FCommandLine::Get(), TEXT("MCPRequireAuth")));
+	bRequireAuth = Options.bAllowCommandLineOverrides
+		? FParse::Param(FCommandLine::Get(), TEXT("MCPRequireAuth"))
+		: Options.bRequireAuth;
 
 	const FString IntendedSessionFilePath =
-		Options.SessionFilePath.IsSet() ? Options.SessionFilePath.GetValue() : DefaultSessionFilePath(ListenPort);
+		Options.SessionFilePath.IsEmpty() ? DefaultSessionFilePath(ListenPort) : Options.SessionFilePath;
 	SessionFilePath = IntendedSessionFilePath;
 	TSharedRef<FJsonObject> Session = MakeShared<FJsonObject>();
 	Session->SetNumberField(TEXT("port"), ListenPort);

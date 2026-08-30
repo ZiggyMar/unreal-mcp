@@ -81,9 +81,37 @@ Reported separately and explicitly, per `STYLEGUIDE.md`.
 | `doctor.ts` session token check | Verified. Unit tested for both the found and not-found cases. |
 | `run-automation.mjs` log parsing and path comparison | Verified. Unit tested against log fixtures, including the mismatch it exists to catch. |
 | `run-automation.mjs` launching an editor | **Unverified.** Never run: no engine was available. |
-| `MCPTcpServer.cpp` / `.h` changes | **Compiled: no.** Hand-checked for brace balance, declaration order and API shape only. |
+| `MCPTcpServer.cpp` / `.h` changes | **Compiled: no.** Brace balance and declaration order checked mechanically; every engine symbol accounted for by the audit below. |
 | `MCPBridgeAuthTest.cpp` | **Compiled: no. Run: no.** Written to be run by someone with an engine. |
 | Where `FPlatformProcess::UserSettingsDir()` actually points on 5.6 and 5.8 | **Still unknown.** This is the question `npm run test:bridge` exists to answer. |
+
+## Accounting for the engine symbols that cannot be compiled here
+
+Not compiling the C++ is the real risk in this feature, and "it was read carefully" is not a control.
+What can be done instead is to insist that every engine symbol the new code touches is either
+**already called somewhere in this plugin**, and therefore already built against 5.6 and 5.8, or
+**published by Epic** for those versions. Anything in neither category gets rewritten until it is.
+
+| Symbol | Basis |
+|---|---|
+| `FSocket::Recv` (3-arg), `Send`, `Close`, `SetNonBlocking`, `DestroySocket`, `ISocketSubsystem::Get` | Called in `MCPTcpServer.cpp`. The 3-arg `Recv` is settled by shipped code, which is better evidence than the reference page, which does not render default arguments |
+| `FIPv4Endpoint`, `FIPv4Address` | `MCPTcpServer.cpp` |
+| `FPaths::Combine`, `FPaths::ProjectSavedDir`, `FFileHelper`, `IFileManager::Delete`, `TFunction`, the JSON reader and writer, `FTCHARToUTF8`, `FUTF8ToTCHAR`, `FPlatformTime` | Called elsewhere in the plugin. `ProjectSavedDir` is where `MCPProjectIndex` already writes |
+| `ISocketSubsystem::CreateSocket`, `CreateInternetAddr`, `FInternetAddr::SetIp` / `SetPort`, `FSocket::Connect` | Published. Connecting **out** is the one thing this plugin has never done, so this group has no call site to lean on. `CreateSocket`'s three overloads differ in their third parameter (`bool`, `ESocketProtocolFamily`, `FName`), so `false` selects one unambiguously |
+| `IMPLEMENT_SIMPLE_AUTOMATION_TEST`, `DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER`, `ADD_LATENT_AUTOMATION_COMMAND`, `AddError`, `TestTrue` / `TestFalse` / `TestEqual` | Published: [Write C++ Tests in Unreal Engine](https://dev.epicgames.com/documentation/unreal-engine/write-cplusplus-tests-in-unreal-engine) and the Automation Technical Guide |
+| `EAutomationTestFlags::EditorContext \| EAutomationTestFlags::EngineFilter` | Published, and **verbatim** Epic's minimal example. The same two enumerators appear in the guide back through 4.26, so they are stable across the change that made this an enum class. The combined application-context mask is deliberately unused: it is the one part of the enum whose spelling did move |
+
+Three symbols were removed rather than justified: `TOptional` and `FAutomationTestBase::AddInfo` had
+no call site here and nothing needed them, and `FPaths::ProjectIntermediateDir` became
+`ProjectSavedDir`. One was considered and rejected: `FIPv4Endpoint::ToInternetAddr()` would have
+replaced three unprecedented address calls with one method on a type the file already uses, but
+Epic's reference says it "will be removed after the socket subsystem is refactored", and trading a
+documented call for a deprecation-flagged one is the wrong direction in a file nobody here can
+compile.
+
+**None of this is a substitute for compiling it.** It lowers the odds of a build failure and makes
+any failure a shallow one. The automation tests have still never run, and the question at the top of
+this document is still open.
 
 ## Turning enforcement on
 

@@ -115,6 +115,39 @@ export function judgeRun({ status, log, candidates }) {
   return { ok: problems.length === 0, problems, probedPath: parsed.probedPath, results: parsed.results };
 }
 
+/**
+ * Render the whole run as one block somebody can paste into a pull request.
+ *
+ * This exists because the person who runs this is usually not the person who needs the answer. The
+ * whole point of the script is to settle a question for a reviewer, and a result that has to be
+ * summarised by hand before it can be shared gets summarised wrong, or not shared at all.
+ */
+export function formatSummary(results, candidates) {
+  const lines = ["```", "npm run test:bridge", ""];
+
+  for (const result of results) {
+    lines.push(`${result.ok ? "PASS" : "FAIL"}  ${result.target.name}`);
+    lines.push(`      session file written: ${result.probedPath ?? "(not reported)"}`);
+    lines.push(
+      `      matches a path the client searches: ${
+        result.probedPath ? (result.ok || !result.problems.some((p) => p.includes("NOT one of")) ? "yes" : "NO") : "unknown"
+      }`
+    );
+    for (const test of result.results ?? []) {
+      lines.push(`      ${test.outcome === "passed" ? "ok  " : "FAIL"}  ${test.name}`);
+    }
+    for (const problem of result.problems ?? []) {
+      lines.push(`      ! ${problem.split("\n")[0]}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(`client searches (port ${PROBE_PORT}):`);
+  for (const candidate of candidates) lines.push(`      ${candidate}`);
+  lines.push("```");
+  return lines.join("\n");
+}
+
 /** Where UnrealEditor-Cmd lives, which build-engines.mjs never had to care about. */
 export function editorCommandPath(engineDir, platform = process.platform) {
   const binaries = join(engineDir, "Engine", "Binaries");
@@ -190,9 +223,10 @@ function main() {
   }
 
   console.log("");
-  for (const result of results) {
-    console.log(`  ${result.ok ? "ok  " : "FAIL"}  ${result.target.name}`);
-  }
+  console.log("Paste this into the pull request:");
+  console.log("");
+  console.log(formatSummary(results, candidates));
+  console.log("");
 
   const failed = results.filter((r) => !r.ok);
   if (failed.length > 0) {

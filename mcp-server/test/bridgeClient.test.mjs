@@ -205,10 +205,16 @@ test("a bridge that refuses forever stops after one retry, without a counter to 
   });
 });
 
-test("a refusal pointing outside the settings directories is not followed", async () => {
+test("an unauthenticated peer can name a path, but cannot make this client read an arbitrary file", async () => {
+  // The invariant the whole session_file design rests on, stated in one place rather than implied
+  // across two.
+  //
+  // The bridge discloses its session file path before authenticating, which is a deliberate trade:
+  // that path is not the secret, the token is, and any peer that can open this socket already runs
+  // as this user. What must remain true is the other half. A process squatting the port names a
+  // file that exists, is readable, and contains a plausible token, and this client must decline to
+  // read it and must certainly never send what is in it back over the same socket.
   await withFakeHome(async (dir) => {
-    // A file that exists, is readable, and holds a token, but sits somewhere the bridge has no
-    // business naming. A process squatting the port must not be able to have this read back to it.
     const planted = join(dir, "not-a-settings-dir", "session-1.json");
     mkdirSync(dirname(planted), { recursive: true });
     writeFileSync(planted, JSON.stringify({ token: "should-never-be-sent" }), "utf8");
@@ -217,12 +223,25 @@ test("a refusal pointing outside the settings directories is not followed", asyn
       (request) => ({ ok: false, id: request.id, error: "unauthorized", session_file: planted }),
       async (port, seen) => {
         const client = new UnrealBridgeClient({ host: "127.0.0.1", port, timeoutMs: 5000 });
-        await assert.rejects(() => client.send("ping"), /unauthorized/i);
-        assert.equal(seen.length, 1, "no retry, so the planted token never reached the wire");
+
+        await assert.rejects(
+          () => client.send("ping"),
+          (err) => {
+            // The peer may be heard: the path it named is surfaced, because a human debugging a
+            // genuinely misplaced session file needs to see it.
+            assert.match(err.message, /not-a-settings-dir/, "the hinted path is reported to the user");
+            assert.match(err.message, /outside every settings directory/, "and reported as refused");
+            // The peer may not be obeyed.
+            assert.doesNotMatch(err.message, /should-never-be-sent/, "the file's contents never appear anywhere");
+            return true;
+          }
+        );
+
+        assert.equal(seen.length, 1, "no retry, so nothing was read and re-sent");
         assert.equal(
           seen.every((request) => request.auth_token === undefined),
           true,
-          "and nothing read from it was sent to anyone"
+          "the planted token never reached the wire"
         );
       }
     );

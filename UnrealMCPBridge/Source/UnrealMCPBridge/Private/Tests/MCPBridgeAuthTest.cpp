@@ -136,8 +136,11 @@ namespace MCPBridgeAuthTest
 			Options.Port = Port;
 			Options.bAllowCommandLineOverrides = false;
 			Options.bRequireAuth = bRequireAuth;
+			// ProjectSavedDir rather than ProjectIntermediateDir: it is where this plugin already
+			// writes (MCPProjectIndex), so it is a call the plugin has been built against on both
+			// engine versions, and a runtime-generated file belongs under Saved anyway.
 			Options.SessionFilePath = FPaths::Combine(
-				FPaths::ProjectIntermediateDir(),
+				FPaths::ProjectSavedDir(),
 				TEXT("MCPBridgeAuthTest"),
 				FString::Printf(TEXT("session-%d.json"), Port));
 
@@ -146,7 +149,7 @@ namespace MCPBridgeAuthTest
 			{
 				Fixture->Server = Server;
 				Fixture->Port = Port;
-				Fixture->SessionFilePath = Options.SessionFilePath.GetValue();
+				Fixture->SessionFilePath = Options.SessionFilePath;
 				break;
 			}
 			Server->Stop();
@@ -168,6 +171,15 @@ namespace MCPBridgeAuthTest
 			return nullptr;
 		}
 
+		// Connecting OUT is the one thing this plugin has never done: it only ever accepts. So these
+		// four calls are the group with no already-compiled call site to lean on, and they are
+		// documented instead. CreateSocket's three overloads differ in their third parameter (bool,
+		// ESocketProtocolFamily, FName), so passing `false` selects the bool one unambiguously.
+		//
+		// FIPv4Endpoint::ToInternetAddr() would have collapsed the three address calls into one on a
+		// type this file already uses, and was rejected on purpose: Epic's own reference says it
+		// "will be removed after the socket subsystem is refactored". Trading a documented call for a
+		// deprecation-flagged one is the wrong direction in a file nobody here can compile.
 		ISocketSubsystem* Sockets = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
 		Fixture->Socket = Sockets->CreateSocket(NAME_Stream, TEXT("MCPBridgeAuthTestClient"), false);
 		if (!Fixture->Socket)
@@ -372,12 +384,19 @@ bool FMCPShutdownFixture::Update()
 }
 
 /**
- * The flag expression is kept to two enumerators on purpose.
+ * Verbatim the flag expression in Epic's own minimal example, which is the point.
  *
- * EAutomationTestFlags became an enum class, and the combined application-context mask was moved to
- * a separately named constant when that happened. Which spelling a given engine version wants is
- * exactly the kind of thing this file cannot check for itself, so it uses only the two enumerators
- * that have been stable across the change.
+ * This file cannot be compiled here, so every engine symbol in it is either one this plugin already
+ * calls elsewhere and has therefore been built against 5.6 and 5.8, or one Epic publishes. This is
+ * the second kind: "Write C++ Tests in Unreal Engine" gives
+ *
+ *     IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPlaceholderTest, "TestGroup.TestSubgroup.Placeholder Test",
+ *         EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+ *
+ * and the same two enumerators appear in the Automation Technical Guide back through 4.26, so they
+ * are stable across the change that turned EAutomationTestFlags into an enum class and moved the
+ * combined application-context mask to a separately named constant. That mask is deliberately not
+ * used: it is the one part of this enum whose spelling did move.
  */
 #define MCP_BRIDGE_TEST_FLAGS (EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -584,8 +603,9 @@ bool FMCPBridgeSessionPathTest::RunTest(const FString& Parameters)
 	const FString Path = FMCPTcpServer::DefaultSessionFilePath(8765);
 	TestTrue(TEXT("the bridge can name a session file path at all"), !Path.IsEmpty());
 
+	// UE_LOG rather than AddInfo: this plugin logs everywhere and has never called AddInfo, and
+	// scripts/run-automation.mjs reads stdout, which -stdout -fullstdoutlogoutput delivers.
 	UE_LOG(LogMCPBridgeAuthTest, Display, TEXT("MCPSessionPathProbe: %s"), *Path);
-	AddInfo(FString::Printf(TEXT("MCPSessionPathProbe: %s"), *Path));
 	return true;
 }
 
