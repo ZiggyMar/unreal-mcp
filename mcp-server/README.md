@@ -1152,6 +1152,13 @@ feature, 28% even for a trial that spans Blueprints, data tables, C++, component
 the instructions used to claim by hand turned out to be right — 4,552 — but a number nobody checks is
 one that is eventually wrong, so it comes from `src/groupCosts.ts` now like the rest.
 
+The instructions had grown four separate blocks about how to switch tools on — why the list is
+short, presets, a group price table, and a note about naming exact tools — **380 tokens of preamble
+before any work**, a third of the whole text, and partly redundant with each other. They are now one
+block of ~150: what to do first, what it costs, and where to look for the rest. `unreal_list_tools`
+already prices every group on demand and now names the presets too, so nothing was lost that a model
+cannot reach; it went from 1,162 tokens to 981.
+
 On `search`, the instructions are the larger half, and they are the last thing that should be cut —
 four tools are only usable because the text explains how to reach the rest. They now quote the
 **measured** cost of every group, generated from `src/groupCosts.ts` so they cannot drift, and steer

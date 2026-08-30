@@ -146,28 +146,17 @@ function buildInstructions(profile: string): string {
   if (profile === "search") {
     lines.push(
       "THE TOOL LIST IS DELIBERATELY SHORT.",
-      "Only four tools are listed. Everything else is registered and switched off, because the full",
-      `set is ~${Math.round(ALL_GROUPS_TOKENS / 100) / 10}k tokens of context on every turn and most of it goes unused. Switch on what`,
-      "the job needs with unreal_enable_tools and the real, fully typed schemas arrive - nothing is",
-      "dumbed down or proxied.",
+      `Four tools are listed. The rest are registered and switched off, because all of them is ~${Math.round(ALL_GROUPS_TOKENS / 100) / 10}k`,
+      "tokens on every turn and most goes unused. Switch on what the job needs and the real, fully",
+      "typed schemas arrive - nothing is dumbed down or proxied.",
       "",
-      "IF YOU KNOW THE JOB, USE A PRESET. It is the tools for that job, already chosen, and each one",
-      "is checked by a trial that runs the whole job on it - so the list is sufficient, not plausible.",
+      "START WITH A PRESET: the tools for one job, already chosen, each checked by a trial that runs",
+      "that whole job on it. These costs are measured, not estimated:",
       `  diagnose ~${Math.round(PRESET_COST_TOKENS.diagnose / 100) / 10}k   feature ~${Math.round(PRESET_COST_TOKENS.feature / 100) / 10}k   ui ~${Math.round(PRESET_COST_TOKENS.ui / 100) / 10}k   data ~${Math.round(PRESET_COST_TOKENS.data / 100) / 10}k   cpp ~${Math.round(PRESET_COST_TOKENS.cpp / 100) / 10}k`,
       "  unreal_enable_tools({ preset: \"diagnose\" })",
-      `One preset beats the core group (~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k). Two is roughly a wash, and if the job genuinely spans`,
-      "three or more, enable core instead - four presets together measured more than core does.",
-      "",
-      "CHOOSE THE GROUP FROM THE JOB, not out of habit. These are measured, not estimated:",
-      `  core ~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k   scene ~${Math.round(GROUP_COST_TOKENS.scene / 100) / 10}k   data ~${Math.round(GROUP_COST_TOKENS.data / 100) / 10}k   edit ~${Math.round(GROUP_COST_TOKENS.edit / 100) / 10}k`,
-      `  ui ~${Math.round(GROUP_COST_TOKENS.ui / 100) / 10}k   maintenance ~${Math.round(GROUP_COST_TOKENS.maintenance / 100) / 10}k   materials ~${Math.round(GROUP_COST_TOKENS.materials / 100) / 10}k   cpp ~${GROUP_COST_TOKENS.cpp}`,
-      "core is the authoring spine and much the largest: enable it to AUTHOR, not to look around.",
-      "Reading a project to find a bug rarely needs it. unreal_list_tools shows what is in each group",
-      "and what it costs, without paying for the schemas.",
-      "",
-      "Cheaper still, once you know the job: pass unreal_enable_tools a `tools` list of exact names",
-      `instead of a group. The eight tools one Blueprint feature needs are ~${Math.round(FEATURE_SET_TOKENS / 100) / 10}k against core's`,
-      `~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k, and that difference is paid on every turn for the rest of the session.`,
+      `One preset beats the core group (~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k). Two is roughly a wash; if the job genuinely spans three`,
+      "or more, enable core instead. Whole groups and exact tool names also work, and unreal_list_tools",
+      "prices every group without paying for its schemas.",
       ""
     );
   }
@@ -2887,7 +2876,12 @@ register(
           `costTokens is what unreal_enable_tools adds to every later request once that group is on. ` +
           `Enabling everything is ~${ALL_GROUPS_TOKENS} tokens; \`core\` alone is ~${GROUP_COST_TOKENS.core}, ` +
           `which is most of it, so "just enable core" is not the cheap option it sounds like. Turn on what ` +
-          `the job needs and add more later - enabling is immediate and re-calling is harmless.`,
+          `the job needs and add more later - enabling is immediate and re-calling is harmless.\n\n` +
+          // A model that reaches list_tools rather than reading the instructions still has to learn
+          // that presets exist, or it will hand-pick from this catalogue and pay for the privilege.
+          `If the job has a name, a preset is cheaper than any group and needs no picking from this list: ` +
+          PRESET_NAMES.map((n) => `${n} ~${PRESET_COST_TOKENS[n]}`).join(", ") +
+          `. Each is verified by a trial that runs that whole job on it.`,
       });
     }
     const rows = [...toolCatalog.entries()]
