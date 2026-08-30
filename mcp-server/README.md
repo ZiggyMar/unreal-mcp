@@ -921,6 +921,22 @@ for Claude Desktop, Claude Code, and Cursor. Only four tools stand: `unreal_ping
 and switched off. `unreal_list_tools` names every tool with a one-line summary and no schema, so
 even discovery is cheap; one `unreal_enable_tools` call then brings back whatever the job needs.
 
+**Be precise about what that saves, because the headline number is only the first turn.** 1.2k is
+what `tools/list` costs before anything is enabled. A model that then asks for the whole `core` group
+pays ~11.5k on every turn after — still far better than `full`'s ~28k, but not 1.2k.
+
+The way to keep the saving is to enable *tools*, not groups:
+
+```
+unreal_enable_tools({ tools: ["unreal_get_project_overview", "unreal_search_project",
+                              "unreal_build_graph", "unreal_compile_blueprint"] })
+```
+
+Measured end to end: enabling the `core` group gives 32 tools at **11,597 tokens**; enabling the
+eight a feature actually needs gives 12 tools at **4,512 tokens**. That difference is paid on every
+turn for the rest of the session, which is why it is worth one extra thought at the start. A
+misspelled name is reported back rather than silently enabling nothing.
+
 The saving is 95% of the standing cost, and nothing is given up for it. This is deliberately *not* a
 `call_tool(name, json)` dispatcher: enabling a group hands the model the **real, fully typed
 schemas**, so argument validation, enum constraints, and parameter documentation are all intact. The

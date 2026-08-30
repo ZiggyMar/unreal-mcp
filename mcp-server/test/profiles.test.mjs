@@ -293,3 +293,58 @@ test("--print-config supports the clients people actually use", async () => {
     assert.match(out, /Paste this into|claude mcp add-json/);
   }
 });
+
+test("individual tools can be enabled by name, not only whole groups", async () => {
+  // The saving this exists for. `core` is 32 tools and about 11.6k tokens of definitions, and a
+  // session that reads a project and builds one graph touches a fraction of them - while paying for
+  // all of them on every turn for the rest of the conversation.
+  const wanted = [
+    "unreal_get_project_overview",
+    "unreal_search_project",
+    "unreal_build_graph",
+    "unreal_compile_blueprint",
+  ];
+  const messages = await callServer("search", [
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "unreal_enable_tools", arguments: { tools: wanted } } },
+    { jsonrpc: "2.0", id: 3, method: "tools/list", params: {} },
+  ]);
+
+  const listed = messages.find((m) => m.id === 3).result.tools.map((t) => t.name);
+  for (const name of wanted) {
+    assert.ok(listed.includes(name), `${name} should be enabled by name`);
+  }
+  // Four always-on plus the four asked for, and nothing else from their groups came along.
+  assert.equal(listed.length, 8, `expected only the named tools, got: ${listed.join(", ")}`);
+  assert.ok(!listed.includes("unreal_spawn_actor"), "asking for one scene tool must not enable the whole scene group");
+});
+
+test("a misspelled tool name is reported rather than silently doing nothing", async () => {
+  // A typo that enables nothing is a tool call spent for no effect, and the caller cannot tell that
+  // from "it was already on".
+  const messages = await callServer("search", [
+    {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "unreal_enable_tools", arguments: { tools: ["unreal_bild_graph"] } },
+    },
+  ]);
+  const body = JSON.parse(messages.find((m) => m.id === 2).result.content[0].text);
+  assert.deepEqual(body.unknownTools, ["unreal_bild_graph"]);
+  assert.match(body.unknownNote, /unreal_list_tools/);
+});
+
+test("groups still work, and both can be asked for at once", async () => {
+  const messages = await callServer("search", [
+    {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "unreal_enable_tools", arguments: { groups: ["materials"], tools: ["unreal_build_graph"] } },
+    },
+    { jsonrpc: "2.0", id: 3, method: "tools/list", params: {} },
+  ]);
+  const listed = messages.find((m) => m.id === 3).result.tools.map((t) => t.name);
+  assert.ok(listed.includes("unreal_create_material"), "the group should be on");
+  assert.ok(listed.includes("unreal_build_graph"), "the named tool should be on");
+});

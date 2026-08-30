@@ -146,6 +146,9 @@ function buildInstructions(profile: string): string {
       "arrives with its real, fully typed schemas - nothing is dumbed down or proxied. Add \"ui\",",
       '"data", "scene", "materials", "edit" or "maintenance" when the job needs them, and use',
       "unreal_list_tools to see what exists without paying for the schemas.",
+      "Cheaper still, and worth doing once you know the job: pass unreal_enable_tools a `tools` list",
+      "of exact names instead of a group. \"core\" is 32 tools and ~11.6k tokens; the eight a feature",
+      "actually needs are ~4.5k, and that difference is paid on every turn for the rest of the session.",
       ""
     );
   }
@@ -2673,31 +2676,60 @@ register(
       '  - "scene": Levels, actors, components, class defaults (including replication), project settings, input ' +
       "mappings, and Play In Editor.\n" +
       '  - "maintenance": what references an asset, deleting assets safely, and the Refresh Nodes repair.\n\n' +
-      "Enabling is cheap, immediate, and permanent for the session, and enabling a group you turn out not to need " +
-      "costs nothing but its definitions. Ask for every group the job plausibly needs in one call rather than " +
-      "discovering them one at a time. If your client does not appear to pick up the new tools, the response lists " +
-      "exactly what was turned on, and re-calling is harmless.",
+      "Enabling is immediate and lasts the session. Ask for everything the job plausibly needs in one call " +
+      "rather than discovering it one at a time; the response lists what was turned on, and re-calling is harmless.",
     inputSchema: {
       groups: z
         .array(z.enum(["core", "edit", "ui", "materials", "data", "scene", "maintenance"]))
-        .describe('Groups to turn on, e.g. ["core","ui"].'),
+        .optional()
+        .describe('Whole groups to turn on, e.g. ["core","ui"].'),
+      tools: z
+        .array(z.string())
+        .optional()
+        .describe('Exact tool names, instead of whole groups. unreal_list_tools has the names.'),
     },
   },
-  async ({ groups }) => {
+  async ({ groups, tools }) => {
     const enabled: string[] = [];
-    for (const group of groups) {
+    for (const group of groups ?? []) {
       enabled.push(...enableGroup(group));
     }
+
+    // Individual tools, so a session can pay for the six it needs instead of the thirty-two in the
+    // group that contains them. On a capable model this is the whole saving: `core` is 11.5k tokens
+    // of definitions and a session that reads a project and builds one graph touches a fraction of
+    // it, every turn, for the rest of the conversation.
+    const unknown: string[] = [];
+    for (const name of tools ?? []) {
+      const handle = toolHandles.get(name);
+      if (!handle) {
+        unknown.push(name);
+        continue;
+      }
+      if (!handle.enabled) {
+        handle.enable();
+        enabled.push(name);
+      }
+    }
+
     const available = [...toolHandles.entries()].filter(([, h]) => h.enabled).map(([name]) => name);
     return jsonResult({
-      requested: groups,
+      requested: { groups: groups ?? [], tools: tools ?? [] },
       newlyEnabled: enabled,
-      alreadyOn: enabled.length === 0,
+      alreadyOn: enabled.length === 0 && unknown.length === 0,
       availableTools: available.sort(),
+      // Named rather than ignored: a typo that silently enables nothing is a tool call spent for no
+      // effect, and the caller has no way to tell that from "it was already on".
+      ...(unknown.length > 0
+        ? {
+            unknownTools: unknown,
+            unknownNote: "No tool by that name is registered. Call unreal_list_tools to see the exact names.",
+          }
+        : {}),
       note:
         enabled.length > 0
           ? "These tools are now available. Your client has been notified that the tool list changed."
-          : "Nothing new to enable; those groups were already on.",
+          : "Nothing new to enable.",
     });
   }
 );
