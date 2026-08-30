@@ -122,6 +122,10 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       "unreal_set_data_table_row",
       "unreal_remove_data_table_row",
       "unreal_check_data_tables",
+      // Data Assets are the typed sibling of a Data Table and there were 41 of them in the project
+      // this was measured on, so a "data" preset without them was answering half the question.
+      "unreal_read_asset_properties",
+      "unreal_set_asset_property",
       "unreal_save_asset",
     ],
   },

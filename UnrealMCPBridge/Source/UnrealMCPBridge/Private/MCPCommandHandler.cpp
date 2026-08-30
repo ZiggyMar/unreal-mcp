@@ -706,7 +706,8 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("delete_asset"), TEXT("refresh_blueprint"), TEXT("add_component"),
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
-		TEXT("save_asset"), TEXT("create_data_table"), TEXT("add_data_table_row"),
+		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
+		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
 }
@@ -936,6 +937,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("spawn_actor"))
 	{
 		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("read_asset_properties"))
+	{
+		Response = HandleReadAssetProperties(Params);
+	}
+	else if (Cmd == TEXT("set_asset_property"))
+	{
+		Response = HandleSetAssetProperty(Params);
 	}
 	else if (Cmd == TEXT("save_asset"))
 	{
@@ -5149,6 +5158,127 @@ static TSharedRef<FJsonObject> DescribeDataTableRow(const UScriptStruct* RowStru
 			DataTableUtils::GetPropertyValueAsString(Property, RowData, EDataTableExportFlags::None));
 	}
 	return Values;
+}
+
+// Read and change the properties of a plain asset.
+//
+// Measured against the real project this is developed on: 41 DataAssets, and not one tool could see
+// inside any of them. A DataAsset is how a great many teams store the numbers a designer tunes -
+// it is the typed sibling of a Data Table - so "I have a change request, find it and change it"
+// stopped at the door for a whole class of the project's own configuration.
+//
+// This is deliberately generic over UObject rather than special-cased to DataAsset. The same two
+// handlers cover CurveFloat, SoundClass, MaterialParameterCollection and anything else that is an
+// asset with properties on it, because the machinery - find the FProperty, export or import its text
+// - does not care what the outer class is. Writing five type-specific tools would have cost five
+// tool definitions in every session's context to do one thing.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	if (!Asset)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("asset_not_found: %s. list_assets with a className finds real paths; note that an asset ")
+			TEXT("path repeats the name, as in /Game/Folder/DA_Thing.DA_Thing."),
+			*Path));
+	}
+
+	FString MatchFilter;
+	Params->TryGetStringField(TEXT("match"), MatchFilter);
+
+	UClass* Class = Asset->GetClass();
+	TArray<TSharedPtr<FJsonValue>> Properties;
+	int32 Total = 0;
+
+	for (TFieldIterator<FProperty> It(Class); It; ++It)
+	{
+		FProperty* Property = *It;
+
+		// Only what a human could edit in the details panel. Everything else is engine bookkeeping
+		// that would triple the reply and cannot be written back anyway.
+		if (!Property->HasAnyPropertyFlags(CPF_Edit))
+		{
+			continue;
+		}
+		++Total;
+
+		const FString Name = Property->GetName();
+		if (!MatchFilter.IsEmpty() && !Name.Contains(MatchFilter))
+		{
+			continue;
+		}
+
+		FString Value;
+		const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Asset);
+		Property->ExportTextItem_Direct(Value, ValuePtr, nullptr, Asset, PPF_None);
+
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Name);
+		Entry->SetStringField(TEXT("type"), Property->GetCPPType());
+		Entry->SetStringField(TEXT("value"), Value);
+
+		// The category is what the details panel groups by, and it is how a human describes where a
+		// setting lives ("under Combat"). Only sent when the asset actually sets one.
+		const FString Category = Property->GetMetaData(TEXT("Category"));
+		if (!Category.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("category"), Category);
+		}
+		if (Property->HasAnyPropertyFlags(CPF_EditConst))
+		{
+			Entry->SetBoolField(TEXT("readOnly"), true);
+		}
+		Properties.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("class"), Class->GetName());
+	Result->SetArrayField(TEXT("properties"), Properties);
+	if (Properties.Num() != Total)
+	{
+		Result->SetNumberField(TEXT("totalProperties"), Total);
+	}
+	return MakeOkResponse(Result);
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetAssetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString PropertyName;
+	FString Value;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("property"), PropertyName) ||
+		!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, property and value are required"));
+	}
+
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	if (!Asset)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("asset_not_found: %s"), *Path));
+	}
+
+	// The same helper the actor, component and class-default setters use, so a value that works in
+	// one of them works here and the silent-None guard applies to all four rather than three.
+	TSharedRef<FJsonObject> Response = SetPropertyFromString(
+		Asset, PropertyName, Value, &MakeOkResponse, &MakeErrorResponse);
+
+	// Only mark dirty if the write actually happened. Dirtying on failure leaves a user with an
+	// asset the editor wants to save and no change in it.
+	bool bOk = false;
+	if (Response->TryGetBoolField(TEXT("ok"), bOk) && bOk)
+	{
+		Asset->MarkPackageDirty();
+	}
+	return Response;
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleSaveAsset(const TSharedPtr<FJsonObject>& Params)

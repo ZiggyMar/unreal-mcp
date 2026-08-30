@@ -242,6 +242,36 @@ string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, a
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
 
+### The other half of "data": `unreal_read_asset_properties` / `unreal_set_asset_property`
+
+Counted rather than assumed. Asking the real project this is developed on what it is made of turned
+up **41 Data Assets** — and not one tool could see inside any of them. A Data Asset is the typed
+sibling of a Data Table and is how a great many teams store the numbers a designer tunes, so *"I have
+a change request, find it and change it"* stopped at the door for a whole class of the project's own
+configuration.
+
+```text
+unreal_read_asset_properties({ path: "/Game/Data/DA_EnemyTuning.DA_EnemyTuning" })
+unreal_set_asset_property({ path: "...", property: "MaxHealth", value: "250" })
+unreal_save_asset({ path: "..." })
+```
+
+The pair is deliberately generic over `UObject` rather than special-cased to Data Assets: the same
+two tools cover Curves, Sound Classes, Material Parameter Collections and anything else that is an
+asset with settings on it, because finding an `FProperty` and exporting or importing its text does
+not care what the outer class is. Five type-specific tools would have cost five tool definitions in
+every session's context to do one thing.
+
+Reading returns only what has `CPF_Edit` — what a human could change in the details panel — which is
+also exactly the set the setter can write, so the two agree by construction. Values come back spelled
+the way they must be written back, and the write path is the same `SetPropertyFromString` the actor,
+component and class-default setters use, so its silent-`None` guard now protects four callers rather
+than three.
+
+The full asset inventory that prompted this is in
+[FEATURE_BACKLOG.md](FEATURE_BACKLOG.md#asset-type-coverage) — 38 classes, with what is and is not
+reachable.
+
 ### Data Tables: the reason structs are worth making
 
 A struct describes what one item *is*; a Data Table holds every item there is. That pairing is the

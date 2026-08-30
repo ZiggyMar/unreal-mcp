@@ -178,3 +178,40 @@ them — because reading is where this project's leverage has always been, and i
 abilities is a larger second step.
 
 **Not started.** Recorded here so it is tracked rather than rediscovered.
+
+---
+
+## Asset-type coverage (measured 2026-08-30)
+
+Counted rather than guessed at. Asking the real project this is developed on what it actually
+contains gives a list of what "supports everything a normal human would have for this engine" has to
+mean. 38 asset classes are present; these are the ones that matter, with what the bridge can do.
+
+| class | count | reachable? |
+|---|---|---|
+| Blueprint | many | **full** — read, author, compile, review |
+| WidgetBlueprint | 152 | **full** — tree, properties, bindings |
+| MaterialFunction | 54 | partial — materials and instances yes, function graphs no |
+| **DataAsset** | **41** | **full** — read/set properties (added on the strength of this count) |
+| InputAction | 35 | partial — mappings can be listed and added |
+| **AnimMontage** | **27** | **none** |
+| World | 25 | partial — actors, components, spawn, levels |
+| SkeletalMesh | 22 | none (referenced only) |
+| **BlendSpace** (+1D, +AimOffset) | **29** | **none** |
+| SoundCue | 20 | none |
+| DataTable | 20 | **full** |
+| UserDefinedStruct / Enum | 26 | **full** |
+| NiagaraSystem / Emitter | 17 | none |
+| **AnimBlueprint** | **6** | **none** |
+| LevelSequence | 9 | none |
+| BehaviorTree / Blackboard | 3 | none |
+
+**The largest remaining gap is animation: 62 assets across AnimBlueprints, Montages and Blend
+Spaces, and nothing can read any of them.** For a game whose enemies walk, "the enemy is not
+animating" is a question this bridge cannot even look at — it can see the Blueprint that sets a
+variable and not the state machine that reads it. That is the next thing worth building, and the
+useful first cut is read-only: list an AnimBlueprint's state machines, their states and the
+transition rules, the way `read_blueprint_summary` does for an Event Graph.
+
+Niagara (17) and Level Sequences (9) are real but narrower; Behavior Trees (3) are barely used here
+and would matter much more on a project built around them.

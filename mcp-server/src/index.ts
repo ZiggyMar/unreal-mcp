@@ -334,6 +334,8 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   data: [
     "unreal_save_asset",
+    "unreal_read_asset_properties",
+    "unreal_set_asset_property",
     "unreal_create_data_table",
     "unreal_add_data_table_row",
     "unreal_set_data_table_row",
@@ -2370,6 +2372,60 @@ register(
     try {
       const result = await bridge.send("set_widget_property", { path, widget, property, value, onSlot });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_read_asset_properties",
+  {
+    title: "Read the settings inside a plain asset",
+    description:
+      "**The tool for Data Assets, and for any asset that is a bag of settings** - Curves, Sound Classes, Material " +
+      "Parameter Collections, Data Assets of every custom class. A Data Asset is how a great many teams store the " +
+      "numbers a designer tunes; it is the typed sibling of a Data Table, and nothing else here can see inside one.\n\n" +
+      "Returns each editable property with its type, current value and details-panel category, so \"what does this " +
+      "thing actually hold\" is one call. Engine bookkeeping is left out - only what a human could edit is returned, " +
+      "which is also exactly the set unreal_set_asset_property can write.\n\n" +
+      "Use `match` on a big asset to ask about one setting rather than reading all of them. Find paths with " +
+      'unreal_list_assets({ className: "DataAsset" }) or by the asset\'s own class name.',
+    inputSchema: {
+      path: z.string().describe('Asset path, e.g. "/Game/Data/DA_EnemyTuning.DA_EnemyTuning".'),
+      match: z.string().optional().describe('Only properties whose name contains this, e.g. "Damage".'),
+    },
+  },
+  async ({ path, match }) => {
+    try {
+      return jsonResult(await bridge.send("read_asset_properties", { path, match }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_asset_property",
+  {
+    title: "Change one setting inside a plain asset",
+    description:
+      "Writes one property on a Data Asset, Curve, Sound Class or any other asset that carries settings. This is the " +
+      "change-request path for configuration that does not live in a Blueprint or a Data Table.\n\n" +
+      "**Read it first with unreal_read_asset_properties.** That gives you the exact property name and the exact " +
+      "spelling of its current value, and matching that spelling is the whole game: struct values are comma triples " +
+      'like "0, -90, 0", enums take the entry name, and an object reference takes a full asset path. A value the ' +
+      "engine cannot parse is rejected rather than silently written as None.\n\n" +
+      "Nothing reaches disk until unreal_save_asset.",
+    inputSchema: {
+      path: z.string().describe('Asset path, e.g. "/Game/Data/DA_EnemyTuning.DA_EnemyTuning".'),
+      property: z.string().describe("Exact property name, as unreal_read_asset_properties spells it."),
+      value: z.string().describe("The new value, spelled the way the current one is spelled."),
+    },
+  },
+  async ({ path, property, value }) => {
+    try {
+      return jsonResult(await bridge.send("set_asset_property", { path, property, value }));
     } catch (err) {
       return errorResult(err);
     }
