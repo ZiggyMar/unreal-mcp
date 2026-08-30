@@ -247,6 +247,27 @@ The mapping this produced for the project it was built on is written up in
 evidence for saying so, and one hypothesis that was tested and found wrong before anything was
 changed.
 
+### A connection that quietly breaks a chain now says so
+
+An exec **output** pin holds one link. Connecting a new one silently drops whatever was there, the
+graph still compiles, and the chain past the old target simply stops running — a broken Blueprint
+reporting zero errors.
+
+This tool did it to a function it was building: wiring the Return, it matched *every* node titled
+`Set CurrentSkinRow`, including the clear at the top, redirected that node.s exec to the Return, and
+orphaned everything between. The compile said **0 errors, 0 warnings**. Only reading the graph back
+found it.
+
+`connect_pins` and `build_graph` now report what a link displaced:
+
+```text
+This replaced an existing execution link to Get Data Table Row Names.execute, which is now
+unreachable unless something else runs it. A Blueprint with an orphaned chain still compiles
+with zero errors, so check that this is what you meant.
+```
+
+`connected: true` on its own was not the whole truth when the connection removed one.
+
 ### Finding the system that is actually live: `unreal_trace_function_calls`
 
 This one exists because of a mistake, and the mistake is worth writing down.

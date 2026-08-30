@@ -362,6 +362,44 @@ static void NotifyConnectionChanged(UEdGraphPin* Pin)
 	}
 }
 
+// What an execution link is about to displace.
+//
+// An exec OUTPUT pin holds one link. Connecting a new one silently drops whatever was there, the
+// graph still compiles, and the chain past the old target simply stops running - which is a broken
+// Blueprint that reports zero errors. This tool did exactly that to a function it was building: it
+// redirected the first node's exec to the Return, orphaning everything between, and the compile said
+// 0 errors 0 warnings. Only reading the graph back afterwards found it.
+//
+// So the reply says what was displaced. "connected: true" on its own is not the whole truth when the
+// connection removed one.
+static FString DescribeDisplacedLinks(const UEdGraphPin* SourcePin)
+{
+	if (!SourcePin || SourcePin->Direction != EGPD_Output ||
+		SourcePin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec || SourcePin->LinkedTo.Num() == 0)
+	{
+		return FString();
+	}
+	TArray<FString> Lost;
+	for (const UEdGraphPin* Linked : SourcePin->LinkedTo)
+	{
+		if (Linked && Linked->GetOwningNode())
+		{
+			Lost.Add(FString::Printf(TEXT("%s.%s"),
+				*Linked->GetOwningNode()->GetNodeTitle(ENodeTitleType::ListView).ToString().Replace(TEXT("\n"), TEXT(" ")),
+				*Linked->PinName.ToString()));
+		}
+	}
+	if (Lost.Num() == 0)
+	{
+		return FString();
+	}
+	return FString::Printf(
+		TEXT("This replaced an existing execution link to %s, which is now unreachable unless something else "
+			 "runs it. A Blueprint with an orphaned chain still compiles with zero errors, so check that this "
+			 "is what you meant."),
+		*FString::Join(Lost, TEXT(", ")));
+}
+
 UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString& OutError)
 {
 	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *Path);
@@ -2388,6 +2426,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	SourceNode->Modify();
 	TargetNode->Modify();
 
+	const FString Displaced = DescribeDisplacedLinks(SourcePin);
 	const bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
 	if (bConnected)
 	{
@@ -2407,6 +2446,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	if (!ConnectResponse.Message.IsEmpty())
 	{
 		Result->SetStringField(TEXT("note"), ConnectResponse.Message.ToString());
+	}
+	if (!Displaced.IsEmpty())
+	{
+		Result->SetStringField(TEXT("displaced"), Displaced);
 	}
 	return MakeOkResponse(Result);
 }
@@ -3255,6 +3298,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 	}
 
 	TSharedRef<FJsonObject> NodesOut = MakeShared<FJsonObject>();
+	// Execution links this batch quietly replaced. A build reporting "connectionsMade: 20" while it
+	// orphaned an existing chain is telling the truth and hiding the important half.
+	TArray<FString> DisplacedReports;
 	int32 ConnectionsMade = 0;
 	// Near-miss pin names that were accepted, so the caller learns the real ones instead of being
 	// quietly carried. Silent forgiveness teaches a model nothing and hides real mistakes.
@@ -3466,6 +3512,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 				SourceNode->Modify();
 				TargetNode->Modify();
 				const UEdGraphSchema* Schema = Graph->GetSchema();
+				// Captured BEFORE the link is made, because afterwards the old one is gone.
+				const FString DisplacedBefore = DescribeDisplacedLinks(SourcePin);
 				const FPinConnectionResponse ConnectResponse = Schema->CanCreateConnection(SourcePin, TargetPin);
 				if (ConnectResponse.Response == CONNECT_RESPONSE_DISALLOW)
 				{
@@ -3492,6 +3540,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 				NotifyConnectionChanged(TargetPin);
 				MadeLinks.Add(TPair<UEdGraphPin*, UEdGraphPin*>(SourcePin, TargetPin));
 				++ConnectionsMade;
+				if (!DisplacedBefore.IsEmpty())
+				{
+					DisplacedReports.Add(FString::Printf(TEXT("connection %d: %s"), i, *DisplacedBefore));
+				}
 			}
 		}
 
@@ -3565,6 +3617,15 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetObjectField(TEXT("nodes"), NodesOut);
 	Result->SetNumberField(TEXT("connectionsMade"), ConnectionsMade);
+	if (DisplacedReports.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> Entries;
+		for (const FString& Report : DisplacedReports)
+		{
+			Entries.Add(MakeShared<FJsonValueString>(Report));
+		}
+		Result->SetArrayField(TEXT("displaced"), Entries);
+	}
 	if (PinCorrections.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> CorrectionValues;
