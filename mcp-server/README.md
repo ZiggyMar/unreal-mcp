@@ -1007,6 +1007,24 @@ that removes the events leaves a list of function calls belonging to nothing.
 A graph smaller than the cap comes back exactly as it always did, with no truncation bookkeeping
 attached. Only the graphs that would have cost six figures are touched at all.
 
+**The other two big reads got the same treatment**, and the breakdown decided the fix in each case
+rather than a guess:
+
+| call | before | after |
+| --- | --- | --- |
+| `unreal_explain_graph` | 13,294 | **3,804** |
+| `unreal_list_blueprints` (339 Blueprints) | 15,149 | **4,508** |
+| `unreal_list_blueprints` `match: "Enemy"` | — | **472** |
+
+For `explain_graph` the measurement was the argument: of 13,294 tokens, the **prose was 2,043** and
+the structured `chains` array was **7,296** across 89 chains — largely restating the prose, and
+carrying every visited node id. The prose is what the tool exists to produce, so it is untouched;
+the array is capped and drops the ids. `audit` and `review` call `explainGraph()` directly and still
+receive all of it.
+
+For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
+is, and `match` answers that for a thirtieth of the cost.
+
 **Replies are budgeted too, by `npm run check:replies`.** `check:profiles` guards the standing cost —
 what the tool *definitions* cost before a conversation starts. Nothing guarded what a tool costs when
 it *answers*, and that gap was not hypothetical: `unreal_list_tools`, whose entire purpose is keeping

@@ -641,20 +641,48 @@ register(
   {
     title: "List Unreal Blueprints",
     description:
-      "Lists Blueprint assets in the open Unreal project via the AssetRegistry (project-wide, or scoped to a path prefix). " +
-      "Returns name, asset path, and parent class for each, not graph contents. Use this to find a Blueprint before " +
-      "drilling into it with unreal_list_blueprint_graphs.",
+      "Blueprint assets in the open project: name, path and parent class, not graph contents. Find one here, " +
+      "then drill in with unreal_list_blueprint_graphs.",
     inputSchema: {
       pathPrefix: z
         .string()
         .optional()
-        .describe('Optional content-path prefix to scope the search, e.g. "/Game/Blueprints". Defaults to "/Game".'),
+        .describe('Scope to a content path, e.g. "/Game/Blueprints". Defaults to "/Game".'),
+      match: z
+        .string()
+        .optional()
+        .describe('Filter by name, path or parent class, e.g. "Enemy".'),
+      maxResults: z.number().optional().describe("Cap on results. Default 100."),
     },
   },
-  async ({ pathPrefix }) => {
+  async ({ pathPrefix, match, maxResults }) => {
     try {
       const result = await bridge.send<ListBlueprintsResult>("list_blueprints", { pathPrefix });
-      return jsonResult(result);
+      const all = result.blueprints ?? [];
+      const needle = (match ?? "").trim().toLowerCase();
+      const filtered = needle
+        ? all.filter((b) => `${b.name ?? ""} ${b.path ?? ""} ${b.parentClass ?? ""}`.toLowerCase().includes(needle))
+        : all;
+      const limit = Math.max(1, Math.min(maxResults ?? 100, 5000));
+
+      if (filtered.length <= limit) {
+        return jsonResult(needle ? { ...result, blueprints: filtered, totalBlueprints: all.length } : result);
+      }
+      // 339 Blueprints came to 15,149 tokens on a real project. Enumerating a whole project is
+      // rarely the question; finding something in it usually is, and search_project answers that
+      // for a sixth of the cost.
+      return jsonResult({
+        ...result,
+        blueprints: filtered.slice(0, limit),
+        totalBlueprints: all.length,
+        shown: limit,
+        omitted: filtered.length - limit,
+        truncated: true,
+        next:
+          `${all.length} Blueprints in this project; ${limit} listed. Narrow with \`match\` (name, path ` +
+          `or parent class) or \`pathPrefix\`, use unreal_search_project to find one by what it contains, ` +
+          `or raise \`maxResults\`.`,
+      });
     } catch (err) {
       return errorResult(err);
     }
@@ -698,15 +726,50 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
       graphName: z.string().optional().describe('Graph to explain. Defaults to "EventGraph".'),
+      maxChains: z
+        .number()
+        .optional()
+        .describe("Entry-point chains listed in the structured result. Defaults to 25; the prose always covers every one."),
     },
   },
-  async ({ path, graphName }) => {
+  async ({ path, graphName, maxChains }) => {
     try {
       const summary = await bridge.send("read_blueprint_graph_summary", {
         path,
         graphName: graphName ?? "EventGraph",
       });
-      return jsonResult(explainGraph(summary as never));
+      const explained = explainGraph(summary as never);
+
+      // Measured on a real Blueprint: 13,294 tokens, of which the `chains` array was 7,296 across
+      // 89 chains and the prose - the thing this tool exists to produce - was 2,043. The array
+      // largely restates the prose and carries every visited node id, which the caller of THIS tool
+      // does not need: audit and review use explainGraph() directly and still get all of it.
+      const limit = Math.max(1, Math.min(maxChains ?? 25, 500));
+      const chains = explained.chains.slice(0, limit).map((c) => ({
+        entry: c.entry,
+        entryId: c.entryId,
+        steps: c.steps,
+        ...(c.truncated ? { truncated: true } : {}),
+      }));
+      const unreachableShown = explained.unreachable.slice(0, 20);
+
+      return jsonResult({
+        path: explained.path,
+        graphName: explained.graphName,
+        nodeCount: explained.nodeCount,
+        text: explained.text,
+        chains,
+        ...(explained.chains.length > chains.length
+          ? {
+              chainsOmitted: explained.chains.length - chains.length,
+              chainsNote: `${explained.chains.length} entry points in this graph; ${chains.length} listed. The prose above covers all of them. Raise maxChains for the rest.`,
+            }
+          : {}),
+        unreachable: unreachableShown,
+        ...(explained.unreachable.length > unreachableShown.length
+          ? { unreachableOmitted: explained.unreachable.length - unreachableShown.length }
+          : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }
