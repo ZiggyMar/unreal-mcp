@@ -156,3 +156,25 @@ one document holds the whole backlog.
 3. **M5 node catalog** as the main event (see [M5_DESIGN.md](M5_DESIGN.md)).
 4. Everything else as it becomes relevant, with the agent-workflow Skill worth doing early since it
    is nearly free and improves real-world reliability.
+
+---
+
+## Gameplay Ability System (identified 2026-08-30, from Epic's 5.8 toolset list)
+
+**The finding:** Epic's first-party plugin ships an `AttributeSetToolset` in a `GASToolsets` plugin.
+This bridge has nothing for GAS — verified by grep across the whole repo, C++ and TypeScript: no
+mention of `GameplayAbility`, `AttributeSet`, or gameplay effects anywhere.
+
+**Why it matters:** GAS is how a large share of serious UE projects model health, damage, cooldowns,
+stats and status effects. On such a project, "reduce the player's health when hit" is not a
+Blueprint variable question at all — it is an attribute set, a gameplay effect and an ability. A
+bridge that cannot see any of that will confidently give the wrong answer rather than say it cannot
+look, which is worse than not supporting it.
+
+**Scope, honestly:** this is a subsystem, not a tool. A useful first cut is read-only — list the
+attribute sets a project defines, their attributes and defaults, and which gameplay effects modify
+them — because reading is where this project's leverage has always been, and it is what makes the
+"I tell it a bug in plain text" workflow work on a GAS project at all. Authoring effects and
+abilities is a larger second step.
+
+**Not started.** Recorded here so it is tracked rather than rediscovered.

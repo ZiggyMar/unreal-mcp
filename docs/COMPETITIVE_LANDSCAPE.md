@@ -310,6 +310,12 @@ Measured: 4 tools / ~1.2k tokens standing, against 80 / ~25.5k for `full`.
 - **UE 5.6.** It is 5.8-only. There is no first-party equivalent for 5.6, which this project also
   targets from one source tree.
 - **MCP Resources and Prompts.** Not advertised by the shipped toolsets.
+- **Letting a model see.** `unreal_screenshot` captures the viewport, downscales it to a long-edge
+  budget and returns a real MCP image content block. Verified live on 2026-08-30 against the running
+  editor: an 876x264 viewport came back as a valid 438x132 PNG, roughly 77 image tokens. This was
+  listed below as something Epic did and we did not, for longer than it was true. What we still
+  cannot show a model is a *graph* - only the viewport is renderable, so `unreal_explain_graph` and
+  the node summary remain the only way to see Blueprint logic.
 
 ### What it does that we do not
 
@@ -317,10 +323,12 @@ Measured: 4 tools / ~1.2k tokens standing, against 80 / ~25.5k for `full`.
   tools with no changes to the server. Our 81 tools are a fixed, hand-curated surface. That is a
   deliberate trade — every tool here is documented, parity-checked and measured — but it does mean
   a studio with its own pipeline cannot expose it through this bridge without patching the repo.
-- **Screenshot capture, and image results generally.** Epic's toolsets can hand an agent an image.
-  This bridge is text-only and gives a model no way to *see* anything: not the viewport, not a
-  graph, not a material preview. For a multimodal frontier model that is a real missing sense, and
-  it is the most interesting gap in this list.
+- **Gameplay Ability System.** Epic ships an `AttributeSetToolset` in its GASToolsets plugin. We
+  have nothing for GAS: no attribute sets, no gameplay effects, no ability blueprints. For a project
+  built on GAS - which is a large share of serious UE projects - that is a whole subsystem this
+  bridge cannot see or author. This is the most substantial remaining gap in this list.
+- **Third-party toolset registration at runtime.** Covered above; repeated here because it is what
+  makes the GAS gap self-healing for them and not for us.
 - **Agent Skills.** Instruction bundles (`AgentSkill`, `AgentSkillToolset`) that teach an agent how
   to use a toolset correctly — workflow steps, pitfalls, safety constraints, verification steps —
   shipped as assets rather than prose. We cover the same ground with the server `instructions`
