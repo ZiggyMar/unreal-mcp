@@ -52,6 +52,38 @@ reliably knows UE's exact node names, pin names, and function signatures.
 - **Competitive survey** of 9 other Unreal MCP projects, including which of their ideas are worth
   adopting. See [docs/COMPETITIVE_LANDSCAPE.md](docs/COMPETITIVE_LANDSCAPE.md).
 
+- **The token cost of using this server, measured end to end and guarded.** This was the largest
+  gap in the project and it was invisible because nothing measured it. Tool definitions cost 25,477
+  tokens on every request; the `search` profile stands four tools at ~1,203 and hands back real typed
+  schemas on demand. Worse was hiding in the replies: `read_blueprint_summary` on a real 807-node
+  graph returned **126,477 tokens** — 63% of a 200k window in one call, from a project whose premise
+  is that a model never sees a raw engine dump. Now 9,085, with the full graph one parameter away.
+  `list_blueprints` 15,149 → 4,508, `explain_graph` 13,294 → 3,804, `list_tools` 5,523 → 338,
+  `enable_tools` 700 → 71. Four unbounded reads, bounded in four different ways, because the
+  breakdown of each said something different. Guarded by `check:profiles` and `check:replies` in CI,
+  and by `measure:reads` against a live editor.
+- **The server tells the model how to work.** MCP's `instructions` field was empty, so call order and
+  the exact strings no model can recall (`self`, `then_0`, `Exec`) arrived only via a prompt the
+  model had to choose to pull, or via a failed call. It is profile-aware, and on `search` it explains
+  why only four tools are listed.
+- **Data Tables are a first-class surface**: read, add, change (`set_data_table_row`) and delete
+  (`remove_data_table_row`, which returns what it deleted so the delete is reversible). Plus
+  `check_data_tables`, which finds rows whose asset reference is empty while sibling rows fill it in.
+  All of it exists because a shipped build lost most of its enemy spawns to exactly that, and the
+  audit that answers "where are the bugs" read only Blueprint graphs and looked straight past it.
+- **The C++ half of a project is reachable.** `find_source` maps the modules and locates the file and
+  line that declares a symbol, returning locations rather than contents — every client that drives
+  this already reads files better than a tool wrapper could; what none of them knew was *where*.
+- **A model can look at the viewport.** `screenshot` returns a downscaled frame, because there is a
+  class of question — did that enemy move, did the widget land right — that text cannot settle.
+- **Compile errors name the node and the pin** they are about, instead of prose naming a node title
+  that occurs nine times in the graph.
+- **`verify_feature`**: one call that compiles and reviews every asset written this session, taken
+  from the change journal rather than from memory, and sweeps Data Tables too.
+- **`find_orphans`**: actors that lost the partner they depend on, paired by position rather than by
+  the reference — because the reference is the broken thing. Found a real one in a shipped level.
+
+
 ## M4: finish UE 5.6 support
 
 The plugin compiles clean against UE 5.6 with **zero source changes** (verified by diffing all 10
@@ -105,6 +137,11 @@ never dump the whole thing into a response.
 
 ## M6: expand context scope beyond Blueprints
 
+**Partly done.** Data Tables, level actors and native C++ are reachable now (see Done above).
+What is still Blueprint-only is `FMCPProjectIndex` itself: Levels, GameMode/GameState class
+assignments and project settings are read live per call rather than indexed, so they cannot be
+searched the way Blueprints can.
+
 `FMCPProjectIndex` currently indexes only Blueprint assets. "Understands the project better than
 you do" requires more than graph structure: Level/World assets (actors placed in a level, their
 classes and key properties), GameMode/GameState/PlayerController class assignments, and probably
@@ -120,6 +157,13 @@ deliberately: sensible node layout rather than everything at the origin, comment
 related logic, and meaningful naming as the graph is built rather than after.
 
 ## M8: the actual agentic loop
+
+**Partly done, and the remaining half is not a tool.** The loop now has its missing pieces:
+`plan_feature` to start, `build_graph` to author, compile errors that name the node when it goes
+wrong, `verify_feature` to answer "is this actually finished", and `screenshot` to look at the
+result. What has not been done is running an assistant unsupervised across a real feature and
+measuring where it still fails - which, as the note below already said, costs nothing to attempt
+and should happen before any "plan and execute" meta-tool is built.
 
 Once M5 and M6 exist, "give a one-line feature request, get a correct and complete implementation
 back" becomes a question of good agent behavior on top of solid tools rather than a new
