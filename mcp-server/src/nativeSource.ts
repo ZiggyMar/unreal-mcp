@@ -69,6 +69,11 @@ export function findSourceRoots(projectFile: string): SourceRoot[] {
   const projectDir = dirname(projectFile);
   const roots: SourceRoot[] = [];
 
+  // A directory under Source/ is a module when it declares itself one with a .Build.cs. That is how
+  // UnrealBuildTool decides, and treating every directory as a module gets it wrong in a way that
+  // misleads: plugins that put Public/ and Private/ straight under Source/ were being reported as
+  // modules called "Public" and "Private", so a model asking where new code belongs was offered two
+  // directories that are not modules at all. Measured on a real project: 26 "modules" became 12.
   const addModulesUnder = (sourceDir: string, kind: "project" | "plugin") => {
     let entries: string[];
     try {
@@ -79,7 +84,9 @@ export function findSourceRoots(projectFile: string): SourceRoot[] {
     for (const entry of entries) {
       const full = join(sourceDir, entry);
       try {
-        if (statSync(full).isDirectory()) {
+        if (!statSync(full).isDirectory()) continue;
+        const declaresItself = readdirSync(full).some((f) => f.toLowerCase().endsWith(".build.cs"));
+        if (declaresItself) {
           roots.push({ module: entry, dir: full, kind });
         }
       } catch {
@@ -178,6 +185,14 @@ export interface SearchOptions {
   limit?: number;
   /** Only search files whose name contains this. */
   fileFilter?: string;
+  /**
+   * How many bare mentions to include. Declarations and definitions are never capped by this.
+   *
+   * Measured: searching a common symbol returned 30 matches of which 25 were mentions - the kind
+   * that says "this file also refers to it" and answers nothing. They are ranked last, so they were
+   * already the least useful thing in the reply while being most of its cost.
+   */
+  maxMentions?: number;
 }
 
 /**
@@ -191,7 +206,7 @@ export function searchSource(
   roots: SourceRoot[],
   symbol: string,
   options: SearchOptions = {}
-): { matches: SourceMatch[]; filesScanned: number; totalMatches: number; truncated: boolean } {
+): { matches: SourceMatch[]; filesScanned: number; totalMatches: number; mentionsOmitted: number; truncated: boolean } {
   const projectDir = dirname(projectFile);
   const limit = options.limit ?? 40;
   const escaped = escapeRe(symbol);
@@ -227,10 +242,18 @@ export function searchSource(
   }
 
   all.sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.file.localeCompare(b.file) || a.line - b.line);
+
+  // Keep every declaration and definition; keep only a sample of the bare mentions.
+  const maxMentions = options.maxMentions ?? 5;
+  const located = all.filter((m) => m.kind !== "mention");
+  const mentions = all.filter((m) => m.kind === "mention");
+  const kept = [...located, ...mentions.slice(0, maxMentions)].slice(0, limit);
+
   return {
-    matches: all.slice(0, limit),
+    matches: kept,
     filesScanned: files.length,
     totalMatches: all.length,
-    truncated: all.length > limit,
+    mentionsOmitted: Math.max(0, mentions.length - maxMentions),
+    truncated: all.length > kept.length,
   };
 }

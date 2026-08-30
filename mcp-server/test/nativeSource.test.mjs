@@ -20,6 +20,10 @@ function makeProject() {
 
   write("MyGame.uproject", "{}");
 
+  // A module is a directory under Source/ that declares itself with a .Build.cs. That is how
+  // UnrealBuildTool decides, and it is why Public/ and Private/ are not modules.
+  write("Source/MyGame/MyGame.Build.cs", "public class MyGame : ModuleRules {}");
+
   write(
     "Source/MyGame/Public/MyCharacter.h",
     [
@@ -52,7 +56,14 @@ function makeProject() {
   );
 
   write("Source/MyGameEditor/MyGameEditor.Build.cs", "public class MyGameEditor {}");
+  write("Plugins/Cool/Source/CoolRuntime/CoolRuntime.Build.cs", "public class CoolRuntime : ModuleRules {}");
   write("Plugins/Cool/Source/CoolRuntime/CoolThing.h", "class COOL_API UCoolThing {};");
+
+  // A plugin that puts Public/ and Private/ straight under Source/, with no module folder between.
+  // These are NOT modules; reporting them as such offered a model two places to put new code that
+  // do not exist as modules at all. Measured on a real project: 26 "modules" were really 15.
+  write("Plugins/Flat/Source/Public/FlatThing.h", "class FLAT_API UFlatThing {};");
+  write("Plugins/Flat/Source/Private/FlatThing.cpp", "// nothing");
 
   // Build output. If any of this is ever searched, the scan is wrong.
   write("Binaries/Win64/MyGame.dll", "AMyCharacter Health ApplyDamage");
@@ -165,6 +176,30 @@ test("a project with no C++ at all is not an error", () => {
     assert.deepEqual(findSourceRoots(projectFile), []);
     const { matches } = searchSource(projectFile, [], "Anything");
     assert.deepEqual(matches, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare mentions are sampled, declarations and definitions never are", () => {
+  // Searching a common symbol returned 30 matches of which 25 were bare mentions - the kind that
+  // says "this file also refers to it" and answers nothing, ranked last and costing most of the
+  // reply. Capping them keeps every hit that locates the thing.
+  const { root, projectFile } = makeProject();
+  try {
+    // Bare mentions: lines that reference the symbol without declaring or defining it.
+    const noisy = ["void Unrelated() {", ...Array.from({ length: 30 }, (_, i) => `  Register(AMyCharacter);`), "}"];
+    writeFileSync(join(root, "Source/MyGame/Private/Noise.cpp"), noisy.join("\n"), "utf8");
+
+    const roots = findSourceRoots(projectFile);
+    const res = searchSource(projectFile, roots, "AMyCharacter");
+    const mentions = res.matches.filter((m) => m.kind === "mention");
+    assert.ok(mentions.length <= 5, `mentions should be sampled, got ${mentions.length}`);
+    assert.ok(
+      res.matches.some((m) => m.kind === "class"),
+      "the declaration must survive the cap"
+    );
+    assert.ok(res.totalMatches > res.matches.length, "the total is still reported");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

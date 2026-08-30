@@ -579,6 +579,19 @@ It returns **locations, never contents**: a path, a line number, and the one lin
 whole-project symbol lookup costs a few hundred tokens instead of several thousand, and the model
 reads what it actually wants with the tools it already has.
 
+Two things came out of measuring it against a real project rather than trusting it:
+
+**A module is a directory with a `.Build.cs` in it**, which is how UnrealBuildTool decides. Treating
+every directory under `Source/` as a module reported plugins that put `Public/` and `Private/`
+straight under `Source/` as modules *called* "Public" and "Private" — so a model asking where new
+code belongs was offered two directories that are not modules at all. 26 became 15, and the module
+map went from 883 tokens to 556.
+
+**Bare mentions are sampled; declarations and definitions never are.** Searching a common symbol
+returned 30 matches of which 25 were the kind that says "this file also refers to it" and answers
+nothing — ranked last, and most of the cost. Keeping five of them took that reply from 1,304 tokens
+to 507 while keeping every class and definition, and `mentionsOmitted` says how many were left out.
+
 A Blueprint-only project is not an error — it says so plainly and points back at the Blueprint
 tools.
 
