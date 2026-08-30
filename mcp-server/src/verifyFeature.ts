@@ -54,6 +54,22 @@ function isBlueprintPath(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("(");
 }
 
+/**
+ * One asset, one spelling.
+ *
+ * The same Blueprint reaches the journal under two names: create_blueprint records the package path
+ * (`/Game/X/BP_Alpha`) and build_graph records the object path (`/Game/X/BP_Alpha.BP_Alpha`). A Set
+ * of raw strings treats those as two assets, so a two-Blueprint feature was compiled and reviewed
+ * four times and every blocker was reported twice - which reads as two separate problems and invites
+ * a model to fix the same thing twice. Measured on a real two-asset trial, not reasoned about.
+ */
+function canonicalAssetPath(path: string): string {
+  const trimmed = path.replace(/\/+$/, "");
+  const lastSlash = trimmed.lastIndexOf("/");
+  const name = lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
+  return name.includes(".") ? trimmed : `${trimmed}.${name}`;
+}
+
 export interface VerifyOptions {
   /** Paths to check. Defaults to every asset the session actually wrote to. */
   paths?: string[];
@@ -77,9 +93,9 @@ export async function verifyFeature(
   const fromJournal = (options.touched ?? []).filter(isBlueprintPath);
   const scope = explicit.length > 0 ? "the paths you named" : "every Blueprint written this session";
 
-  // De-duplicated, because a feature touches the same asset many times and checking it four times
-  // costs four times as much and says the same thing.
-  const paths = [...new Set(explicit.length > 0 ? explicit : fromJournal)];
+  // De-duplicated by CANONICAL path, because a feature touches the same asset many times and under
+  // more than one spelling; checking it four times costs four times as much and says the same thing.
+  const paths = [...new Set((explicit.length > 0 ? explicit : fromJournal).map(canonicalAssetPath))];
 
   if (paths.length === 0) {
     return {

@@ -210,3 +210,29 @@ test("Blueprints in scope are not reported as unreadable Data Tables", async () 
   assert.deepEqual(r.dataTableNulls, []);
   assert.deepEqual(r.blockers, []);
 });
+
+test("one asset under two spellings is checked once, not twice", async () => {
+  // The journal records the same Blueprint two ways: create_blueprint logs the package path and
+  // build_graph logs the object path. Measured on a real two-asset trial, a Set of raw strings made
+  // that four assets, and every blocker appeared twice - which reads as two separate problems.
+  let compiles = 0;
+  const bridge = {
+    async send(cmd, params = {}) {
+      if (cmd === "compile_blueprint") {
+        compiles++;
+        return { success: true, errorCount: 0, warningCount: 0, status: "ok", messages: [] };
+      }
+      if (cmd === "list_blueprint_graphs") return { graphs: [] };
+      if (cmd === "list_variables") return { variables: [] };
+      if (cmd === "list_data_table_rows") throw new Error("data_table_not_found");
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+
+  const r = await verifyFeature(bridge, {
+    touched: ["/Game/X/BP_Alpha", "/Game/X/BP_Alpha.BP_Alpha", "/Game/X/BP_Beta.BP_Beta", "/Game/X/BP_Beta"],
+  });
+
+  assert.deepEqual(r.checked, ["/Game/X/BP_Alpha.BP_Alpha", "/Game/X/BP_Beta.BP_Beta"]);
+  assert.equal(compiles, 2, "two assets, two compiles - not four");
+});

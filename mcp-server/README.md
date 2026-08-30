@@ -814,6 +814,13 @@ feature is not done, whatever the last individual call said. An asset that canno
 reported as a blocker rather than skipped, because a check that quietly drops what it could not
 examine is worse than no check.
 
+**One asset, one spelling.** The same Blueprint reaches the journal under two names —
+`create_blueprint` records the package path (`/Game/X/BP_Alpha`), `build_graph` records the object
+path (`/Game/X/BP_Alpha.BP_Alpha`). De-duplicating raw strings treated those as two assets, so a
+two-Blueprint feature was compiled and reviewed **four** times and every blocker appeared **twice** —
+which reads as two separate problems and invites fixing the same thing twice. Paths are canonicalised
+now. Found by running a real two-Blueprint trial, not by reading the code.
+
 **It checks Data Tables too, and that was learned the hard way.** The most expensive bug this tool
 has seen was not in a graph at all — a row's class reference cleared to `None`, which the engine
 resolves to null and the consumer silently ignores. A verification step that only compiled Blueprints
