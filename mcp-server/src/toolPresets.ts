@@ -67,6 +67,9 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // handle to an Actor that replicates itself is ordinary bookkeeping, and the only way to know
       // which it is, is to read whether that Actor replicates.
       "unreal_read_class_defaults",
+      // "The character is not animating" starts as a diagnosis, and a Blueprint only holds half the
+      // answer: it sets the Speed variable, and the state machine decides what Speed means.
+      "unreal_read_anim_blueprint",
       // The fix half. A preset that can only diagnose leaves the model to enable more before it can
       // act on what it just found, which is the round trip this is meant to remove.
       "unreal_build_graph",

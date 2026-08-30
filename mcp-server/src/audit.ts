@@ -33,6 +33,7 @@ import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { findUncalledParentEvents } from "./parentCalls.js";
+import { findAnimStateMachineFaults } from "./animAudit.js";
 import { explainGraph } from "./explainGraph.js";
 
 /** What each finding is likely to cost, and why it sits where it does. */
@@ -43,6 +44,11 @@ export const FINDING_COST: Record<string, number> = {
   // is not a bug at all: an object reference to an Actor that replicates itself. Costing it at 100
   // put correct code at the top of the audit, where a model acts on it first.
   "server-writes-unreplicated-handle": 15,
+  // A state nothing leaves freezes the character in one pose for the rest of the round, and the
+  // machine looks finished in the editor because the state IS wired - just not outward.
+  "anim-state-no-exit": 80,
+  // Draws exactly like a working transition and behaves like a wall.
+  "anim-transition-never-fires": 70,
   // Costs the most that any of these can cost: the game builds, hosts, searches, reports no error,
   // and the lobby list is empty. It cannot be reproduced on one machine.
   "session-lan-mismatch": 100,
@@ -80,6 +86,10 @@ const WHY_IT_COSTS: Record<string, string> = {
     "Reads as 'it works for the host'. Nobody can reproduce it alone, which is why it survives to a showcase.",
   "server-writes-unreplicated-handle":
     "Usually fine: if the referenced Actor replicates itself, clients already see it and the variable is just the server's handle. Worth one look, not a rewrite.",
+  "anim-state-no-exit":
+    "The character enters the pose and stays in it. Reads as 'he freezes after the dodge', and nothing warns.",
+  "anim-transition-never-fires":
+    "An empty rule graph draws like a working transition. The destination state is simply unreachable through it.",
   "unhandled-cast-failure":
     "A failed cast does not error. The chain simply stops, so the feature does not happen and there is nothing to search for.",
   "level-sweep-every-frame": "Walks every actor in the level, 60+ times a second.",
@@ -363,6 +373,42 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       // One unreadable Blueprint must not cost the caller the audit.
       unreadable.push({ name: bp.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
     }
+  }
+
+  // Animation. list_blueprints returns Blueprint assets, and an AnimBlueprint is a different class,
+  // so until now this audit could not see a single state machine in the project - "find every bug"
+  // stopped at the door of the half where "the character is not animating" is usually answered.
+  try {
+    const animAssets = await bridge.send<{ assets?: Array<{ name: string; path: string }> }>("list_assets", {
+      className: "AnimBlueprint",
+      maxResults: 200,
+    });
+    for (const asset of animAssets.assets ?? []) {
+      try {
+        const anim = await bridge.send<Record<string, unknown>>("read_anim_blueprint", { path: asset.path });
+        for (const finding of findAnimStateMachineFaults(anim, asset.name)) {
+          findings.push({
+            blueprint: asset.name,
+            path: asset.path,
+            graph: "AnimGraph",
+            check: finding.check,
+            severity: finding.severity,
+            message: finding.message,
+            ...(finding.observed ? { observed: finding.observed } : {}),
+            fix: finding.fix,
+            cost: FINDING_COST[finding.check] ?? 1,
+          });
+        }
+      } catch (err) {
+        unreadable.push({
+          name: asset.name,
+          error: err instanceof Error ? err.message.slice(0, 140) : String(err),
+        });
+      }
+    }
+  } catch {
+    // An older bridge has no read_anim_blueprint. The rest of the audit is still worth returning,
+    // and a hard failure here would make upgrading the server a prerequisite for auditing at all.
   }
 
   // A child against its parent. Both have to have been read, which is why this waits until here.

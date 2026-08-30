@@ -267,6 +267,20 @@ like a wall. An Anim Blueprint with no state machines at all is normal rather th
 reply says so instead of returning a bare empty list, so a caller does not go hunting for a problem
 that is not there.
 
+**`unreal_audit_project` now scans Anim Blueprints too**, which it could not do before this tool
+existed: `list_blueprints` returns Blueprint assets and an `AnimBlueprint` is a different class, so
+"find every bug" stopped at the door of the half where *"the character is not animating"* is usually
+answered. It checks the two ways a state machine breaks silently — a state **nothing leaves**, which
+freezes the character in one pose for the rest of the round, and a transition with an **empty rule**,
+which draws exactly like a working one and behaves like a wall.
+
+Scanned across this project: six Anim Blueprints, twenty-one states, **clean on both**. That is worth
+saying rather than hiding — a check is not evidence of a bug, and these exist because the failures
+are expensive elsewhere, not because this project has them. The unit tests carry the positive cases
+the project does not, including the one that matters most: a machine with a *single* state is an
+ordinary looping pose and must not be reported, or the check fires on every idle in every project
+and is ignored in all of them.
+
 Read-only, and states-and-transitions rather than every node: an anim graph is mostly pose plumbing,
 and dumping it would cost a great deal to say little. It lives in its own **`anim` group**, so a
 project without animation never pays for it.
