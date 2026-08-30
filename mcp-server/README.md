@@ -242,6 +242,11 @@ string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, a
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
 
+The mapping this produced for the project it was built on is written up in
+[docs/AVS_SKIN_SYSTEM.md](../docs/AVS_SKIN_SYSTEM.md) - two systems, which one is dead and the
+evidence for saying so, and one hypothesis that was tested and found wrong before anything was
+changed.
+
 ### Finding the system that is actually live: `unreal_trace_function_calls`
 
 This one exists because of a mistake, and the mistake is worth writing down.
