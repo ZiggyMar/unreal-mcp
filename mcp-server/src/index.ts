@@ -30,6 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
+import { compactVariable } from "./compactRows.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -1737,7 +1738,11 @@ register(
       "Lists the variables a Blueprint declares, with type, default, category and whether a designer can set each " +
       "one per instance. **Use this to see what state a Blueprint holds** - it is usually the first question worth " +
       "asking about an unfamiliar one. " +
-      "This is a direct read, so unlike unreal_search_project it cannot lag behind a write you just made.",
+      "This is a direct read, so unlike unreal_search_project it cannot lag behind a write you just made." +
+      "\n\n" +
+      "The flags `isArray`, `instanceEditable`, `blueprintReadOnly` and `replicated` appear only when true, and " +
+      "`category` only when it is not the default one - an absent flag means no, not unknown. On a Blueprint with " +
+      "84 variables those four flags were 44% of the reply and were false almost every time.",
     inputSchema: {
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
       match: z
@@ -1756,11 +1761,15 @@ register(
       const all = result.variables ?? [];
       const needle = (match ?? "").trim().toLowerCase();
 
-      // Filtering rather than truncating, and the measurement is why. 84 variables came to 4,117
-      // tokens with no single field dominating - unlike the graph read, there is no fat to cut and a
-      // cap would just hide state at random. What a caller usually wants is not "fewer variables",
-      // it is "the ones about health", or "the ones a client can see", and those are cheap to ask
-      // for and expensive to guess at from a truncated list.
+      // Filtering rather than truncating. A cap would hide state at random, and what a caller wants
+      // is not "fewer variables" but "the ones about health" or "the ones a client can see" - cheap
+      // to ask for, expensive to guess at from a truncated list.
+      //
+      // This once said there was "no fat to cut" here. That was wrong, and measuring said so: of
+      // 4,084 tokens, 65% was structure, and four boolean flags were most of it - blueprintReadOnly
+      // was emitted 84 times and was false every time. compactVariable drops them when false, which
+      // is 44% of the reply for no lost fact. Filtering happens FIRST, because replicatedOnly reads
+      // the very flag that compaction removes.
       let filtered = all;
       if (needle) {
         filtered = filtered.filter((v) =>
@@ -1771,12 +1780,14 @@ register(
         filtered = filtered.filter((v) => v.replicated === true);
       }
 
+      const compacted = filtered.map(compactVariable);
+
       if (filtered.length === all.length) {
-        return jsonResult(result);
+        return jsonResult({ ...result, variables: compacted });
       }
       return jsonResult({
         ...result,
-        variables: filtered,
+        variables: compacted,
         totalVariables: all.length,
         matched: filtered.length,
         ...(filtered.length === 0
