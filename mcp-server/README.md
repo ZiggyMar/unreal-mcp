@@ -1578,7 +1578,7 @@ modules and locates a symbol, and treats a Blueprint-only project as a valid ans
 failure.
 
 It uses engine assets only, so it runs against any project, and it deletes what it made even when it
-fails. Thirty-three calls, about 5,700 tokens.
+fails. Thirty-three calls, about 3,950 tokens.
 
 The UI leg is there because "a HUD bound to a value" is one of the recipes this project ships, and a
 documented workflow that nothing exercises is a claim rather than a feature. It checks the widget
@@ -1588,6 +1588,34 @@ model nothing about nesting.
 Verified by breaking it on purpose: with the ghost-node exemption removed, it reports
 `review: review flagged the placeholder events again` and exits 1. A trial that has never failed is
 not evidence of anything.
+
+### The other loop: `npm run trial:diagnose`
+
+`trial:feature` walks the authoring loop — build a thing, check it works. This walks the loop people
+ask for first: *"I tell it a bug in plain text and it finds it and fixes it."* Nothing exercised that
+end to end, so the tools answering it were covered only by unit tests and by me reading their output
+and being satisfied.
+
+It plants a defect rather than borrowing one from the open project, because a trial that depends on a
+particular project's mistakes stops working the moment somebody fixes them. The defect is a node left
+wired to nothing — the commonest real mess in a Blueprint anyone has iterated on, and exactly the
+thing a human notices by eye and a model cannot see at all unless told. Then it: reviews and requires
+the reply to **name** the orphan; compiles and requires that to come back **clean**, because if a
+model trusts the compiler to catch this class of defect it will be told everything is fine, which is
+why `review` exists at all; cleans up; and re-reviews **independently**, because trusting cleanup's
+own account of its work is how a tool gets away with claiming success.
+
+Eight calls, about 1,450 tokens for the whole find-and-fix loop.
+
+The distinction it is built around: a diagnostic tool can be perfectly healthy and still useless, by
+returning a reply that is true and unactionable. `"score": 72` is true. So is `"3 findings"`. Neither
+tells a model which node to touch. Every check asserts the reply contains something a model could
+**act** on.
+
+Verified by breaking it both ways. On its first run the planted node used a function that does not
+exist (`GetGameTimeInSeconds` is not on `GameplayStatics`), so no defect was planted and the finder
+step correctly reported that nothing was found — the trial caught its own author. And with the
+finder's matcher replaced by one that can never match, it exits 1.
 
 ### Live verification: `npm run verify:live`
 

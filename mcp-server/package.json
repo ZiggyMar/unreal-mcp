@@ -32,7 +32,8 @@
     "measure:reads": "node scripts/measure-reads.mjs",
     "trial:feature": "node scripts/trial-feature.mjs",
     "check:engines": "node scripts/build-engines.mjs --isolated",
-    "measure:groups": "node scripts/measure-groups.mjs"
+    "measure:groups": "node scripts/measure-groups.mjs",
+    "trial:diagnose": "node scripts/trial-diagnose.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
