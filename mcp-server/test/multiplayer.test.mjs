@@ -330,3 +330,36 @@ test("a server writing ordinary state is still reported at full weight", () => {
   );
   assert.equal(findings.filter((f) => f.check === "server-writes-unreplicated").length, 1);
 });
+
+test("a server write is never suppressed just because this Blueprint does not read it", () => {
+  // The mistake this pins. A first attempt dropped the finding when nothing in the Blueprint read
+  // the variable, or when every read was server-side. Both are wrong, because reads live in OTHER
+  // Blueprints: a HUD widget reading the player's value on a client is exactly the bug this check
+  // exists for, and it would have been silenced by a rule that only ever looked at one asset.
+  // Suppressing a real finding is far worse than reporting a doubtful one.
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "Server_RequestPurchase", ["s"]),
+      node("s", "K2Node_VariableSet", "SET CostServer", []),
+    ],
+    [{ name: "CostServer", type: "int", replicated: false }]
+  );
+  const finding = findings.find((f) => f.check === "server-writes-unreplicated");
+  assert.ok(finding, "the finding must survive even with no reads in this asset");
+  assert.match(finding.observed, /widget or another actor/i, "and must say what it cannot see");
+});
+
+test("the evidence is separated from the conclusion", () => {
+  // When a read IS visible outside the server chain, the finding should say so plainly - that is
+  // the case where a client genuinely reads what the server changes.
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "Server_TakeDamage", ["s"]),
+      node("s", "K2Node_VariableSet", "SET Health", []),
+      node("g", "K2Node_VariableGet", "GET Health", []),
+    ],
+    [{ name: "Health", type: "float", replicated: false }]
+  );
+  const finding = findings.find((f) => f.check === "server-writes-unreplicated");
+  assert.match(finding.observed, /worth fixing/i);
+});

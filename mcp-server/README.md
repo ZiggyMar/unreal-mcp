@@ -272,6 +272,26 @@ The full asset inventory that prompted this is in
 [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md#asset-type-coverage) — 38 classes, with what is and is not
 reachable.
 
+### A finding that says what it saw, not only what it concluded
+
+`server-writes-unreplicated` is the most expensive check in the audit, and hunting bugs in a real
+game showed all five of its findings there were doubtful. One was a handle to an Actor that
+replicates itself (fixed above, now its own cheap check). The other three were `PC_Gameplay` setting
+`RowLocal`, `CostServer` and `ScaleNow` from one purchase RPC — names that read like working state
+inside a server call, and `ScaleNow` is not read anywhere in that Blueprint at all.
+
+The obvious fix was to suppress the finding when nothing reads the variable, or when every read is
+server-side. **The existing tests caught that within a minute, and they were right to.** Reads live
+in *other* Blueprints: a HUD widget reading the player's value on a client is exactly the bug this
+check exists for, and a rule that only ever looks at one asset would have silenced it. Suppressing a
+real finding is far worse than reporting a doubtful one.
+
+So the finding now carries an `observed` field, separate from its conclusion, saying which of three
+things the Blueprint actually shows — nothing reads it here, every read here is server-side, or a
+read exists outside the server chain and *"this one is worth fixing"*. A check that sees one asset
+cannot settle a question that spans several, and saying so beats both guessing and going quiet. Two
+tests pin it, including one whose whole job is to fail if anyone tries the suppression again.
+
 ### Class defaults you can read, not only write: `unreal_read_class_defaults`
 
 `unreal_set_class_default` shipped a long time ago with nothing to read defaults back, which meant a

@@ -43,6 +43,13 @@ export interface MpFinding {
   message: string;
   fix: string;
   variable?: string;
+  /**
+   * What the Blueprint itself shows, separated from what the finding concludes.
+   *
+   * A check that sees one asset cannot settle a question that spans several, and saying so is more
+   * useful than either guessing or going quiet. This carries the evidence so a reader can weigh it.
+   */
+  observed?: string;
 }
 
 /** Naming conventions that mean "this runs somewhere else". Unreal itself has no other marker. */
@@ -94,6 +101,20 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
   const replicationOf = new Map(variables.map((variable) => [variable.name.toLowerCase(), variable]));
   const offenders = new Map<string, string>(); // variable -> the server event that writes it
 
+  // Every node any server event can reach. Needed twice: to find what the server writes, and to
+  // decide whether anything OUTSIDE the server ever reads it - which is what separates a real
+  // replication bug from a scratch variable the server uses and nobody else looks at.
+  const serverReachable = new Set<string>();
+  for (const event of serverEvents) {
+    const queue = [event];
+    while (queue.length > 0) {
+      const node = queue.pop();
+      if (!node || serverReachable.has(node.id)) continue;
+      serverReachable.add(node.id);
+      queue.push(...execTargets(node));
+    }
+  }
+
   for (const event of serverEvents) {
     const seen = new Set<string>([event.id]);
     const queue = execTargets(event);
@@ -112,6 +133,14 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
     }
   }
 
+  /** Every node that READS a variable, whether or not execution can reach it. */
+  const readsOf = (name: string): MpNode[] =>
+    nodes.filter((node) => {
+      const title = (node.title ?? "").trim();
+      const got = /^GET\s+(.+)$/i.exec(title);
+      return got ? got[1].trim().toLowerCase() === name.toLowerCase() : false;
+    });
+
   for (const [variable, event] of offenders) {
     // An object reference is not gameplay state, and this distinction was learned the hard way.
     // Measured on a real project: this check reported BP_Player setting "CurrentActivePing" as a
@@ -127,6 +156,27 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
     const type = `${declared?.type ?? ""}`.toLowerCase();
     const isHandle = type === "object" || type === "class" || type === "softobject" || type === "softclass";
     const referenced = declared?.subType;
+
+    // What can be observed about the reads, WITHOUT pretending it settles the question.
+    //
+    // The first attempt at this suppressed the finding when nothing in the Blueprint read the
+    // variable, or when every read was server-side. The existing tests caught that immediately, and
+    // they were right: reads live in other Blueprints too. A HUD widget reading the player's value
+    // on a client is exactly the bug this check exists for, and it would have been silenced by a
+    // rule that only ever looked at one asset. Suppressing a real finding is far worse than
+    // reporting a doubtful one, so this annotates instead.
+    const reads = readsOf(variable);
+    const observed =
+      reads.length === 0
+        ? `Nothing in this Blueprint reads "${variable}". It may still be read from a widget or ` +
+          `another actor - if it is, on a client, this is the bug. If nothing anywhere reads it, ` +
+          `it is left over and replicating it would send a value nobody looks at.`
+        : reads.every((node) => serverReachable.has(node.id))
+          ? `Every read of "${variable}" in this Blueprint is also on the server, so it looks like ` +
+            `working state inside a server call. Check whether a widget or another actor reads it ` +
+            `on a client before changing anything.`
+          : `"${variable}" is read outside the server chain in this Blueprint, so a client does ` +
+            `read the value the server is changing. This one is worth fixing.`;
 
     if (isHandle) {
       findings.push({
@@ -152,6 +202,7 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
       message:
         `"${event}" runs on the server and sets "${variable}", which is not replicated. ` +
         `The server will change its own copy and no client will ever see it.`,
+      observed,
       fix:
         `Mark "${variable}" as Replicated (or RepNotify if clients need to react to the change). ` +
         `Until then this works for whoever is hosting and silently does nothing for everyone else.`,
