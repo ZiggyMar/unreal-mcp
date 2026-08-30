@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { findSourceRoots, searchSource } from "./nativeSource.js";
 import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
+import { findOrphans } from "./orphans.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -353,6 +354,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_stop_pie",
     "unreal_pie_status",
     "unreal_screenshot",
+    "unreal_find_orphans",
   ],
   maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
 };
@@ -2332,6 +2334,42 @@ register(
           },
         ],
       };
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_find_orphans",
+  {
+    title: "Find actors that lost the partner they depend on",
+    description:
+      "Levels are full of actors that only work in pairs: a nav link and the door it belongs to, a " +
+      "trigger and the thing it triggers, a spawn point and its volume. Delete one half and the other " +
+      "stays behind, still ticking, still handling events, pointing at nothing - and nothing warns, " +
+      "because an actor with a null reference is a perfectly legal actor. " +
+      "Pass two class-name fragments and it pairs each actor of the first to its nearest of the second " +
+      "and reports the ones standing on their own, plus any partner nothing paired to, which is the " +
+      "same mistake seen from the other side. " +
+      "It pairs by POSITION rather than by reading the reference property, because the reference is " +
+      "the thing that is broken: a null says nothing about what it should have pointed at. Two actors " +
+      "placed together are still where they were placed. " +
+      "The distance threshold is inferred from the level by looking for the gap between the cluster of " +
+      "real pairs and anything standing clear of it, so it adapts to a level's own scale instead of " +
+      "using a constant that is wrong everywhere. Pass maxDistance to override it.",
+    inputSchema: {
+      of: z.string().describe('Class-name fragment of the actor that may be orphaned, e.g. "BP_NavLink".'),
+      pairedWith: z.string().describe('Class-name fragment of the partner it belongs to, e.g. "BP_Door".'),
+      maxDistance: z
+        .number()
+        .optional()
+        .describe("Units beyond which an actor counts as orphaned. Omit to infer it from the level."),
+    },
+  },
+  async ({ of, pairedWith, maxDistance }) => {
+    try {
+      return jsonResult(await findOrphans(bridge, { of, pairedWith, maxDistance }));
     } catch (err) {
       return errorResult(err);
     }

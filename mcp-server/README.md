@@ -741,6 +741,39 @@ is worse than an absent one; and starting PIE to sample runtime behaviour, becau
 apply to the editor world, and a verification step that mutates what it is verifying is not one.
 
 
+### Half a deletion: `unreal_find_orphans`
+
+Levels are full of actors that only work in pairs — a nav link and the door it belongs to, a trigger
+and the thing it triggers, a spawn point and its volume. Delete one half and the other stays behind,
+still ticking, still handling events, pointing at nothing. Nothing warns, because **an actor with a
+null reference is a perfectly legal actor.**
+
+Found in a real level: 25 nav links, 12 firewalls. Twenty-four paired off two per wall, all within
+190 units. One sat 921 units from the nearest firewall — left when a wall was deleted — and still
+handled `Receive Smart Link Reached` by messaging a firewall that no longer existed. An enemy that
+walked onto it waited for an event that could never arrive.
+
+```
+unreal_find_orphans({ of: "BP_NavLink", pairedWith: "BP_Door" })
+```
+
+**It pairs by position, not by reading the reference property** — because the reference is the thing
+that is broken. A null tells you nothing about what it should have pointed at, and a stale one may
+still name a deleted actor. Position survives both: two actors placed together are still where they
+were placed. It reports the unpaired partners too, which is the same mistake seen from the other end.
+
+**The threshold is inferred by finding the gap, and that detail was settled by a real level rather
+than by argument.** The first version used five times the median pairing distance. On the actual
+level the median was 204 units and the orphan sat at 921 — so the threshold landed at 1019 and the
+check reported a *clean level* while the bug it was written for sat right there. The synthetic
+fixture had passed, because a fixture author puts the orphan somewhere unmissable.
+
+Real pairs cluster; a leftover is separated from that cluster by a jump. So the distances are sorted
+and the largest proportional step between neighbours is found: the threshold goes in the gap. A level
+whose distances rise smoothly — one with no orphan — produces no threshold at all rather than an
+arbitrary cut. The real distribution is now a regression test.
+
+
 ### Looking at it: `unreal_screenshot`
 
 Every other tool here answers in text, and there is a class of question text cannot settle. *Did that
