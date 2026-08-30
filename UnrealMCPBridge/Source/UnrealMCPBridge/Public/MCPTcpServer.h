@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
+#include "Containers/Queue.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
 
 class FSocket;
@@ -34,6 +35,14 @@ private:
 
 	TUniquePtr<FTcpListener> Listener;
 	TArray<TSharedPtr<class FMCPClientConnection>> Clients;
+	/**
+	 * Connections accepted on the listener thread, waiting to be adopted by Tick.
+	 *
+	 * Single-producer (FTcpListener's thread) / single-consumer (the game thread), which is exactly
+	 * the shape of this handoff. Clients itself is touched only by Tick, so there is no shared
+	 * container left to race on.
+	 */
+	TQueue<TSharedPtr<class FMCPClientConnection>, EQueueMode::Spsc> PendingClients;
 	FTSTicker::FDelegateHandle TickHandle;
 	int32 ListenPort = 0;
 };

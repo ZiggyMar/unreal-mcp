@@ -19,11 +19,21 @@
 DEFINE_LOG_CATEGORY_STATIC(LogMCPBridge, Log, All);
 
 /** Per-connection state: raw socket + a line-buffering receive buffer. */
+/**
+ * Per-connection state: raw socket, a BYTE receive buffer, and a pending-send buffer.
+ *
+ * The receive buffer holds bytes rather than TCHARs on purpose. It used to decode each recv() chunk
+ * to text as it arrived, which corrupts any multi-byte UTF-8 sequence that happens to straddle a
+ * chunk boundary - and the boundary is a TCP segment, not a tidy 8KB block, so any request past
+ * roughly 1.4KB could hit it. An asset path with a non-ASCII character in it came back as garbage
+ * and nothing downstream could tell. Bytes go in, and a line is decoded only once it is complete.
+ */
 class FMCPClientConnection
 {
 public:
 	explicit FMCPClientConnection(FSocket* InSocket)
 		: Socket(InSocket)
+		, LastActivitySeconds(FPlatformTime::Seconds())
 	{
 	}
 
@@ -42,9 +52,76 @@ public:
 		return Socket != nullptr && Socket->GetConnectionState() == SCS_Connected;
 	}
 
+	/** Queue a reply. Draining is Tick's job, because one Send call is not guaranteed to take it all. */
+	void QueueSend(const FString& Line)
+	{
+		FTCHARToUTF8 UTF8Str(*Line);
+		SendBuffer.Append(reinterpret_cast<const uint8*>(UTF8Str.Get()), UTF8Str.Length());
+	}
+
+	/**
+	 * Push as much of SendBuffer as the socket will take. Returns false if the peer is gone.
+	 *
+	 * The socket is non-blocking, so Send is entitled to accept only part of a large reply and
+	 * report how much it took. That return value used to be ignored, which meant a big reply - a
+	 * graph summary, a project search - was silently truncated. Because the only newline in a reply
+	 * is the one terminating it, the client then never saw a complete line at all: it waited out its
+	 * whole timeout and told the model the editor was busy and to retry, which reproduced the hang
+	 * instead of reporting it. Anything not taken now stays buffered and goes out next tick.
+	 */
+	bool FlushSend()
+	{
+		while (SentBytes < SendBuffer.Num())
+		{
+			int32 BytesSent = 0;
+			if (!Socket->Send(SendBuffer.GetData() + SentBytes, SendBuffer.Num() - SentBytes, BytesSent))
+			{
+				return false;
+			}
+			if (BytesSent <= 0)
+			{
+				// The send window is full. Keep the remainder and try again on the next tick.
+				break;
+			}
+			SentBytes += BytesSent;
+			LastActivitySeconds = FPlatformTime::Seconds();
+		}
+
+		if (SentBytes > 0 && SentBytes >= SendBuffer.Num())
+		{
+			SendBuffer.Reset();
+			SentBytes = 0;
+		}
+		return true;
+	}
+
+	bool HasPendingSend() const { return SentBytes < SendBuffer.Num(); }
+
 	FSocket* Socket = nullptr;
-	FString RecvBuffer;
+	TArray<uint8> RecvBuffer;
+	TArray<uint8> SendBuffer;
+	int32 SentBytes = 0;
+	/** The peer performed an orderly close. Answer what is already buffered, then drop it. */
+	bool bPeerClosed = false;
+	/** Set to true once a line has been refused; the connection is finished after its reply drains. */
+	bool bDropAfterFlush = false;
+	double LastActivitySeconds = 0.0;
 };
+
+/**
+ * The largest single request this server will buffer before giving up on a peer.
+ *
+ * A request is one line, and the largest legitimate ones are whole-graph builds: comfortably under
+ * a megabyte. Without a ceiling, a peer that opens a socket and never sends a newline makes the
+ * editor allocate until it dies, which is a denial of service costing the attacker one connection.
+ */
+static constexpr int32 MCPMaxRequestBytes = 4 * 1024 * 1024;
+
+/** Concurrent connections. The real client uses one at a time; this is only a runaway guard. */
+static constexpr int32 MCPMaxClients = 32;
+
+/** How long a silent connection may hold a slot. Long enough not to interrupt a slow human. */
+static constexpr double MCPIdleTimeoutSeconds = 300.0;
 
 FMCPTcpServer::FMCPTcpServer() = default;
 
@@ -100,6 +177,26 @@ bool FMCPTcpServer::Start(int32 Port)
 {
 	DisableBackgroundThrottlingForAgentUse();
 
+	// -MCPBridgePort=<n>. This flag has been documented for a while - it is what the server's own
+	// two-editors-open error tells you to use - and nothing has ever read it. The documented way to
+	// run two editors side by side therefore did nothing at all: the second editor still tried 8765,
+	// still lost the bind, and the agent still quietly edited the first project.
+	int32 PortOverride = 0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("MCPBridgePort="), PortOverride))
+	{
+		if (PortOverride >= 1024 && PortOverride <= 65535)
+		{
+			UE_LOG(LogMCPBridge, Log, TEXT("UnrealMCPBridge: using port %d from -MCPBridgePort."), PortOverride);
+			Port = PortOverride;
+		}
+		else
+		{
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("UnrealMCPBridge: ignoring -MCPBridgePort=%d, which is outside 1024-65535. Using %d."),
+				PortOverride, Port);
+		}
+	}
+
 	if (Listener.IsValid())
 	{
 		return true;
@@ -146,8 +243,20 @@ void FMCPTcpServer::Stop()
 		TickHandle.Reset();
 	}
 
-	Clients.Empty();
+	// Order matters, and it used to be wrong. Clients.Empty() ran first, while the listener thread
+	// was still alive and still able to accept - so a connection arriving during shutdown could be
+	// added to a container that had just been emptied, and then never cleaned up. Destroying the
+	// listener joins its thread, which is what actually makes "no more producers" true; only then is
+	// it safe to drain the handoff queue and drop the live connections.
 	Listener.Reset();
+
+	TSharedPtr<FMCPClientConnection> Pending;
+	while (PendingClients.Dequeue(Pending))
+	{
+		Pending.Reset();
+	}
+
+	Clients.Empty();
 }
 
 bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endpoint& Endpoint)
@@ -159,13 +268,46 @@ bool FMCPTcpServer::HandleConnectionAccepted(FSocket* NewSocket, const FIPv4Endp
 	}
 
 	NewSocket->SetNonBlocking(true);
-	Clients.Add(MakeShared<FMCPClientConnection>(NewSocket));
+
+	// Hand off to the game thread rather than touching Clients here: this runs on FTcpListener's
+	// thread, and Clients belongs to Tick. The queue is single-producer/single-consumer, which is
+	// exactly the shape of this handoff, and it never blocks the accept path.
+	PendingClients.Enqueue(MakeShared<FMCPClientConnection>(NewSocket));
 	UE_LOG(LogMCPBridge, Verbose, TEXT("UnrealMCPBridge: client connected from %s"), *Endpoint.ToString());
 	return true;
 }
 
 bool FMCPTcpServer::Tick(float DeltaTime)
 {
+	// Adopt anything the listener thread accepted since the last tick.
+	//
+	// HandleConnectionAccepted runs on FTcpListener's own thread, and it used to Add straight into
+	// Clients while this loop was iterating and removing from it. That is a plain data race on a
+	// TArray: a reallocation on the listener thread while the game thread holds an element reference
+	// is a crash, and an intermittent one, which is the worst kind to be handed by a bug report.
+	TSharedPtr<FMCPClientConnection> Adopted;
+	while (PendingClients.Dequeue(Adopted))
+	{
+		if (Clients.Num() >= MCPMaxClients)
+		{
+			// Say why, rather than dropping the socket and letting the client guess. A bare close
+			// surfaces as ECONNRESET, which the Node client reports as "the editor closed or
+			// crashed" - a badly wrong diagnosis for "you opened too many connections".
+			Adopted->QueueSend(
+				TEXT("{\"ok\":false,\"error\":\"too_many_connections\",\"detail\":\"The bridge is already ")
+				TEXT("holding its maximum concurrent connections. This normally means a client is opening ")
+				TEXT("sockets without closing them.\"}\n"));
+			Adopted->FlushSend();
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("UnrealMCPBridge: refused a connection; already at the %d-connection limit."), MCPMaxClients);
+			continue;
+		}
+		Clients.Add(Adopted);
+	}
+	Adopted.Reset();
+
+	const double Now = FPlatformTime::Seconds();
+
 	for (int32 i = Clients.Num() - 1; i >= 0; --i)
 	{
 		FMCPClientConnection& Client = *Clients[i];
@@ -174,10 +316,41 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 			Clients.RemoveAt(i);
 			continue;
 		}
+
 		if (!ProcessClientSocket(Client))
 		{
-			// The connection asked to be closed - malformed framing, or an oversized line. The
-			// destructor closes and destroys the socket.
+			Clients.RemoveAt(i);
+			continue;
+		}
+
+		// Anything the socket would not take last time goes out now.
+		if (!Client.FlushSend())
+		{
+			Clients.RemoveAt(i);
+			continue;
+		}
+
+		// A refused connection stays only long enough to deliver the reason.
+		if (Client.bDropAfterFlush && !Client.HasPendingSend())
+		{
+			Clients.RemoveAt(i);
+			continue;
+		}
+
+		// An orderly close from the peer, once anything still buffered has been answered and sent.
+		if (Client.bPeerClosed && !Client.HasPendingSend())
+		{
+			Clients.RemoveAt(i);
+			continue;
+		}
+
+		// A half-open connection - the peer vanished without a FIN, which loopback does not prevent -
+		// would otherwise hold its slot until the editor closed.
+		if (Now - Client.LastActivitySeconds > MCPIdleTimeoutSeconds && !Client.HasPendingSend())
+		{
+			UE_LOG(LogMCPBridge, Verbose,
+				TEXT("UnrealMCPBridge: dropping a connection idle for more than %.0f seconds."),
+				MCPIdleTimeoutSeconds);
 			Clients.RemoveAt(i);
 			continue;
 		}
@@ -185,49 +358,70 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 	return true; // keep ticking
 }
 
-/**
- * The largest single request this server will buffer before giving up on a peer.
- *
- * A request is one line, and the largest legitimate ones are whole-graph builds: comfortably under
- * a megabyte. Without a ceiling, a peer that opens a socket and never sends a newline makes the
- * editor allocate until it dies, which is a denial of service costing the attacker one connection.
- */
-static constexpr int32 MCPMaxRequestBytes = 4 * 1024 * 1024;
-
 bool FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 {
-	uint32 PendingSize = 0;
-	while (Client.Socket->HasPendingData(PendingSize) && PendingSize > 0)
+	// Read until the socket is empty.
+	//
+	// Recv on a non-blocking socket returns true with BytesRead == 0 when there is simply nothing
+	// to read, and returns false for an orderly peer close as well as for a hard error. That is the
+	// only reliable end-of-stream signal available here. The previous loop gated on HasPendingData,
+	// which cannot distinguish "nothing to read yet" from "the peer hung up", so a client that
+	// disconnected mid-session kept its slot until the editor was closed.
+	TArray<uint8> Chunk;
+	Chunk.SetNumUninitialized(8192);
+	while (true)
 	{
-		TArray<uint8> Buffer;
-		Buffer.SetNumUninitialized(FMath::Min(PendingSize, 8192u));
-
 		int32 BytesRead = 0;
-		if (!Client.Socket->Recv(Buffer.GetData(), Buffer.Num(), BytesRead) || BytesRead <= 0)
+		if (!Client.Socket->Recv(Chunk.GetData(), Chunk.Num(), BytesRead))
+		{
+			Client.bPeerClosed = true;
+			break;
+		}
+		if (BytesRead <= 0)
 		{
 			break;
 		}
-
-		FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Buffer.GetData()), BytesRead);
-		Client.RecvBuffer.AppendChars(Converter.Get(), Converter.Length());
+		Client.RecvBuffer.Append(Chunk.GetData(), BytesRead);
+		Client.LastActivitySeconds = FPlatformTime::Seconds();
 	}
 
 	// A peer that never sends a newline must not be able to grow this without limit.
-	if (Client.RecvBuffer.Len() > MCPMaxRequestBytes)
+	if (Client.RecvBuffer.Num() > MCPMaxRequestBytes)
 	{
 		UE_LOG(LogMCPBridge, Warning,
 			TEXT("UnrealMCPBridge: dropping a connection that sent %d bytes with no newline (limit %d). ")
 			TEXT("A request is a single line of JSON; nothing legitimate reaches this size."),
-			Client.RecvBuffer.Len(), MCPMaxRequestBytes);
+			Client.RecvBuffer.Num(), MCPMaxRequestBytes);
 		return false;
 	}
 
 	// Process complete newline-terminated requests.
-	int32 NewlineIndex;
-	while (Client.RecvBuffer.FindChar(TEXT('\n'), NewlineIndex))
+	//
+	// The scan is over BYTES and each line is decoded only once it is whole. Decoding every arriving
+	// chunk instead - which is what this did - mangles any multi-byte UTF-8 sequence that straddles
+	// a chunk boundary, and the boundary is a TCP segment rather than a tidy block, so a request
+	// much past a kilobyte could hit it. The result was corrupted characters in asset paths, with
+	// nothing downstream able to notice.
+	while (true)
 	{
-		FString Line = Client.RecvBuffer.Left(NewlineIndex);
-		Client.RecvBuffer.RightChopInline(NewlineIndex + 1);
+		int32 NewlineIndex = INDEX_NONE;
+		for (int32 i = 0; i < Client.RecvBuffer.Num(); ++i)
+		{
+			if (Client.RecvBuffer[i] == static_cast<uint8>('\n'))
+			{
+				NewlineIndex = i;
+				break;
+			}
+		}
+		if (NewlineIndex == INDEX_NONE)
+		{
+			break;
+		}
+
+		FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Client.RecvBuffer.GetData()), NewlineIndex);
+		FString Line(Converter.Length(), Converter.Get());
+		Client.RecvBuffer.RemoveAt(0, NewlineIndex + 1);
+
 		Line.TrimStartAndEndInline();
 		if (Line.IsEmpty())
 		{
@@ -280,18 +474,19 @@ bool FMCPTcpServer::ProcessClientSocket(FMCPClientConnection& Client)
 		FJsonSerializer::Serialize(Response, Writer);
 		OutStr.AppendChar(TEXT('\n'));
 
-		FTCHARToUTF8 UTF8Str(*OutStr);
-		int32 BytesSent = 0;
-		Client.Socket->Send(reinterpret_cast<const uint8*>(UTF8Str.Get()), UTF8Str.Length(), BytesSent);
+		// Queued rather than sent here: the socket is non-blocking and may take only part of a large
+		// reply. Tick drains whatever is left. The diagnosis is written before the hang-up, so a
+		// human pointing the wrong tool at this port is told what the port is rather than just
+		// having the connection close on them.
+		Client.QueueSend(OutStr);
 
 		if (bDropConnection)
 		{
-			// The diagnosis is written first, so a human pointing the wrong tool at this port still
-			// gets told what the port is, and only then hung up on.
 			UE_LOG(LogMCPBridge, Warning,
 				TEXT("UnrealMCPBridge: closing a connection that sent a line which is not JSON. ")
 				TEXT("If this was a browser, a page tried to reach the bridge and was refused."));
-			return false;
+			Client.bDropAfterFlush = true;
+			return true;
 		}
 	}
 

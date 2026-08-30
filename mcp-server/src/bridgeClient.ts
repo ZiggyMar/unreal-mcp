@@ -1,5 +1,6 @@
 import { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
+import { StringDecoder } from "node:string_decoder";
 
 export interface BridgeRequest {
   cmd: string;
@@ -129,6 +130,15 @@ export class UnrealBridgeClient {
     return await new Promise<T>((resolve, reject) => {
       const socket = new Socket();
       let buffer = "";
+      // A StringDecoder, not chunk.toString("utf8") per chunk.
+      //
+      // Bridge replies routinely run to tens of kilobytes - a graph summary, a project search, an
+      // actor list - so they arrive as several TCP segments, and a segment boundary lands wherever
+      // it lands. Decoding each chunk on its own turns any multi-byte character split across that
+      // boundary into U+FFFD, which meant a model could read back a mangled asset name and then
+      // reason from it, with nothing anywhere able to notice. StringDecoder holds the partial
+      // sequence until its remaining bytes arrive.
+      const decoder = new StringDecoder("utf8");
       let settled = false;
       let connected = false;
 
@@ -205,7 +215,7 @@ export class UnrealBridgeClient {
       });
 
       socket.on("data", (chunk: Buffer) => {
-        buffer += chunk.toString("utf8");
+        buffer += decoder.write(chunk);
         const newlineIndex = buffer.indexOf("\n");
         if (newlineIndex === -1) {
           return;
