@@ -329,6 +329,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_create_data_table",
     "unreal_add_data_table_row",
     "unreal_set_data_table_row",
+    "unreal_remove_data_table_row",
     "unreal_check_data_tables",
     "unreal_list_data_table_rows",
     "unreal_create_struct",
@@ -2408,6 +2409,35 @@ register(
   async ({ paths, pathPrefix, limit }) => {
     try {
       return jsonResult(await auditDataTables(bridge, { paths, pathPrefix, limit }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_data_table_row",
+  {
+    title: "Delete a Data Table row",
+    description:
+      "Removes one row by name and hands back everything it contained, so the delete can be undone. " +
+      "Reach for this when something should stop existing rather than stop appearing. " +
+      "The workaround people use instead - clearing the row's asset reference - is not a removal: the " +
+      "row survives, still passes whatever gate the consumer applies, and now contributes a null. That " +
+      "exact mistake put a shipped build in front of players with most of its enemy spawns silently " +
+      "failing, so if the intent is only to disable something temporarily, change the field that gates " +
+      "it (a minimum level, a ratio, an enabled flag) and leave its references intact. " +
+      "The `was` field in the reply holds every value the row had, so unreal_add_data_table_row can " +
+      "restore it exactly. Anything that looked the row up by name will find nothing afterwards - " +
+      "unreal_find_references on the table before saving is the cheap way to be sure.",
+    inputSchema: {
+      path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
+      rowName: z.string().describe('The row key to delete, e.g. "Potion".'),
+    },
+  },
+  async ({ path, rowName }) => {
+    try {
+      return jsonResult(await bridge.send("remove_data_table_row", { path, rowName }));
     } catch (err) {
       return errorResult(err);
     }

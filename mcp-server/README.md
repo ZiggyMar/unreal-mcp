@@ -290,6 +290,30 @@ No single call compiles against both. So nothing here calls it. `FEnumEditorUtil
 `FStructureEditorUtils` sit one level above and are byte-identical across both versions, verified
 header to header, which makes the problem not exist rather than solved-for-one-version.
 
+#### Deleting a row: `unreal_remove_data_table_row`
+
+The Data Table surface could create rows, change them and read them — and not remove one. So *"take
+this thing out of the game"* had no correct answer, and the workaround people reach for is to clear
+the row's asset reference instead.
+
+**That is not a removal.** The row survives, still passes whatever gate the consumer applies, and now
+contributes a `None`. That exact mistake put a shipped build in front of players with most of its
+enemy spawns silently failing. If the intent is to disable something *temporarily*, change the field
+that gates it — a minimum wave, a ratio, an enabled flag — and leave its references intact.
+
+```
+unreal_remove_data_table_row({ path: "/Game/Data/DT_Items.DT_Items", rowName: "Potion" })
+```
+
+The reply carries **every value the row held**, under `was`. That is the reason this is safe to
+offer at all: a delete you cannot undo is a delete nobody should run against a real project, and
+those values let `unreal_add_data_table_row` put it back exactly. It costs a few hundred bytes on an
+operation that happens rarely, and turns an irreversible action into a reversible one.
+
+Anything that looked the row up by name will find nothing afterwards, so the reply says so and points
+at `unreal_find_references` — before you save, while it is still only a change in memory.
+
+
 #### Finding rows that point at nothing: `unreal_check_data_tables`
 
 Every other audit in this server reads Blueprint graphs. This one exists because a bug reached a

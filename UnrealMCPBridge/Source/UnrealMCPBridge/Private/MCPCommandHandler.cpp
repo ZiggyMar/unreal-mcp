@@ -906,6 +906,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleSetDataTableRow(Params);
 	}
+	else if (Cmd == TEXT("remove_data_table_row"))
+	{
+		Response = HandleRemoveDataTableRow(Params);
+	}
 	else if (Cmd == TEXT("take_screenshot"))
 	{
 		Response = HandleTakeScreenshot(Params);
@@ -5467,6 +5471,78 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTakeScreenshot(const TSharedPt
 	Result->SetNumberField(TEXT("sourceHeight"), Size.Y);
 	Result->SetNumberField(TEXT("bytes"), Png.Num());
 	Result->SetBoolField(TEXT("isPlayInEditor"), GEditor && GEditor->PlayWorld != nullptr);
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Delete a row, and hand back what it contained.
+ *
+ * The Data Table surface could create rows and change them and read them, and not remove one, which
+ * meant "take this thing out of the game" had no correct answer through this bridge. The workaround
+ * people reach for - clearing the row's class reference - is not a removal at all: the row survives,
+ * still passes whatever gate the consumer applies, and now contributes a null. That exact mistake
+ * put a shipped build in front of players with most of its enemy spawns silently failing.
+ *
+ * The reply carries every field the row held. That is the whole reason this is safe to offer: a
+ * delete you cannot undo is a delete nobody should run against a real project, and the values coming
+ * back mean add_data_table_row can put it back exactly as it was. It costs a few hundred bytes on an
+ * operation that happens rarely, and it turns an irreversible action into a reversible one.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, RowName;
+	if (!Params.IsValid() ||
+		!Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("rowName"), RowName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and rowName are required"));
+	}
+
+	FString TableError;
+	UDataTable* Table = ResolveDataTable(Path, TableError);
+	if (!Table)
+	{
+		return MakeErrorResponse(TableError);
+	}
+
+	uint8* RowData = Table->FindRowUnchecked(FName(*RowName));
+	if (!RowData)
+	{
+		TArray<FString> Names;
+		for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+		{
+			Names.Add(Pair.Key.ToString());
+		}
+		return MakeErrorResponse(FString::Printf(
+			TEXT("row_not_found: %s has no row named '%s' (rows: %s)."),
+			*Path, *RowName, *FString::Join(Names, TEXT(", "))));
+	}
+
+	// Read it before it is gone. Afterwards the pointer is invalid and the values are unrecoverable.
+	TSharedPtr<FJsonObject> Was = DescribeDataTableRow(Table->RowStruct, RowData);
+
+	FDataTableEditorUtils::BroadcastPreChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowList);
+	const bool bRemoved = FDataTableEditorUtils::RemoveRow(Table, FName(*RowName));
+	FDataTableEditorUtils::BroadcastPostChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowList);
+
+	if (!bRemoved)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("remove_row_failed: the editor refused to remove '%s' from %s."), *RowName, *Path));
+	}
+
+	Table->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("removed"), RowName);
+	Result->SetObjectField(TEXT("was"), Was.ToSharedRef());
+	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	Result->SetBoolField(TEXT("unsaved"), true);
+	Result->SetStringField(TEXT("next"),
+		TEXT("Removed in memory and marked dirty. Call save_asset to write it to disk. The `was` field ")
+		TEXT("holds every value the row had, so add_data_table_row can restore it exactly if this was ")
+		TEXT("a mistake. Anything that looked this row up by name will now find nothing - check with ")
+		TEXT("find_references before saving if you are not certain."));
 	return MakeOkResponse(Result);
 }
 
