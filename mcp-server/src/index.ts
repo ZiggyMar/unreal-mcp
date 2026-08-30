@@ -98,6 +98,10 @@ const bridge = {
       await assertExpectedProject(cmd);
       const result = await rawBridge.send<T>(cmd, params);
       journal.record(cmd, params, true);
+      // The project just changed, so the repeat guard's "you will get the same answer" claim is no
+      // longer true for anything. Here rather than in the tool wrapper because this is the one
+      // place that knows a write actually reached the editor and succeeded.
+      if (isWrite(cmd)) repeatGuard.bump();
       return result;
     } catch (err) {
       journal.record(cmd, params, false, err instanceof Error ? err.message : String(err));
@@ -222,6 +226,9 @@ const CORE_PROFILE_TOOLS = new Set([
   // `lazy` - which the stranded-tool test caught immediately.
   "unreal_list_tools",
   "unreal_enable_tools",
+  // The docs, fetchable mid-task. A model that cannot reach them guesses instead, and a guess at a
+  // pin name costs a failed call - which is more expensive than the section index it replaces.
+  "unreal_guide",
   "unreal_session_changes",
   "unreal_undo_history",
   "unreal_get_project_overview",
@@ -1278,12 +1285,39 @@ register(
         const reviewPart =
           MODE.attachReview === "summary"
             ? { score: review.score, nextAction: review.nextAction }
-            : {
-                score: review.score,
-                summary: review.summary,
-                nextAction: review.nextAction,
-                findings: review.graphs.flatMap((graph) => graph.findings).slice(0, MODE.maxFindings),
-              };
+            : (() => {
+                // Sorted before it is capped, and the cap is reported.
+                //
+                // Two defects lived in the one line this replaces. The flatMap was sliced in graph
+                // order, so a Blueprint with twenty info-level notes in its first graph pushed every
+                // error out of the response - the cap silently kept the least important findings.
+                // And review.blueprint was dropped entirely: the state-placement and replication
+                // findings are deliberately held separate from any graph (review.ts:132-151, because
+                // filing them under one graph would be a lie), which meant they reached no build
+                // response in any mode at all. They are the findings most likely to describe a real
+                // design problem rather than a tidiness one.
+                const rank = { error: 0, warning: 1, info: 2 } as const;
+                const severityOf = (f: { severity: string }) => rank[f.severity as keyof typeof rank] ?? 3;
+                const all = [
+                  ...review.graphs.flatMap((graph) => graph.findings),
+                  ...review.blueprint,
+                ].sort((a, b) => severityOf(a) - severityOf(b));
+                const kept = all.slice(0, MODE.maxFindings);
+                return {
+                  score: review.score,
+                  summary: review.summary,
+                  nextAction: review.nextAction,
+                  findings: kept,
+                  // A truncated list that does not say it was truncated reads as "that is all of
+                  // them", which is the one thing it must not do.
+                  ...(all.length > kept.length
+                    ? {
+                        findingsOmitted: all.length - kept.length,
+                        findingsNote: `${all.length - kept.length} lower-severity finding(s) not shown; call unreal_review_blueprint for all of them.`,
+                      }
+                    : {}),
+                };
+              })();
 
         return jsonResult({
           ...buildPart,
@@ -2510,6 +2544,147 @@ function loadDoc(fileName: string, fallback: string): string {
 function loadWorkflowGuide(): string {
   return loadDoc("AGENT_WORKFLOW.md", WORKFLOW_FALLBACK);
 }
+
+/**
+ * The documentation, fetchable by the model at the moment it needs it.
+ *
+ * The three prompts already carry this text, but a prompt has to be pulled in by the CLIENT, and
+ * most clients surface prompts as something the human picks from a menu. So the model could not
+ * reach any of it on its own initiative - which is precisely when it is worth having, at the moment
+ * a pin name comes back wrong and the answer is one paragraph away.
+ *
+ * Returning the section index by default rather than the whole document is the difference between
+ * this being a token saving and a token cost: the index for all three guides is a few hundred
+ * tokens, and a single section is usually under a thousand, against the several thousand a whole
+ * handbook costs to inline.
+ */
+const GUIDE_DOCS: Record<string, { file: string; fallback: string; what: string }> = {
+  workflow: {
+    file: "AGENT_WORKFLOW.md",
+    fallback: WORKFLOW_FALLBACK,
+    what: "the call order that makes a session go smoothly",
+  },
+  handbook: {
+    file: "BLUEPRINT_HANDBOOK.md",
+    fallback: "See docs/BLUEPRINT_HANDBOOK.md in the unreal-mcp repository.",
+    what: "Unreal ground truth: exact pin names, type descriptors, the Blueprint mental model",
+  },
+  recipes: {
+    file: "RECIPES.md",
+    fallback: "See docs/RECIPES.md in the unreal-mcp repository.",
+    what: "verified end-to-end builds of the systems people ask for",
+  },
+};
+
+/** Split a markdown document into (heading, body) sections on ## and ### lines. */
+function guideSections(text: string): { heading: string; body: string }[] {
+  const lines = text.split("\n");
+  const out: { heading: string; body: string }[] = [];
+  let heading = "(preamble)";
+  let body: string[] = [];
+  for (const line of lines) {
+    if (/^#{2,3}\s+/.test(line)) {
+      if (body.join("").trim().length > 0 || out.length === 0) {
+        out.push({ heading, body: body.join("\n").trim() });
+      }
+      heading = line.replace(/^#+\s+/, "").trim();
+      body = [];
+    } else {
+      body.push(line);
+    }
+  }
+  out.push({ heading, body: body.join("\n").trim() });
+  return out.filter((s) => s.body.length > 0);
+}
+
+register(
+  "unreal_guide",
+  {
+    title: "Fetch a section of the Unreal guides, without loading the whole document",
+    description:
+      "The project's own documentation, readable on demand. Call it the moment something is not " +
+      "obvious - a pin name that will not connect, a type descriptor the server rejects, which node " +
+      "type a Branch actually is - rather than guessing and spending a failed call to find out. " +
+      "With no `section` it returns just the list of section headings, which is cheap; pass one of " +
+      "those headings (or any distinctive part of it) to get that section's text. `full: true` " +
+      'returns the whole document. Topics: "handbook" (exact pin names, type descriptors, the ' +
+      'Blueprint mental model), "recipes" (verified end-to-end builds of common systems), ' +
+      '"workflow" (the call order that makes a session go smoothly).',
+    inputSchema: {
+      topic: z.enum(["handbook", "recipes", "workflow"]).describe("Which guide to read."),
+      section: z
+        .string()
+        .optional()
+        .describe('A section heading, or any distinctive part of one, e.g. "pin" or "multiplayer".'),
+      full: z.boolean().optional().describe("Return the entire document rather than an index or one section."),
+    },
+  },
+  async ({ topic, section, full }) => {
+    const doc = GUIDE_DOCS[topic];
+    const text = loadDoc(doc.file, doc.fallback);
+
+    if (full === true) {
+      return jsonResult({ topic, source: `docs/${doc.file}`, text });
+    }
+
+    const sections = guideSections(text);
+
+    if (section === undefined || section.trim().length === 0) {
+      return jsonResult({
+        topic,
+        source: `docs/${doc.file}`,
+        what: doc.what,
+        sections: sections.map((s) => s.heading),
+        next:
+          "Call again with `section` set to one of these headings to read it, or `full: true` for " +
+          "the whole document.",
+      });
+    }
+
+    const needle = section.trim().toLowerCase();
+    let hits = sections.filter((s) => s.heading.toLowerCase().includes(needle));
+    let matchedOn = "heading";
+
+    if (hits.length === 0) {
+      // Fall back to the body text, because the useful headings are rarely the searchable ones. The
+      // exact pin names - the single most looked-up fact in the handbook - live under "9. The traps
+      // that cost one failed call each", so a model sensibly searching for "pin" would otherwise be
+      // told there is nothing, about the one document that has the answer.
+      hits = sections.filter((s) => s.body.toLowerCase().includes(needle));
+      matchedOn = "body";
+    }
+
+    if (hits.length === 0) {
+      return jsonResult({
+        topic,
+        source: `docs/${doc.file}`,
+        error: `Nothing in ${doc.file} mentions "${section}".`,
+        sections: sections.map((s) => s.heading),
+        next: "Pick one of the headings above, or pass `full: true`.",
+      });
+    }
+
+    // Several body matches usually means the word is common rather than that every section is
+    // wanted, so hand back the headings and let the caller choose instead of returning the document
+    // a section at a time.
+    if (matchedOn === "body" && hits.length > 3) {
+      return jsonResult({
+        topic,
+        source: `docs/${doc.file}`,
+        matchedOn,
+        matchingSections: hits.map((s) => s.heading),
+        next: `"${section}" appears in ${hits.length} sections. Call again with one of these headings.`,
+      });
+    }
+
+    return jsonResult({
+      topic,
+      source: `docs/${doc.file}`,
+      matchedOn,
+      sections: hits.map((s) => ({ heading: s.heading, text: s.body })),
+    });
+  }
+);
 
 /**
  * Handbooks, for a model that can program but was never trained on Unreal.

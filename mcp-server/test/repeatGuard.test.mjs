@@ -67,3 +67,30 @@ test("the kill switch silences it entirely", () => {
     else process.env.UNREAL_MCP_REPEAT_NOTICE = previous;
   }
 });
+
+test("a write clears the repeat count, because the answer really will be different now", () => {
+  const g = new RepeatGuard();
+
+  // Review, then review again: the second one is a genuine repeat and should be called out.
+  assert.equal(g.record("unreal_review_blueprint", { path: "/Game/BP_A.BP_A" }).notice, null);
+  assert.ok(g.record("unreal_review_blueprint", { path: "/Game/BP_A.BP_A" }).notice);
+
+  // Now the model acts on the review and fixes something. Reviewing again to check its own work is
+  // the single most valuable thing it can do, and the guard used to tell it not to bother.
+  g.bump();
+  assert.equal(
+    g.record("unreal_review_blueprint", { path: "/Game/BP_A.BP_A" }).notice,
+    null,
+    "re-checking work after a change is not a loop"
+  );
+
+  // Still a loop if it repeats again without changing anything.
+  assert.ok(g.record("unreal_review_blueprint", { path: "/Game/BP_A.BP_A" }).notice);
+});
+
+test("the notice no longer claims the answer cannot change", () => {
+  const g = new RepeatGuard();
+  g.record("unreal_doctor", {});
+  const { notice } = g.record("unreal_doctor", {});
+  assert.match(notice, /nothing has changed the project in between/);
+});

@@ -329,13 +329,28 @@ Scope, honestly: these are single features with clear descriptions, not system d
 model still cannot hold a plan across turns. It no longer has to. Full write-up in
 [../docs/LOCAL_MODEL_BENCHMARK.md](../docs/LOCAL_MODEL_BENCHMARK.md).
 
-### Handbooks, for models that were never trained on Unreal
+### Handbooks, for any model driving an engine it cannot recall exactly
 
-A capable local model - Qwen, DeepSeek, anything you host yourself - can write logic perfectly
-well. What it lacks is Unreal's vocabulary: the class hierarchy, exec wires versus data pins, how
-to get a reference to another actor, and the dozen traps that each cost a failed call to discover.
-That is a gap a document can close, and it is the difference between a self-hosted model being
-unusable here and being genuinely useful.
+Any model - a local Qwen or DeepSeek, or a frontier one - can write logic perfectly well. What none
+of them can do reliably is recall Unreal's exact vocabulary: that the target pin is spelled `self`,
+that Sequence's outputs are `then_0` and `then_1`, that a struct default is a comma triple. A
+frontier model is not exempt from this; it is merely more confident while getting it wrong, which is
+worse. That is a gap a document closes, and each of these facts otherwise costs a failed call to
+learn.
+
+**`unreal_guide` is how the model reaches them mid-task.** The prompts below have to be pulled in by
+the *client*, and most clients surface prompts as a menu for the human — so the model could never
+reach any of this on its own initiative, which is exactly when it is worth having. `unreal_guide`
+fixes that, and is built to be cheap: with no `section` it returns only the list of section
+headings, so the model spends a few hundred tokens to find the one paragraph it needs rather than
+several thousand inlining a whole handbook. Pass a heading to read that section, or `full: true` for
+everything.
+
+```
+unreal_guide({ topic: "handbook" })                      # just the section headings
+unreal_guide({ topic: "handbook", section: "pin" })      # the section about pins
+unreal_guide({ topic: "recipes", section: "health" })    # how to build health and damage
+```
 
 Three guides ship as MCP prompts, so any client can pull them in with no configuration, and they
 cost nothing until asked for:
