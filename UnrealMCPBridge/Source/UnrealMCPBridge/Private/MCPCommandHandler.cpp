@@ -414,8 +414,19 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 		return nullptr;
 	}
 
-	// Short name form ("Actor", "Pawn", "ActorComponent"): try native prefixes, then bare name.
-	static const TCHAR* Prefixes[] = { TEXT("A"), TEXT("U"), TEXT("") };
+	// Short name form ("Actor", "Pawn", "ActorComponent"). The EXACT name is tried first, and the
+	// order is the whole point.
+	//
+	// It used to try "A" and then "U" before the bare name, which silently answered the wrong
+	// question whenever some other class happened to be named "A" plus what was asked for. Found by
+	// measuring, not by reading: describe_class("BP_Player_C") on a real project returned
+	// ABP_Player_C - an AnimBlueprint, in a folder called "NotUsingIThink" - with its ancestry, its
+	// isActor:false, and no indication it was not the class asked for. A model would have reasoned
+	// from it and never known.
+	//
+	// The prefixes are not needed for native classes anyway: UClass::GetName() carries no prefix, so
+	// AActor is found as "Actor". They stay as a fallback for a caller who writes the C++ spelling.
+	static const TCHAR* Prefixes[] = { TEXT(""), TEXT("A"), TEXT("U") };
 	for (const TCHAR* Prefix : Prefixes)
 	{
 		const FString Candidate = FString(Prefix) + ClassName;

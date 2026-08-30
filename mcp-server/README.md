@@ -1113,6 +1113,27 @@ A test asserts that no tool is stranded outside core and every group, so a tool 
 cannot silently become unreachable in `lazy` or `search`.
 
 
+### Driving the editor headlessly
+
+Two things learned by doing it for a day, both of which cost time to rediscover:
+
+**Close the editor gracefully, never force-kill it.** A killed editor shows a **"Restore Packages"**
+dialog on next launch, and a modal dialog blocks the game thread — so the bridge accepts the TCP
+connection and then never answers, which looks exactly like a hung or broken plugin. `unreal_doctor`
+reports it honestly ("accepted the connection but did not answer"), but the cause is a window nobody
+is looking at.
+
+**If it does happen, relaunch with `-unattended`**, which suppresses modal dialogs and gets past the
+prompt:
+
+```
+UnrealEditor.exe <project>.uproject -nosplash -unattended -nopause
+```
+
+An editor that has just been force-killed also rebuilds derived data on the next open, so give it
+longer than usual before deciding something is wrong — poll `unreal_ping` rather than guessing at a
+fixed wait.
+
 ### Security: what this bridge does and does not protect you from
 
 Security surveys of MCP servers keep finding the same shape. One 2025 review of popular servers
