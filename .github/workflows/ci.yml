@@ -49,7 +49,7 @@ jobs:
         run: npm run build
 
       # The whole guard set: typecheck, tool/bridge parity, documentation, profile token budgets,
-      # strict-client protocol conformance, and the unit tests. Every one of these exists because
+      # REPLY token budgets, strict-client protocol conformance, and the unit tests. Every one of these exists because
       # the thing it prevents had already happened at least once.
       #
       # No editor is reachable here, which is itself worth exercising: the suite has to pass with

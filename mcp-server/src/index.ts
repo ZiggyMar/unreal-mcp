@@ -2778,12 +2778,16 @@ register(
       }
     }
 
-    const available = [...toolHandles.entries()].filter(([, h]) => h.enabled).map(([name]) => name);
+    const enabledCount = [...toolHandles.values()].filter((h) => h.enabled).length;
     return jsonResult({
       requested: { groups: groups ?? [], tools: tools ?? [] },
       newlyEnabled: enabled,
       alreadyOn: enabled.length === 0 && unknown.length === 0,
-      availableTools: available.sort(),
+      // A count, not the list. Echoing every enabled tool name cost about 700 tokens and grew with
+      // the tool count - so enabling ONE tool cost the same as enabling thirty-two, and the reply
+      // was mostly a repeat of the tools/list the client had just been notified about. What the
+      // caller cannot get elsewhere is which names were newly switched on, and that is above.
+      enabledCount,
       // Named rather than ignored: a typo that silently enables nothing is a tool call spent for no
       // effect, and the caller has no way to tell that from "it was already on".
       ...(unknown.length > 0

@@ -981,7 +981,23 @@ problem.**
 | `minimal` | 11 tools, ~4.0k tokens | only those, permanently | small local models |
 
 Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
-fails if a profile grows past the ceiling its intended model can hold. They were hand-measured once
+fails if a profile grows past the ceiling its intended model can hold.
+
+**Replies are budgeted too, by `npm run check:replies`.** `check:profiles` guards the standing cost —
+what the tool *definitions* cost before a conversation starts. Nothing guarded what a tool costs when
+it *answers*, and that gap was not hypothetical: `unreal_list_tools`, whose entire purpose is keeping
+this surface cheap, had grown to **5,523 tokens** per call, and `unreal_enable_tools` echoed every
+enabled tool name back so that enabling *one* tool cost the same 700 tokens as enabling thirty-two.
+Both had grown a tool at a time while the number that would have exposed them sat in a document
+nobody re-measured. It now fails the build instead.
+
+It covers only editor-free tools, deliberately — anything that reads a real project produces a reply
+whose size depends on the project, so a fixed ceiling would be meaningless and would fail on someone
+else's machine. Those are measured against a live editor by `npm run measure:cost`.
+
+Every case asserts the reply actually *contains* what it should before measuring it. That is not
+belt-and-braces: the first version of the script reported two cases comfortably under budget at
+**eleven tokens**, because the tool was disabled and it was measuring the error message. They were hand-measured once
 before that existed and were wrong within a few commits, which is the argument for the script.
 
 **`search` is the one to reach for on a capable model**, and it is what `--print-config` now writes
