@@ -125,3 +125,26 @@ test("the next step names the tool that repairs it", async () => {
   assert.match(result.next, /unreal_set_data_table_row/);
   assert.match(result.next, /unreal_save_asset/);
 });
+
+test("list_assets is called with the parameters the bridge actually takes", async () => {
+  // This test exists because the first version sent `classNames: ["DataTable"]`. The fake bridge
+  // accepted it without complaint and a real editor answered "missing_param: className is required"
+  // on the very first call. A mock that takes anything verifies nothing about the contract, so the
+  // contract is pinned here explicitly.
+  let seen = null;
+  const bridge = {
+    async send(cmd, params = {}) {
+      if (cmd === "list_assets") {
+        seen = params;
+        if (typeof params.className !== "string") throw new Error("missing_param: className is required");
+        return { assets: [] };
+      }
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+
+  await auditDataTables(bridge, { pathPrefix: "/Game/Data" });
+  assert.equal(seen.className, "DataTable", "singular className, not classNames");
+  assert.equal(seen.pathPrefix, "/Game/Data");
+  assert.equal("classNames" in seen, false, "the plural form is not a parameter the bridge knows");
+});

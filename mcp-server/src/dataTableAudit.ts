@@ -76,8 +76,11 @@ export async function auditDataTables(
 
   let tables: string[] = options.paths ?? [];
   if (tables.length === 0) {
+    // `className`, singular. The bridge takes one class name, not a list - which a mocked test
+    // happily accepted and a real project rejected on the first call. The name is pinned by a test
+    // now, because a parameter a fake will take and the engine will not is worth exactly one bug.
     const listed = await bridge.send<{ assets?: Array<{ path?: string } | string> }>("list_assets", {
-      classNames: ["DataTable"],
+      className: "DataTable",
       pathPrefix: options.pathPrefix ?? "/Game",
       maxResults: limit,
     });
