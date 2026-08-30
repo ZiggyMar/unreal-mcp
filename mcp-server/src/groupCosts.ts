@@ -7,18 +7,19 @@
 // `npm run measure:groups` fails when they drift, because a stale number here is worse than none.
 
 /** Tool-definition tokens standing on the `search` profile before anything is enabled. */
-export const SEARCH_BASELINE_TOKENS = 1244;
+export const SEARCH_BASELINE_TOKENS = 1239;
 
 /** Tokens added by enabling each group. */
 export const GROUP_COST_TOKENS: Record<string, number> = {
   core: 10427,
-  edit: 3153,
+  cpp: 417,
+  edit: 3154,
   ui: 1942,
   materials: 1411,
-  data: 3610,
+  data: 3611,
   scene: 5616,
-  maintenance: 1513,
+  maintenance: 1514,
 };
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
-export const ALL_GROUPS_TOKENS = 28918;
+export const ALL_GROUPS_TOKENS = 29330;

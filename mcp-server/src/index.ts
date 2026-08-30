@@ -32,6 +32,7 @@ import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
 import { compactBlueprintRow, compactVariable } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, GROUP_COST_TOKENS } from "./groupCosts.js";
+import { compileNative } from "./nativeBuild.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -365,9 +366,21 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_find_orphans",
   ],
   maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
+  // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
+  // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
+  // CLAIMS without changing what enable_tools DOES - the group would say cpp while `core` still
+  // switched it on. A listing that disagrees with the behaviour is worse than a group that is one
+  // tool larger than it looks. Removing it from CORE_PROFILE_TOOLS instead would shrink the surface
+  // the local-model benchmark was measured against, which is not a thing to do as a side effect.
+  //
+  // find_source also earns its place in the spine: called with no symbol it answers "does this
+  // project have C++ at all", which is orientation, not C++ work.
+  cpp: ["unreal_compile_cpp"],
 };
 
 const GROUP_SUMMARY: Record<string, string> = {
+  cpp: "compile a C++ source file to see whether an edit built (find_source, which locates it, is in core)",
   edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
   materials: "Materials and Material Instances: create them, parameterise them, override them",
@@ -2899,12 +2912,13 @@ register(
   {
     title: "Turn on a group of Unreal tools",
     description:
-      "This server starts with a small set of always-available tools and keeps the rest switched off until asked, " +
-      "so a session that never builds UI never pays the context cost of the UI tools. Call this the moment you " +
-      "need something from a group, then use those tools normally. Groups:\n" +
+      "This server keeps most tools switched off until asked, so a session that never builds UI never pays for " +
+      "the UI tools. Call this the moment you need something from a group, then use those tools normally. Groups:\n" +
       '  - "core": the authoring spine - read a project, find a function, scaffold a Blueprint, build a ' +
-      "graph, compile, review, and save. On the \"search\" profile nothing is on until you ask, so this is " +
-      'your first call and often the only one you need: ["core"] alone can carry a whole feature.\n' +
+      "graph, compile, review, and save. Much the largest group: enable it to author, not to look " +
+      'around. unreal_list_tools reports what each group costs.\n' +
+      '  - "cpp": the C++ in this project - find where a symbol is declared, and compile a file to see if an ' +
+      "edit built. Only useful on a project that has C++.\n" +
       '  - "edit": single-node graph editing (add/remove one node, wire one pin, set one default, move and comment ' +
       "nodes). You usually do NOT need this: unreal_build_graph places whole graphs in one call and auto-lays them " +
       "out. Enable it to adjust an existing graph surgically.\n" +
@@ -2914,11 +2928,11 @@ register(
       '  - "scene": Levels, actors, components, class defaults (including replication), project settings, input ' +
       "mappings, and Play In Editor.\n" +
       '  - "maintenance": what references an asset, deleting assets safely, and the Refresh Nodes repair.\n\n' +
-      "Enabling is immediate and lasts the session. Ask for everything the job plausibly needs in one call " +
-      "rather than discovering it one at a time; the response lists what was turned on, and re-calling is harmless.",
+      "Enabling is immediate and lasts the session. Ask for everything the job needs in one call rather than " +
+      "one at a time; re-calling is harmless.",
     inputSchema: {
       groups: z
-        .array(z.enum(["core", "edit", "ui", "materials", "data", "scene", "maintenance"]))
+        .array(z.enum(["core", "cpp", "edit", "ui", "materials", "data", "scene", "maintenance"]))
         .optional()
         .describe('Whole groups to turn on, e.g. ["core","ui"].'),
       tools: z
@@ -3207,6 +3221,55 @@ register(
     });
   }
 );
+
+register(
+  "unreal_compile_cpp",
+  {
+    title: "Compile the project's C++ and get the errors",
+    description:
+      "**Call this after editing a .cpp or .h.** unreal_find_source shows you where the C++ is; this tells you " +
+      "whether your change built. Without it a model can locate a symbol, edit the file, and then has no way to " +
+      "know if the edit compiles - in a client with no shell that is a hard stop, and guessing at C++ is how a " +
+      "confident wrong answer gets delivered.\n\n" +
+      "Pass a `file` and it compiles that one translation unit and skips linking. That is the default because it " +
+      "is what you almost always want: it takes seconds rather than minutes, and it works while the editor is " +
+      "running. Omit `file` for a full editor build, but read the warning below first.\n\n" +
+      "**A full build fails while the editor is open**, and not because your code is wrong: the running editor " +
+      "holds the module DLL open so the link step cannot replace it. The bridge lives inside that editor, so it " +
+      "cannot close it for you. If you get a failure with no diagnostics, that is what happened - compile a single " +
+      "file instead.\n\n" +
+      "Errors come back structured - file, line, code and message, project-relative paths, duplicates removed - " +
+      "not as build output. A UnrealBuildTool run emits megabytes and the answer is usually one line of it.",
+    inputSchema: {
+      file: z
+        .string()
+        .optional()
+        .describe(
+          "Absolute path to one .cpp to compile without linking. Strongly preferred: seconds instead of minutes, " +
+            "and it works with the editor running. Omit for a full editor build."
+        ),
+    },
+  },
+  async ({ file }) => {
+    try {
+      // The engine and project locations come from the editor itself rather than from configuration,
+      // because they are the two things a client cannot know and the editor always can.
+      const info = await bridge.send<{ projectFile?: string; engineDir?: string }>("ping", {});
+      if (!info.projectFile || !info.engineDir) {
+        throw new Error(
+          "missing_engine_paths: this plugin build does not report engineDir. Rebuild the bridge plugin " +
+            "(npm run build:engines) - unreal_ping's pluginBuiltAt will tell you how old the running one is."
+        );
+      }
+      return jsonResult(
+        await compileNative({ projectFile: info.projectFile, engineDir: info.engineDir, file })
+      );
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
 
 register(
   "unreal_guide",

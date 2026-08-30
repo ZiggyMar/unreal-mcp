@@ -579,6 +579,40 @@ It returns **locations, never contents**: a path, a line number, and the one lin
 whole-project symbol lookup costs a few hundred tokens instead of several thousand, and the model
 reads what it actually wants with the tools it already has.
 
+### Compiling that C++: `unreal_compile_cpp`
+
+Locating a symbol is half a workflow. `find_source` shows where the C++ is and the model edits it
+with its own file tools — and then, until now, had no way to find out whether the edit built. With a
+shell that is inconvenient; in Claude Desktop, which has no shell, it is a hard stop, and guessing at
+C++ is how a confident wrong answer gets delivered.
+
+```text
+unreal_compile_cpp({ file: "M:/Proj/Source/MyGame/Private/MyCharacter.cpp" })
+unreal_compile_cpp({})   # full editor build - read the warning below
+```
+
+**Single-file is the default and is what you want.** UnrealBuildTool's `-SingleFile` compiles one
+translation unit and skips linking: measured at 33 seconds against this plugin's own 6,900-line
+command handler, where a full editor build is minutes. It also sidesteps the thing that makes a
+naive "just build it" tool useless here — **a running editor holds the module DLL open, so the link
+step fails however correct the code is**. The bridge lives inside that editor, so it cannot close it
+to satisfy the build. A failure with no diagnostics is almost always that, and the reply says so.
+
+Errors come back structured — file, line, compiler code, message, project-relative paths, duplicates
+removed — because a UBT run emits megabytes and the answer is usually one line of it. Forwarding the
+log would be the single most expensive reply this server has.
+
+The engine and project locations come from `unreal_ping`, not from configuration: they are the two
+things a client cannot know and the editor always can. `ping` reports `engineDir` for exactly this
+reason — an engine install moves, and there is no registry entry a cross-platform client can trust.
+
+`unreal_compile_cpp` is the whole of the **`cpp` group**, so a Blueprint-only project never pays for
+it. `find_source` deliberately stays in `core`: enabling `"core"` enables `CORE_PROFILE_TOOLS` rather
+than this table's `core` entry, so moving `find_source` would have changed what `unreal_list_tools`
+*claims* without changing what `enable_tools` *does* — a listing that disagrees with the behaviour is
+worse than a group one tool larger than it looks. It earns its place there anyway: called with no
+symbol it answers "does this project have C++ at all", which is orientation rather than C++ work.
+
 Two things came out of measuring it against a real project rather than trusting it:
 
 **A module is a directory with a `.Build.cs` in it**, which is how UnrealBuildTool decides. Treating

@@ -1099,6 +1099,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandlePing(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("project"), FApp::GetProjectName());
 	Result->SetStringField(TEXT("projectFile"), FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()));
 	Result->SetStringField(TEXT("engineVersion"), FEngineVersion::Current().ToString(EVersionComponent::Patch));
+	// WHERE the engine is, which is not derivable from the version: installs move, and there is no
+	// registry entry a cross-platform client can trust. Without this a caller cannot find Build.bat,
+	// so it cannot compile the project's C++ at all - it can locate a symbol and then do nothing
+	// about it. Full path, because a relative one is relative to a working directory the caller
+	// does not share.
+	Result->SetStringField(TEXT("engineDir"), FPaths::ConvertRelativePathToFull(FPaths::EngineDir()));
 	// Source control state, because it decides whether a save can succeed at all: an un-checked-out
 	// file is read-only, and a Blueprint is a binary asset nobody can merge afterwards.
 	Result->SetBoolField(TEXT("sourceControlEnabled"), USourceControlHelpers::IsEnabled());
