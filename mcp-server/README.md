@@ -1078,6 +1078,25 @@ that removes the events leaves a list of function calls belonging to nothing.
 A graph smaller than the cap comes back exactly as it always did, with no truncation bookkeeping
 attached. Only the graphs that would have cost six figures are touched at all.
 
+**Node ids in a graph summary are abbreviated, because they were 29% of the reply.** A node id is 32
+hex characters and appears once per node and again for every link into it — measured on that same
+807-node graph, **19,592 tokens of 67,163 were identifiers**, carrying no information beyond "which
+node". The summary emits the shortest prefix that is unique across that graph, never shorter than 8,
+and **every command that takes a node id accepts a unique prefix**. On that graph the full read went
+from 67,163 tokens to 52,469 and the capped default from 9,085 to 8,017.
+
+Two details keep it safe. The length is computed per graph and lengthens if 8 characters would
+collide, because two nodes sharing an id is not a cosmetic problem — it is edits landing on the wrong
+node. And an ambiguous prefix is *named* as ambiguous, listing the candidates, rather than resolved
+to whichever node came first:
+
+```
+ambiguous_node_id: 'A' matches 45 nodes in this graph (A0B1A6EB..., ADDE6CA3..., ...). Use more characters.
+```
+
+Single-node replies elsewhere still carry the whole GUID, where one identifier costs nothing and
+being able to quote it anywhere is worth more.
+
 **The other two big reads got the same treatment**, and the breakdown decided the fix in each case
 rather than a guess:
 
