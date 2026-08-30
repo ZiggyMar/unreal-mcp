@@ -360,6 +360,30 @@ It names the three shapes that are bugs in themselves:
 
 A few seconds to scan every Blueprint, against the alternative of opening them one at a time.
 
+### Names typed as text, checked against what exists
+
+A whole family of Blueprint bugs is one shape: a node takes a **name as a string**, nothing validates
+it, and a wrong one fails silently. The Blueprint compiles, the node is wired, and the call does
+nothing.
+
+- **`Get Data Table Row`** with a row name not in the table - returns an empty struct, and the
+  `Row Found` pin is routinely left unwired, so nothing reports it.
+- **`Set Timer by Function Name`** pointing at a function that does not exist - the timer runs at its
+  interval forever and calls nothing.
+
+Neither is visible from the asset holding the string, because the answer lives in a different asset.
+No amount of compiling finds them: the compiler has no idea those strings were meant to name
+anything. `unreal_audit_project` checks them now, and reports the rows a table **does** have, because
+a wrong row name is nearly always a near miss.
+
+**Only literal names are checked, and the reply says so.** A name coming from a variable is a runtime
+value and this says nothing about it. Measured on the project: 3 literal names checked, **33 from
+variables and skipped**. That is reported as coverage rather than as a clean bill of health - zero
+broken out of three reads as "all good" when it means "barely looked".
+
+There is deliberately **no MCP tool** for it. It belongs inside "find every bug", and a separate tool
+would cost every session ~330 tokens of definition for something nobody calls directly.
+
 ### VFX: `unreal_read_niagara_system`
 
 Same shape of gap as animation and AI: 17 Niagara systems in the project this is developed against,

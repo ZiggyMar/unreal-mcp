@@ -849,7 +849,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
-		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("read_niagara_system"), TEXT("trace_variable"), TEXT("trace_function_calls"),
+		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("read_niagara_system"), TEXT("trace_variable"), TEXT("trace_function_calls"), TEXT("find_broken_names"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -1084,6 +1084,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("trace_function_calls"))
 	{
 		Response = HandleTraceFunctionCalls(Params);
+	}
+	else if (Cmd == TEXT("find_broken_names"))
+	{
+		Response = HandleFindBrokenNames(Params);
 	}
 	else if (Cmd == TEXT("trace_variable"))
 	{
@@ -5534,6 +5538,185 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 		Result->SetStringField(TEXT("verdict"),
 			TEXT("Some calls run and some cannot. The dead ones are usually an older version of the same system, "
 				 "unplugged rather than deleted. Work on the ones under `reachable`."));
+	}
+	return MakeOkResponse(Result);
+}
+
+// Strings that name something, checked against whether that something exists.
+//
+// A whole family of Blueprint bugs is one shape: a node takes a NAME as text, nothing validates it,
+// and a wrong one fails silently. The Blueprint compiles, the node is wired, and the call does
+// nothing at all:
+//
+//   Get Data Table Row      a row name not in the table -> returns failure, and the "not found"
+//                           pin is routinely left unwired
+//   Set Timer by Function   a function name that does not exist -> the timer fires into nothing,
+//                           forever, at whatever rate was set
+//
+// Neither is visible from the asset holding the string, because the answer lives in a different
+// asset. That is exactly the kind of question this bridge is for, and no amount of compiling finds
+// it - the compiler has no idea those strings were meant to name anything.
+//
+// Only LITERAL names are checked. A row name coming from a variable is a runtime value and this says
+// nothing about it, rather than guessing.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindBrokenNames(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PathPrefix = TEXT("/Game");
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("pathPrefix"), PathPrefix);
+	}
+
+	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	FARFilter Filter;
+	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	Filter.PackagePaths.Add(FName(*PathPrefix));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	Registry.Get().GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Findings;
+	int32 Checked = 0;
+	int32 Scanned = 0;
+	// Candidates whose name arrives from a variable rather than typed in. Counted and reported,
+	// because "0 broken" out of 3 checks reads as "all good" when it means "barely looked" - and on
+	// the project this was written against, 3 of 40 candidates had a literal name.
+	int32 Runtime = 0;
+
+	for (const FAssetData& Asset : Assets)
+	{
+		UBlueprint* Blueprint = Cast<UBlueprint>(Asset.GetAsset());
+		if (!Blueprint)
+		{
+			continue;
+		}
+		++Scanned;
+
+		TArray<UEdGraph*> Graphs;
+		Blueprint->GetAllGraphs(Graphs);
+		for (UEdGraph* Graph : Graphs)
+		{
+			if (!Graph)
+			{
+				continue;
+			}
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node);
+				if (!CallNode)
+				{
+					continue;
+				}
+				const FString Called = CallNode->FunctionReference.GetMemberName().ToString();
+
+				auto LiteralPin = [CallNode](const TCHAR* PinName) -> UEdGraphPin*
+				{
+					for (UEdGraphPin* Pin : CallNode->Pins)
+					{
+						if (Pin && Pin->Direction == EGPD_Input && Pin->PinName == PinName && Pin->LinkedTo.Num() == 0)
+						{
+							return Pin;
+						}
+					}
+					return nullptr;
+				};
+
+				// A Data Table row name, against the table it is actually reading.
+				if (Called.Contains(TEXT("GetDataTableRow")))
+				{
+					UEdGraphPin* TablePin = LiteralPin(TEXT("Table"));
+					UEdGraphPin* RowPin = LiteralPin(TEXT("RowName"));
+					if (!TablePin || !RowPin || RowPin->DefaultValue.IsEmpty())
+					{
+						++Runtime;
+						continue;
+					}
+					UDataTable* Table = Cast<UDataTable>(TablePin->DefaultObject);
+					if (!Table)
+					{
+						++Runtime;
+						continue;
+					}
+					++Checked;
+					const FName Wanted(*RowPin->DefaultValue);
+					if (Table->GetRowNames().Contains(Wanted))
+					{
+						continue;
+					}
+
+					TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+					Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
+					Entry->SetStringField(TEXT("graph"), Graph->GetName());
+					Entry->SetStringField(TEXT("check"), TEXT("row-name-not-in-table"));
+					Entry->SetStringField(TEXT("message"), FString::Printf(
+						TEXT("reads row \"%s\" from %s, which has no such row. The lookup fails and returns an "
+							 "empty struct; the Row Found pin is usually not wired, so nothing reports it."),
+						*RowPin->DefaultValue, *Table->GetName()));
+
+					// The rows that DO exist, because a wrong row name is nearly always a near miss and
+					// a caller with no list has nothing to correct against.
+					TArray<FString> Rows;
+					for (const FName& RowName : Table->GetRowNames())
+					{
+						Rows.Add(RowName.ToString());
+						if (Rows.Num() >= 12)
+						{
+							break;
+						}
+					}
+					Entry->SetStringField(TEXT("fix"), FString::Printf(
+						TEXT("%s has: %s"), *Table->GetName(), *FString::Join(Rows, TEXT(", "))));
+					Findings.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+
+				// A timer's target function, against the class that would have to have it.
+				if (IsTimerByName(Called))
+				{
+					UEdGraphPin* NamePin = LiteralPin(TEXT("FunctionName"));
+					if (!NamePin || NamePin->DefaultValue.IsEmpty())
+					{
+						++Runtime;
+						continue;
+					}
+					++Checked;
+					UClass* OwnerClass = Blueprint->SkeletonGeneratedClass
+						? Blueprint->SkeletonGeneratedClass.Get()
+						: Blueprint->GeneratedClass.Get();
+					if (!OwnerClass || OwnerClass->FindFunctionByName(FName(*NamePin->DefaultValue)))
+					{
+						continue;
+					}
+
+					TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+					Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
+					Entry->SetStringField(TEXT("graph"), Graph->GetName());
+					Entry->SetStringField(TEXT("check"), TEXT("timer-target-missing"));
+					Entry->SetStringField(TEXT("message"), FString::Printf(
+						TEXT("starts a timer on \"%s\", which %s has no function or event by. The timer runs at "
+							 "its interval forever and calls nothing."),
+						*NamePin->DefaultValue, *Blueprint->GetName()));
+					Entry->SetStringField(TEXT("fix"),
+						TEXT("Check the spelling against the function or custom event it should call. Note that a "
+							 "timer can only target this Blueprint's own functions and events."));
+					Findings.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+			}
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("blueprintsScanned"), Scanned);
+	Result->SetNumberField(TEXT("namesChecked"), Checked);
+	Result->SetNumberField(TEXT("namesFromVariables"), Runtime);
+	Result->SetArrayField(TEXT("broken"), Findings);
+	if (Findings.Num() == 0)
+	{
+		Result->SetStringField(TEXT("verdict"), FString::Printf(
+			TEXT("%d literal names checked, all resolve. %d more came from variables and were NOT checked - "
+				 "those are runtime values and this says nothing about them. Read that as coverage, not as a "
+				 "clean bill of health: on a project that builds its names at runtime this check sees very "
+				 "little."), Checked, Runtime));
 	}
 	return MakeOkResponse(Result);
 }

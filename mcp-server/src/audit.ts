@@ -49,6 +49,9 @@ export const FINDING_COST: Record<string, number> = {
   // machine looks finished in the editor because the state IS wired - just not outward.
   "anim-state-no-exit": 80,
   // A system that can render nothing, spawned by a Blueprint that looks correct.
+  // A name typed as text that names nothing. The Blueprint compiles and the call does nothing.
+  "row-name-not-in-table": 85,
+  "timer-target-missing": 85,
   "niagara-system-empty": 60,
   "niagara-all-emitters-disabled": 60,
   // Draws exactly like a working transition and behaves like a wall.
@@ -92,6 +95,10 @@ const WHY_IT_COSTS: Record<string, string> = {
     "Usually fine: if the referenced Actor replicates itself, clients already see it and the variable is just the server's handle. Worth one look, not a rewrite.",
   "anim-state-no-exit":
     "The character enters the pose and stays in it. Reads as 'he freezes after the dodge', and nothing warns.",
+  "row-name-not-in-table":
+    "The lookup returns an empty struct and the Row Found pin is usually unwired, so nothing reports it.",
+  "timer-target-missing":
+    "The timer runs at its interval forever and calls nothing. Nothing warns, at compile time or at runtime.",
   "niagara-system-empty":
     "The spawn call succeeds and nothing appears. Reads as 'the effect doesn't play', with no error to search for.",
   "niagara-all-emitters-disabled":
@@ -417,6 +424,31 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   } catch {
     // An older bridge has no read_anim_blueprint. The rest of the audit is still worth returning,
     // and a hard failure here would make upgrading the server a prerequisite for auditing at all.
+  }
+
+  // Names typed as text, checked against whether the thing they name exists. Deliberately no MCP
+  // tool of its own: it belongs in "find every bug", and a separate tool would cost every session
+  // ~330 tokens of definition for a check nobody calls directly.
+  try {
+    const broken = await bridge.send<{
+      broken?: Array<{ blueprint: string; graph: string; check: string; message: string; fix: string }>;
+      namesChecked?: number;
+      namesFromVariables?: number;
+    }>("find_broken_names", { pathPrefix });
+    for (const finding of broken.broken ?? []) {
+      findings.push({
+        blueprint: finding.blueprint,
+        path: pathOfBlueprint.get(finding.blueprint) ?? pathPrefix,
+        graph: finding.graph,
+        check: finding.check,
+        severity: "warning",
+        message: `${finding.blueprint} ${finding.message}`,
+        fix: finding.fix,
+        cost: FINDING_COST[finding.check] ?? 1,
+      });
+    }
+  } catch {
+    // An older bridge has no find_broken_names; the rest of the audit still stands.
   }
 
   // VFX. Same reasoning as the animation pass: a NiagaraSystem is not a Blueprint, so list_blueprints

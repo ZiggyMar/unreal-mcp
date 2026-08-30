@@ -54,7 +54,17 @@ for (const tool of registeredTools) {
   covered.add(aliases.get(tool) ?? tool);
 }
 
-const unreachable = [...bridgeCommands].filter((cmd) => !covered.has(cmd)).sort();
+// Bridge commands that deliberately have no MCP tool: internal helpers a composite tool calls, where
+// a separate tool would cost every session a definition for something nobody calls directly.
+//
+// find_broken_names checks names typed as text - a Data Table row, a timer's target function -
+// against whether that thing exists. It belongs inside "find every bug", and audit_project is what
+// calls it. Exposing it as well would add ~330 tokens of standing context to earn nothing.
+const internalCommands = new Set(["find_broken_names"]);
+
+const unreachable = [...bridgeCommands]
+  .filter((cmd) => !covered.has(cmd) && !internalCommands.has(cmd))
+  .sort();
 const dangling = [...covered].filter((cmd) => !bridgeCommands.has(cmd)).sort();
 
 if (unreachable.length === 0 && dangling.length === 0) {

@@ -103,6 +103,7 @@ private:
 	static TSharedRef<FJsonObject> HandleReadBehaviorTree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleReadNiagaraSystem(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleTraceVariable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleFindBrokenNames(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleTraceFunctionCalls(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetAssetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSaveAsset(const TSharedPtr<FJsonObject>& Params);
