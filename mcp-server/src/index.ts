@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, pickFields } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -684,9 +684,17 @@ register(
         .optional()
         .describe('Filter by name, path or parent class, e.g. "Enemy".'),
       maxResults: z.number().optional().describe("Cap on results. Default 100."),
+      fields: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Return only these fields on each row, e.g. ["path"]. A view, not a filter - it changes what ' +
+            "each row carries, not which rows come back. Names that match nothing are reported rather than " +
+            "silently dropped."
+        ),
     },
   },
-  async ({ pathPrefix, match, maxResults }) => {
+  async ({ pathPrefix, match, maxResults, fields }) => {
     try {
       const result = await bridge.send<ListBlueprintsResult>("list_blueprints", { pathPrefix });
       const all = result.blueprints ?? [];
@@ -696,20 +704,35 @@ register(
         : all;
       const limit = Math.max(1, Math.min(maxResults ?? 100, 5000));
 
-      // Compact AFTER filtering: `match` reads the name that compaction removes.
-      const compact = (rows: typeof all) => rows.map((r) => compactBlueprintRow({ ...r }));
+      // Compact AFTER filtering: `match` reads the name that compaction removes. The field view is
+      // applied last, for the same reason - it is what the caller SEES, not what the tool searches.
+      let unknownFields: string[] = [];
+      const compact = (rows: typeof all) => {
+        const compacted = rows.map((r) => compactBlueprintRow({ ...r }));
+        if (!fields || fields.length === 0) return compacted;
+        const picked = pickFields(compacted, fields);
+        unknownFields = picked.unknown;
+        return picked.rows;
+      };
+      const withFieldNote = (payload: Record<string, unknown>) =>
+        unknownFields.length > 0
+          ? { ...payload, unknownFields, note: `No row has ${unknownFields.join(", ")}; those were ignored.` }
+          : payload;
 
       if (filtered.length <= limit) {
         return jsonResult(
-          needle
-            ? { ...result, blueprints: compact(filtered), totalBlueprints: all.length }
-            : { ...result, blueprints: compact(all) }
+          withFieldNote(
+            needle
+              ? { ...result, blueprints: compact(filtered), totalBlueprints: all.length }
+              : { ...result, blueprints: compact(all) }
+          )
         );
       }
       // 339 Blueprints came to 15,149 tokens on a real project. Enumerating a whole project is
       // rarely the question; finding something in it usually is, and search_project answers that
       // for a sixth of the cost.
-      return jsonResult({
+      return jsonResult(
+        withFieldNote({
         ...result,
         blueprints: compact(filtered.slice(0, limit)),
         totalBlueprints: all.length,
@@ -720,7 +743,8 @@ register(
           `${all.length} Blueprints in this project; ${limit} listed. Narrow with \`match\` (name, path ` +
           `or parent class) or \`pathPrefix\`, use unreal_search_project to find one by what it contains, ` +
           `or raise \`maxResults\`.`,
-      });
+        })
+      );
     } catch (err) {
       return errorResult(err);
     }

@@ -338,6 +338,38 @@ Measured: 4 tools / ~1.2k tokens standing, against 80 / ~25.5k for `full`.
   `GenerateClientConfig` from inside the editor. Our equivalent of the last one is
   `--print-config`; we have no in-editor control surface at all.
 
+### Re-checked 2026-08-30 (second pass)
+
+Epic's plugin is **materially unchanged** since the first read: still Experimental, still the same
+toolsets, still HTTP-only, still no Resources or Prompts. Nothing new to adopt there.
+
+The ecosystem around it has moved, and one competitor is worth studying rather than dismissing.
+**Monolith** advertises 1,400+ actions across 25+ namespaces - Blueprints, Materials, Animation,
+Niagara, Mesh, UI, Behavior Trees, State Trees, EQS, GAS, Audio - with a "Reflection Intelligence"
+layer doing replication census, RPC discovery, OnRep handler validation and C++ reflection queries.
+
+**Its token strategy is the same family as ours, arrived at independently.** It does not ship 1,400
+definitions: each namespace registers one `{namespace}_query()` dispatcher, `monolith_discover()`
+returns terse one-line listings, and full schemas come on demand. That is Epic's `list_toolsets` /
+`describe_toolset` / `call_tool` shape again, and the same problem our `search` profile solves. Ours
+still has the edge that matters: after `enable_tools`, the tools are **real MCP tools with native
+schemas**, so there is no dispatcher hop and no lost validation on every call.
+
+**The one idea worth taking: universal response shaping.** They expose `_fields`, `_omit` and
+`_compact_json` on every action, so a caller can ask for only the parts of a reply it needs. This
+project does the same job per-tool instead - node caps, `match` filters, dropped false flags, wiring
+flattened to one line - which is better tuned but only covers the tools that were tuned.
+
+Adopting it *universally* was costed and rejected: an extra parameter on all 96 tools is roughly
+40 tokens each, about 3,800 tokens of standing context, against reads that are already 1-3.7k. That
+trade is negative. Applied to the handful of largest reads it is positive, which is where it belongs
+if it is added at all.
+
+**What they have that we do not, honestly:** Niagara, GAS, State Trees, EQS, Audio, motion matching,
+and AnimGraph *authoring* (we read Anim Blueprints, we cannot build one). Niagara is the next gap by
+the same reasoning that made animation and AI worth doing - 17 Niagara systems in the project this is
+developed against, and "the effect does not play" is a sentence a person actually says.
+
 Net effect on positioning: the first-party plugin validates the in-editor MCP surface and, on token
 discipline, was ahead of us — that is now fixed and credited. It still does not compete on reading
 and editing an existing project's Blueprints, and it does not exist for 5.6.

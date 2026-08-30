@@ -6,6 +6,7 @@ import {
   omitDefault,
   compactVariable,
   compactBlueprintRow,
+  pickFields,
   VARIABLE_FLAGS,
 } from "../dist/compactRows.js";
 
@@ -96,4 +97,35 @@ test("the path keeps its object suffix even though the short form resolves", () 
   // other eighty-three, and these paths get pasted into all of them.
   const out = compactBlueprintRow({ name: "BP_Thing", path: "/Game/Folder/BP_Thing.BP_Thing" });
   assert.match(out.path, /BP_Thing\.BP_Thing$/);
+});
+
+test("a field view keeps only what was asked for", () => {
+  const rows = [
+    { path: "/Game/A.A", parentClass: "Actor", extra: 1 },
+    { path: "/Game/B.B", parentClass: "Pawn", extra: 2 },
+  ];
+  const { rows: out, unknown } = pickFields(rows, ["path"]);
+  assert.deepEqual(out, [{ path: "/Game/A.A" }, { path: "/Game/B.B" }]);
+  assert.deepEqual(unknown, []);
+});
+
+test("a name that matches nothing is reported, not silently dropped", () => {
+  // Failing the whole read because one name was wrong turns a cheap question into no answer. But
+  // saying nothing would let a typo quietly narrow the view to fields the caller never chose, which
+  // reads as "the project has no parent classes" rather than "you spelled it wrong".
+  const { rows, unknown } = pickFields([{ path: "/Game/A.A", parentClass: "Actor" }], ["path", "parentclass"]);
+  assert.deepEqual(rows, [{ path: "/Game/A.A" }]);
+  assert.deepEqual(unknown, ["parentclass"], "case matters, and the caller should be told");
+});
+
+test("an empty field list returns the rows untouched", () => {
+  const rows = [{ path: "/Game/A.A", parentClass: "Actor" }];
+  assert.deepEqual(pickFields(rows, []).rows, rows);
+});
+
+test("a field absent from one row but present in another is not reported unknown", () => {
+  // Sparse rows are normal here: compaction drops flags that are false and fields that are default,
+  // so a field genuinely present in the data may be missing from any given row.
+  const { unknown } = pickFields([{ path: "a" }, { path: "b", replicated: true }], ["replicated"]);
+  assert.deepEqual(unknown, []);
 });

@@ -1410,6 +1410,17 @@ Four together measured **14,368**, which is more than `core` costs — so a job 
 four surfaces should enable the group. The instructions say so, with the measured numbers, because a
 rule of thumb a model cannot check is one it will apply in the wrong place.
 
+**A field view on the largest listing.** `unreal_list_blueprints` takes an optional `fields` - ask
+for `["path"]` and each row carries only that. Measured on the project: 12,117 tokens to 8,950, a
+26% cut, for a caller that already knows it only wants paths.
+
+Deliberately **not** universal, and the arithmetic is why. Competing servers expose `_fields` on every
+action; an extra parameter on all 96 tools here is roughly 40 tokens each, about 3,800 tokens of
+standing context, against reads already down to 1-3.7k. That trade is a loss everywhere except the
+few largest reads, so it lives on those and nowhere else. A field name matching nothing is reported
+rather than silently narrowing the view - a typo would otherwise read as "this project has no parent
+classes" instead of "you spelled it wrong".
+
 **Naming tools instead of enabling a group is the largest single saving available**, and it is now
 measured rather than asserted. `npm run trial:feature --by-name` runs the whole five-surface trial on
 nothing but the tools it calls — derived from the trial's own source, so the list cannot drift from

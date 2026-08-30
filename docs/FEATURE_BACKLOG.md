@@ -221,3 +221,29 @@ transition rules, the way `read_blueprint_summary` does for an Event Graph.
 
 Niagara (17) and Level Sequences (9) are real but narrower; Behavior Trees (3) are barely used here
 and would matter much more on a project built around them.
+
+
+---
+
+## Niagara (identified 2026-08-30, second competitive pass)
+
+**The finding:** 17 `NiagaraSystem` and 2 `NiagaraEmitter` assets in the project this is developed
+against, plus 7 legacy `ParticleSystem`, and nothing here can read any of them. Competing servers
+cover Niagara; this one does not.
+
+**Why it matters:** "the effect does not play" is a sentence people say, and it has the same shape as
+"the character is not animating" - which was worth closing. A Blueprint spawns a system and sets a
+user parameter; whether that parameter exists, and what the system expects, is invisible from the
+Blueprint side. The bridge can currently see the spawn call and nothing it spawns.
+
+**Scope, honestly:** read-only first, as with animation - list a system's emitters and its exposed
+user parameters, so "the Blueprint sets `SpawnRate` and the system has no such parameter" becomes a
+one-call answer. Authoring Niagara is a much larger second step and probably not worth it.
+
+**Not started.**
+
+## Response shaping (considered 2026-08-30, deliberately narrow)
+
+Competing servers expose `_fields` / `_omit` on every action. Costed here: an extra parameter on 96
+tools is ~40 tokens each, ~3,800 tokens of standing context, against reads already down to 1-3.7k.
+Universally it is a net loss. On the four largest reads it pays. Worth doing there and nowhere else.
