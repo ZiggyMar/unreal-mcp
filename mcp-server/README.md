@@ -1050,7 +1050,23 @@ nobody re-measured. It now fails the build instead.
 
 It covers only editor-free tools, deliberately — anything that reads a real project produces a reply
 whose size depends on the project, so a fixed ceiling would be meaningless and would fail on someone
-else's machine. Those are measured against a live editor by `npm run measure:cost`.
+else's machine.
+
+**`npm run measure:reads` is the other half**, and it needs an editor. It finds the largest graph in
+the open project by itself rather than trusting a path hardcoded to one machine — the worst case is
+the only case worth measuring, because a small graph tells you nothing — then measures every read
+against it. Its ceiling is deliberately loose and absolute (25k tokens) rather than tight and
+project-specific: a tight number would fail on every machine but the one that recorded it and would
+be deleted within a week, while a loose one still catches the class of bug that matters, which is a
+read with no bound at all. Nothing legitimate returns 25k tokens from one call.
+
+Write costs are measured by `npm run measure:cost`: a five-node build response is ~110 tokens on
+`fast`, ~194 on `standard`, ~697 on `max`.
+
+Both scripts refuse to measure a reply that does not contain what it should, because a reply that is
+an error is not a cheap reply — it is a broken measurement, and the first version of `check:replies`
+reported two cases comfortably under budget at eleven tokens having faithfully measured the size of
+"Tool disabled".
 
 Every case asserts the reply actually *contains* what it should before measuring it. That is not
 belt-and-braces: the first version of the script reported two cases comfortably under budget at

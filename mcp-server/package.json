@@ -28,7 +28,8 @@
     "check:fresh": "node scripts/check-binary-fresh.mjs",
     "check:protocol": "node scripts/check-protocol.mjs",
     "audit": "node scripts/audit-project.mjs",
-    "check:replies": "node scripts/check-response-budgets.mjs"
+    "check:replies": "node scripts/check-response-budgets.mjs",
+    "measure:reads": "node scripts/measure-reads.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
