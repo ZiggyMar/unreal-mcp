@@ -242,6 +242,33 @@ string is (`unreal_add_variable`, `unreal_create_function` inputs and outputs, a
 so structs can nest). Both resolve by short asset name or full path, and `struct:` also resolves
 native engine structs.
 
+### Finding the system that is actually live: `unreal_trace_function_calls`
+
+This one exists because of a mistake, and the mistake is worth writing down.
+
+Asked to fix a skin system, this tool searched for the word **"Skin"**, found a system whose names
+matched, and spent an afternoon on it. It was the *old* system — replaced months earlier because it
+handled mid-round joins badly, and left on the canvas with its front end unplugged. Every part of it
+read like working code. The developer had to say *"you've been working on the wrong system"*.
+
+**Names are the weakest thing to search on.** A skin system can be called character selection, or
+loadout, or randomisation. Worse, when a system is replaced the old one usually keeps the obvious
+name. What cannot be renamed is the **engine function** the system must eventually call: whatever
+changes a character's appearance ends up at `SetSkeletalMeshAsset`.
+
+```text
+unreal_trace_function_calls({ function: "SetSkeletalMeshAsset" })
+```
+
+Every hit comes back as `reachable` or `unreachable`, decided by walking exec wires back to an event
+or a function entry. **A call nothing can reach is the signature of a replaced system** — and it is
+not a bug to fix, it means look elsewhere for what took over.
+
+The same failure improved `trace_variable`'s verdict. It had reported `ServerSkinMemory` as *"read
+but never written — the half-built feature"*, and that reading was half the story: **written by
+nobody is equally the signature of a system whose writer was ripped out.** Same evidence, opposite
+correct response. It now says both, and points at this tool to settle which.
+
 ### The bug-hunting primitive: `unreal_trace_variable`
 
 This one was earned rather than designed. The report was *"the skin you pick in the lobby is not the

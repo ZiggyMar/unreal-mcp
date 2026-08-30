@@ -102,6 +102,7 @@ private:
 	static TSharedRef<FJsonObject> HandleReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleReadBehaviorTree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleTraceVariable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleTraceFunctionCalls(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetAssetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSaveAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateDataTable(const TSharedPtr<FJsonObject>& Params);

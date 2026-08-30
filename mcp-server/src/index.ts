@@ -372,7 +372,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -961,9 +961,34 @@ register(
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
       nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
+      // These three were implemented in the bridge and reachable from no tool, so a Server RPC -
+      // the thing every piece of multiplayer logic is built from - could not be authored at all.
+      netMode: z
+        .enum(["Server", "Multicast", "Client"])
+        .optional()
+        .describe(
+          'For CustomEvent: makes it an RPC. "Server" runs it on the server when a client calls it (the only ' +
+            'way a client can change authoritative state), "Multicast" runs it on everyone, "Client" on the owner.'
+        ),
+      reliable: z
+        .boolean()
+        .optional()
+        .describe("For an RPC: guarantee delivery. Default false. Use true for anything that must not be dropped."),
+      inputs: z
+        .array(z.object({ name: z.string(), type: z.string() }))
+        .optional()
+        .describe('Parameters for a CustomEvent, e.g. [{"name":"SkinId","type":"int"}]. An RPC that carries no data is rarely what you want.'),
       functionName: z.string().optional().describe("Required for nodeType CallFunction."),
       className: z.string().optional().describe("Optional owning class for nodeType CallFunction."),
       variableName: z.string().optional().describe("Required for nodeType VariableGet or VariableSet."),
+      ownerClass: z
+        .string()
+        .optional()
+        .describe(
+          "For VariableGet/VariableSet: the class that DECLARES the variable, when it lives on another object " +
+            'rather than this Blueprint - e.g. "AVS_GameInstance_C" for a variable read off a cast result. Wire ' +
+            "the node's `self` pin to that object. Omit for this Blueprint's own or inherited variables."
+        ),
       targetClass: z.string().optional().describe("Required for nodeType Cast: the class to cast to."),
       pure: z.boolean().optional().describe("Cast only: true for the pure (no exec pins) form. Defaults to false."),
       macroName: z.string().optional().describe('Required for nodeType Macro, e.g. "ForEachLoop", "WhileLoop", "DoOnce".'),
@@ -972,16 +997,20 @@ register(
       comment: z.string().optional().describe("Optional node comment explaining why this node exists."),
     },
   },
-  async ({ path, graphName, nodeType, eventName, functionName, className, variableName, targetClass, pure, macroName, x, y, comment }) => {
+  async ({ path, graphName, nodeType, eventName, netMode, reliable, inputs, functionName, className, variableName, ownerClass, targetClass, pure, macroName, x, y, comment }) => {
     try {
       const result = await bridge.send<AddNodeResult>("add_node", {
         path,
         graphName,
         nodeType,
         eventName,
+        netMode,
+        reliable,
+        inputs,
         functionName,
         className,
         variableName,
+        ownerClass,
         targetClass,
         pure,
         macroName,
@@ -1402,7 +1431,41 @@ register(
         return jsonResult(result);
       }
       try {
-        // Layout happens in every mode. A graph nobody can read is not a cheaper graph.
+        // Layout happens in every mode, because a graph nobody can read is not a cheaper graph - but
+        // only when this call BUILT the graph, not when it added to somebody else's.
+        //
+        // Measured on a real project: adding four nodes to an existing EventGraph relaid out 209 of
+        // them. Nothing broke, and it was still wrong. That graph is a thing its author navigates by
+        // shape and muscle memory, and rearranging all of it to place four nodes is a far larger
+        // change than the one that was asked for. "Adapts to the current work" has to mean leaving
+        // the current work where it is.
+        // Ask the bridge how big the graph is now. This is a local socket call, so it costs the
+        // caller nothing in tokens - only what this tool returns is paid for.
+        let totalNodes = 0;
+        try {
+          const summary = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
+            path,
+            graphName,
+          });
+          totalNodes = (summary.nodes ?? []).length;
+        } catch {
+          // If the graph cannot be read, fall through to laying it out as before rather than
+          // silently skipping something the caller expects.
+        }
+        const priorNodes = Math.max(0, totalNodes - Object.keys(result.nodes ?? {}).length);
+        if (priorNodes > 6) {
+          return jsonResult({
+            ...result,
+            layout: {
+              nodesMoved: 0,
+              skipped: true,
+              why:
+                `This graph already had ${priorNodes} nodes before the build, so it was left where it is. ` +
+                `Call unreal_auto_layout_graph explicitly if you do want the whole graph rearranged.`,
+            },
+            mode: MODE.mode,
+          });
+        }
         const layout = await autoLayoutGraph(bridge, path, graphName, {
           addCommentBoxes: MODE.commentBoxes,
         });
@@ -1881,6 +1944,35 @@ register(
     try {
       const result = await bridge.send("set_component_property", { path, component, property, value });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_trace_function_calls",
+  {
+    title: "Find every call to a function, and whether it can run",
+    description:
+      "**Use this to find the system that is actually live.** Names are the weakest thing to search on: a system " +
+      "can be called anything, and two systems doing the same job have similar names with only one of them " +
+      "connected. What cannot be renamed is the ENGINE function it must eventually call - whatever changes a " +
+      "character's appearance ends up at SetSkeletalMeshAsset.\n\n" +
+      "So ask this, not \"where is the skin system\": **what calls SetSkeletalMeshAsset, and which of those can be " +
+      "reached?** Every hit comes back as `reachable` or `unreachable`, decided by walking exec wires back to an " +
+      "event or function entry.\n\n" +
+      "That split is the point. **A call nothing can reach is the signature of a replaced system** - somebody " +
+      "unplugged the front of the old one and left the rest on the canvas, where it reads exactly like working " +
+      "code. It is not a bug to fix; it means look elsewhere for what took over.",
+    inputSchema: {
+      function: z.string().describe('Function name, or part of one, e.g. "SetSkeletalMeshAsset". Substring match.'),
+      pathPrefix: z.string().optional().describe('Scope the scan, e.g. "/Game/MyGame". Defaults to "/Game".'),
+    },
+  },
+  async ({ function: fn, pathPrefix }) => {
+    try {
+      return jsonResult(await bridge.send("trace_function_calls", { function: fn, pathPrefix }));
     } catch (err) {
       return errorResult(err);
     }

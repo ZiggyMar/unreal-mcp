@@ -36,7 +36,7 @@
 #include "K2Node_Variable.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_VariableGet.h"
-#include "K2Node_VariableSet.h"
+#include "K2Node_FunctionEntry.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_DynamicCast.h"
@@ -751,7 +751,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
-		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("trace_variable"),
+		TEXT("read_class_defaults"), TEXT("read_anim_blueprint"), TEXT("read_behavior_tree"), TEXT("trace_variable"), TEXT("trace_function_calls"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -982,6 +982,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("spawn_actor"))
 	{
 		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("trace_function_calls"))
+	{
+		Response = HandleTraceFunctionCalls(Params);
 	}
 	else if (Cmd == TEXT("trace_variable"))
 	{
@@ -1987,6 +1991,46 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		}
 
 		const FName VarFName(*VariableName);
+
+		// A variable on ANOTHER object, read through a cast - "get ServerSkinMemory off the
+		// AVS_GameInstance we just cast to". Without this a graph can only ever touch its own
+		// Blueprint's variables, which rules out most of what real Blueprints do: every cast
+		// followed by a Get or a Set is this shape, and it is one of the commonest in the engine.
+		//
+		// SetExternalMember rather than SetSelfMember, and then the node's `self` pin is wired to
+		// the cast result exactly as a human would wire it.
+		FString OwnerClassName;
+		if (Params->TryGetStringField(TEXT("ownerClass"), OwnerClassName) && !OwnerClassName.IsEmpty())
+		{
+			FString OwnerClassError;
+			UClass* OwnerClass = ResolveClassByName(OwnerClassName, OwnerClassError);
+			if (!OwnerClass)
+			{
+				return MakeErrorResponse(FString::Printf(
+					TEXT("class_not_found: %s. Pass the class that DECLARES the variable, e.g. ")
+					TEXT("\"AVS_GameInstance_C\" or a full /Game path."), *OwnerClassName));
+			}
+			if (!OwnerClass->FindPropertyByName(VarFName))
+			{
+				return MakeErrorResponse(FString::Printf(
+					TEXT("variable_not_found: %s on %s"), *VariableName, *OwnerClass->GetName()));
+			}
+			if (NodeType == TEXT("VariableGet"))
+			{
+				UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(Graph);
+				GetNode->VariableReference.SetExternalMember(VarFName, OwnerClass);
+				NewNode = GetNode;
+			}
+			else
+			{
+				UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(Graph);
+				SetNode->VariableReference.SetExternalMember(VarFName, OwnerClass);
+				NewNode = SetNode;
+			}
+		}
+		else
+		{
+
 		bool bFoundVar = false;
 		for (const FBPVariableDescription& ExistingVar : Blueprint->NewVariables)
 		{
@@ -2028,6 +2072,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 			UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(Graph);
 			SetNode->VariableReference.SetSelfMember(VarFName);
 			NewNode = SetNode;
+		}
 		}
 	}
 	else if (NodeType == TEXT("Branch"))
@@ -4948,6 +4993,157 @@ static void DescribeBTNode(const UBTNode* Node, int32 Depth, TArray<TSharedPtr<F
 // Cast-and-set is why this cannot be narrowed to the declaring Blueprint and its children: GM_Gameplay
 // reaches AVS_GameInstance's variable through a cast, and any scan that only looked at the owner would
 // have reported zero of everything and been confidently wrong.
+// Can execution reach this node from an event at all?
+//
+// Walk the exec wires backwards. A node whose chain ends at an Event, a Custom Event or a Function
+// Entry is live; a node whose chain just stops is in a graph fragment nothing runs. That second case
+// is not rare and it is not obviously visible: a system gets replaced, whoever replaced it unplugged
+// the front of the old one, and everything behind it stays on the canvas looking exactly like
+// working code.
+static bool IsReachableFromEntry(UEdGraphNode* Node, int32 Depth = 0)
+{
+	if (!Node || Depth > 200)
+	{
+		return false;
+	}
+	if (Node->IsA<UK2Node_Event>() || Node->IsA<UK2Node_CustomEvent>() || Node->IsA<UK2Node_FunctionEntry>())
+	{
+		return true;
+	}
+
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (!Pin || Pin->Direction != EGPD_Input || Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+		{
+			continue;
+		}
+		for (UEdGraphPin* Linked : Pin->LinkedTo)
+		{
+			if (Linked && IsReachableFromEntry(Linked->GetOwningNode(), Depth + 1))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+// Every place a function is called, across the whole project - and whether each call can actually run.
+//
+// This exists because of a mistake worth writing down. Asked to fix a skin system, this tool searched
+// for the word "Skin", found a system whose names matched, and spent an afternoon on it. It was the
+// OLD system: replaced months earlier because it handled mid-round joins badly, and left on the
+// canvas with its front end unplugged. Everything about it read like working code.
+//
+// Names are the weakest thing to search on. A system can be called anything - character selection,
+// randomisation, loadout - and two systems that do the same job will have similar names, with only
+// one of them live. What cannot be renamed is the ENGINE function the system must eventually call:
+// whatever changes a character's appearance ends up at SetSkeletalMeshAsset. So the reliable question
+// is not "where is the skin system" but "what calls SetSkeletalMeshAsset, and which of those callers
+// can actually be reached".
+//
+// Hence `reachable` on every hit. A call nothing can reach is the signature of a replaced system, and
+// it is the difference between a bug to fix and code to leave alone.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FunctionName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("function"), FunctionName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: function"));
+	}
+
+	FString PathPrefix = TEXT("/Game");
+	Params->TryGetStringField(TEXT("pathPrefix"), PathPrefix);
+
+	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	FARFilter Filter;
+	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	Filter.PackagePaths.Add(FName(*PathPrefix));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	Registry.Get().GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Live;
+	TArray<TSharedPtr<FJsonValue>> Unreachable;
+	int32 Scanned = 0;
+
+	for (const FAssetData& Asset : Assets)
+	{
+		UBlueprint* Blueprint = Cast<UBlueprint>(Asset.GetAsset());
+		if (!Blueprint)
+		{
+			continue;
+		}
+		++Scanned;
+
+		TArray<UEdGraph*> Graphs;
+		Blueprint->GetAllGraphs(Graphs);
+		for (UEdGraph* Graph : Graphs)
+		{
+			if (!Graph)
+			{
+				continue;
+			}
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node);
+				if (!CallNode)
+				{
+					continue;
+				}
+				const FName Member = CallNode->FunctionReference.GetMemberName();
+				if (!Member.ToString().Contains(FunctionName))
+				{
+					continue;
+				}
+
+				TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
+				Entry->SetStringField(TEXT("graph"), Graph->GetName());
+				Entry->SetStringField(TEXT("calls"), Member.ToString());
+				Entry->SetStringField(TEXT("nodeId"), MakeShortNodeId(Node, 8));
+
+				if (IsReachableFromEntry(Node))
+				{
+					Live.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+				else
+				{
+					Unreachable.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+			}
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("function"), FunctionName);
+	Result->SetNumberField(TEXT("blueprintsScanned"), Scanned);
+	Result->SetArrayField(TEXT("reachable"), Live);
+	Result->SetArrayField(TEXT("unreachable"), Unreachable);
+
+	if (Live.Num() == 0 && Unreachable.Num() == 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Nothing in any Blueprint calls a function whose name contains this. Check the spelling, or it "
+				 "may be called from C++ - find_source will say."));
+	}
+	else if (Live.Num() == 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Every call is unreachable: no execution path leads to any of them from an event or function "
+				 "entry. That is what a REPLACED system looks like - the front end was unplugged and the rest "
+				 "left on the canvas. Do not fix it; find what took over."));
+	}
+	else if (Unreachable.Num() > 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Some calls are live and some cannot be reached. The unreachable ones are usually an older "
+				 "version of the same system that was unplugged rather than deleted; work on the reachable ones."));
+	}
+	return MakeOkResponse(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceVariable(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VariableName;
@@ -5051,9 +5247,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceVariable(const TSharedPtr
 	else if (Writes.Num() == 0 && Reads.Num() > 0)
 	{
 		Result->SetStringField(TEXT("verdict"),
-			TEXT("Read but never written. Whatever reads it always sees the default, so every branch that "
-				 "depends on it always goes the same way. This is what a half-built feature looks like: the "
-				 "reading side exists, compiles, and silently takes the fallback forever."));
+			TEXT("Read but never written, which has TWO readings needing opposite responses. Either a half-built "
+				 "feature - the reading side exists, compiles, and silently takes the fallback forever - or a "
+				 "REPLACED one, where the writer was ripped out and the readers left on the canvas. Before "
+				 "changing anything, check whether those readers can be reached at all: trace_function_calls "
+				 "reports that, and a system nothing can reach is not a bug to fix."));
 	}
 	else if (Reads.Num() == 0 && Writes.Num() > 0)
 	{

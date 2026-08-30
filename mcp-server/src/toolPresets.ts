@@ -76,6 +76,9 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // The primitive that turns "this value is wrong" into one call instead of opening every
       // Blueprint that might touch it. Earned its place on a real hunt that took nine reads.
       "unreal_trace_variable",
+      // The one that says whether the system you found is the one that runs. Added after this tool
+      // spent an afternoon fixing a system that had been replaced and unplugged months earlier.
+      "unreal_trace_function_calls",
       // The fix half. A preset that can only diagnose leaves the model to enable more before it can
       // act on what it just found, which is the round trip this is meant to remove.
       "unreal_build_graph",
