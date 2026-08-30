@@ -3987,6 +3987,17 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 		return MakeErrorResponse(LoadError);
 	}
 
+	// The Class Default Object, not FBPVariableDescription::DefaultValue.
+	//
+	// That description field only holds a value when the editor happened to serialise a literal into
+	// it, so it is empty for a great many variables that plainly do have a default - a bool that is
+	// unticked, anything set through the details panel rather than typed. Reporting only that field
+	// meant every such variable came back with an empty defaultValue, which reads as "no default"
+	// when it means "we did not look in the right place". The CDO holds what the game will actually
+	// start with, which is the only answer worth giving: whether `isAlive` starts false decides
+	// whether the AI ever chases the player, and that question was unanswerable through this bridge.
+	UObject* const DefaultObject = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
 	TArray<TSharedPtr<FJsonValue>> Variables;
 	for (const FBPVariableDescription& Desc : Blueprint->NewVariables)
 	{
@@ -3998,9 +4009,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 			Entry->SetStringField(TEXT("subType"), Desc.VarType.PinSubCategoryObject->GetName());
 		}
 		Entry->SetBoolField(TEXT("isArray"), Desc.VarType.ContainerType == EPinContainerType::Array);
-		if (!Desc.DefaultValue.IsEmpty())
+		bool bReportedDefault = false;
+		if (DefaultObject)
 		{
+			if (FProperty* Property = Blueprint->GeneratedClass->FindPropertyByName(Desc.VarName))
+			{
+				FString DefaultText;
+				Property->ExportText_InContainer(0, DefaultText, DefaultObject, DefaultObject, nullptr, PPF_None);
+				Entry->SetStringField(TEXT("defaultValue"), DefaultText);
+				bReportedDefault = true;
+			}
+		}
+		if (!bReportedDefault && !Desc.DefaultValue.IsEmpty())
+		{
+			// A variable added since the last compile has no property on the generated class yet.
 			Entry->SetStringField(TEXT("defaultValue"), Desc.DefaultValue);
+			Entry->SetBoolField(TEXT("defaultFromUncompiledEdit"), true);
 		}
 		if (!Desc.Category.IsEmpty())
 		{
