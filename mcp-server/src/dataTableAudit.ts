@@ -100,9 +100,16 @@ export async function auditDataTables(
     try {
       read = await bridge.send<DataTableRows>("list_data_table_rows", { path: table });
     } catch (err) {
-      // A table this server cannot read is reported, not skipped. Silently dropping it would let a
-      // broken row hide behind a permissions or plugin-version problem.
-      unreadable.push({ table, why: err instanceof Error ? err.message : String(err) });
+      const why = err instanceof Error ? err.message : String(err);
+      // "That is not a Data Table" is not a failure to read one. When the caller hands over a list
+      // of assets it touched - which is how verify_feature uses this - most of them are Blueprints,
+      // and reporting each as unreadable would bury the one real finding in noise.
+      if (options.paths !== undefined && /data_table_not_found|not a datatable|not a data table/i.test(why)) {
+        continue;
+      }
+      // Anything else IS reported rather than skipped: a broken row must not be able to hide behind
+      // a permissions or plugin-version problem.
+      unreadable.push({ table, why });
       continue;
     }
 

@@ -735,7 +735,15 @@ feature is not done, whatever the last individual call said. An asset that canno
 reported as a blocker rather than skipped, because a check that quietly drops what it could not
 examine is worse than no check.
 
-It is deliberately compile + review and nothing more. Two things were considered and cut: a
+**It checks Data Tables too, and that was learned the hard way.** The most expensive bug this tool
+has seen was not in a graph at all — a row's class reference cleared to `None`, which the engine
+resolves to null and the consumer silently ignores. A verification step that only compiled Blueprints
+would have passed that build with a straight face, which is exactly what happened. So every asset in
+scope is also swept for null references, and one found is a blocker like any other. Assets that are
+not Data Tables are skipped silently rather than reported as unreadable — most of a touched set is
+Blueprints, and one line per asset would bury the single real finding.
+
+Beyond that it is deliberately compile + review and nothing more. Two things were considered and cut: a
 checkpoint diff, because no snapshot facility exists yet and a parameter that silently does nothing
 is worse than an absent one; and starting PIE to sample runtime behaviour, because writes during PIE
 apply to the editor world, and a verification step that mutates what it is verifying is not one.

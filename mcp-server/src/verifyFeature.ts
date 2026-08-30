@@ -21,6 +21,7 @@
 import type { BridgeLike } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import type { CompileBlueprintResult } from "./types.js";
+import { auditDataTables } from "./dataTableAudit.js";
 
 export interface VerifiedAsset {
   path: string;
@@ -36,6 +37,8 @@ export interface VerifiedAsset {
 
 export interface VerifyFeatureResult {
   verdict: "pass" | "fail";
+  /** Data Table rows written this session that point at nothing. */
+  dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
   checked: string[];
   scope: string;
   assets: VerifiedAsset[];
@@ -84,6 +87,7 @@ export async function verifyFeature(
       checked: [],
       scope,
       assets: [],
+      dataTableNulls: [],
       blockers: [],
       next:
         "Nothing to verify: no Blueprint has been written this session and no paths were given. " +
@@ -132,6 +136,20 @@ export async function verifyFeature(
     assets.push(asset);
   }
 
+  // Data Tables are checked as well as Blueprints, because the most expensive bug this tool has
+  // seen was not in a graph at all: a row's class reference cleared to None, which the engine
+  // resolves to null and the consumer silently ignores. A verification step that only compiles
+  // Blueprints would have passed that build with a straight face.
+  const dataTableNulls: VerifyFeatureResult["dataTableNulls"] = [];
+  try {
+    const tables = await auditDataTables(bridge, { paths });
+    for (const n of tables.nullReferences) {
+      dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field });
+    }
+  } catch {
+    /* the sweep is a bonus; a bridge too old to read tables must not fail the whole verification */
+  }
+
   const blockers: string[] = [];
   for (const a of assets.filter((x) => x.unavailable)) {
     blockers.push(`${a.path}: could not be checked - ${a.unavailable}`);
@@ -146,6 +164,14 @@ export async function verifyFeature(
     blockers.push(`${a.path} (score ${a.score}): ${a.nextAction}`);
   }
 
+  for (const n of dataTableNulls) {
+    blockers.push(
+      `${n.table} row "${n.rowName}": ${n.field} is empty while other rows fill it in. The engine ` +
+        `resolves that to null and whatever consumes it does nothing, with no error. Fix with ` +
+        `unreal_set_data_table_row.`
+    );
+  }
+
   const scored = assets.map((a) => a.score).filter((s): s is number => typeof s === "number");
   const worstScore = scored.length > 0 ? Math.min(...scored) : undefined;
   const verdict: "pass" | "fail" = blockers.length === 0 ? "pass" : "fail";
@@ -155,6 +181,7 @@ export async function verifyFeature(
     checked: paths,
     scope,
     assets,
+    dataTableNulls,
     blockers,
     worstScore,
     next:

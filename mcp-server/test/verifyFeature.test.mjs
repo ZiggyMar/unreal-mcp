@@ -157,3 +157,56 @@ test("project-wide journal entries are not mistaken for asset paths", async () =
   assert.deepEqual(result.checked, []);
   assert.equal(result.verdict, "fail");
 });
+
+test("a null Data Table reference fails verification, not just a broken Blueprint", async () => {
+  // The bug that motivated this whole session was not in a graph. A row's class reference was
+  // cleared to None; the engine resolved it to null and the spawner silently did nothing. A
+  // verification step that only compiled Blueprints would have passed that build with a straight
+  // face, which is exactly what happened.
+  const bridge = {
+    async send(cmd, params = {}) {
+      if (cmd === "compile_blueprint") {
+        return { success: true, errorCount: 0, warningCount: 0, status: "UpToDate", messages: [] };
+      }
+      if (cmd === "list_blueprint_graphs") return { graphs: [{ name: "EventGraph", type: "Event" }] };
+      if (cmd === "read_blueprint_graph_summary") return { path: params.path, graphName: "EventGraph", nodes: [] };
+      if (cmd === "list_variables") return { variables: [] };
+      if (cmd === "list_data_table_rows") {
+        if (!/DT_/.test(params.path)) throw new Error(`data_table_not_found: ${params.path}`);
+        return {
+          rows: [
+            { rowName: "Good", values: { Cls: "/Game/X/BP_A.BP_A_C" } },
+            { rowName: "Bad", values: { Cls: "None" } },
+          ],
+        };
+      }
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+
+  const r = await verifyFeature(bridge, { touched: ["/Game/BP_Fine.BP_Fine", "/Game/DT_Things.DT_Things"] });
+
+  assert.equal(r.verdict, "fail", "a clean compile is not the same as a finished feature");
+  assert.equal(r.dataTableNulls.length, 1);
+  assert.equal(r.dataTableNulls[0].rowName, "Bad");
+  assert.ok(r.blockers.some((b) => b.includes("DT_Things") && b.includes("Bad")));
+});
+
+test("Blueprints in scope are not reported as unreadable Data Tables", async () => {
+  // verify_feature hands the whole touched set to the table sweep, and most of it is Blueprints.
+  // "That is not a Data Table" is not a failure to read one, and reporting each as a problem would
+  // bury the single real finding under one line per asset.
+  const bridge = {
+    async send(cmd, params = {}) {
+      if (cmd === "compile_blueprint") return { success: true, errorCount: 0, warningCount: 0, status: "ok", messages: [] };
+      if (cmd === "list_blueprint_graphs") return { graphs: [] };
+      if (cmd === "list_variables") return { variables: [] };
+      if (cmd === "list_data_table_rows") throw new Error(`data_table_not_found: ${params.path}`);
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+  const r = await verifyFeature(bridge, { touched: ["/Game/BP_A.BP_A", "/Game/BP_B.BP_B"] });
+  assert.equal(r.verdict, "pass");
+  assert.deepEqual(r.dataTableNulls, []);
+  assert.deepEqual(r.blockers, []);
+});
