@@ -876,9 +876,15 @@ Stated plainly, because a vague security claim is worse than none:
 
   **Enforcement is currently opt-in: launch the editor with `-MCPRequireAuth`.** The token is always
   generated and always sent, so turning enforcement on is a launch flag rather than a code change,
-  and it cannot then discover the other half was never wired up. It is off by default only until the
-  mechanism has been exercised against a real editor build — a fail-closed control that is wrong
-  takes the whole integration down with it, and the editor half of this has not been compiled.
+  and it cannot then discover the other half was never wired up.
+
+  The plugin **compiles against both engines** — UE 5.8 (499s) and UE 5.6 (292s), via
+  `npm run build:engines`. What has not happened yet is a *runtime* check: nobody has confirmed that
+  `FPlatformProcess::UserSettingsDir()` resolves to a directory `sessionToken.ts` actually looks in.
+  That mirroring is done by hand per platform, and if it is wrong the client silently finds no token
+  and every call fails the moment enforcement is switched on. Compiling proves the code is valid; it
+  does not prove the two halves agree on a path. Run one editor with `-MCPRequireAuth`, confirm the
+  tools still work, and then the default can move.
 - **No arbitrary code execution.** There is no `execute_python`, no shell, no eval. Every command is
   a typed operation over engine APIs, so there is nothing to inject *into*.
 - **Writes are confined to `/Game`.** Creating, modifying and deleting are refused for anything
