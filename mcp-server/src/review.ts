@@ -27,7 +27,7 @@ export interface BlueprintReview {
    * without appearing anywhere a caller could read them, which made the score unexplainable - a
    * number nobody can trace back to a reason is worse than no number at all.
    */
-  blueprint: Array<{ check: string; severity: "warning" | "info"; message: string; fix: string }>;
+  blueprint: Array<{ check: string; severity: "warning" | "info"; message: string; fix: string; observed?: string }>;
   /** Raw graph nodes, only when asked for. See reviewBlueprint's includeGraphNodes. */
   graphNodes?: Array<{ graphName: string; nodes: unknown[] }>;
   /** The one thing most worth fixing next, or a note that nothing needs fixing. */
@@ -148,7 +148,16 @@ export async function reviewBlueprint(
     variables: options.includeGraphNodes ? variables : undefined,
     parentClass: options.includeGraphNodes ? parentClass : undefined,
     graphNodes: options.includeGraphNodes ? graphNodes : undefined,
-    blueprint: extraFindings.map(({ check, severity, message, fix }) => ({ check, severity, message, fix })),
+    // `observed` rides along deliberately. It is the evidence a check gathered, and two of these
+    // checks fire identically on a real bug and on a deliberate choice - dropping it here would have
+    // handed the audit a verdict with none of the reasoning behind it.
+    blueprint: extraFindings.map(({ check, severity, message, fix, ...rest }) => ({
+      check,
+      severity,
+      message,
+      fix,
+      ...("observed" in rest && rest.observed ? { observed: rest.observed as string } : {}),
+    })),
     nextAction,
   };
 }

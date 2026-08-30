@@ -32,6 +32,14 @@ export interface ParentCallChain {
 }
 
 export interface ParentCallFinding {
+  /**
+   * What the two Blueprints show about whether the child actually depends on the parent's work.
+   *
+   * Separated from the conclusion for the same reason the replication check separates it: this
+   * check fires identically on a certain bug and on a deliberate override, and the evidence is the
+   * only thing that tells them apart.
+   */
+  observed?: string;
   check: string;
   severity: string;
   message: string;
@@ -81,9 +89,41 @@ export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallF
     if (!parentChain || !isRealWork(parentChain.steps)) continue;
 
     const what = parentChain.steps.slice(0, 4).join(" -> ");
+
+    // Does the child DEPEND on what the parent sets? This is the difference between a finding worth
+    // acting on and one that might be deliberate, and it was learned by working both cases by hand
+    // on a real game.
+    //
+    // BP_Player overrides BeginPlay without calling Parent, and BP_BaseCharacter's BeginPlay is the
+    // only place VacuumableComp is ever set - while BP_Player reads it and calls two functions on
+    // it. That is decisive: the component is None on the player and those calls do nothing.
+    //
+    // PC_Gameplay, PC_Lobby and PC_MainMenu do the same thing against PC_Base, whose BeginPlay
+    // creates the root layout widget - and none of them reads MyRootLayout or anything else it
+    // sets. There the omission may well be deliberate, and "fixing" it could add a second widget or
+    // a duplicate input mapping. Same check, same shape, opposite right answer.
+    const setByParent = new Set(
+      parentChain.steps
+        .map((step) => /^Set(?:\s+with\s+Notify)?\s+(.+)$/i.exec(String(step).trim())?.[1]?.trim().toLowerCase())
+        .filter((name): name is string => !!name)
+    );
+    const readByChild = input.childNodeTitles
+      .map((title) => /^Get\s+(.+)$/i.exec(String(title).trim())?.[1]?.trim())
+      .filter((name): name is string => !!name && setByParent.has(name.toLowerCase()));
+    const depended = [...new Set(readByChild)];
+
+    const observed =
+      depended.length > 0
+        ? `${input.blueprint} reads ${depended.join(", ")}, which ${input.parentBlueprint}'s ${name} is ` +
+          `what sets. Those reads get None. This one is a real bug, not a style choice.`
+        : `Nothing in ${input.blueprint} reads what ${input.parentBlueprint}'s ${name} sets, so the ` +
+          `override may be deliberate. Check what the parent does before adding the call - if it ` +
+          `creates a widget or adds an input mapping, calling it could produce a second one.`;
+
     findings.push({
       check: "parent-event-not-called",
       severity: "error",
+      observed,
       message:
         `${input.blueprint} overrides ${name} but never calls Parent: ${bare}, so ${input.parentBlueprint}'s ` +
         `${name} never runs - including ${what}. Nothing warns about this, and the child's own logic works, ` +

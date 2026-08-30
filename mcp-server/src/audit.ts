@@ -109,6 +109,14 @@ export interface AuditFinding {
   message: string;
   fix: string;
   cost: number;
+  /**
+   * Evidence, kept apart from the conclusion.
+   *
+   * Some checks fire identically on a certain bug and on a deliberate choice - the same shape of
+   * override is a real defect in one Blueprint and the author's intent in the next. This carries
+   * what the assets actually show so the reader can tell which, instead of being handed a verdict.
+   */
+  observed?: string;
 }
 
 export interface AuditGroup {
@@ -116,7 +124,7 @@ export interface AuditGroup {
   count: number;
   cost: number;
   why?: string;
-  examples: Array<{ blueprint: string; graph: string; message: string }>;
+  examples: Array<{ blueprint: string; graph: string; message: string; observed?: string }>;
   /** Absent when detail was elided for budget. Absent does NOT mean "no fix is known". */
   fix?: string;
   /** True when the explanation, examples and fix were dropped to keep the reply small. */
@@ -346,6 +354,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
           check: finding.check,
           severity: finding.severity,
           message: finding.message,
+          ...((finding as { observed?: string }).observed ? { observed: (finding as { observed?: string }).observed } : {}),
           fix: finding.fix,
           cost: FINDING_COST[finding.check] ?? 1,
         });
@@ -374,6 +383,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         check: finding.check,
         severity: finding.severity,
         message: finding.message,
+        ...(finding.observed ? { observed: finding.observed } : {}),
         fix: finding.fix,
         cost: FINDING_COST[finding.check] ?? 1,
       });
@@ -486,6 +496,10 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
               blueprint: f.blueprint,
               graph: f.graph,
               message: f.message,
+              // Only when a check has evidence to add. Two checks fire identically on a real bug and
+              // on a deliberate choice, and this is the field that tells them apart - dropping it
+              // here would leave the reader with the conclusion and none of the reasoning.
+              ...(f.observed ? { observed: f.observed } : {}),
             }))
           : [],
         // Undefined, not "". An empty string reads as "there is no fix for this", which is the

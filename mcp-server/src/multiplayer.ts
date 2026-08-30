@@ -133,13 +133,36 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
     }
   }
 
-  /** Every node that READS a variable, whether or not execution can reach it. */
+  /** Every node that READS a variable. */
   const readsOf = (name: string): MpNode[] =>
     nodes.filter((node) => {
       const title = (node.title ?? "").trim();
       const got = /^GET\s+(.+)$/i.exec(title);
       return got ? got[1].trim().toLowerCase() === name.toLowerCase() : false;
     });
+
+  /**
+   * Is this read on the server?
+   *
+   * A Get node is pure data: it has no exec pins, so it is never itself reachable by walking
+   * execution. Asking whether the GET is server-reachable therefore always answered "no", which
+   * made the evidence say "a client reads this" about every variable in the project - confidently,
+   * and wrongly. What decides it is where the value GOES: the node that consumes it.
+   */
+  const readIsOnServer = (getNode: MpNode): boolean => {
+    const consumers: MpNode[] = [];
+    for (const pin of getNode.connectedPins ?? []) {
+      if (pin.direction !== "out") continue;
+      for (const link of pin.linkedTo ?? []) {
+        const target = byId.get(link.node);
+        if (target) consumers.push(target);
+      }
+    }
+    // A read that feeds nothing tells us nothing; treat it as server-side so it does not raise an
+    // alarm on its own.
+    if (consumers.length === 0) return true;
+    return consumers.every((node) => serverReachable.has(node.id));
+  };
 
   for (const [variable, event] of offenders) {
     // An object reference is not gameplay state, and this distinction was learned the hard way.
@@ -171,7 +194,7 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
         ? `Nothing in this Blueprint reads "${variable}". It may still be read from a widget or ` +
           `another actor - if it is, on a client, this is the bug. If nothing anywhere reads it, ` +
           `it is left over and replicating it would send a value nobody looks at.`
-        : reads.every((node) => serverReachable.has(node.id))
+        : reads.every(readIsOnServer)
           ? `Every read of "${variable}" in this Blueprint is also on the server, so it looks like ` +
             `working state inside a server call. Check whether a widget or another actor reads it ` +
             `on a client before changing anything.`

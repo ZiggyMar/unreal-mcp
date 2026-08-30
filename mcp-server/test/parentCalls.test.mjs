@@ -83,3 +83,35 @@ test("EndPlay counts too, because cleanup that never runs leaks quietly", () => 
   assert.equal(found.length, 1);
   assert.match(found[0].fix, /Add call to parent function/);
 });
+
+test("a child that reads what the parent sets is called a real bug, plainly", () => {
+  // The BP_Player case, worked by hand on a real game: BP_BaseCharacter's BeginPlay is the only
+  // place VacuumableComp is set, and BP_Player reads it and calls two functions on it. That is
+  // decisive - the component is None on the player and those calls silently do nothing.
+  const [finding] = findUncalledParentEvents({
+    blueprint: "BP_Player",
+    parentBlueprint: "BP_BaseCharacter",
+    childChains: [{ entry: "Event BeginPlay", steps: ["Sequence", "Switch Has Authority"], nodeIds: [] }],
+    childNodeTitles: ["Event BeginPlay", "Get VacuumableComp", "Parent: Tick"],
+    parentChains: [{ entry: "Event BeginPlay", steps: ["Add Component by Class", "Set VacuumableComp"], nodeIds: [] }],
+  });
+  assert.ok(finding, "the finding must still fire");
+  assert.match(finding.observed, /VacuumableComp/);
+  assert.match(finding.observed, /real bug/i);
+});
+
+test("a child that reads none of it is flagged as possibly deliberate", () => {
+  // The PC_Gameplay case: PC_Base's BeginPlay creates the root layout widget, and no child reads
+  // MyRootLayout. Adding the parent call there could create a second widget, so the same check must
+  // reach the opposite recommendation on the same shape of evidence.
+  const [finding] = findUncalledParentEvents({
+    blueprint: "PC_Gameplay",
+    parentBlueprint: "PC_Base",
+    childChains: [{ entry: "Event BeginPlay", steps: ["Delay", "SetupAudio"], nodeIds: [] }],
+    childNodeTitles: ["Event BeginPlay", "Get SomethingElse"],
+    parentChains: [{ entry: "Event BeginPlay", steps: ["Create Widget", "Set MyRootLayout"], nodeIds: [] }],
+  });
+  assert.ok(finding);
+  assert.match(finding.observed, /may be deliberate/i);
+  assert.match(finding.observed, /second one/i, "it must warn what 'fixing' it could do");
+});

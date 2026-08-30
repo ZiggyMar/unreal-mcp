@@ -292,6 +292,21 @@ read exists outside the server chain and *"this one is worth fixing"*. A check t
 cannot settle a question that spans several, and saying so beats both guessing and going quiet. Two
 tests pin it, including one whose whole job is to fail if anyone tries the suppression again.
 
+`parent-event-not-called` carries the same kind of evidence, and it was the check that made the case
+for the field. It fires when a child overrides `BeginPlay` without calling `Parent: BeginPlay`. On a
+real game it fired four times, and the right answer was opposite in two of them:
+
+- **`BP_Player`** overrides `BeginPlay` without the parent call, and `BP_BaseCharacter.BeginPlay` is
+  the only place `VacuumableComp` is ever set — while `BP_Player` reads it and calls two functions on
+  it. Decisive: the component is `None` on the player and those calls silently do nothing. Fixed.
+- **`PC_Gameplay`, `PC_Lobby`, `PC_MainMenu`** do the same against `PC_Base`, whose `BeginPlay`
+  creates the root layout widget and adds an input mapping context — and none of them reads
+  `MyRootLayout` or anything else it sets. There the override may well be deliberate, and "fixing"
+  it could create a second widget. Left alone.
+
+Same check, same shape, opposite correct action. So the finding now reports whether the child *reads
+what the parent sets*, which is the fact that separates them, and says so in those words.
+
 ### Class defaults you can read, not only write: `unreal_read_class_defaults`
 
 `unreal_set_class_default` shipped a long time ago with nothing to read defaults back, which meant a

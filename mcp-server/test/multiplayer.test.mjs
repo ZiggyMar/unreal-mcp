@@ -350,16 +350,45 @@ test("a server write is never suppressed just because this Blueprint does not re
 });
 
 test("the evidence is separated from the conclusion", () => {
-  // When a read IS visible outside the server chain, the finding should say so plainly - that is
-  // the case where a client genuinely reads what the server changes.
+  // A read whose value feeds a node OUTSIDE any server chain is the case that matters: a client
+  // really does read what the server changed, and will keep reading the stale value.
+  //
+  // The first version of this test used a Get wired to nothing and asserted "worth fixing". It
+  // passed for the wrong reason - back then every Get looked client-side, because a Get has no exec
+  // pins and could never be exec-reachable. Fixing that broke this test, correctly.
+  const get = node("g", "K2Node_VariableGet", "GET Health", []);
+  get.connectedPins = [{ pin: "Health", direction: "out", linkedTo: [{ node: "hud", pin: "InValue" }] }];
   const findings = reviewMultiplayer(
     [
       node("e", "K2Node_CustomEvent", "Server_TakeDamage", ["s"]),
       node("s", "K2Node_VariableSet", "SET Health", []),
-      node("g", "K2Node_VariableGet", "GET Health", []),
+      node("tick", "K2Node_Event", "Event Tick", ["hud"]),
+      node("hud", "K2Node_CallFunction", "Set Health Bar Percent", []),
+      get,
     ],
     [{ name: "Health", type: "float", replicated: false }]
   );
   const finding = findings.find((f) => f.check === "server-writes-unreplicated");
-  assert.match(finding.observed, /worth fixing/i);
+  assert.match(finding.observed, /worth fixing/i, "a read consumed off the server is the real bug");
+});
+
+test("a read is judged by where its value goes, not by the Get node itself", () => {
+  // A Get node is pure data - no exec pins - so it is never reachable by walking execution. Asking
+  // whether the GET is server-reachable always answered "no", which made the evidence claim "a
+  // client reads this" about every variable in the project: confident, and wrong. What decides it is
+  // the node the value feeds.
+  const get = node("g", "K2Node_VariableGet", "GET CostServer", []);
+  get.connectedPins = [{ pin: "CostServer", direction: "out", linkedTo: [{ node: "use", pin: "Value" }] }];
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "Server_RequestPurchase", ["s"]),
+      node("s", "K2Node_VariableSet", "SET CostServer", ["use"]),
+      node("use", "K2Node_CallFunction", "Print String", []),
+      get,
+    ],
+    [{ name: "CostServer", type: "int", replicated: false }]
+  );
+  const finding = findings.find((f) => f.check === "server-writes-unreplicated");
+  assert.match(finding.observed, /also on the server/i, "the consumer is inside the server chain");
+  assert.doesNotMatch(finding.observed, /worth fixing/i);
 });
