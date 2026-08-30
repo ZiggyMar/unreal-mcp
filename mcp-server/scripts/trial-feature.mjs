@@ -72,7 +72,7 @@ async function step(label, name, args, check) {
 await rpc("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "trial", version: "1" } });
 child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + NL);
 
-console.log("building a feature end to end\n");
+console.log("the Blueprint surface");
 
 await step("create the Blueprint", "unreal_create_blueprint", { packagePath: PKG, parentClass: "Actor", save: false },
   (t, j) => (j && j.path ? null : "no asset path came back"));
@@ -135,6 +135,89 @@ await step("rebuild under the same name", "unreal_create_blueprint", { packagePa
 
 await step("final cleanup", "unreal_delete_asset", { paths: [PATH], force: true },
   (t, j) => (j && j.deleted >= 1 ? null : "cleanup failed - a trial asset is left in the project"));
+
+// ---------------------------------------------------------------------------------------------
+// The data surface. A model is told "whether it is C++ or Blueprints or a Data Table", and a Data
+// Table is where the most expensive bug this project has seen actually lived: a row's class
+// reference cleared to None, which the engine resolves to null and the consumer silently ignores.
+// ---------------------------------------------------------------------------------------------
+console.log("");
+console.log("the data surface");
+
+const STRUCT = "/Game/__MCPFeatureTrial/S_TrialRow";
+const TABLE = "/Game/__MCPFeatureTrial/DT_Trial";
+const TABLE_PATH = `${TABLE}.DT_Trial`;
+
+await step("create a row struct", "unreal_create_struct", {
+  packagePath: STRUCT,
+  fields: [{ name: "Thing", type: "object:StaticMesh" }, { name: "Count", type: "int" }],
+}, (t, j) => (j && (j.path || j.created) ? null : "no struct came back"));
+
+await step("create a Data Table", "unreal_create_data_table", { packagePath: TABLE, rowStruct: STRUCT },
+  (t, j) => (j && (j.path || j.created) ? null : "no table came back"));
+
+// An engine asset that exists in every project, so the reference actually resolves. A class path
+// would not: an object field wants an instance, and the row would silently stay empty - which is
+// how the first version of this trial "failed", by writing a fixture the engine could not store.
+await step("add a good row", "unreal_add_data_table_row", {
+  path: TABLE_PATH, rowName: "Good", values: { Thing: "/Engine/BasicShapes/Cube.Cube", Count: "3" },
+}, (t, j) => {
+  if (!t.includes("Good")) return "the row name is not in the reply";
+  const stored = j && j.values && j.values.Thing;
+  // The reply reads the row BACK rather than echoing the input, so this checks the engine kept it.
+  return stored && stored !== "None" ? null : `the reference did not store: ${JSON.stringify(stored)}`;
+});
+
+// A row whose reference is empty while a sibling fills it in - exactly the shape that shipped.
+await step("add a row with an empty reference", "unreal_add_data_table_row", {
+  path: TABLE_PATH, rowName: "Empty", values: { Count: "1" },
+}, (t) => (t.includes("Empty") ? null : "the row name is not in the reply"));
+
+await step("check_data_tables finds it", "unreal_check_data_tables", { paths: [TABLE_PATH] }, (t, j) => {
+  if (!j) return "no JSON";
+  const hit = (j.nullReferences || []).some((n) => n.rowName === "Empty");
+  return hit ? null : `the empty reference was not reported: ${JSON.stringify(j.nullReferences || [])}`;
+});
+
+await step("repair it with set_data_table_row", "unreal_set_data_table_row", {
+  path: TABLE_PATH, rowName: "Empty", values: { Thing: "/Engine/BasicShapes/Cube.Cube" },
+}, (t, j) => {
+  const before = j && j.changed && j.changed.Thing && j.changed.Thing.before;
+  return before ? null : "the reply should report what the field was before the change";
+});
+
+await step("check_data_tables is clean now", "unreal_check_data_tables", { paths: [TABLE_PATH] },
+  (t, j) => (j && j.verdict === "clean" ? null : `still reporting problems: ${JSON.stringify((j || {}).nullReferences || [])}`));
+
+await step("delete a row, get its values back", "unreal_remove_data_table_row", { path: TABLE_PATH, rowName: "Empty" },
+  (t, j) => (j && j.was && Object.keys(j.was).length > 0 ? null : "a delete that cannot be undone returned no values"));
+
+await step("clean up the data assets", "unreal_delete_asset", { paths: [TABLE_PATH, `${STRUCT}.S_TrialRow`], force: true },
+  (t, j) => (j && j.deleted >= 1 ? null : "the trial's data assets are still in the project"));
+
+// ---------------------------------------------------------------------------------------------
+// The C++ surface. Locations, never contents - the client already reads files better than a tool
+// wrapper could; what it cannot do is know where the project's source actually lives.
+// ---------------------------------------------------------------------------------------------
+console.log("");
+console.log("the C++ surface");
+
+const modules = await step("map the C++ modules", "unreal_find_source", {}, (t, j) => {
+  if (!j) return "no JSON";
+  // A Blueprint-only project is a valid answer, and must say so rather than looking like a failure.
+  if ((j.modules || []).length === 0) return j.note ? null : "no modules and no explanation";
+  return null;
+});
+
+if (modules.parsed && (modules.parsed.modules || []).length > 0) {
+  await step("locate a symbol in C++", "unreal_find_source", { symbol: "AActor" }, (t, j) => {
+    if (!j) return "no JSON";
+    if ((j.matches || []).length === 0 && !j.note) return "no matches and no explanation";
+    return null;
+  });
+} else {
+  console.log("  (project has no C++ modules - symbol lookup skipped)");
+}
 
 console.log(`\n${calls} calls, ~${tokens} tokens`);
 if (stalls.length > 0) {

@@ -1438,8 +1438,16 @@ builds a small feature end to end — create, add a component, build a graph, co
 throw it away, build it again — and checks that each reply contains what that step is *for*. A reply
 that merely arrives is not a working step; that mistake hid three of the five.
 
-It uses engine classes only, so it runs against any project, and it deletes what it made even when it
-fails. Nine calls, about 1,800 tokens.
+It covers all three surfaces a model is told it can work with — **Blueprints, Data Tables and C++** —
+because "whether it is C++ or Blueprints or a Data Table" is the actual requirement and only one of
+those was being exercised. The data leg builds a struct and a table, adds a row whose reference is
+deliberately empty, checks that `check_data_tables` reports it, repairs it with `set_data_table_row`,
+confirms the table is clean, and deletes the row to prove the values come back. The C++ leg maps the
+modules and locates a symbol, and treats a Blueprint-only project as a valid answer rather than a
+failure.
+
+It uses engine assets only, so it runs against any project, and it deletes what it made even when it
+fails. Twenty calls, about 5,300 tokens.
 
 Verified by breaking it on purpose: with the ghost-node exemption removed, it reports
 `review: review flagged the placeholder events again` and exits 1. A trial that has never failed is
