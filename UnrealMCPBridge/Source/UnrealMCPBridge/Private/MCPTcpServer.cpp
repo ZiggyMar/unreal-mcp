@@ -1,4 +1,11 @@
 #include "MCPTcpServer.h"
+// These are used directly by this file and were arriving only through the unity build, which merges
+// it with a .cpp that does include them. That compiles, and hides a real include-what-you-use
+// violation: the file cannot be built on its own. Found by unreal_compile_cpp, whose -SingleFile
+// path compiles exactly one translation unit and so does not get the unity blob's includes for free.
+#include "Serialization/JsonWriter.h"
+#include "Serialization/JsonSerializer.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Editor/EditorPerformanceSettings.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"

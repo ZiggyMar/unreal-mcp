@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseBuildOutput, buildBatchPath, MAX_DIAGNOSTICS } from "../dist/nativeBuild.js";
+import {
+  parseBuildOutput,
+  buildBatchPath,
+  extractFailureReason,
+  guidanceFor,
+  unityNote,
+  MAX_DIAGNOSTICS,
+} from "../dist/nativeBuild.js";
 
 const NL = String.fromCharCode(10);
 
@@ -89,4 +96,48 @@ test("a wall of errors is capped, and the total is still reported", () => {
   const { errors } = parseBuildOutput(lines.join(NL), "M:\\P");
   assert.equal(errors.length, 40, "the parser reports everything; capping is the tool's job");
   assert.ok(MAX_DIAGNOSTICS < 40, "and the tool's cap must actually be a cap");
+});
+
+test("a failure with no diagnostics reports what the build actually said", () => {
+  // Found by running the tool for real: it failed with zero errors and the reply confidently blamed
+  // a link step holding the DLL open. It was a Wwise plugin referencing an AkAudio module that is
+  // not installed, so UBT refused before compiling anything. A wrong explanation sends a model
+  // hunting a problem that is not there, in code that is fine.
+  const out = [
+    "Creating makefile for UnrealEditor (no existing makefile)",
+    "Could not find definition for module 'AkAudio', (referenced via allmodules option -> Wwise.uplugin)",
+    "Result: Failed (RulesError)",
+  ].join(NL);
+  const reason = extractFailureReason(out);
+  assert.ok(reason.some((l) => /AkAudio/.test(l)), "the one informative line must survive");
+  assert.match(guidanceFor(reason), /configuration, not/i, "it must not blame the caller's code");
+  assert.doesNotMatch(guidanceFor(reason), /link/i, "there is no link step to blame here");
+});
+
+test("a genuine link failure still gets the link explanation", () => {
+  const reason = extractFailureReason("LINK : fatal error LNK1104: cannot open file 'X.dll'" + NL + "Result: Failed");
+  assert.match(guidanceFor(reason), /editor running/i);
+});
+
+test("missing-declaration errors from a single-file compile carry the unity-build explanation", () => {
+  // The live case: this tool's first real run reported ten errors in the plugin's own
+  // MCPTcpServer.cpp, a file that builds cleanly on both engines. It used TJsonWriterFactory without
+  // including it and got the header from a neighbour in the unity blob. The errors were real - the
+  // file could not build alone - but no edit caused them, and a model told "ten errors" with no
+  // explanation would set about fixing code its change had not broken.
+  const errs = [{ file: "A.cpp", line: 1, code: "C2065", message: "'TJsonWriter': undeclared identifier", severity: "error" }];
+  const note = unityNote("A.cpp", errs);
+  assert.match(note, /unity/i);
+  assert.match(note, /may predate your edit/i, "it must say the errors might not be the caller's doing");
+  assert.match(note, /still real/i, "and must not excuse them either - the file cannot build alone");
+});
+
+test("an ordinary mistake gets no unity note, so the note stays meaningful", () => {
+  const errs = [{ file: "A.cpp", line: 1, code: "C4430", message: "missing type specifier", severity: "error" }];
+  assert.equal(unityNote("A.cpp", errs), undefined);
+});
+
+test("a full build gets no unity note, because unity is exactly what a full build uses", () => {
+  const errs = [{ file: "A.cpp", line: 1, code: "C2065", message: "'X': undeclared identifier", severity: "error" }];
+  assert.equal(unityNote(undefined, errs), undefined);
 });

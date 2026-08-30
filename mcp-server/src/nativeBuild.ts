@@ -41,6 +41,10 @@ export interface NativeDiagnostic {
 export interface NativeBuildResult {
   succeeded: boolean;
   errors: NativeDiagnostic[];
+  /** What the build said when it failed without producing a compiler diagnostic. */
+  reason?: string[];
+  /** Set when the errors look like a unity-build include artifact rather than a fresh mistake. */
+  note?: string;
   warnings: NativeDiagnostic[];
   totalErrors: number;
   totalWarnings: number;
@@ -122,6 +126,94 @@ export function parseBuildOutput(output: string, projectDir?: string): {
   return { errors, warnings, succeeded };
 }
 
+/**
+ * Why a build failed when it produced no compiler diagnostic at all.
+ *
+ * Found by running the tool against a real project: it failed with zero errors and the reply
+ * confidently blamed a link step holding the module DLL open. It was nothing of the sort - the
+ * project has a Wwise plugin referencing an `AkAudio` module that is not installed, so
+ * UnrealBuildTool refused at the makefile stage, before compiling a single file. UBT said so in one
+ * clear line, and the parser threw it away because it has no file(line) prefix.
+ *
+ * A wrong explanation is worse than no explanation: it sends a model looking for a problem that is
+ * not there, in code that is fine. So the failure lines are captured verbatim and the guidance is
+ * chosen from what they actually say.
+ */
+const FAILURE_LINES = [
+  /Could not find definition for module/i,
+  /Result:\s*Failed/i,
+  /^ERROR:/i,
+  /fatal error/i,
+  /Unable to find/i,
+  /is not a valid/i,
+];
+
+export function extractFailureReason(output: string): string[] {
+  const found: string[] = [];
+  for (const raw of output.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || found.includes(line)) continue;
+    if (FAILURE_LINES.some((re) => re.test(line))) found.push(line.slice(0, 300));
+    if (found.length >= 4) break;
+  }
+  return found;
+}
+
+/**
+ * Compiler codes that mean "this name is not declared here".
+ *
+ * These matter specially for a single-file compile. Unreal builds with unity enabled by default,
+ * merging many .cpp files into one translation unit, so a file can use a type whose header it never
+ * includes and still build - it gets the include for free from a neighbour in the same blob.
+ * Compiled alone, it fails.
+ *
+ * This is not hypothetical: the first live run of this tool reported ten errors in THIS plugin's own
+ * MCPTcpServer.cpp, which builds cleanly on both engines. The file used TJsonWriterFactory and
+ * TCondensedJsonPrintPolicy without including them. The errors were real - the file genuinely could
+ * not be built on its own - but they were not caused by any edit, and a model told "ten errors"
+ * with no further explanation would set about fixing code that was not broken by it.
+ *
+ * So the errors are still reported, because they describe a real defect worth fixing, and a note
+ * explains where they came from.
+ */
+const MISSING_DECLARATION_CODES = /\b(C2065|C2039|C2504|C2653|C2143|C3203|C2955|C7568|C2672|C2665)\b/;
+const MISSING_DECLARATION_TEXT = /undeclared identifier|unknown type name|no member named|not declared|incomplete type/i;
+
+export function unityNote(file: string | undefined, errors: NativeDiagnostic[]): string | undefined {
+  if (!file || errors.length === 0) return undefined;
+  const looksLikeIncludes = errors.some(
+    (e) => MISSING_DECLARATION_CODES.test(e.code ?? "") || MISSING_DECLARATION_TEXT.test(e.message)
+  );
+  if (!looksLikeIncludes) return undefined;
+  return (
+    "Some of these look like missing declarations. Unreal builds with unity enabled by default, so a " +
+    "file can use a type whose header it never includes and still build - it gets it from a neighbour " +
+    "in the same translation unit. Compiling one file alone removes that, so these may predate your " +
+    "edit. They are still real: the file cannot be built on its own, and the fix is to include what it " +
+    "uses. To check whether your edit specifically broke something, compare against a file you have " +
+    "not touched."
+  );
+}
+
+/** Turn those lines into advice that matches the actual failure rather than the likeliest one. */
+export function guidanceFor(reason: string[]): string {
+  const text = reason.join(" ");
+  if (/Could not find definition for module|RulesError/i.test(text)) {
+    return (
+      "UnrealBuildTool refused before compiling anything: this is the PROJECT's configuration, not " +
+      "your code. A plugin references a module that is not installed, so nothing in this project can " +
+      "be compiled until it is fixed or that plugin is disabled in the .uproject."
+    );
+  }
+  if (/LNK|link/i.test(text)) {
+    return (
+      "The compile succeeded and the LINK failed. That is usually the editor running and holding the " +
+      "module DLL open - pass a single `file`, which compiles without linking."
+    );
+  }
+  return "The build failed without a compiler diagnostic. The lines in `reason` are what it did say.";
+}
+
 export interface CompileOptions {
   /** Absolute path to the .uproject, from unreal_ping. */
   projectFile: string;
@@ -194,15 +286,20 @@ export async function compileNative(options: CompileOptions): Promise<NativeBuil
     compiled: file ?? "the editor target",
     ...(succeeded
       ? {}
-      : {
-          next:
-            errors.length === 0
-              ? `The build did not report "Result: Succeeded" but no diagnostic was parsed. That is ` +
-                `usually a link step failing because the editor is running and holds the module DLL ` +
-                `open - pass a single \`file\` to compile without linking, which is what this tool ` +
-                `does by default.`
-              : `Fix the first error and compile again; the rest are often the same cause. Paths are ` +
+      : errors.length === 0
+        ? // No compiler diagnostic at all. Report what the build actually said rather than guessing.
+          (() => {
+            const reason = extractFailureReason(output);
+            return { reason, next: guidanceFor(reason) };
+          })()
+        : (() => {
+            const note = unityNote(file, kept);
+            return {
+              ...(note ? { note } : {}),
+              next:
+                `Fix the first error and compile again; the rest are often the same cause. Paths are ` +
                 `relative to the project.`,
-        }),
+            };
+          })()),
   };
 }

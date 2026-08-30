@@ -602,6 +602,18 @@ Errors come back structured — file, line, compiler code, message, project-rela
 removed — because a UBT run emits megabytes and the answer is usually one line of it. Forwarding the
 log would be the single most expensive reply this server has.
 
+
+
+**One caveat, found by running it rather than by reasoning about it.** Unreal builds with unity
+enabled, merging many `.cpp` files into one translation unit, so a file can use a type whose header
+it never includes and still build — it gets the include free from a neighbour in the blob. Compiled
+alone, it fails. The first live run of this tool reported **ten errors in this plugin's own
+`MCPTcpServer.cpp`**, a file that builds cleanly on both engines: it used `TJsonWriterFactory` and
+`TCondensedJsonPrintPolicy` without including them. The errors were real — that file genuinely could
+not be built on its own, and the includes have since been added — but no edit had caused them, and a
+model told "ten errors" with no further explanation would set about fixing code its change had not
+broken. So those errors are still reported, and a `note` explains where they came from.
+
 The engine and project locations come from `unreal_ping`, not from configuration: they are the two
 things a client cannot know and the editor always can. `ping` reports `engineDir` for exactly this
 reason — an engine install moves, and there is no registry entry a cross-platform client can trust.
