@@ -983,6 +983,30 @@ problem.**
 Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
 fails if a profile grows past the ceiling its intended model can hold.
 
+**The single most expensive call in this server was a read, and it was unbounded.** Measured against
+a real game rather than reasoned about: `unreal_read_blueprint_summary` on `BP_Player`'s EventGraph —
+807 nodes — returned **126,477 tokens**. That is 63% of a 200k context window, in one call, from a
+project whose stated premise is that a model should never receive a raw engine dump. Every saving
+made on tool definitions is rounding error beside it.
+
+It is capped now, and the numbers are the argument:
+
+| call | tokens |
+| --- | --- |
+| default (60 nodes, entry points first) | **9,085** |
+| `match: "Health"` (23 nodes) | **3,661** |
+| `maxNodes: 5000` (all 807) | 126,477 |
+
+Two things make the cap safe rather than lossy. It is applied in the **tool**, not the bridge —
+`review`, `audit` and `explain_graph` call the bridge command directly and still receive every node,
+so the analysis stays correct while the model gets a view it can afford. Capping in the bridge would
+have quietly corrupted them instead, which is precisely the mistake `explainGraph`'s own traversal cap
+had already made once, reporting live nodes as dead. And **entry points are never dropped**: a cap
+that removes the events leaves a list of function calls belonging to nothing.
+
+A graph smaller than the cap comes back exactly as it always did, with no truncation bookkeeping
+attached. Only the graphs that would have cost six figures are touched at all.
+
 **Replies are budgeted too, by `npm run check:replies`.** `check:profiles` guards the standing cost —
 what the tool *definitions* cost before a conversation starts. Nothing guarded what a tool costs when
 it *answers*, and that gap was not hypothetical: `unreal_list_tools`, whose entire purpose is keeping

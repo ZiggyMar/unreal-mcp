@@ -29,6 +29,7 @@ import { findSourceRoots, searchSource } from "./nativeSource.js";
 import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
+import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -723,15 +724,27 @@ register(
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),
+      match: z
+        .string()
+        .optional()
+        .describe('Only nodes whose title or type contains this, e.g. "Cast" or "Health". The cheapest way to read a large graph.'),
+      maxNodes: z
+        .number()
+        .optional()
+        .describe("Cap on nodes returned. Defaults to 150. Entry points are always kept. Raise it only when you genuinely need the whole graph."),
     },
   },
-  async ({ path, graphName }) => {
+  async ({ path, graphName, match, maxNodes }) => {
     try {
       const result = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
         path,
         graphName,
       });
-      return jsonResult(result);
+
+      // Bounded in the TOOL, not in the bridge: review, audit and explain_graph call the bridge
+      // command directly and still get every node, so the analysis stays correct while the model
+      // gets a view it can afford. See src/graphSummary.ts for the measurement behind the cap.
+      return jsonResult(capGraphSummary(result as never, { match, maxNodes }));
     } catch (err) {
       return errorResult(err);
     }
