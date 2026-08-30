@@ -1422,6 +1422,29 @@ Three decisions worth naming:
 - **The report states its own limits.** It sees what this server did, not hand edits in the editor
   or another tool, and it says so rather than leaving that to be discovered at a bad moment.
 
+### The loop test: `npm run trial:feature`
+
+The unit tests cover the pieces, and all 315 were green while five separate defects sat in the path
+*between* them. Every one appeared only when something used the tools in order:
+
+- deleting a Blueprint and rebuilding it under the same name refused, so iterating stopped dead
+- the quality gate returned score 95 for a Blueprint that did not compile
+- the review penalised the placeholder `BeginPlay` and `Tick` that `create_blueprint` had just made
+- `verify_feature` counted one asset twice, because the journal spells it two ways
+- and the first trial harness reported "0 stalls" while three calls had plainly failed
+
+None of those is visible from a unit test, because each is about **what the next call sees**. So this
+builds a small feature end to end — create, add a component, build a graph, compile, review, verify,
+throw it away, build it again — and checks that each reply contains what that step is *for*. A reply
+that merely arrives is not a working step; that mistake hid three of the five.
+
+It uses engine classes only, so it runs against any project, and it deletes what it made even when it
+fails. Nine calls, about 1,800 tokens.
+
+Verified by breaking it on purpose: with the ghost-node exemption removed, it reports
+`review: review flagged the placeholder events again` and exits 1. A trial that has never failed is
+not evidence of anything.
+
 ### Live verification: `npm run verify:live`
 
 Compiling proves the plugin builds. Running it against a real editor is the only thing that proves
