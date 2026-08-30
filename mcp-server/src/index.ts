@@ -3227,10 +3227,10 @@ register(
       "\"clean this up before we ship\", \"what is wrong with my game\". " +
       "Ordered by cost rather than severity, because those differ: a dead event is cosmetic until somebody wires " +
       "it, while a cast that fails on every client but the host is a bug nobody can reproduce alone. " +
-      "Findings are grouped, because seventeen Blueprints with the same problem is one decision, not seventeen, and " +
-      "the result names the Blueprints worth opening first. " +
-      "Bounded on purpose: it reads one graph summary per graph, and the reply is a ranked summary rather than " +
-      "every finding. Raise `limit` for a bigger sweep, and expect it to take longer.",
+      "Findings are grouped: seventeen Blueprints with the same problem is one decision, not seventeen, and the " +
+      "result names which to open first. " +
+      "Bounded on purpose: the reply is a ranked summary, not every finding. Raise `limit` to sweep wider, or " +
+      "`detailedGroups` to get more kinds back in full.",
     inputSchema: {
       pathPrefix: z.string().optional().describe('Restrict to a folder, e.g. "/Game/Player". Defaults to /Game.'),
       limit: z
@@ -3241,11 +3241,34 @@ register(
         .number()
         .optional()
         .describe("Examples reported per finding kind. Defaults to 3."),
+      detailedGroups: z
+        .number()
+        .optional()
+        .describe("Finding kinds returned in full, not just counted. Default 4, max 30."),
     },
   },
-  async ({ pathPrefix, limit, examplesPerGroup }) => {
+  async ({ pathPrefix, limit, examplesPerGroup, detailedGroups }) => {
     try {
-      return jsonResult(await auditProject(bridge, { pathPrefix, limit, examplesPerGroup }));
+      const audit = await auditProject(bridge, { pathPrefix, limit, examplesPerGroup, detailedGroups });
+      // The explanation of the cap lives in the reply rather than in the schema, so it is paid for
+      // only when it actually applies. In the schema it was ~350 characters on every request of
+      // every session, which pushed the `minimal` profile past the ceiling that exists to keep it
+      // loadable on a 14B at 8k - a good sentence in the wrong place.
+      const elided = audit.groups.filter((g) => g.detailElided).length;
+      return jsonResult(
+        elided > 0
+          ? {
+              ...audit,
+              detailNote:
+                `${elided} further finding kind(s) are listed with counts only and marked ` +
+                `detailElided. They have no \`fix\` field because the remedy was dropped to keep this ` +
+                `reply small, NOT because there is no remedy. Re-run with detailedGroups: ${Math.min(
+                  audit.groups.length,
+                  30
+                )} to see them.`,
+            }
+          : audit
+      );
     } catch (err) {
       return errorResult(err);
     }

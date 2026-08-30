@@ -183,3 +183,45 @@ test("a button's On Clicked is an entry point, not dead logic", () => {
   assert.match(result.text, /On Clicked \(HostButton\) -> Create Kronos Match/);
   assert.deepEqual(result.unreachable, []);
 });
+
+test("a chain longer than the print cap does not report its own live nodes as dead", () => {
+  // The regression this guards. Traversal used to stop at 40 steps, so `visited` never learned
+  // about anything past it and every later node came back under "not reached by any event chain" -
+  // dead logic - while being plainly live. audit.ts builds liveNodeIds from these chains, so one
+  // long graph produced a page of false dead-node findings.
+  const CHAIN = 60;
+  const nodes = [node("e", "K2Node_Event", "Event BeginPlay", [["n0"]])];
+  for (let i = 0; i < CHAIN; i++) {
+    const next = i === CHAIN - 1 ? [] : [[`n${i + 1}`]];
+    nodes.push(node(`n${i}`, "K2Node_CallFunction", `Step ${i}`, next));
+  }
+
+  const result = explainGraph(graph(nodes));
+
+  assert.equal(result.unreachable.length, 0, `live nodes reported as unreachable: ${result.unreachable.join(", ")}`);
+  assert.equal(result.chains[0].steps.length, CHAIN, "every step should be walked, not just the printed ones");
+  assert.equal(
+    result.chains[0].nodeIds.length,
+    CHAIN + 1,
+    "nodeIds feeds audit's liveNodeIds and must cover the whole chain"
+  );
+});
+
+test("the printed line is still capped, and says how much it left out", () => {
+  const CHAIN = 60;
+  const nodes = [node("e", "K2Node_Event", "Event BeginPlay", [["n0"]])];
+  for (let i = 0; i < CHAIN; i++) {
+    const next = i === CHAIN - 1 ? [] : [[`n${i + 1}`]];
+    nodes.push(node(`n${i}`, "K2Node_CallFunction", `Step ${i}`, next));
+  }
+
+  const result = explainGraph(graph(nodes));
+  // 60 walked, 40 printed, so the reader is told about the other 20 rather than "...(more)".
+  assert.match(result.text, /\.\.\.\(20 more steps\)/);
+  assert.ok(result.chains[0].truncated, "truncated now describes the rendered line");
+
+  // And the cap is a choice the caller can make.
+  const full = explainGraph(graph(nodes), { maxStepsPerChain: 100 });
+  assert.doesNotMatch(full.text, /more steps/);
+  assert.equal(full.chains[0].truncated, false);
+});

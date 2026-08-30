@@ -110,7 +110,10 @@ export interface AuditGroup {
   cost: number;
   why?: string;
   examples: Array<{ blueprint: string; graph: string; message: string }>;
-  fix: string;
+  /** Absent when detail was elided for budget. Absent does NOT mean "no fix is known". */
+  fix?: string;
+  /** True when the explanation, examples and fix were dropped to keep the reply small. */
+  detailElided?: boolean;
 }
 
 export interface AuditResult {
@@ -470,7 +473,12 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
               message: f.message,
             }))
           : [],
-        fix: detailed ? list[0].fix : "",
+        // Undefined, not "". An empty string reads as "there is no fix for this", which is the
+        // opposite of true: every one of these checks has a fix and it was dropped for budget.
+        // Saying so explicitly is what makes raising detailedGroups an obvious move rather than a
+        // guess.
+        fix: detailed ? list[0].fix : undefined,
+        ...(detailed ? {} : { detailElided: true }),
       };
     });
 

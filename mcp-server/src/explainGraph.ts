@@ -96,9 +96,16 @@ const ENTRY_TYPES = [
 /** Titles are shown to a reader, so strip the noise the editor adds for its own layout. */
 const clean = (title: string) => title.replace(/\s+/g, " ").trim();
 
-const MAX_STEPS_PER_CHAIN = 40;
+/** How many steps of a chain are PRINTED. Traversal itself is never capped - see below. */
+const DEFAULT_MAX_STEPS_PER_CHAIN = 40;
 
-export function explainGraph(summary: GraphSummary): GraphExplanation {
+export interface ExplainOptions {
+  /** Steps per chain to print before saying how many more there are. Defaults to 40. */
+  maxStepsPerChain?: number;
+}
+
+export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}): GraphExplanation {
+  const maxStepsPerChain = options.maxStepsPerChain ?? DEFAULT_MAX_STEPS_PER_CHAIN;
   const nodes = summary.nodes ?? [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
@@ -122,17 +129,22 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
   for (const entry of entries) {
     visited.add(entry.id);
     const steps: string[] = [];
-    let truncated = false;
 
     // Breadth-first along execution, so a branch reads as two steps rather than losing one arm
     // entirely. Depth would silently drop the second half of every Branch.
+    //
+    // The traversal runs to completion and is NOT capped. It used to stop at 40 steps, which was
+    // meant to bound the printed output and instead corrupted the analysis: `visited` never learned
+    // about anything past step 40, so every node beyond it was reported as "not reached by any event
+    // chain" - dead logic - when it was plainly live. audit.ts builds liveNodeIds from these chains,
+    // so the same cap turned a long graph into a page of false dead-node findings, which is the
+    // worst possible failure for a tool whose job is to tell you what is actually wrong.
+    //
+    // Nothing can run away here: seenInChain makes every node visitable once, so this is O(nodes)
+    // whatever the graph looks like. The cap belongs on the printing, and that is where it now is.
     let frontier = nextFrom(entry);
     const seenInChain = new Set<string>([entry.id]);
     while (frontier.length > 0) {
-      if (steps.length >= MAX_STEPS_PER_CHAIN) {
-        truncated = true;
-        break;
-      }
       const next: SummaryNode[] = [];
       for (const node of frontier) {
         if (seenInChain.has(node.id)) continue;
@@ -144,7 +156,14 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
       frontier = next;
     }
 
-    chains.push({ entry: clean(entry.title), entryId: entry.id, steps, truncated, nodeIds: [...seenInChain] });
+    chains.push({
+      entry: clean(entry.title),
+      entryId: entry.id,
+      steps,
+      // Now a statement about the rendered line rather than about how far the analysis got.
+      truncated: steps.length > maxStepsPerChain,
+      nodeIds: [...seenInChain],
+    });
   }
 
   // Anything never reached is either dead logic or a pure data node feeding something else. Both
@@ -189,8 +208,14 @@ export function explainGraph(summary: GraphSummary): GraphExplanation {
       lines.push(`- ${chain.entry}: nothing wired to it.`);
       continue;
     }
+    const shownSteps = chain.steps.slice(0, maxStepsPerChain);
     lines.push(
-      `- ${chain.entry} -> ${chain.steps.join(" -> ")}${chain.truncated ? " -> ...(more)" : ""}`
+      `- ${chain.entry} -> ${shownSteps.join(" -> ")}` +
+        // Naming the number matters: "...(more)" gave no way to tell a chain two steps too long
+        // from one ten times too long, and no way to know what to raise the cap to.
+        (chain.steps.length > shownSteps.length
+          ? ` -> ...(${chain.steps.length - shownSteps.length} more steps)`
+          : "")
     );
   }
   // Reported once per pair rather than once per chain, so two entry points sharing a chain produce
