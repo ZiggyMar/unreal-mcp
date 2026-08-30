@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { omitFalseFlags, omitDefault, compactVariable, VARIABLE_FLAGS } from "../dist/compactRows.js";
+import {
+  omitFalseFlags,
+  omitDefault,
+  compactVariable,
+  compactBlueprintRow,
+  VARIABLE_FLAGS,
+} from "../dist/compactRows.js";
 
 /** A variable shaped exactly as the engine returns one. */
 const variable = (over = {}) => ({
@@ -69,4 +75,25 @@ test("compaction never runs before a filter that reads the flags it removes", ()
 
   const compactedThenFiltered = vars.map(compactVariable).filter((v) => v.replicated !== false);
   assert.equal(compactedThenFiltered.length, 2, "this is the wrong order, and it is wrong by 2 to 1");
+});
+
+test("a Blueprint row drops the name, because the path already says it twice", () => {
+  // An Unreal object path is /Game/Folder/BP_Thing.BP_Thing, so a listing of 339 Blueprints carried
+  // every name three times. Measured: name was 2,102 tokens of a 12,264-token reply for nothing new.
+  const out = compactBlueprintRow({
+    name: "BP_Thing",
+    path: "/Game/Folder/BP_Thing.BP_Thing",
+    parentClass: "Actor",
+  });
+  assert.equal(out.name, undefined);
+  assert.equal(out.path, "/Game/Folder/BP_Thing.BP_Thing", "the path must stay whole and pasteable");
+  assert.equal(out.parentClass, "Actor");
+});
+
+test("the path keeps its object suffix even though the short form resolves", () => {
+  // The short form /Game/Folder/BP_Thing does resolve - verified against five commands - and would
+  // save another 1,466 tokens. It is not taken: five tools of eighty-eight is not evidence about the
+  // other eighty-three, and these paths get pasted into all of them.
+  const out = compactBlueprintRow({ name: "BP_Thing", path: "/Game/Folder/BP_Thing.BP_Thing" });
+  assert.match(out.path, /BP_Thing\.BP_Thing$/);
 });

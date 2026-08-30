@@ -1144,7 +1144,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprints(const TSharedPt
 		FString ParentClass;
 		if (Asset.GetTagValue(FName(TEXT("ParentClass")), ParentClass))
 		{
-			// Tag value is usually a full object path like "/Script/Engine.Actor", so trim to short name.
+			// The tag is export text, not a bare object path: "Class'/Script/Engine.SaveGame'". The
+			// comment here used to claim the latter, so trimming to the last dot left the closing
+			// quote behind and EVERY parentClass came back as "SaveGame'" - which reads fine until a
+			// model pastes it into create_blueprint and the class lookup fails on a stray apostrophe.
+			// Strip the quoting first, then trim.
+			ParentClass.ReplaceInline(TEXT("'"), TEXT(""));
 			int32 DotIndex;
 			if (ParentClass.FindLastChar(TEXT('.'), DotIndex))
 			{

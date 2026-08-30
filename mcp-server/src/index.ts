@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactVariable } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable } from "./compactRows.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -643,8 +643,8 @@ register(
   {
     title: "List Unreal Blueprints",
     description:
-      "Blueprint assets in the open project: name, path and parent class, not graph contents. Find one here, " +
-      "then drill in with unreal_list_blueprint_graphs.",
+      "Blueprint assets in the open project: path and parent class, not graph contents; the name is the last " +
+      "segment of `path`. Drill in with unreal_list_blueprint_graphs.",
     inputSchema: {
       pathPrefix: z
         .string()
@@ -667,15 +667,22 @@ register(
         : all;
       const limit = Math.max(1, Math.min(maxResults ?? 100, 5000));
 
+      // Compact AFTER filtering: `match` reads the name that compaction removes.
+      const compact = (rows: typeof all) => rows.map((r) => compactBlueprintRow({ ...r }));
+
       if (filtered.length <= limit) {
-        return jsonResult(needle ? { ...result, blueprints: filtered, totalBlueprints: all.length } : result);
+        return jsonResult(
+          needle
+            ? { ...result, blueprints: compact(filtered), totalBlueprints: all.length }
+            : { ...result, blueprints: compact(all) }
+        );
       }
       // 339 Blueprints came to 15,149 tokens on a real project. Enumerating a whole project is
       // rarely the question; finding something in it usually is, and search_project answers that
       // for a sixth of the cost.
       return jsonResult({
         ...result,
-        blueprints: filtered.slice(0, limit),
+        blueprints: compact(filtered.slice(0, limit)),
         totalBlueprints: all.length,
         shown: limit,
         omitted: filtered.length - limit,

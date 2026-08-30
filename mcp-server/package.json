@@ -30,7 +30,8 @@
     "audit": "node scripts/audit-project.mjs",
     "check:replies": "node scripts/check-response-budgets.mjs",
     "measure:reads": "node scripts/measure-reads.mjs",
-    "trial:feature": "node scripts/trial-feature.mjs"
+    "trial:feature": "node scripts/trial-feature.mjs",
+    "check:engines": "node scripts/check-engines.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

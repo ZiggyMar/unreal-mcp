@@ -1168,6 +1168,20 @@ read with no bound at all. Nothing legitimate returns 25k tokens from one call.
 Write costs are measured by `npm run measure:cost`: a five-node build response is ~110 tokens on
 `fast`, ~194 on `standard`, ~697 on `max`.
 
+**`npm run check:engines` guards the other claim this project makes**: that one source tree supports
+UE 5.6 and 5.8. It builds the plugin against every engine it can find with `RunUAT BuildPlugin`,
+which compiles against public engine APIs only, and fails if any of them fails. Set `UNREAL_ENGINES`
+to a semicolon-separated list of engine roots to point it at yours.
+
+That check exists because dual-version support is the kind of claim that rots silently: a 5.8-only
+API slips into a handler, 5.8 keeps building, and nobody finds out until a 5.6 user compiles. It is
+deliberately NOT a build of the host project - the real project used for verification here cannot
+build its editor target at all, because a Wwise plugin references an `AkAudio` module that is not
+installed. That has nothing to do with this bridge, and building the whole project would let an
+unrelated failure mask the plugin's own result.
+
+Last run: 2026-08-30, `UE_5.8` ok (88s) and `UE_5.6` ok (81s).
+
 Both scripts refuse to measure a reply that does not contain what it should, because a reply that is
 an error is not a cheap reply — it is a broken measurement, and the first version of `check:replies`
 reported two cases comfortably under budget at eleven tokens having faithfully measured the size of

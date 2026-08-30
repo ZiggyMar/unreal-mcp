@@ -59,3 +59,23 @@ export const VARIABLE_FLAGS = ["isArray", "instanceEditable", "blueprintReadOnly
 export function compactVariable(variable: Row): Row {
   return omitDefault(omitFalseFlags(variable, VARIABLE_FLAGS), "category", "Default");
 }
+
+/**
+ * Compact one row of a Blueprint listing.
+ *
+ * `name` is dropped because it is exactly the last segment of `path`, which already spells it out
+ * twice: an Unreal object path is /Game/Folder/BP_Thing.BP_Thing, so a listing of 339 Blueprints
+ * carried every name three times over. Measured: `path` was 7,076 tokens of a 12,264-token reply and
+ * `name` another 2,102 for nothing new.
+ *
+ * The larger saving next door was NOT taken. Emitting the package form /Game/Folder/BP_Thing without
+ * the object suffix would cut another 1,466 tokens, and it was verified to resolve - list_variables,
+ * list_blueprint_graphs, list_components, compile_blueprint and find_references all accept it,
+ * because 21 call sites funnel through StaticLoadObject which takes either form. Five tools of
+ * eighty-eight is not evidence about the other eighty-three, and these paths get pasted into all of
+ * them. A path that always works is worth more than 1,466 tokens.
+ */
+export function compactBlueprintRow(row: Row): Row {
+  const { name: _dropped, ...rest } = row;
+  return rest;
+}
