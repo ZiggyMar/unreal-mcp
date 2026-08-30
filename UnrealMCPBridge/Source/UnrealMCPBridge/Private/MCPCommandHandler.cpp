@@ -404,7 +404,46 @@ UEdGraph* FMCPCommandHandler::FindGraphByName(UBlueprint* Blueprint, const FStri
 			return Graph;
 		}
 	}
-	OutError = FString::Printf(TEXT("graph_not_found: %s"), *GraphName);
+	// "graph_not_found" on its own sends a caller looking for a graph that was never going to exist.
+	// A Custom Event is NOT a graph - it is a node inside the Event Graph - so asking to read
+	// "GetSkinFromGI" fails exactly as if the name were wrong, when the name is right and the thing
+	// is somewhere else. That cost four wasted calls on a real hunt, so the error now looks.
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph)
+		{
+			continue;
+		}
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			UK2Node_CustomEvent* AsEvent = Cast<UK2Node_CustomEvent>(Node);
+			if (AsEvent && AsEvent->CustomFunctionName.ToString() == GraphName)
+			{
+				OutError = FString::Printf(
+					TEXT("not_a_graph: \"%s\" is a Custom Event, not a function, so it has no graph of its own. ")
+					TEXT("It is a node inside \"%s\" - read that graph with match=\"%s\", or use explain_graph on ")
+					TEXT("\"%s\" to see the chain it starts."),
+					*GraphName, *Graph->GetName(), *GraphName, *Graph->GetName());
+				return nullptr;
+			}
+		}
+	}
+
+	// Otherwise say what DOES exist, rather than only what does not.
+	TArray<FString> Names;
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (Graph)
+		{
+			Names.Add(Graph->GetName());
+		}
+	}
+	Names.Sort();
+	const int32 Show = FMath::Min(Names.Num(), 12);
+	OutError = FString::Printf(
+		TEXT("graph_not_found: %s. This Blueprint has %d graphs%s: %s"),
+		*GraphName, Names.Num(), Names.Num() > Show ? TEXT(", including") : TEXT(""),
+		*FString::Join(TArray<FString>(Names.GetData(), Show), TEXT(", ")));
 	return nullptr;
 }
 
