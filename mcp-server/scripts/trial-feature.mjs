@@ -219,6 +219,40 @@ if (modules.parsed && (modules.parsed.modules || []).length > 0) {
   console.log("  (project has no C++ modules - symbol lookup skipped)");
 }
 
+// ---------------------------------------------------------------------------------------------
+// The asset surface: VFX, sound and animation.
+//
+// There is no Niagara tool or animation tool here, and the README argues there does not need to be
+// for the common case - attaching and driving assets that already exist is what a feature actually
+// requires, and the component tools do that. That claim was tested once, by hand, and then written
+// down. A claim tested once is a claim that was true once; this keeps it true, and it is cheap.
+// ---------------------------------------------------------------------------------------------
+console.log("");
+console.log("the asset surface (VFX, sound, animation)");
+
+const FX = "/Game/__MCPFeatureTrial/BP_TrialFx";
+const FX_PATH = `${FX}.BP_TrialFx`;
+
+await step("create an actor for components", "unreal_create_blueprint", { packagePath: FX, parentClass: "Actor", save: false },
+  (t, j) => (j && j.path ? null : "no asset path came back"));
+
+for (const cls of ["NiagaraComponent", "AudioComponent", "SkeletalMeshComponent", "StaticMeshComponent"]) {
+  await step(`attach a ${cls}`, "unreal_add_component", { path: FX_PATH, componentClass: cls, name: `C_${cls}` },
+    (t) => (t.includes(`C_${cls}`) ? null : `${cls} did not attach - the claim that VFX and audio need no dedicated tool rests on this`));
+}
+
+// Pointing a component at an existing asset is the other half of the claim: attaching a component
+// that references nothing would satisfy the step above and none of the intent.
+await step("point it at a real asset", "unreal_set_component_property", {
+  path: FX_PATH, component: "C_StaticMeshComponent", property: "StaticMesh", value: "/Engine/BasicShapes/Cube.Cube",
+}, (t, j) => {
+  const stored = j && j.value;
+  return stored && String(stored).includes("Cube") ? null : `the asset reference did not stick: ${JSON.stringify(stored)}`;
+});
+
+await step("clean up the component actor", "unreal_delete_asset", { paths: [FX_PATH], force: true },
+  (t, j) => (j && j.deleted >= 1 ? null : "the trial's component actor is still in the project"));
+
 console.log(`\n${calls} calls, ~${tokens} tokens`);
 if (stalls.length > 0) {
   console.log(`\nthe loop is broken in ${stalls.length} place(s):`);

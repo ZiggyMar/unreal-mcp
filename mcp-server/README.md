@@ -599,7 +599,12 @@ Recipe 8 in [../docs/RECIPES.md](../docs/RECIPES.md) has the full list, every na
 the running engine.
 
 This was **tested before being believed**, and the test corrected the record: three rows in the
-complaint matrix said "Open" on the assumption these were missing. They were not. The cost of
+complaint matrix said "Open" on the assumption these were missing. They were not. It is now checked
+on every run of `npm run trial:feature` rather than resting on that one test — a claim tested once is
+a claim that *was* true once, and this one is load-bearing enough to keep proving: the trial attaches
+a `NiagaraComponent`, `AudioComponent`, `SkeletalMeshComponent` and `StaticMeshComponent`, then points
+one at a real engine asset and checks the reference actually stuck. Attaching a component that
+references nothing would satisfy the first half and none of the intent. The cost of
 assuming a gap is not a wrong row in a table, it is building a redundant tool that then charges
 every user context for the rest of time.
 
@@ -1438,7 +1443,8 @@ builds a small feature end to end — create, add a component, build a graph, co
 throw it away, build it again — and checks that each reply contains what that step is *for*. A reply
 that merely arrives is not a working step; that mistake hid three of the five.
 
-It covers all three surfaces a model is told it can work with — **Blueprints, Data Tables and C++** —
+It covers the surfaces a model is told it can work with — **Blueprints, Data Tables, C++, and the
+VFX/sound/animation components** —
 because "whether it is C++ or Blueprints or a Data Table" is the actual requirement and only one of
 those was being exercised. The data leg builds a struct and a table, adds a row whose reference is
 deliberately empty, checks that `check_data_tables` reports it, repairs it with `set_data_table_row`,
@@ -1447,7 +1453,7 @@ modules and locates a symbol, and treats a Blueprint-only project as a valid ans
 failure.
 
 It uses engine assets only, so it runs against any project, and it deletes what it made even when it
-fails. Twenty calls, about 5,300 tokens.
+fails. Twenty-seven calls, about 5,400 tokens.
 
 Verified by breaking it on purpose: with the ghost-node exemption removed, it reports
 `review: review flagged the placeholder events again` and exits 1. A trial that has never failed is
