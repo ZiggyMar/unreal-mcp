@@ -326,6 +326,64 @@ Play with two players. The nametag should be correct **immediately** after a res
 on the *other* player's screen, not just your own. If it is right locally and wrong remotely, the
 name is being read on the wrong side - see the multiplayer section of the handbook.
 
+## 10. A change request, end to end: guarding a value that can be empty
+
+Not every job is "build me a feature". A common one is "this data can be blank and the game breaks
+when it is" — and it is worth writing down because the shape recurs and because getting the *type*
+right is the whole job.
+
+The real case: a wave system read enemy types from a Data Table and fed each one to
+`SpawnActorFromClass`. A designer emptied one row's class to take that enemy out of the game. The row
+survived, still passed the wave gate, and contributed a **null** — which spawns nothing, logs
+nothing, and still increments the spawned counter, so the wave never completed.
+
+**Read before you write.** `unreal_read_blueprint_summary` on the function gives every node and how
+it is wired:
+
+```
+Break S_EnemyType.MinimumWave -> integer <= integer .A
+Get Round                     -> integer <= integer .B
+integer <= integer.ReturnValue -> Branch.Condition
+Branch.then -> For Loop -> Add (NewItem <- Break.EnemyType)
+```
+
+**Get the pin's type before choosing the node.** `unreal_read_node_detail` on the Break node reports
+`category: "softclass"`, not `class`. That decides everything: `IsValid` is for objects, `IsValidClass`
+is for hard class references, and neither is correct here. `unreal_find_node` and
+`unreal_get_node_signature` confirm the right one against the running engine:
+
+```
+KismetSystemLibrary::IsValidSoftClassReference(SoftClassReference) -> bool   (pure, static)
+```
+
+Guessing here produces a graph that compiles and is wrong, which is the expensive kind of wrong.
+
+**Make the edit in one call.** `unreal_build_graph` accepts existing node ids in place of refs, so an
+edit to an existing graph is the same call as building a new one. Both new nodes are pure, so no exec
+wiring is needed:
+
+```
+nodes:       isvalid = CallFunction IsValidSoftClassReference (KismetSystemLibrary)
+             and     = CallFunction BooleanAND               (KismetMathLibrary)
+connections: <break>.EnemyType_... -> isvalid.SoftClassReference
+             <compare>.ReturnValue -> and.A
+             isvalid.ReturnValue   -> and.B
+             and.ReturnValue       -> <branch>.Condition
+```
+
+Connecting to `Branch.Condition` **replaces** the existing link, because an input pin holds one
+connection. That is what turns `MinimumWave <= Round` into
+`(MinimumWave <= Round) AND EnemyType is set` without deleting anything.
+
+**Verify the wiring, not just the compile.** A clean compile only proves the graph is legal. Re-read
+the summary and check the links actually say what you intended — the branch now reading its condition
+from the AND, and the AND reading from the comparison and the validity check. Then
+`unreal_compile_blueprint`, then `unreal_save_blueprint`.
+
+The result: an empty reference now skips its row instead of poisoning the pool. The mistake stops
+being possible rather than being fixed once.
+
+
 ## Nodes that are not functions
 
 This is the trap that most reliably defeats a model with no Unreal training, and no amount of
