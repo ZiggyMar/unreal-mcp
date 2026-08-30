@@ -55,6 +55,11 @@ jobs:
       # No editor is reachable here, which is itself worth exercising: the suite has to pass with
       # the bridge absent, and a check that silently needs an editor would fail here rather than
       # quietly passing forever on the one machine that has one.
+      # `test:unit` is `node --test` with no path, and that is deliberate. It used to be
+      # `node --test "test/*.test.mjs"`, which works on Node 22 and does not exist on Node 18: glob
+      # expansion inside the test runner arrived in Node 21, and the quotes stop the shell expanding
+      # it first. So the 18 job failed instantly for two years' worth of commits while every local run
+      # was green, which is exactly the gap this matrix is here to close.
       - name: Guards and tests
         working-directory: mcp-server
         run: npm test
