@@ -1,0 +1,15 @@
+import { startAndInitialize } from "./scripts/lib/mcpStdio.mjs";
+const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "mk");
+const call = async (n, a) => ((await server.request("tools/call", { name: n, arguments: a }))?.result?.content ?? []).map((c) => c.text ?? "").join("");
+const GS = (JSON.parse(await call("unreal_list_blueprints", { match: "GS_Gameplay" })).blueprints ?? []).find((b) => b.path.includes("/GS_Gameplay."))?.path;
+const s = JSON.parse(await call("unreal_read_blueprint_summary", { path: GS, graphName: "GetNextTicket" }));
+const mk = (s.nodes ?? []).find((n) => n.type === "MakeArray");
+const d = JSON.parse(await call("unreal_read_node_detail", { path: GS, graphName: "GetNextTicket", nodeId: mk.id }));
+console.log("Make Array pins:");
+for (const p of d.pins ?? []) console.log("   ", p.direction, p.name, "=", JSON.stringify(p.defaultValue ?? null));
+const GM = (JSON.parse(await call("unreal_list_blueprints", { match: "GM_Gameplay" })).blueprints ?? []).find((b) => b.path.includes("/GM_Gameplay."))?.path;
+const bt = JSON.parse(await call("unreal_read_node_detail", { path: GM, graphName: "EventGraph", nodeId: "208E99C4" }));
+console.log("");
+console.log("BurnTicket call pins in GM_Gameplay:");
+for (const p of bt.pins ?? []) console.log("   ", p.direction, p.name, "=", JSON.stringify(p.defaultValue ?? null), "| linked:", (p.linkedTo ?? []).length);
+server.child.kill();

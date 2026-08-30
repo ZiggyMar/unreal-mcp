@@ -1,0 +1,10 @@
+import { startAndInitialize } from "./scripts/lib/mcpStdio.mjs";
+const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "body");
+const call = async (n, a) => ((await server.request("tools/call", { name: n, arguments: a }))?.result?.content ?? []).map((c) => c.text ?? "").join("");
+const GS = (JSON.parse(await call("unreal_list_blueprints", { match: "GS_Gameplay" })).blueprints ?? []).find((b) => b.path.includes("/GS_Gameplay."))?.path;
+console.log("signature of Array_RemoveItem:");
+console.log((await call("unreal_get_node_signature", { functionName: "Array_RemoveItem", className: "KismetArrayLibrary" })).slice(0, 500));
+console.log("");
+console.log("signature of EnsureDeckExists (self):");
+console.log((await call("unreal_get_node_signature", { functionName: "EnsureDeckExists", blueprintPath: GS })).slice(0, 400));
+server.child.kill();

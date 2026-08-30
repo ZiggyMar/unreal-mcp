@@ -20,6 +20,7 @@
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
+#include "K2Node_CallArrayFunction.h"
 #include "Animation/AnimBlueprint.h"
 #include "AnimGraphNode_StateMachine.h"
 #include "AnimationStateMachineGraph.h"
@@ -329,6 +330,35 @@ namespace
 			OutError = FString::Printf(TEXT("save_failed: %s"), *PackageFileName);
 		}
 		return bSaved;
+	}
+}
+
+// Tell a node that one of its pins just gained a connection.
+//
+// Both hooks, because they are different virtuals and which one matters depends on the node:
+// UEdGraphNode::PinConnectionListChanged is the generic one, UK2Node::NotifyPinConnectionListChanged
+// is what K2 nodes override to react.
+//
+// Honest note, because this was written while chasing the wrong cause: this did NOT fix the wildcard
+// problem it was added for. That was the node CLASS - array functions were being built as plain
+// UK2Node_CallFunction, which has no wildcard logic to notify. See the comment where call nodes are
+// created. This stays because notifying a node that its connections changed is correct on its own
+// terms, not because it solved anything.
+static void NotifyConnectionChanged(UEdGraphPin* Pin)
+{
+	if (!Pin)
+	{
+		return;
+	}
+	UEdGraphNode* Owner = Pin->GetOwningNode();
+	if (!Owner)
+	{
+		return;
+	}
+	Owner->PinConnectionListChanged(Pin);
+	if (UK2Node* AsK2 = Cast<UK2Node>(Owner))
+	{
+		AsK2->NotifyPinConnectionListChanged(Pin);
 	}
 }
 
@@ -1929,7 +1959,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 			return NotFound;
 		}
 
-		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
+		// An array-library function needs UK2Node_CallArrayFunction, not the plain call node.
+		//
+		// Every Array, Map and Set function has a WILDCARD pin - TargetArray on Remove Item, for
+		// instance - which takes its concrete type from whatever is plugged into it. That
+		// propagation lives in UK2Node_CallArrayFunction. Built as a plain UK2Node_CallFunction the
+		// node links up fine and reads back correctly, and the Blueprint then refuses to compile
+		// with "The type of Target Array is undetermined. Connect something to imply a specific
+		// type" - pointing at a pin that visibly has an int array connected to it.
+		//
+		// Found by trying to author a function that removes an int from an array, and diagnosed by
+		// reading a graph Unreal itself had built: its nodes came back as CallArrayFunction where
+		// ours came back as CallFunction. It made the whole Array/Map/Set family unbuildable through
+		// this bridge, which is a large hole in a tool whose job is authoring graphs.
+		UK2Node_CallFunction* CallNode = Function->HasMetaData(FBlueprintMetadata::MD_ArrayParam)
+			? NewObject<UK2Node_CallArrayFunction>(Graph)
+			: NewObject<UK2Node_CallFunction>(Graph);
 		CallNode->SetFromFunction(Function);
 		NewNode = CallNode;
 	}
@@ -2241,6 +2286,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	TargetNode->Modify();
 
 	const bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
+	if (bConnected)
+	{
+		// Same reason as in build_graph: a wildcard pin only learns its type when the node is told.
+		NotifyConnectionChanged(SourcePin);
+		NotifyConnectionChanged(TargetPin);
+	}
 	if (!bConnected)
 	{
 		return MakeErrorResponse(TEXT("connect_failed"));
@@ -3323,6 +3374,19 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 					RollbackBatch();
 					return MakeErrorResponse(FString::Printf(TEXT("connection %d: connect_failed"), i));
 				}
+
+				// Tell both nodes their connections changed. Without this a WILDCARD pin never resolves:
+				// every Array, Map and Set function has one (TargetArray on Remove Item, for instance),
+				// and it takes its concrete type from whatever is plugged into it. The link is made
+				// either way, so the graph LOOKS right and reads back correctly - it just refuses to
+				// compile, with "The type of Target Array is undetermined. Connect something to imply a
+				// specific type", pointing at a pin that visibly has something connected to it.
+				//
+				// Found by trying to build a real function that removes an int from an array. It makes
+				// the entire Array/Map/Set family unbuildable through this bridge, which is a large hole
+				// for a tool whose whole job is authoring graphs.
+				NotifyConnectionChanged(SourcePin);
+				NotifyConnectionChanged(TargetPin);
 				MadeLinks.Add(TPair<UEdGraphPin*, UEdGraphPin*>(SourcePin, TargetPin));
 				++ConnectionsMade;
 			}
