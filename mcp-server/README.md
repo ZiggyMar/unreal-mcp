@@ -1443,8 +1443,8 @@ builds a small feature end to end — create, add a component, build a graph, co
 throw it away, build it again — and checks that each reply contains what that step is *for*. A reply
 that merely arrives is not a working step; that mistake hid three of the five.
 
-It covers the surfaces a model is told it can work with — **Blueprints, Data Tables, C++, and the
-VFX/sound/animation components** —
+It covers the surfaces a model is told it can work with — **Blueprints, Data Tables, C++, the
+VFX/sound/animation components, and UMG** —
 because "whether it is C++ or Blueprints or a Data Table" is the actual requirement and only one of
 those was being exercised. The data leg builds a struct and a table, adds a row whose reference is
 deliberately empty, checks that `check_data_tables` reports it, repairs it with `set_data_table_row`,
@@ -1453,7 +1453,12 @@ modules and locates a symbol, and treats a Blueprint-only project as a valid ans
 failure.
 
 It uses engine assets only, so it runs against any project, and it deletes what it made even when it
-fails. Twenty-seven calls, about 5,400 tokens.
+fails. Thirty-three calls, about 5,700 tokens.
+
+The UI leg is there because "a HUD bound to a value" is one of the recipes this project ships, and a
+documented workflow that nothing exercises is a claim rather than a feature. It checks the widget
+tree reports a panel, not just the two widget names — a flat list of names would pass and tell a
+model nothing about nesting.
 
 Verified by breaking it on purpose: with the ghost-node exemption removed, it reports
 `review: review flagged the placeholder events again` and exits 1. A trial that has never failed is

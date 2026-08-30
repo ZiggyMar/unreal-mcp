@@ -253,6 +253,42 @@ await step("point it at a real asset", "unreal_set_component_property", {
 await step("clean up the component actor", "unreal_delete_asset", { paths: [FX_PATH], force: true },
   (t, j) => (j && j.deleted >= 1 ? null : "the trial's component actor is still in the project"));
 
+// ---------------------------------------------------------------------------------------------
+// The UI surface. "A HUD bound to a value" is one of the recipes this project ships, so the widget
+// path is not a nice-to-have - it is a documented workflow, and a documented workflow that nothing
+// exercises is a claim rather than a feature.
+// ---------------------------------------------------------------------------------------------
+console.log("");
+console.log("the UI surface");
+
+const WBP = "/Game/__MCPFeatureTrial/WBP_Trial";
+const WBP_PATH = `${WBP}.WBP_Trial`;
+
+await step("create a Widget Blueprint", "unreal_create_widget_blueprint", { packagePath: WBP },
+  (t, j) => (j && j.path ? null : "no widget blueprint came back"));
+
+await step("add a text block", "unreal_add_widget", { path: WBP_PATH, widgetClass: "TextBlock", name: "HealthText" },
+  (t) => (t.includes("HealthText") ? null : "the widget name is not in the reply"));
+
+await step("add a progress bar", "unreal_add_widget", { path: WBP_PATH, widgetClass: "ProgressBar", name: "HealthBar" },
+  (t) => (t.includes("HealthBar") ? null : "the widget name is not in the reply"));
+
+await step("read the widget tree", "unreal_list_widgets", { path: WBP_PATH }, (t, j) => {
+  const widgets = (j && j.widgets) || [];
+  const names = widgets.map((w) => w.name);
+  if (!names.includes("HealthText") || !names.includes("HealthBar")) {
+    return `both widgets should be in the tree, got ${JSON.stringify(names)}`;
+  }
+  // A flat list of names would pass the check above and tell a model nothing about layout.
+  return widgets.some((w) => w.isPanel) ? null : "the tree reports no panel, so nesting is invisible";
+});
+
+await step("set a widget property", "unreal_set_widget_property", { path: WBP_PATH, widget: "HealthText", property: "Text", value: "Health" },
+  (t, j) => (j && String(j.value).includes("Health") ? null : `the property did not stick: ${JSON.stringify(j && j.value)}`));
+
+await step("clean up the widget", "unreal_delete_asset", { paths: [WBP_PATH], force: true },
+  (t, j) => (j && j.deleted >= 1 ? null : "the trial's widget blueprint is still in the project"));
+
 console.log(`\n${calls} calls, ~${tokens} tokens`);
 if (stalls.length > 0) {
   console.log(`\nthe loop is broken in ${stalls.length} place(s):`);
