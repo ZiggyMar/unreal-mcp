@@ -452,6 +452,41 @@ Three uses, in order of how much trouble they save:
 An empty result is informative rather than a failure: the system genuinely is not there, or is
 named something else, and the response says so.
 
+### The C++ half of the project: `unreal_find_source`
+
+A Blueprint-only bridge answers half the question. Real projects keep their base classes, damage
+maths and replicated state in C++, so "the health bar does not update when I take damage" is
+routinely a question about a `.cpp` file that no Blueprint tool can see. Until now a model could
+read every Blueprint in the project, see that `BP_Character` derives from `AMyCharacter`, and have
+no way at all to look at `AMyCharacter`.
+
+The fix is deliberately **not** file reading. Every client that drives this server — Claude Code,
+Cursor, Claude Desktop with filesystem access — already opens and edits files better than a tool
+wrapper could. What none of them knows is *where*: the project root is not the working directory,
+plugins keep their own `Source` trees, and nothing in the MCP surface ever said so. `ping` has
+always returned the absolute `.uproject` path, and this turns that into a map.
+
+```
+unreal_find_source({})                          # project root + every C++ module, incl. plugins
+unreal_find_source({ symbol: "AMyCharacter" })  # where that class is declared and defined
+unreal_find_source({ symbol: "ApplyDamage", fileFilter: "Character" })
+```
+
+Matches come back ranked — the class declaration first, then definitions, then `UFUNCTION` and
+`UPROPERTY` declarations, and bare mentions last — because a symbol appears dozens of times in a
+real codebase and returning them in file order buries the answer. That ranking is the difference
+between this and handing a model a raw grep. Matching is whole-word, so `Health` does not drag in
+every `HealthBarWidth`; `Binaries/` and `Intermediate/` are never searched, so a stale generated
+header cannot answer for the real one.
+
+It returns **locations, never contents**: a path, a line number, and the one line that matched. A
+whole-project symbol lookup costs a few hundred tokens instead of several thousand, and the model
+reads what it actually wants with the tools it already has.
+
+A Blueprint-only project is not an error — it says so plainly and points back at the Blueprint
+tools.
+
+
 ### VFX, sound, and animation already work
 
 There is no Niagara tool or animation tool here, and for the common case there does not need to be.

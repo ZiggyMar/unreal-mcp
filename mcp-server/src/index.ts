@@ -25,6 +25,7 @@ import { allPolicies, resolveMode } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findSourceRoots, searchSource } from "./nativeSource.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -152,6 +153,10 @@ function buildInstructions(profile: string): string {
     "2. Orient before writing. unreal_get_project_overview, then unreal_search_project and",
     "   unreal_list_blueprints to find what already exists. Assume the project is to be extended,",
     "   not rebuilt: match what is there.",
+    "   Not everything is a Blueprint. If a parentClass is not itself a Blueprint it is native C++,",
+    "   and unreal_find_source locates the file and line that declares it - then read and edit it",
+    "   with your own file tools. Call unreal_find_source with no symbol to see whether the project",
+    "   has C++ at all and where its modules are.",
     "3. unreal_plan_feature before building anything non-trivial. It reads the real project and",
     "   returns concrete steps, so the structure is not guesswork.",
     "4. Check exact names before writing: unreal_find_node for functions, unreal_describe_class for",
@@ -229,6 +234,9 @@ const CORE_PROFILE_TOOLS = new Set([
   // The docs, fetchable mid-task. A model that cannot reach them guesses instead, and a guess at a
   // pin name costs a failed call - which is more expensive than the section index it replaces.
   "unreal_guide",
+  // The C++ half of the project. Without it a model can read every Blueprint and still not find a
+  // bug that lives in the native parent class it can see the name of and nothing else.
+  "unreal_find_source",
   "unreal_session_changes",
   "unreal_undo_history",
   "unreal_get_project_overview",
@@ -2596,6 +2604,110 @@ function guideSections(text: string): { heading: string; body: string }[] {
   out.push({ heading, body: body.join("\n").trim() });
   return out.filter((s) => s.body.length > 0);
 }
+
+register(
+  "unreal_find_source",
+  {
+    title: "Find the project's C++ and which file defines a symbol",
+    description:
+      "Real projects keep their base classes, damage maths and replicated state in C++, so a question " +
+      'like "the health bar does not update when I take damage" is often a question about a .cpp file ' +
+      "that no Blueprint tool can see. This is how you reach that half of the project.\n\n" +
+      "Call it with no `symbol` to get the project root and every C++ module in it, including plugin " +
+      "modules - which is also how you find out whether the project has any C++ at all, and where new " +
+      "code would belong. Call it with a `symbol` (a class, function or property name, matched " +
+      "whole-word) to get the exact files and line numbers that declare or define it, ranked so the " +
+      "class declaration comes first and passing mentions come last.\n\n" +
+      "It deliberately returns locations rather than file contents: you already have file tools that " +
+      "read and edit far better than this could, and what you were missing was where to point them. " +
+      "A `parentClass` from unreal_read_blueprint_summary that is not a Blueprint is a native class, " +
+      "and this is how you find it.",
+    inputSchema: {
+      symbol: z
+        .string()
+        .optional()
+        .describe('A class, function or property name, e.g. "AMyCharacter" or "ApplyDamage". Omit to map the modules.'),
+      fileFilter: z
+        .string()
+        .optional()
+        .describe('Only search files whose name contains this, e.g. "Character".'),
+      limit: z.number().int().positive().optional().describe("Maximum matches to return. Default 40."),
+    },
+  },
+  async ({ symbol, fileFilter, limit }) => {
+    const ping = await bridge.send<{ project?: string; projectFile?: string }>("ping", {});
+    const projectFile = ping.projectFile;
+    if (!projectFile) {
+      return errorResult(
+        new Error(
+          "The bridge did not report a project file path, so the C++ tree cannot be located. This " +
+            "usually means the loaded plugin binary predates the field; rebuild the plugin and restart " +
+            "the editor, then run unreal_doctor."
+        )
+      );
+    }
+
+    const roots = findSourceRoots(projectFile);
+
+    if (roots.length === 0) {
+      return jsonResult({
+        project: ping.project,
+        projectFile,
+        modules: [],
+        note:
+          "This project has no C++ modules: there is no Source directory, and no plugin under " +
+          "Plugins/ has one. It is Blueprint-only, so every answer is in the Blueprint tools.",
+      });
+    }
+
+    if (symbol === undefined || symbol.trim().length === 0) {
+      return jsonResult({
+        project: ping.project,
+        projectFile,
+        modules: roots.map((r) => ({ module: r.module, kind: r.kind, dir: r.dir })),
+        next:
+          "Call again with `symbol` to find where a class, function or property is declared. New " +
+          "gameplay code normally belongs in the project module rather than a plugin one.",
+      });
+    }
+
+    const { matches, filesScanned, totalMatches, truncated } = searchSource(projectFile, roots, symbol, {
+      limit,
+      fileFilter,
+    });
+
+    if (matches.length === 0) {
+      return jsonResult({
+        project: ping.project,
+        projectFile,
+        symbol,
+        matches: [],
+        filesScanned,
+        note:
+          `Nothing in this project's C++ declares or mentions "${symbol}". If it is a Blueprint ` +
+          "concept rather than a native one, use unreal_search_project instead; if it is an engine " +
+          "symbol, it lives in the engine source, which is not part of this project.",
+      });
+    }
+
+    return jsonResult({
+      project: ping.project,
+      projectFile,
+      symbol,
+      matches,
+      filesScanned,
+      // Paths are relative to projectFile's directory, so say so once rather than making the caller
+      // work it out from the shape of them.
+      pathsAreRelativeTo: dirname(projectFile),
+      ...(truncated
+        ? {
+            omitted: totalMatches - matches.length,
+            note: `${totalMatches - matches.length} further match(es) not shown, all lower-ranked than these. Narrow with \`fileFilter\` or raise \`limit\`.`,
+          }
+        : {}),
+    });
+  }
+);
 
 register(
   "unreal_guide",
