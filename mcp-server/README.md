@@ -739,6 +739,30 @@ When the complaint is "my AI tool cannot see Unreal", taking the AI tool out of 
 fastest way to learn which half is broken. Exit code 1 if the editor is unreachable, 0 otherwise,
 so it can gate a script.
 
+#### A review will not hand you a score for something that does not build
+
+Found by running a real feature request end to end and deliberately leaving it half-wired. The
+Blueprint did not compile, and `unreal_review_blueprint` returned **score 95, `"errors": 0`** — because
+a review reads graph *structure*, and a compile error is not a structural finding.
+
+That is this project's own failure mode, produced by its own quality gate. The workflow this server
+prints tells a model to review before claiming a feature is done, so the one call standing between
+*"built it"* and *"it works"* was answering 95/100 about a graph the engine had rejected.
+
+It compiles first now, and leads with the result:
+
+```json
+{ "compiles": false, "verdict": "does not compile", "compileErrors": 1,
+  "compileMessages": [ ... node and pin named ... ],
+  "next": "fix that before anything below",
+  "review": { "score": 95, ... } }
+```
+
+The review still runs and is still returned — it is not useless, it is **subordinate**. What changed
+is that a caller can no longer read a score without seeing that the thing does not build.
+`unreal_verify_feature` already reasoned this way; now the tool a model reaches for on its own does
+too.
+
 ### The last call before "done": `unreal_verify_feature`
 
 The failure this exists for is specific and it is the expensive one. A model builds a feature across

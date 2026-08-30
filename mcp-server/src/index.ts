@@ -2111,8 +2111,36 @@ register(
   },
   async ({ path, graphName }) => {
     try {
+      // Compile first, and lead with it if it fails.
+      //
+      // Measured on a deliberately half-wired Blueprint: it did not compile, and the review returned
+      // score 95 with "errors": 0, because a review reads graph STRUCTURE and a compile error is not
+      // a structural finding. The workflow this server prints tells a model to review before claiming
+      // a feature is done - so the one call standing between "built it" and "said it works" was
+      // answering 95/100 about something the engine had rejected. That is the exact failure this
+      // project exists to prevent, produced by its own quality gate.
+      //
+      // The review still runs and is still returned: it is not useless, it is subordinate. What
+      // changes is that the caller cannot read a score without seeing that the thing does not build.
+      const compile = await bridge
+        .send<CompileBlueprintResult>("compile_blueprint", { path })
+        .catch(() => null);
       const result = await reviewBlueprint(bridge, path, graphName);
-      return jsonResult(result);
+
+      if (compile && compile.success === false) {
+        return jsonResult({
+          compiles: false,
+          compileErrors: compile.errorCount ?? 0,
+          compileMessages: compile.messages ?? [],
+          verdict: "does not compile",
+          next:
+            "This Blueprint does not compile, so fix that before anything below. A review reads graph " +
+            "structure and cannot see a compile error; the score is about a graph the engine has " +
+            "rejected. Each message names the node and pin it is about.",
+          review: result,
+        });
+      }
+      return jsonResult(compile ? { compiles: true, ...result } : result);
     } catch (err) {
       return errorResult(err);
     }
