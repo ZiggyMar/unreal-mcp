@@ -17,9 +17,17 @@
 //
 // Uses engine classes only, so it runs against any project rather than the one it was written on.
 //
-// Usage: node scripts/trial-feature.mjs      (needs an editor open)
+// Usage: node scripts/trial-feature.mjs             (needs an editor open)
+//        node scripts/trial-feature.mjs --by-name   (same trial, paying only for the tools it uses)
+//
+// --by-name exists to check a claim the server instructions make to every frontier model: that
+// passing enable_tools an exact `tools` list instead of a group is much cheaper and still works.
+// Advice with no evidence behind it is how this repo has been wrong before, so this runs the whole
+// trial on nothing but the tools it actually calls - derived from THIS FILE, so the list cannot
+// drift away from what the trial does - and prints what that standing context costs beside `core`.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -27,11 +35,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const serverPath = join(here, "..", "dist", "index.js");
 const NL = String.fromCharCode(10);
 
+const CORE_TOKENS = 11666; // measured by `npm run measure:groups`; see src/groupCosts.ts
+
 const PKG = "/Game/__MCPFeatureTrial/BP_TrialPickup";
 const PATH = `${PKG}.BP_TrialPickup`;
 
+const byName = process.argv.includes("--by-name");
+
+// Derived from this file rather than written down: a hand-kept list would drift the first time a
+// step was added, and would then be measuring a set the trial does not use.
+const TOOLS_USED = [
+  ...new Set([...readFileSync(fileURLToPath(import.meta.url), "utf8").matchAll(/"(unreal_[a-z0-9_]+)"/g)].map((m) => m[1])),
+];
+
 const child = spawn(process.execPath, [serverPath], {
-  env: { ...process.env, UNREAL_MCP_PROFILE: "full" },
+  env: { ...process.env, UNREAL_MCP_PROFILE: byName ? "search" : "full" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 let buf = "";
@@ -71,6 +89,22 @@ async function step(label, name, args, check) {
 
 await rpc("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "trial", version: "1" } });
 child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + NL);
+
+// Enable exactly what this trial uses, and price it against the group a model would otherwise reach
+// for. The comparison is the point: if the named set is not much cheaper, the advice is wrong.
+if (byName) {
+  const sizeOf = async () => {
+    const listed = await rpc("tools/list", {});
+    return Math.round(JSON.stringify(listed?.result?.tools ?? []).length / 4);
+  };
+  const baseline = await sizeOf();
+  await rpc("tools/call", { name: "unreal_enable_tools", arguments: { tools: TOOLS_USED } });
+  const named = await sizeOf();
+  console.log(`enabled ${TOOLS_USED.length} tools by name: ${named} tokens standing (search baseline ${baseline})`);
+  console.log(`for comparison, enabling "core" instead costs ${CORE_TOKENS} tokens standing`);
+  console.log("");
+}
+
 
 console.log("the Blueprint surface");
 

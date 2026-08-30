@@ -23,3 +23,6 @@ export const GROUP_COST_TOKENS: Record<string, number> = {
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
 export const ALL_GROUPS_TOKENS = 29330;
+
+/** Naming the eight tools one Blueprint feature needs, instead of enabling the `core` group. */
+export const FEATURE_SET_TOKENS = 4552;

@@ -31,7 +31,7 @@ import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
 import { compactBlueprintRow, compactVariable } from "./compactRows.js";
-import { ALL_GROUPS_TOKENS, GROUP_COST_TOKENS } from "./groupCosts.js";
+import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS } from "./groupCosts.js";
 import { compileNative } from "./nativeBuild.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
@@ -158,8 +158,8 @@ function buildInstructions(profile: string): string {
       "and what it costs, without paying for the schemas.",
       "",
       "Cheaper still, once you know the job: pass unreal_enable_tools a `tools` list of exact names",
-      "instead of a group. The eight tools a feature actually needs are ~4.5k, and the difference is",
-      "paid on every turn for the rest of the session.",
+      `instead of a group. The eight tools one Blueprint feature needs are ~${Math.round(FEATURE_SET_TOKENS / 100) / 10}k against core's`,
+      `~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k, and that difference is paid on every turn for the rest of the session.`,
       ""
     );
   }

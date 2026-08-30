@@ -1109,6 +1109,22 @@ correction rather than a relaxation: every ceiling encoded an intent about what 
 before it can work, that intent always covered the whole payload, and nothing got bigger on the day
 the numbers changed.
 
+**Naming tools instead of enabling a group is the largest single saving available**, and it is now
+measured rather than asserted. `npm run trial:feature --by-name` runs the whole five-surface trial on
+nothing but the tools it calls — derived from the trial's own source, so the list cannot drift from
+what it does — and prices that against the group a model would otherwise reach for:
+
+| what is enabled | tools | standing |
+| --- | --- | --- |
+| the eight one Blueprint feature needs | 12 | **4,552** |
+| everything the five-surface trial calls | 20 | 8,388 |
+| the `core` group | 32 | 11,666 |
+
+The trial passes on the named set, so this is not a saving bought with capability. 61% for one
+feature, 28% even for a trial that spans Blueprints, data tables, C++, components and UMG. The "~4.5k"
+the instructions used to claim by hand turned out to be right — 4,552 — but a number nobody checks is
+one that is eventually wrong, so it comes from `src/groupCosts.ts` now like the rest.
+
 On `search`, the instructions are the larger half, and they are the last thing that should be cut —
 four tools are only usable because the text explains how to reach the rest. They now quote the
 **measured** cost of every group, generated from `src/groupCosts.ts` so they cannot drift, and steer
