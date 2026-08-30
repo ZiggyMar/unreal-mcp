@@ -20,6 +20,10 @@ export interface MpVariable {
   name: string;
   replicated?: boolean;
   repNotify?: string;
+  /** The declared type, e.g. "Object", "float". Decides handle-versus-state; see the check below. */
+  type?: string;
+  /** For an object or class reference, what it points at, e.g. "BP_PingActor_C". */
+  subType?: string;
 }
 
 export interface MpNode {
@@ -109,6 +113,38 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
   }
 
   for (const [variable, event] of offenders) {
+    // An object reference is not gameplay state, and this distinction was learned the hard way.
+    // Measured on a real project: this check reported BP_Player setting "CurrentActivePing" as a
+    // multiplayer bug. It is not one - CurrentActivePing holds a BP_PingActor, that Actor has
+    // bReplicates true, so it replicates ITSELF and every client already sees the ping. The variable
+    // is the server's handle for "which one is active", and replicating it would change nothing but
+    // bandwidth. Reporting that at cost 100 sends a model to change code that is correct, which is
+    // worse than saying nothing: the finding is confident, plausible and wrong.
+    //
+    // So a handle gets its own check, a much lower cost, and a message that names the fact which
+    // decides it rather than asserting the conclusion.
+    const declared = replicationOf.get(variable.toLowerCase());
+    const type = `${declared?.type ?? ""}`.toLowerCase();
+    const isHandle = type === "object" || type === "class" || type === "softobject" || type === "softclass";
+    const referenced = declared?.subType;
+
+    if (isHandle) {
+      findings.push({
+        check: "server-writes-unreplicated-handle",
+        severity: "info",
+        variable,
+        message:
+          `"${event}" runs on the server and sets "${variable}", a reference to ` +
+          `${referenced ?? "another object"} which is not itself replicated as a variable.`,
+        fix:
+          `This is only a bug if ${referenced ?? "the referenced class"} does not replicate on its own. ` +
+          `Check with unreal_read_class_defaults: if \`replicates\` is true, clients already see the ` +
+          `object and this variable is just the server's handle to it - leave it alone. If it is false, ` +
+          `clients see nothing and either the Actor should replicate or this reference should.`,
+      });
+      continue;
+    }
+
     findings.push({
       check: "server-writes-unreplicated",
       severity: "warning",

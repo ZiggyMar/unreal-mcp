@@ -63,6 +63,10 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // written and read twice: a tool whose entire job is finding something wrong, absent from the
       // preset for finding things wrong. Running the loop found it in one go.
       "unreal_find_orphans",
+      // Needed to tell a real replication bug from a false one: a server writing an unreplicated
+      // handle to an Actor that replicates itself is ordinary bookkeeping, and the only way to know
+      // which it is, is to read whether that Actor replicates.
+      "unreal_read_class_defaults",
       // The fix half. A preset that can only diagnose leaves the model to enable more before it can
       // act on what it just found, which is the round trip this is meant to remove.
       "unreal_build_graph",

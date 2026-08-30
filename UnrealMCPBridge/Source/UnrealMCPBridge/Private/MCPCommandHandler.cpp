@@ -707,6 +707,7 @@ static bool IsPathDestructiveCommand(const FString& Cmd)
 		TEXT("set_component_property"), TEXT("set_class_default"), TEXT("add_widget"),
 		TEXT("set_widget_property"), TEXT("add_struct_field"), TEXT("set_material_parameter"),
 		TEXT("save_asset"), TEXT("read_asset_properties"), TEXT("set_asset_property"),
+		TEXT("read_class_defaults"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 	};
 	return Destructive.Contains(Cmd);
@@ -937,6 +938,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("spawn_actor"))
 	{
 		Response = HandleSpawnActor(Params);
+	}
+	else if (Cmd == TEXT("read_class_defaults"))
+	{
+		Response = HandleReadClassDefaults(Params);
 	}
 	else if (Cmd == TEXT("read_asset_properties"))
 	{
@@ -4528,6 +4533,109 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetComponentProperty(const TSh
 	return Response;
 }
 
+// One walk over an object's editable properties, shared by the asset reader and the class-default
+// reader. They ask the same question of different objects - "what can a human change here, and what
+// does it say now" - and two copies of that would answer it two ways the first time one was touched.
+static void DescribeEditableProperties(UObject* Object, const FString& MatchFilter,
+	TArray<TSharedPtr<FJsonValue>>& OutProperties, int32& OutTotal)
+{
+	OutTotal = 0;
+	for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+	{
+		FProperty* Property = *It;
+
+		// Only what a human could edit in the details panel. Everything else is engine bookkeeping
+		// that would multiply the reply and cannot be written back anyway.
+		if (!Property->HasAnyPropertyFlags(CPF_Edit))
+		{
+			continue;
+		}
+		++OutTotal;
+
+		const FString Name = Property->GetName();
+		if (!MatchFilter.IsEmpty() && !Name.Contains(MatchFilter))
+		{
+			continue;
+		}
+
+		FString Value;
+		const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Object);
+		Property->ExportTextItem_Direct(Value, ValuePtr, nullptr, Object, PPF_None);
+
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Name);
+		Entry->SetStringField(TEXT("type"), Property->GetCPPType());
+		Entry->SetStringField(TEXT("value"), Value);
+
+		const FString Category = Property->GetMetaData(TEXT("Category"));
+		if (!Category.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("category"), Category);
+		}
+		if (Property->HasAnyPropertyFlags(CPF_EditConst))
+		{
+			Entry->SetBoolField(TEXT("readOnly"), true);
+		}
+		OutProperties.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+}
+
+// Read a Blueprint's class defaults.
+//
+// set_class_default has existed for a long time with nothing to read them back, which is the same
+// asymmetry the asset tools just closed: a model could change a default it could not see, so it had
+// to already know the property name, the spelling of its value, and what it currently was. Found by
+// needing it - "does BP_PingActor replicate?" was unanswerable through this bridge, and that is
+// exactly the question that decides whether a server-writes-unreplicated finding is a real bug.
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadClassDefaults(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path"));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+	if (!Blueprint->GeneratedClass)
+	{
+		return MakeErrorResponse(TEXT("no_generated_class: compile the Blueprint first"));
+	}
+	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+	if (!CDO)
+	{
+		return MakeErrorResponse(TEXT("no_class_default_object"));
+	}
+
+	FString MatchFilter;
+	Params->TryGetStringField(TEXT("match"), MatchFilter);
+
+	TArray<TSharedPtr<FJsonValue>> Properties;
+	int32 Total = 0;
+	DescribeEditableProperties(CDO, MatchFilter, Properties, Total);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("class"), Blueprint->GeneratedClass->GetName());
+	// The two defaults that decide whether a multiplayer bug is real, hoisted so they are not buried
+	// in a list of two hundred: whether the actor replicates at all, and whether it replicates moves.
+	if (AActor* AsActor = Cast<AActor>(CDO))
+	{
+		Result->SetBoolField(TEXT("replicates"), AsActor->GetIsReplicated());
+		Result->SetBoolField(TEXT("replicatesMovement"), AsActor->IsReplicatingMovement());
+	}
+	Result->SetArrayField(TEXT("properties"), Properties);
+	if (Properties.Num() != Total)
+	{
+		Result->SetNumberField(TEXT("totalProperties"), Total);
+	}
+	return MakeOkResponse(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path, PropertyName, Value;
@@ -5195,47 +5303,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSha
 	UClass* Class = Asset->GetClass();
 	TArray<TSharedPtr<FJsonValue>> Properties;
 	int32 Total = 0;
-
-	for (TFieldIterator<FProperty> It(Class); It; ++It)
-	{
-		FProperty* Property = *It;
-
-		// Only what a human could edit in the details panel. Everything else is engine bookkeeping
-		// that would triple the reply and cannot be written back anyway.
-		if (!Property->HasAnyPropertyFlags(CPF_Edit))
-		{
-			continue;
-		}
-		++Total;
-
-		const FString Name = Property->GetName();
-		if (!MatchFilter.IsEmpty() && !Name.Contains(MatchFilter))
-		{
-			continue;
-		}
-
-		FString Value;
-		const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Asset);
-		Property->ExportTextItem_Direct(Value, ValuePtr, nullptr, Asset, PPF_None);
-
-		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
-		Entry->SetStringField(TEXT("name"), Name);
-		Entry->SetStringField(TEXT("type"), Property->GetCPPType());
-		Entry->SetStringField(TEXT("value"), Value);
-
-		// The category is what the details panel groups by, and it is how a human describes where a
-		// setting lives ("under Combat"). Only sent when the asset actually sets one.
-		const FString Category = Property->GetMetaData(TEXT("Category"));
-		if (!Category.IsEmpty())
-		{
-			Entry->SetStringField(TEXT("category"), Category);
-		}
-		if (Property->HasAnyPropertyFlags(CPF_EditConst))
-		{
-			Entry->SetBoolField(TEXT("readOnly"), true);
-		}
-		Properties.Add(MakeShared<FJsonValueObject>(Entry));
-	}
+	DescribeEditableProperties(Asset, MatchFilter, Properties, Total);
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("path"), Path);

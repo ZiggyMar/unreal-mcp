@@ -39,6 +39,10 @@ import { explainGraph } from "./explainGraph.js";
 export const FINDING_COST: Record<string, number> = {
   "cast-to-server-only-class": 100,
   "server-writes-unreplicated": 100,
+  // A handle, not state. Deliberately far cheaper than the check above, because the commonest case
+  // is not a bug at all: an object reference to an Actor that replicates itself. Costing it at 100
+  // put correct code at the top of the audit, where a model acts on it first.
+  "server-writes-unreplicated-handle": 15,
   // Costs the most that any of these can cost: the game builds, hosts, searches, reports no error,
   // and the lobby list is empty. It cannot be reproduced on one machine.
   "session-lan-mismatch": 100,
@@ -74,6 +78,8 @@ const WHY_IT_COSTS: Record<string, string> = {
     "A GameMode exists only on the server. On every client the cast fails silently and every node after it never runs. Single-player testing cannot see it.",
   "server-writes-unreplicated":
     "Reads as 'it works for the host'. Nobody can reproduce it alone, which is why it survives to a showcase.",
+  "server-writes-unreplicated-handle":
+    "Usually fine: if the referenced Actor replicates itself, clients already see it and the variable is just the server's handle. Worth one look, not a rewrite.",
   "unhandled-cast-failure":
     "A failed cast does not error. The chain simply stops, so the feature does not happen and there is nothing to search for.",
   "level-sweep-every-frame": "Walks every actor in the level, 60+ times a second.",

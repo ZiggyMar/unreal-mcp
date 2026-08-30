@@ -349,7 +349,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_list_enum_entries",
     "unreal_list_assets",
   ],
-  scene: ["unreal_list_input_mappings", "unreal_get_game_settings", 
+  scene: ["unreal_read_class_defaults", "unreal_list_input_mappings", "unreal_get_game_settings", 
     "unreal_create_level",
     "unreal_open_level",
     "unreal_spawn_actor",
@@ -1871,6 +1871,33 @@ register(
     try {
       const result = await bridge.send("set_component_property", { path, component, property, value });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_read_class_defaults",
+  {
+    title: "Read a Blueprint's class defaults",
+    description:
+      "What a Blueprint's Class Defaults panel holds: every editable property with its type, current value and " +
+      "category. unreal_set_class_default could already change one; nothing could read them, so a model had to " +
+      "already know the property name, its current value and the spelling of the new one.\n\n" +
+      "**For an Actor this also hoists `replicates` and `replicatesMovement` to the top level**, because those two " +
+      "decide whether a multiplayer finding is a real bug. A server writing an unreplicated variable is only broken " +
+      "if the thing it holds does not replicate by itself: an object reference to an Actor that replicates is " +
+      "ordinary server-side bookkeeping, and \"fixing\" it changes nothing but bandwidth.\n\n" +
+      "Use `match` to ask about one setting rather than reading a class with two hundred of them.",
+    inputSchema: {
+      path: z.string().describe('Blueprint path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      match: z.string().optional().describe('Only properties whose name contains this, e.g. "Replicat".'),
+    },
+  },
+  async ({ path, match }) => {
+    try {
+      return jsonResult(await bridge.send("read_class_defaults", { path, match }));
     } catch (err) {
       return errorResult(err);
     }

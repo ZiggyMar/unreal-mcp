@@ -87,7 +87,7 @@ export async function reviewBlueprint(
   try {
     const state = await bridge.send<{
       parentClass?: string;
-      variables?: Array<{ name: string; type?: string; replicated?: boolean; repNotify?: string }>;
+      variables?: Array<{ name: string; type?: string; subType?: string; replicated?: boolean; repNotify?: string }>;
     }>("list_variables", { path });
     stateFindings = reviewStatePlacement(state.parentClass ?? "", state.variables ?? []);
     mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? []);

@@ -272,6 +272,27 @@ The full asset inventory that prompted this is in
 [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md#asset-type-coverage) — 38 classes, with what is and is not
 reachable.
 
+### Class defaults you can read, not only write: `unreal_read_class_defaults`
+
+`unreal_set_class_default` shipped a long time ago with nothing to read defaults back, which meant a
+model could change a default it could not see — it had to already know the property name, what the
+value currently was, and how the new one should be spelled. The same asymmetry the asset tools above
+just closed.
+
+It was found by needing it. The project audit reported five cases of *"the server writes a variable
+that is not replicated"* — a real and expensive class of multiplayer bug, the kind that works
+perfectly for whoever is hosting. One of them was `BP_Player` setting `CurrentActivePing`. Whether
+that is a bug depends entirely on a fact this bridge could not fetch: **`CurrentActivePing` holds an
+object reference to a `BP_PingActor`, and if that Actor replicates itself then the variable is
+ordinary server-side bookkeeping and replicating it would change nothing but bandwidth.**
+
+So for an Actor the reply hoists `replicates` and `replicatesMovement` to the top level, ahead of the
+property list, because those two decide whether a finding is worth acting on.
+
+Both readers share one walk over the object's editable properties. They ask the same question of
+different objects — "what can a human change here, and what does it say now" — and two copies would
+answer it two different ways the first time either was touched.
+
 ### Data Tables: the reason structs are worth making
 
 A struct describes what one item *is*; a Data Table holds every item there is. That pairing is the

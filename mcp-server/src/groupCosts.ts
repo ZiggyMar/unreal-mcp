@@ -17,19 +17,19 @@ export const GROUP_COST_TOKENS: Record<string, number> = {
   ui: 1942,
   materials: 1411,
   data: 4252,
-  scene: 5616,
+  scene: 5937,
   maintenance: 1514,
 };
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
-export const ALL_GROUPS_TOKENS = 30066;
+export const ALL_GROUPS_TOKENS = 30387;
 
 /** Naming the eight tools one Blueprint feature needs, instead of enabling the `core` group. */
 export const FEATURE_SET_TOKENS = 4647;
 
 /** Standing cost of each preset, enabled on its own from the `search` baseline. */
 export const PRESET_COST_TOKENS: Record<string, number> = {
-  diagnose: 7468,
+  diagnose: 7789,
   feature: 7586,
   ui: 5928,
   data: 6523,

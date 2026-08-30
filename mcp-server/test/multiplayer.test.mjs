@@ -293,3 +293,40 @@ test("the same cast from a plain event is still a bug", () => {
   );
   assert.equal(findings.length, 1);
 });
+
+test("a server writing an object handle is not reported as a replication bug", () => {
+  // Measured on a real project: this check reported BP_Player setting "CurrentActivePing" at cost
+  // 100. It is not a bug - CurrentActivePing holds a BP_PingActor, and that Actor has bReplicates
+  // true, so it replicates itself and every client already sees the ping. The variable is the
+  // server's handle to it. A confident, plausible, wrong finding at the top of an audit is worse
+  // than none: it sends a model to change code that is correct.
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "Server_TryPing", ["s"]),
+      node("s", "K2Node_VariableSet", "SET CurrentActivePing", []),
+    ],
+    [{ name: "CurrentActivePing", type: "Object", subType: "BP_PingActor_C", replicated: false }]
+  );
+
+  assert.equal(
+    findings.filter((f) => f.check === "server-writes-unreplicated").length,
+    0,
+    `an object handle must not be reported as unreplicated state, got ${ids(findings).join(", ")}`
+  );
+
+  const soft = findings.filter((f) => f.check === "server-writes-unreplicated-handle");
+  assert.equal(soft.length, 1, "but it is still worth one look, so it is still reported");
+  assert.match(soft[0].fix, /read_class_defaults/, "and it must say how to decide");
+  assert.match(soft[0].fix, /BP_PingActor_C/, "naming what to check, not merely that something should be");
+});
+
+test("a server writing ordinary state is still reported at full weight", () => {
+  const findings = reviewMultiplayer(
+    [
+      node("e", "K2Node_CustomEvent", "Server_TakeDamage", ["s"]),
+      node("s", "K2Node_VariableSet", "SET Health", []),
+    ],
+    [{ name: "Health", type: "float", replicated: false }]
+  );
+  assert.equal(findings.filter((f) => f.check === "server-writes-unreplicated").length, 1);
+});
