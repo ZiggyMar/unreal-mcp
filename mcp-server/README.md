@@ -741,6 +741,38 @@ is worse than an absent one; and starting PIE to sample runtime behaviour, becau
 apply to the editor world, and a verification step that mutates what it is verifying is not one.
 
 
+### Looking at it: `unreal_screenshot`
+
+Every other tool here answers in text, and there is a class of question text cannot settle. *Did that
+enemy walk toward the player? Did the widget land where it should? Is this material black?* The logic
+can read correctly, the variables can hold the right defaults, the graph can compile and review
+clean — and the only way to know is to look. A model driving this server previously could not look at
+anything, so it could reason perfectly and still be unable to confirm that the thing it just built
+actually happens.
+
+```
+unreal_screenshot({})                      # the level editor viewport
+unreal_start_pie({}); unreal_screenshot({})  # the running game
+```
+
+It returns the frame as an MCP image, so a multimodal model sees it directly. The reply also says
+which it captured — editor viewport or a live PIE session — because those look similar and confusing
+them wastes a turn.
+
+**It is downscaled in the bridge, not by the caller, and that is the load-bearing decision.** An
+image costs tokens by *area*: a native 1920×1080 frame would cost more context than every tool
+definition on this server combined, which would make the cheapest-possible tool surface pointless the
+first time anyone looked at anything. The default long edge is 1280, clamped to `[160, 2048]`. That
+is enough to see whether something moved, where it is, or whether it rendered at all. It is not
+enough to judge a texture, and it is not trying to be.
+
+Two details that are easy to get wrong and are handled: `ReadPixels` returns whatever alpha the
+render target held, which is frequently zero — and a PNG with a zero alpha channel is a perfectly
+valid, entirely invisible image, so alpha is forced opaque. And the capture is synchronous, so the
+reply names a file that already exists rather than one that is coming; a path returned before the
+file is written is a race the caller cannot win.
+
+
 ### The quality gate: compiling is not the bar
 
 `unreal_review_blueprint` reports what a senior Unreal developer would flag in review, computed

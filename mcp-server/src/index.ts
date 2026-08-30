@@ -352,6 +352,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_start_pie",
     "unreal_stop_pie",
     "unreal_pie_status",
+    "unreal_screenshot",
   ],
   maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
 };
@@ -2260,6 +2261,77 @@ register(
   async ({ path, rowName, values }) => {
     try {
       return jsonResult(await bridge.send("add_data_table_row", { path, rowName, values }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_screenshot",
+  {
+    title: "Look at the viewport",
+    description:
+      "Captures whatever the editor's active viewport is showing and returns it as an image you can " +
+      "actually see. Every other tool here answers in text, and there is a class of question text " +
+      "cannot settle: did that enemy walk toward the player, did the widget land where it should, is " +
+      "this material black. The logic can read correctly, the variables can hold the right defaults, " +
+      "the graph can compile and review clean, and the only way to know is to look. " +
+      "Works on the level editor viewport, and on a running Play In Editor session - start one with " +
+      "unreal_start_pie first if you want to see the game rather than the editor. The reply says which " +
+      "you got. " +
+      "Downscaled to a 1280px long edge by default, because an image costs tokens by area and a native " +
+      "frame would cost more context than every tool definition on this server combined. That is enough " +
+      "to see whether something moved or where it is; it is not enough to judge a texture.",
+    inputSchema: {
+      maxLongEdge: z
+        .number()
+        .optional()
+        .describe("Longest edge in pixels, clamped to [160, 2048]. Defaults to 1280. Raise it only when detail matters."),
+    },
+  },
+  async ({ maxLongEdge }) => {
+    try {
+      const shot = await bridge.send<{
+        path: string;
+        width: number;
+        height: number;
+        sourceWidth: number;
+        sourceHeight: number;
+        bytes: number;
+        isPlayInEditor: boolean;
+      }>("take_screenshot", { maxLongEdge });
+
+      let base64: string;
+      try {
+        base64 = readFileSync(shot.path).toString("base64");
+      } catch (err) {
+        // The bridge wrote it and this process cannot read it, which on a normal setup means the
+        // editor is on another machine. Worth saying so plainly rather than failing as "ENOENT".
+        return errorResult(
+          new Error(
+            `The bridge captured the viewport to ${shot.path}, but this server could not read that ` +
+              `file (${err instanceof Error ? err.message : String(err)}). That happens when the editor ` +
+              `and this server are not on the same filesystem; the capture itself succeeded.`
+          )
+        );
+      }
+
+      return {
+        content: [
+          { type: "image" as const, data: base64, mimeType: "image/png" },
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              showing: shot.isPlayInEditor ? "a running Play In Editor session" : "the level editor viewport",
+              size: `${shot.width}x${shot.height}`,
+              capturedFrom: `${shot.sourceWidth}x${shot.sourceHeight}`,
+              bytes: shot.bytes,
+              path: shot.path,
+            }),
+          },
+        ],
+      };
     } catch (err) {
       return errorResult(err);
     }

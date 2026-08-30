@@ -30,6 +30,7 @@ const registeredTools = new Set(
 
 // Tool names that intentionally differ from their bridge command name.
 const aliases = new Map([
+  ["screenshot", "take_screenshot"],
   ["read_blueprint_summary", "read_blueprint_graph_summary"],
   ["read_node_detail", "read_blueprint_node_detail"],
 ]);

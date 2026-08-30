@@ -1,4 +1,6 @@
 #include "MCPCommandHandler.h"
+#include "ImageUtils.h"
+#include "UnrealClient.h"
 #include "MCPProjectIndex.h"
 #include "MCPNodeCatalog.h"
 
@@ -815,6 +817,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("set_data_table_row"))
 	{
 		Response = HandleSetDataTableRow(Params);
+	}
+	else if (Cmd == TEXT("take_screenshot"))
+	{
+		Response = HandleTakeScreenshot(Params);
 	}
 	else if (Cmd == TEXT("list_data_table_rows"))
 	{
@@ -5264,6 +5270,128 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetDataTableRow(const TSharedP
 		}
 		Result->SetArrayField(TEXT("fieldsNotSet"), ProblemJson);
 	}
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Let the model see the viewport.
+ *
+ * Everything else this bridge does is text, and there is a whole class of question text cannot
+ * answer. "Did that enemy walk toward the player" is the one that motivated this: the logic reads
+ * correctly, the variables hold the right defaults, the graph compiles and reviews clean, and the
+ * only way to know is to look. A model driving this had no way to look at anything - not the
+ * viewport, not a material, not a graph - so it could reason perfectly and still be unable to
+ * confirm the thing it had just built actually happens.
+ *
+ * Downscaled here rather than by the caller, and that is the whole design decision. A 1920x1080
+ * frame is several megabytes, and an image handed to a model costs tokens by area; sending a native
+ * frame would burn more context than every tool definition in this server put together. A long edge
+ * of 1280 is enough to see whether an enemy moved, where a widget landed, or whether a material is
+ * black, which is what this is for. It is not for judging a texture.
+ *
+ * The capture itself is synchronous - ReadPixels on the active viewport - so the reply names a file
+ * that already exists rather than one that is coming. A request that returns a path to a file which
+ * is not there yet is a race the caller has no way to win.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleTakeScreenshot(const TSharedPtr<FJsonObject>& Params)
+{
+	int32 MaxLongEdge = 1280;
+	if (Params.IsValid())
+	{
+		int32 Requested = 0;
+		if (Params->TryGetNumberField(TEXT("maxLongEdge"), Requested))
+		{
+			// Clamped, not trusted. The upper bound is what keeps this from being an accidental way
+			// to spend a context window; the lower bound keeps it from returning something useless.
+			MaxLongEdge = FMath::Clamp(Requested, 160, 2048);
+		}
+	}
+
+	FViewport* Viewport = GEditor ? GEditor->GetActiveViewport() : nullptr;
+	if (!Viewport)
+	{
+		return MakeErrorResponse(
+			TEXT("no_active_viewport: the editor has no viewport focused, so there is nothing to capture. ")
+			TEXT("Open a level editor tab, or start Play In Editor with start_pie, and try again."));
+	}
+
+	const FIntPoint Size = Viewport->GetSizeXY();
+	if (Size.X <= 0 || Size.Y <= 0)
+	{
+		return MakeErrorResponse(TEXT("viewport_not_ready: the active viewport reports a zero size."));
+	}
+
+	TArray<FColor> Pixels;
+	if (!Viewport->ReadPixels(Pixels) || Pixels.Num() < Size.X * Size.Y)
+	{
+		return MakeErrorResponse(TEXT("read_pixels_failed: the viewport could not be read this frame."));
+	}
+
+	// ReadPixels leaves alpha at whatever the render target held, which is frequently zero - and a
+	// PNG with a zero alpha channel is a perfectly valid, entirely invisible image.
+	for (FColor& Pixel : Pixels)
+	{
+		Pixel.A = 255;
+	}
+
+	// Integer box downscale. Not the prettiest filter available, but it needs no render thread work,
+	// no extra module, and cannot fail - and at this size the difference is invisible.
+	int32 OutWidth = Size.X;
+	int32 OutHeight = Size.Y;
+	TArray<FColor> Scaled;
+	const int32 LongEdge = FMath::Max(Size.X, Size.Y);
+	const int32 Factor = FMath::Max(1, FMath::DivideAndRoundUp(LongEdge, MaxLongEdge));
+	if (Factor > 1)
+	{
+		OutWidth = Size.X / Factor;
+		OutHeight = Size.Y / Factor;
+		Scaled.SetNumUninitialized(OutWidth * OutHeight);
+		for (int32 Y = 0; Y < OutHeight; ++Y)
+		{
+			for (int32 X = 0; X < OutWidth; ++X)
+			{
+				uint32 R = 0, G = 0, B = 0;
+				for (int32 dy = 0; dy < Factor; ++dy)
+				{
+					for (int32 dx = 0; dx < Factor; ++dx)
+					{
+						const FColor& Source = Pixels[(Y * Factor + dy) * Size.X + (X * Factor + dx)];
+						R += Source.R;
+						G += Source.G;
+						B += Source.B;
+					}
+				}
+				const uint32 Count = Factor * Factor;
+				Scaled[Y * OutWidth + X] = FColor(R / Count, G / Count, B / Count, 255);
+			}
+		}
+	}
+
+	TArray64<uint8> Png;
+	FImageUtils::PNGCompressImageArray(OutWidth, OutHeight, Factor > 1 ? Scaled : Pixels, Png);
+	if (Png.Num() == 0)
+	{
+		return MakeErrorResponse(TEXT("encode_failed: the captured frame could not be encoded as PNG."));
+	}
+
+	const FString Directory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MCPScreenshots"));
+	IFileManager::Get().MakeDirectory(*Directory, true);
+	// Overwritten each time on purpose: a model asking to look at the viewport wants the current
+	// frame, and a directory that grows without bound is a mess somebody else has to clean up.
+	const FString FullPath = FPaths::Combine(Directory, TEXT("viewport.png"));
+	if (!FFileHelper::SaveArrayToFile(Png, *FullPath))
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("write_failed: could not write %s"), *FullPath));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), FPaths::ConvertRelativePathToFull(FullPath));
+	Result->SetNumberField(TEXT("width"), OutWidth);
+	Result->SetNumberField(TEXT("height"), OutHeight);
+	Result->SetNumberField(TEXT("sourceWidth"), Size.X);
+	Result->SetNumberField(TEXT("sourceHeight"), Size.Y);
+	Result->SetNumberField(TEXT("bytes"), Png.Num());
+	Result->SetBoolField(TEXT("isPlayInEditor"), GEditor && GEditor->PlayWorld != nullptr);
 	return MakeOkResponse(Result);
 }
 
