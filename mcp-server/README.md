@@ -643,6 +643,41 @@ When the complaint is "my AI tool cannot see Unreal", taking the AI tool out of 
 fastest way to learn which half is broken. Exit code 1 if the editor is unreachable, 0 otherwise,
 so it can gate a script.
 
+### The last call before "done": `unreal_verify_feature`
+
+The failure this exists for is specific and it is the expensive one. A model builds a feature across
+four Blueprints, compiles the one it touched last, sees `success`, and reports the work as finished
+— while an asset it edited twenty calls ago no longer compiles, or compiles and is wired wrong.
+
+Nothing in a session ever asked the whole question, because asking it meant remembering every asset
+touched and then making two calls per asset. And the model that forgets to check is, by definition,
+the model that has already forgotten what it touched.
+
+So the default scope is not a list the caller supplies. It is the **change journal's own record of
+what was actually written** — produced by the same wrapper every bridge command passes through, so
+it cannot drift from what happened.
+
+```
+unreal_verify_feature({})                       # everything written this session
+unreal_verify_feature({ paths: ["/Game/BP_Door.BP_Door"] })
+```
+
+It returns one `verdict` plus an ordered list of what is still wrong. Compile failures are listed
+**before** review findings, because a Blueprint that does not build has no graph worth reviewing —
+its findings would describe a graph the engine has already rejected. For the same reason a Blueprint
+that fails to compile is not reviewed at all.
+
+`verdict: "pass"` means every asset in scope compiles and reviews clean. Anything else means the
+feature is not done, whatever the last individual call said. An asset that cannot be reached is
+reported as a blocker rather than skipped, because a check that quietly drops what it could not
+examine is worse than no check.
+
+It is deliberately compile + review and nothing more. Two things were considered and cut: a
+checkpoint diff, because no snapshot facility exists yet and a parameter that silently does nothing
+is worse than an absent one; and starting PIE to sample runtime behaviour, because writes during PIE
+apply to the editor world, and a verification step that mutates what it is verifying is not one.
+
+
 ### The quality gate: compiling is not the bar
 
 `unreal_review_blueprint` reports what a senior Unreal developer would flag in review, computed
@@ -703,6 +738,24 @@ Two things worth knowing:
   feature is done. Cheap should be a choice, not a silent downgrade.
 - **`standard` keeps the score and one next action** — about thirty tokens. Dropping it would save
   almost nothing and would remove the only unprompted quality feedback a weaker model ever gets.
+
+**Why `standard` is still the default, deliberately.** An audit of this repo argued for making `max`
+the default on the grounds that `standard` withholds review findings and lets a model declare
+victory on broken work. The first half of that was a real defect and is fixed: `review.blueprint`
+findings reached no build response in any mode, and the graph findings were capped in graph order
+rather than by severity, so errors could be pushed out by info-level notes. Both are corrected.
+
+What remains is a genuine trade, and it is resolved in favour of the smaller reply. `max` takes a
+build response from roughly 172 tokens to roughly 808, on every build — and the specific thing
+`standard` still withholds is the *list* of findings, not the fact that findings exist: it reports
+the score and the single most important next action, which is what stops a model claiming success.
+The stronger answer to "did I actually finish" is not a longer build response, it is
+`unreal_verify_feature`, which costs nothing until the moment it is asked and checks every asset
+rather than the one just built.
+
+`--print-config` reads `DEFAULT_MODE` rather than a literal, so if that judgement changes the
+printed config changes with it. The profile line above did **not** do that, and said `lazy` while
+the in-process default was `full` for months with nothing noticing.
 
 `unreal_doctor` reports the active mode and what it means, since it changes what every call costs.
 

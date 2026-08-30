@@ -21,11 +21,12 @@ import { auditProject } from "./audit.js";
 import { guardWithAuthority } from "./authorityGuard.js";
 import { RepeatGuard } from "./repeatGuard.js";
 import { reviewStatePlacement } from "./statePlacement.js";
-import { allPolicies, resolveMode } from "./mode.js";
+import { allPolicies, resolveMode, DEFAULT_MODE } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findSourceRoots, searchSource } from "./nativeSource.js";
+import { verifyFeature } from "./verifyFeature.js";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -164,9 +165,13 @@ function buildInstructions(profile: string): string {
     "   tell you, and a guess costs a failed call.",
     "5. Build whole graphs with unreal_build_graph, in one call. Do not place nodes one at a time,",
     "   and do not pass x/y - it lays out what it places.",
-    "6. unreal_compile_blueprint, then unreal_review_blueprint, and act on what it says BEFORE",
-    "   reporting the work as done. Compiling is not the same as being correct.",
+    "6. unreal_compile_blueprint, then unreal_review_blueprint, and act on what they say.",
+    "   Compiling is not the same as being correct.",
     "7. unreal_save_blueprint / unreal_save_asset. Nothing reaches disk until you do.",
+    "8. unreal_verify_feature before you report anything as done. It compiles and reviews every",
+    "   Blueprint you wrote this session, not just the one you touched last, and its verdict is",
+    "   the answer - an earlier asset that stopped compiling is the usual way work is reported",
+    "   finished when it is not.",
     "",
     "GROUND TRUTH YOU CANNOT DERIVE",
     "Exact strings this server requires. Getting these wrong is the most common failed call, and",
@@ -273,6 +278,9 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_save_blueprint",
   "unreal_auto_layout_graph",
   "unreal_review_blueprint",
+  // The terminal step: one call that checks everything written this session rather than the one
+  // asset the model happens to remember.
+  "unreal_verify_feature",
   "unreal_cleanup_blueprint",
 ]);
 
@@ -2606,6 +2614,43 @@ function guideSections(text: string): { heading: string; body: string }[] {
 }
 
 register(
+  "unreal_verify_feature",
+  {
+    title: "Is the thing I just built actually finished?",
+    description:
+      "**The last call before you tell the user a feature is done.** Compiles and reviews every " +
+      "Blueprint this session actually wrote to - taken from the change journal, not from memory - " +
+      "and reduces it to one verdict plus an ordered list of what is still wrong.\n\n" +
+      "The failure it exists for: you build a feature across four Blueprints, compile the one you " +
+      "touched last, see success, and report the work as done - while an asset you edited twenty " +
+      "calls ago no longer compiles. Asking the whole question by hand means remembering every asset " +
+      "and making two calls per asset, and the model that forgets to check is the one that has " +
+      "already forgotten what it touched.\n\n" +
+      "Compile failures are listed before review findings, because a Blueprint that does not build " +
+      "has no graph worth reviewing. `verdict: \"pass\"` means every asset compiles and reviews clean; " +
+      "anything else means it is not done yet, whatever the last individual call said.",
+    inputSchema: {
+      paths: z
+        .array(z.string())
+        .optional()
+        .describe("Blueprints to check. Defaults to every Blueprint written this session, which is usually what you want."),
+    },
+  },
+  async ({ paths }) => {
+    try {
+      // The journal is the only record that cannot drift from what actually happened: it is written
+      // by the same wrapper every bridge command passes through.
+      const touched = journal
+        .summary()
+        .byAsset.map((entry) => entry.asset);
+      return jsonResult(await verifyFeature(bridge, { paths, touched }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_find_source",
   {
     title: "Find the project's C++ and which file defines a symbol",
@@ -3570,7 +3615,10 @@ async function main() {
         // rest back in one call with the real schemas intact. Local-model users set the profile
         // explicitly; they are the ones the smaller profiles were measured for.
         UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "search",
-        UNREAL_MCP_MODE: process.env.UNREAL_MCP_MODE ?? "standard",
+        // DEFAULT_MODE, not a literal. The profile line above had exactly this bug - it said "lazy"
+        // while the in-process default was "full", so the documented install path and the code
+        // disagreed for months and nothing noticed. Reading the constant makes that impossible.
+        UNREAL_MCP_MODE: process.env.UNREAL_MCP_MODE ?? DEFAULT_MODE,
       },
     };
 
