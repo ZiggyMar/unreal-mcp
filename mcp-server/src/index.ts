@@ -145,15 +145,21 @@ function buildInstructions(profile: string): string {
   if (profile === "search") {
     lines.push(
       "THE TOOL LIST IS DELIBERATELY SHORT.",
-      "Only four tools are listed, because the full set costs about 25k tokens of context on every",
-      "turn and most of it goes unused. Everything else is registered and switched off. Call",
-      'unreal_enable_tools({ groups: ["core"] }) as your first action and the whole authoring path',
-      "arrives with its real, fully typed schemas - nothing is dumbed down or proxied. Add \"ui\",",
-      '"data", "scene", "materials", "edit" or "maintenance" when the job needs them, and use',
-      "unreal_list_tools to see what exists without paying for the schemas.",
-      "Cheaper still, and worth doing once you know the job: pass unreal_enable_tools a `tools` list",
-      "of exact names instead of a group. \"core\" is 32 tools and ~11.6k tokens; the eight a feature",
-      "actually needs are ~4.5k, and that difference is paid on every turn for the rest of the session.",
+      "Only four tools are listed. Everything else is registered and switched off, because the full",
+      `set is ~${Math.round(ALL_GROUPS_TOKENS / 100) / 10}k tokens of context on every turn and most of it goes unused. Switch on what`,
+      "the job needs with unreal_enable_tools and the real, fully typed schemas arrive - nothing is",
+      "dumbed down or proxied.",
+      "",
+      "CHOOSE THE GROUP FROM THE JOB, not out of habit. These are measured, not estimated:",
+      `  core ~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k   scene ~${Math.round(GROUP_COST_TOKENS.scene / 100) / 10}k   data ~${Math.round(GROUP_COST_TOKENS.data / 100) / 10}k   edit ~${Math.round(GROUP_COST_TOKENS.edit / 100) / 10}k`,
+      `  ui ~${Math.round(GROUP_COST_TOKENS.ui / 100) / 10}k   maintenance ~${Math.round(GROUP_COST_TOKENS.maintenance / 100) / 10}k   materials ~${Math.round(GROUP_COST_TOKENS.materials / 100) / 10}k   cpp ~${GROUP_COST_TOKENS.cpp}`,
+      "core is the authoring spine and much the largest: enable it to AUTHOR, not to look around.",
+      "Reading a project to find a bug rarely needs it. unreal_list_tools shows what is in each group",
+      "and what it costs, without paying for the schemas.",
+      "",
+      "Cheaper still, once you know the job: pass unreal_enable_tools a `tools` list of exact names",
+      "instead of a group. The eight tools a feature actually needs are ~4.5k, and the difference is",
+      "paid on every turn for the rest of the session.",
       ""
     );
   }

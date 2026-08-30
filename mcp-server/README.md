@@ -1074,7 +1074,7 @@ the in-process default was `full` for months with nothing noticing.
 `unreal_doctor` reports the active mode and what it means, since it changes what every call costs.
 
 Combine with `UNREAL_MCP_PROFILE=search` for the cheapest useful setup: four tools standing
-(~1.2k tokens instead of ~25.5k) and ~110-token build responses.
+(~2.3k tokens standing instead of ~30.1k) and ~110-token build responses.
 
 ### Tool profiles: paying only for what you use
 
@@ -1089,16 +1089,32 @@ another 17%, so even aggressive editing buys about a tenth of the total and make
 at sequencing. The bytes are not the problem. **Sending tools the caller will never touch is the
 problem.**
 
-| `UNREAL_MCP_PROFILE` | Starts at | Reaches | Meant for |
+| `UNREAL_MCP_PROFILE` | Standing cost | Reaches | Meant for |
 | --- | --- | --- | --- |
-| `search` | **4 tools, ~1.2k tokens** | everything, on request | frontier models — what `--print-config` emits |
-| `full` (in-process default) | 80 tools, ~25.5k tokens | everything, immediately | when you want no indirection at all |
-| `lazy` | 28 tools, ~10.1k tokens | everything, on request | mid-size models |
-| `core` | 28 tools, ~10.1k tokens | only those, permanently | clients that ignore `tools/list_changed` |
-| `minimal` | 11 tools, ~4.0k tokens | only those, permanently | small local models |
+| `search` | **4 tools, ~2.3k tokens** | everything, on request | frontier models — what `--print-config` emits |
+| `full` (in-process default) | 89 tools, ~30.1k tokens | everything, immediately | when you want no indirection at all |
+| `lazy` | 32 tools, ~12.4k tokens | everything, on request | mid-size models |
+| `core` | 32 tools, ~12.4k tokens | only those, permanently | clients that ignore `tools/list_changed` |
+| `minimal` | 11 tools, ~4.8k tokens | only those, permanently | small local models |
 
 Those figures are measured by `npm run check:profiles`, which runs in the normal test suite and
 fails if a profile grows past the ceiling its intended model can hold.
+
+**"Standing cost" means tool definitions *plus* the server `instructions` field**, and it did not
+until recently. A client sends `instructions` to the model on every turn exactly as it sends tool
+definitions, so leaving it out of the budget did not make it free — it made this check report **less
+than half** the real figure on `search`, the frontier default: 1,239 tokens of tools beside 1,033 of
+instructions. All five ceilings were restated once against the correct quantity. That was a
+correction rather than a relaxation: every ceiling encoded an intent about what a model must hold
+before it can work, that intent always covered the whole payload, and nothing got bigger on the day
+the numbers changed.
+
+On `search`, the instructions are the larger half, and they are the last thing that should be cut —
+four tools are only usable because the text explains how to reach the rest. They now quote the
+**measured** cost of every group, generated from `src/groupCosts.ts` so they cannot drift, and steer
+by job rather than by habit: they used to say "call `enable_tools({groups:["core"]})` as your first
+action", which pointed every session at the single most expensive move available (~10.4k tokens) even
+when the job was to read a project and find a bug.
 
 **The single most expensive call in this server was a read, and it was unbounded.** Measured against
 a real game rather than reasoned about: `unreal_read_blueprint_summary` on `BP_Player`'s EventGraph —

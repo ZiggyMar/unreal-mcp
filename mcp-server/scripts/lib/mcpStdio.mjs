@@ -67,15 +67,22 @@ export function startServer(env = {}) {
   return { child, request, notify };
 }
 
-/** Start a server and complete the MCP handshake, which every caller here needs first. */
+/**
+ * Start a server and complete the MCP handshake, which every caller here needs first.
+ *
+ * The returned object carries `instructions` from the initialize response. That field is standing
+ * context - a client sends it to the model every turn, exactly like a tool definition - and it went
+ * unmeasured for a long time because the budget check only ever looked at tools/list.
+ */
 export async function startAndInitialize(env = {}, clientName = "measure") {
   const server = startServer(env);
-  await server.request("initialize", {
+  const init = await server.request("initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
     clientInfo: { name: clientName, version: "1" },
   });
   server.notify("notifications/initialized");
+  server.instructions = init?.result?.instructions ?? "";
   return server;
 }
 

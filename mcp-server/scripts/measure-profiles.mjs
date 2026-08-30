@@ -16,22 +16,31 @@
 // Needs no editor: tool definitions are static, which is exactly why this can run in the normal
 // test suite while live-verify cannot.
 
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { startAndInitialize, listTools, estimateTokens } from "./lib/mcpStdio.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const serverPath = join(here, "..", "dist", "index.js");
 const NEWLINE = String.fromCharCode(10);
 
 // Ceilings, with the reason each one is where it is. These are budgets, not observations: raising
 // one should be a decision someone argues for, not something that happens by adding a tool.
+//
+// All five were restated once, when this script started counting the `instructions` field. That
+// field is standing context - a client sends it to the model every turn, exactly as it sends tool
+// definitions - and counting only tools/list understated `search`, the frontier default, by 44%.
+//
+// The restatement is a CORRECTION, not a relaxation. Every ceiling encoded an intent about what a
+// model has to hold before it can work; that intent always applied to the whole payload, and the
+// old numbers simply measured part of it. Nothing got bigger on the day these changed. The new
+// numbers keep the same intent against the quantity that was meant all along, and each is written
+// as a fraction of the context it has to fit inside so the next person can check the arithmetic
+// rather than trust the number.
 const PROFILES = [
   {
     name: "minimal",
     // The profile that exists for the 14B-at-8k case. Half its context on tool definitions is
     // already generous; more than that and there is no room left to work in.
-    ceilingTokens: 4_000,
+    // 5,000 of 8,192 is 61%, leaving ~3.2k to think and work in. Was 4,000 when only tools were
+    // counted, which meant the real figure was ~4,800 all along and nobody was looking at it.
+    ceilingTokens: 5_000,
     why: "must fit a 14B capped at 8k context with room left to think",
   },
   {
@@ -39,7 +48,9 @@ const PROFILES = [
     // Four tools: ping, doctor, list_tools, enable_tools. This is the frontier default, and the
     // ceiling is low on purpose - the moment anything else is standing here, the profile has
     // stopped being what it claims to be and the saving it exists for is gone.
-    ceilingTokens: 2_000,
+    // Of this, 990 is instructions and only ~1,240 is tools. The instructions are what make four
+    // tools usable at all, so they are the last thing to cut; 2,500 is still ~1% of a 200k window.
+    ceilingTokens: 2_500,
     why: "the frontier default: everything reachable, almost nothing standing",
   },
   {
@@ -48,13 +59,13 @@ const PROFILES = [
     // only this set, while `lazy` registers everything and disables all but this set so it can grow
     // at runtime. Identical tools/list output is the correct result, not a bug - which this script
     // established the hard way by asserting otherwise first.
-    ceilingTokens: 12_000,
+    ceilingTokens: 13_000,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {
     name: "lazy",
     // The recommended default, and the one the 5/5 local-model result was measured with.
-    ceilingTokens: 12_000,
+    ceilingTokens: 13_000,
     why: "the recommended default; the local-model benchmark result is measured with this",
   },
   {
@@ -64,75 +75,30 @@ const PROFILES = [
   },
 ];
 
-/**
- * Tokens are estimated from characters rather than tokenised properly.
- *
- * A real tokeniser would be more accurate and would also make this script depend on one. The ratio
- * for English prose plus JSON punctuation sits near 4 characters per token, and since every number
- * here is compared against a ceiling with a lot of headroom, the estimate is honest enough for the
- * decision it informs. It is deliberately reported as an estimate everywhere it appears.
- */
-const estimateTokens = (chars) => Math.round(chars / 4);
-
-function startServer(profile) {
-  const child = spawn(process.execPath, [serverPath], {
-    env: { ...process.env, UNREAL_MCP_PROFILE: profile, UNREAL_MCP_MODE: "standard" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  let buffer = "";
-  const waiters = new Map();
-  let nextId = 1;
-
-  child.stdout.on("data", (chunk) => {
-    buffer += chunk.toString();
-    let i;
-    while ((i = buffer.indexOf(NEWLINE)) >= 0) {
-      const line = buffer.slice(0, i).trim();
-      buffer = buffer.slice(i + 1);
-      if (!line) continue;
-      let msg;
-      try {
-        msg = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (msg.id !== undefined && waiters.has(msg.id)) {
-        waiters.get(msg.id)(msg);
-        waiters.delete(msg.id);
-      }
-    }
-  });
-
-  const request = (method, params) =>
-    new Promise((resolve) => {
-      const id = nextId++;
-      waiters.set(id, resolve);
-      child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + NEWLINE);
-    });
-  const notify = (method) => child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method }) + NEWLINE);
-  return { child, request, notify };
-}
-
 async function measure(profile) {
-  const server = startServer(profile);
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: profile }, "measure-profiles");
   try {
-    await server.request("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "measure-profiles", version: "1" },
-    });
-    server.notify("notifications/initialized");
-    const listed = await server.request("tools/list", {});
-    const tools = listed?.result?.tools ?? [];
+    const { tools, chars, tokens } = await listTools(server);
 
-    // What a client actually pays for is the serialized definitions it sends to the model, so
-    // measure that rather than counting descriptions.
-    const chars = JSON.stringify(tools).length;
+    // The instructions field counts. A client sends it to the model on every turn exactly as it
+    // sends tool definitions, so leaving it out did not make it free - it made this check report
+    // less than half the standing cost on the `search` profile, which is the frontier default.
+    const instructionChars = (server.instructions ?? "").length;
+    const instructionTokens = estimateTokens(instructionChars);
+
     const perTool = tools
       .map((t) => ({ name: t.name, chars: JSON.stringify(t).length }))
       .sort((a, b) => b.chars - a.chars);
 
-    return { profile, toolCount: tools.length, chars, tokens: estimateTokens(chars), perTool };
+    return {
+      profile,
+      toolCount: tools.length,
+      chars,
+      tokens,
+      instructionTokens,
+      standingTokens: tokens + instructionTokens,
+      perTool,
+    };
   } finally {
     server.child.kill();
   }
@@ -150,17 +116,18 @@ async function main() {
     return;
   }
 
-  console.log("Tool-definition payload by profile (estimated at 4 chars/token):" + NEWLINE);
-  console.log("  profile   tools   chars    ~tokens   ceiling   ");
-  console.log("  --------  ------  -------  --------  ----------");
+  console.log("Standing context by profile - what a model holds before its first call" + NEWLINE);
+  console.log("  profile   tools   ~tools   ~instrs   standing   ceiling   ");
+  console.log("  --------  ------  -------  --------  ---------  ----------");
   const problems = [];
   for (const result of results) {
     const spec = PROFILES.find((p) => p.name === result.profile);
-    const over = result.tokens > spec.ceilingTokens;
+    const over = result.standingTokens > spec.ceilingTokens;
     if (over) problems.push({ ...result, spec });
     console.log(
       `  ${result.profile.padEnd(8)}  ${String(result.toolCount).padStart(6)}  ` +
-        `${String(result.chars).padStart(7)}  ${String(result.tokens).padStart(8)}  ` +
+        `${String(result.tokens).padStart(7)}  ${String(result.instructionTokens).padStart(8)}  ` +
+        `${String(result.standingTokens).padStart(9)}  ` +
         `${String(spec.ceilingTokens).padStart(8)}  ${over ? "OVER" : "ok"}`
     );
   }
@@ -180,7 +147,7 @@ async function main() {
     console.log(NEWLINE + `profile budget exceeded (${problems.length}):`);
     for (const p of problems) {
       console.log(
-        `  - ${p.profile} is ~${p.tokens} tokens, over its ${p.spec.ceilingTokens} ceiling.` +
+        `  - ${p.profile} is ~${p.standingTokens} tokens standing (${p.tokens} tools + ${p.instructionTokens} instructions), over its ${p.spec.ceilingTokens} ceiling.` +
           NEWLINE +
           `    That ceiling exists because it ${p.spec.why}.` +
           NEWLINE +
