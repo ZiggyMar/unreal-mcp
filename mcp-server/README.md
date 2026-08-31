@@ -4882,6 +4882,35 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### The same fix, said thirty times
+
+A review of `BP_Player` returns 30 findings drawn from **8 distinct checks**, and every one carried
+the full fix text for its check. `unlabelled-sections` fires ten times, so its 187 characters of
+advice were sent ten times:
+
+```text
+fix text sent   5,680 chars
+distinct        1,408 chars
+repetition      4,272 chars   ~1,068 tokens, 20% of the reply
+```
+
+The advice for a check does not vary by where it fired — that is what makes it a check — so the
+repetition carries nothing. The fixes are now a map at the top of the reply keyed by `check`, which
+every finding already names. **5,398 → 4,235 tokens, 22%**, and this is the largest read on the
+surface after the Data Table one.
+
+Two things kept it honest:
+
+- **It is done where the review is serialised, not where it is produced.** `audit.ts` reads
+  `finding.fix` in twelve places off the same `reviewBlueprint`. Stripping the field at the source
+  would have broken the audit; stripping it at the tool boundary does not touch it. That is this
+  repo's existing rule — compact in the tool layer, never in the shared function — applied to the
+  one place it had not been.
+- **A check whose advice varies keeps its own text.** If two findings under one check ever carry
+  different fixes, the first wins the map slot and the rest keep their own field. Two different
+  pieces of advice under one key would silently give one finding the other's fix, which is worse
+  than the repetition being removed.
+
 ### `unknown_cmd` told a model the feature did not exist
 
 This repo has carried a line for many sessions saying roughly "the plugin binary is older than the

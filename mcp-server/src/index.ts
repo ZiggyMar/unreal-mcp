@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { dedupeFixes } from "./dedupeFixes.js";
 import { stripSchemaDeclaration } from "./trimSchemaDeclaration.js";
 import { trimFloatPaddingIn, trimFloatPadding } from "./trimFloats.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
@@ -3304,7 +3305,11 @@ register(
       "thing most worth doing next.\n\n" +
       "**Call this before you tell the user a feature is done, and act on what it says.** It costs one cheap read " +
       "per graph, changes nothing, and it is the only feedback available on whether the work is actually good " +
-      "rather than merely valid. If you skip it you are grading your own homework.",
+      "rather than merely valid. If you skip it you are grading your own homework.\n\n" +
+      "**The fix for each finding is in the top-level `fixes` map, keyed by the finding's `check`.** The advice " +
+      "for a check does not vary by where it fired, and repeating it on all thirty findings of a real Blueprint " +
+      "costs about a fifth of the reply. `cleanGraphs` lists the graphs that were read and had nothing wrong, so " +
+      "\"checked and clean\" stays distinguishable from \"never looked at\".",
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
       graphName: z.string().optional().describe("Review only this graph. Omit to review every graph in the Blueprint."),
@@ -3326,7 +3331,12 @@ register(
       const compile = await bridge
         .send<CompileBlueprintResult>("compile_blueprint", { path })
         .catch(() => null);
-      const result = withDisabledToolNote(await reviewBlueprint(bridge, path, graphName), isToolEnabled);
+      // Deduped here, where the review is SERIALISED, not where it is produced: audit.ts reads
+      // finding.fix in twelve places off the same function. See dedupeFixes.ts.
+      const result = withDisabledToolNote(
+        dedupeFixes(await reviewBlueprint(bridge, path, graphName)),
+        isToolEnabled
+      );
 
       if (compile && compile.success === false) {
         return jsonResult({
