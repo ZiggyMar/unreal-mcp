@@ -17,7 +17,8 @@ import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
-import { auditProject, toolsNamedInFixes } from "./audit.js";
+import { auditProject } from "./audit.js";
+import { withDisabledToolNote } from "./disabledTools.js";
 import { guardWithAuthority } from "./authorityGuard.js";
 import { RepeatGuard } from "./repeatGuard.js";
 import { reviewStatePlacement } from "./statePlacement.js";
@@ -262,6 +263,15 @@ function buildInstructions(profile: string): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Is this tool callable right now?
+ *
+ * undefined for a name this server does not have, which is deliberately different from false: a note
+ * saying "switched off" about a tool that does not exist would send a caller to enable something
+ * they can never get.
+ */
+const isToolEnabled = (name: string): boolean | undefined => toolHandles.get(name)?.enabled;
 
 const server = new McpServer(
   {
@@ -2931,7 +2941,7 @@ register(
       const compile = await bridge
         .send<CompileBlueprintResult>("compile_blueprint", { path })
         .catch(() => null);
-      const result = await reviewBlueprint(bridge, path, graphName);
+      const result = withDisabledToolNote(await reviewBlueprint(bridge, path, graphName), isToolEnabled);
 
       if (compile && compile.success === false) {
         return jsonResult({
@@ -3376,7 +3386,7 @@ register(
   },
   async ({ of, pairedWith, maxDistance }) => {
     try {
-      return jsonResult(await findOrphans(bridge, { of, pairedWith, maxDistance }));
+      return jsonResult(withDisabledToolNote(await findOrphans(bridge, { of, pairedWith, maxDistance }), isToolEnabled));
     } catch (err) {
       return errorResult(err);
     }
@@ -3411,7 +3421,7 @@ register(
   },
   async ({ paths, pathPrefix, limit }) => {
     try {
-      return jsonResult(await auditDataTables(bridge, { paths, pathPrefix, limit }));
+      return jsonResult(withDisabledToolNote(await auditDataTables(bridge, { paths, pathPrefix, limit }), isToolEnabled));
     } catch (err) {
       return errorResult(err);
     }
@@ -3990,7 +4000,7 @@ register(
         .all()
         .filter((r) => r.ok && r.target && r.graph)
         .map((r) => ({ asset: r.target as string, graph: r.graph as string }));
-      return jsonResult(await verifyFeature(bridge, { paths, touched, touchedGraphs }));
+      return jsonResult(withDisabledToolNote(await verifyFeature(bridge, { paths, touched, touchedGraphs }), isToolEnabled));
     } catch (err) {
       return errorResult(err);
     }
@@ -4489,7 +4499,7 @@ register(
   },
   async ({ query, maxAssets, depth, detail }) => {
     try {
-      const result = await mapSystem(bridge, query, { maxAssets, depth });
+      const result = withDisabledToolNote(await mapSystem(bridge, query, { maxAssets, depth }), isToolEnabled);
 
       // The prose form is the answer by default, and the structure is opt-in.
       //
@@ -4542,7 +4552,7 @@ register(
   },
   async ({ request, concepts }) => {
     try {
-      const plan = await planFeature(bridge, request, { concepts });
+      const plan = withDisabledToolNote(await planFeature(bridge, request, { concepts }), isToolEnabled);
       return jsonResult(plan);
     } catch (err) {
       return errorResult(err);
@@ -4724,26 +4734,13 @@ register(
       //
       // So it is said here, where the server knows what is actually enabled, only about tools that
       // are actually off, and only when a finding actually named one. A complete answer pays nothing.
-      const notEnabled = toolsNamedInFixes(audit.groups ?? []).filter((name: string) => {
-        const handle = toolHandles.get(name);
-        return handle !== undefined && !handle.enabled;
-      });
+
       // The explanation of the cap lives in the reply rather than in the schema, so it is paid for
       // only when it actually applies. In the schema it was ~350 characters on every request of
       // every session, which pushed the `minimal` profile past the ceiling that exists to keep it
       // loadable on a 14B at 8k - a good sentence in the wrong place.
       const elided = audit.groups.filter((g) => g.detailElided).length;
-      const withFixTools =
-        notEnabled.length > 0
-          ? {
-              ...audit,
-              fixToolsNotEnabled: notEnabled,
-              fixToolsNote:
-                `${notEnabled.length} tool(s) named in the fixes above are switched off in this session: ` +
-                `${notEnabled.join(", ")}. unreal_enable_tools({ tools: [...] }) turns on exactly those, ` +
-                `which costs far less than a whole group.`,
-            }
-          : audit;
+      const withFixTools = withDisabledToolNote(audit, isToolEnabled);
       return jsonResult(
         elided > 0
           ? {

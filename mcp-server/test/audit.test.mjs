@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 import { auditProject, FINDING_COST,
-  toolsNamedInFixes,
 } from "../dist/audit.js";
 
 /**
@@ -376,33 +375,3 @@ test("a missing command is one skipped check, not one unreadable asset per file"
   assert.equal(result.unreadable.length, 0, "a missing command is not an unreadable asset");
 });
 
-test("the tools a fix names are read out of the fix, not from a second list", () => {
-  // Found by extracting every unreal_* mentioned in a `fix` and holding it against the diagnose
-  // preset: a preset whose stated job is "find and fix a reported bug" was naming tools it does not
-  // switch on - call_parent_function among them, the entire remedy for a cost-95 finding.
-  //
-  // Reading it out of the text rather than declaring it beside each check is the point. A declared
-  // list is a second place to update, and a second place not being updated is how this was found.
-  const named = toolsNamedInFixes([
-    { fix: "unreal_call_parent_function on BP_Child, graphName \"EventGraph\"." },
-    { fix: "Remove them with unreal_remove_node, or wire them in." },
-    { fix: "Nothing to do here." },
-    { check: "elided", detailElided: true },
-  ]);
-  assert.deepEqual(named, ["unreal_call_parent_function", "unreal_remove_node"]);
-});
-
-test("a fix naming the same tool twice names it once", () => {
-  const named = toolsNamedInFixes([
-    { fix: "unreal_set_data_table_row repairs it; call unreal_set_data_table_row again for the next row." },
-    { fix: "unreal_set_data_table_row." },
-  ]);
-  assert.deepEqual(named, ["unreal_set_data_table_row"]);
-});
-
-test("no fixes means nothing to say, so the reply carries nothing", () => {
-  // The note is absent when every named tool is enabled, and absent when nothing was named. A field
-  // reading "0 tools not enabled" on every clean audit is a token cost for a fact already visible.
-  assert.deepEqual(toolsNamedInFixes([]), []);
-  assert.deepEqual(toolsNamedInFixes([{ count: 3 }]), []);
-});

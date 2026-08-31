@@ -251,28 +251,6 @@ function isMissingCommand(err: unknown): boolean {
   return /unknown_cmd/.test(err instanceof Error ? err.message : String(err));
 }
 
-/**
- * Tools a finding tells you to use, taken from the `fix` text rather than from a maintained list.
- *
- * Found by extracting every `unreal_*` mentioned in a fix and holding it against the diagnose
- * preset: a preset whose stated job is "find and fix a reported bug" was naming tools it does not
- * switch on - call_parent_function among them, which is the entire remedy for a cost-95 finding.
- *
- * Reading it out of the text rather than declaring it beside each check is deliberate. A declared
- * list is a second place to update, and the whole reason this was found is that a second place had
- * not been updated.
- */
-export function toolsNamedInFixes(groups: Array<{ fix?: string }>): string[] {
-  const named = new Set<string>();
-  for (const group of groups) {
-    // Only `fix`. An elided group has no fix by design, and its examples never carried one - the
-    // remedy lives on the group, which is also why detailElided says "NOT because there is no
-    // remedy". Scanning a field that does not exist would have quietly found nothing.
-    for (const match of (group.fix ?? "").matchAll(/unreal_[a-z0-9_]+/g)) named.add(match[0]);
-  }
-  return [...named].sort();
-}
-
 /** One short line for why a check could not run, from whatever the bridge threw. */
 function reasonFor(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err);

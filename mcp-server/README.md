@@ -1924,6 +1924,55 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The same gap in five places, answered once
+
+Last commit fixed this for the audit. The obvious question was how many other tools give advice
+naming something the caller cannot call. For every preset, for every advice-giving tool the preset
+**actually carries**:
+
+```text
+diagnose / audit_project    call_parent_function, set_data_table_row
+diagnose / verify_feature   set_data_table_row
+diagnose / find_orphans     open_level
+feature  / verify_feature   set_data_table_row
+feature  / plan_feature     trace_function_calls
+```
+
+`plan_feature` is the one that stings. It was taught to say *"check the system still runs with
+`unreal_trace_function_calls` before extending it"* - the single most useful sentence it has, added
+because extending a system nothing calls produces a feature that cannot work - and the preset it
+lives in does not switch that tool on.
+
+**The first version of that scan was wrong**, and in a way worth recording. It compared every module
+against every preset, including presets that do not contain the module's own tool, and produced a
+list twice as long - `diagnose / check_data_tables` among them, when `check_data_tables` is not in
+`diagnose` at all. Advice from a tool you cannot call is not a gap; it is nothing. The claims in the
+source comment were rewritten to the corrected scan.
+
+One helper now covers all five, applied at the seven advice-giving call sites:
+
+```json
+{"verdict": "nothing-to-compare",
+ "toolsNotEnabled": ["unreal_open_level"],
+ "toolsNotEnabledNote": "1 tool(s) named above are switched off in this session: unreal_open_level.
+   unreal_enable_tools({ tools: [\"unreal_open_level\"] }) turns on exactly those..."}
+```
+
+That is a real `find_orphans` reply on a real `diagnose` session, not a fixture.
+
+**Only the advice fields are scanned**, and that restraint is the design. Scanning whole replies would
+be simpler and wrong: `unreal_list_tools` names dozens of deliberately disabled tools - that is its
+job - and a note listing all of them would be noise attached to the one reply whose entire purpose is
+to describe what is off. So the fields are named: `next`, `fix`, `blockers`, `remedy`, `steps`, and
+anything nested under them.
+
+A name this server does not have returns `undefined` rather than `false`, and is not reported.
+Telling someone that a tool which does not exist is "switched off" sends them to enable something
+they can never get.
+
+The audit-specific version from the previous commit was deleted rather than left beside this one. A
+second implementation of the same idea is precisely the drift these commits keep finding.
+
 ### The audit was telling you to use tools it had not switched on
 
 Extracting every `unreal_*` mentioned in a finding's `fix` and holding it against the `diagnose`
