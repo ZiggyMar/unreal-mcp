@@ -80,7 +80,25 @@ const TIMEOUT_OVERRIDE_MS = process.env.UNREAL_MCP_TIMEOUT_MS ? Number(process.e
 // wrong project" into a refusal on the first call.
 const EXPECT_PROJECT = process.env.UNREAL_MCP_EXPECT_PROJECT?.trim();
 
-const rawBridge = new UnrealBridgeClient({ host: BRIDGE_HOST, port: BRIDGE_PORT, timeoutMs: TIMEOUT_OVERRIDE_MS });
+/**
+ * A session that may look but not touch.
+ *
+ * The profiles decide what a model is HANDED. This decides what it can DO, and only the first
+ * question had an answer: on any profile a model can call unreal_enable_tools and turn the writes
+ * back on, which is right for a session meant to build and wrong for one meant to review.
+ *
+ * Any of "1", "true", "yes" or "on" turns it on, because the value people type is not predictable
+ * and a session that silently stayed writable because someone wrote "true" instead of "1" would be
+ * the worst possible outcome for a flag whose entire job is safety.
+ */
+const READ_ONLY = /^(1|true|yes|on)$/i.test((process.env.UNREAL_MCP_READONLY ?? "").trim());
+
+const rawBridge = new UnrealBridgeClient({
+  host: BRIDGE_HOST,
+  port: BRIDGE_PORT,
+  timeoutMs: TIMEOUT_OVERRIDE_MS,
+  readOnly: READ_ONLY,
+});
 const journal = new SessionJournal();
 
 /**
@@ -5635,7 +5653,7 @@ async function main() {
   console.error(
     `unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}; ` +
       `profile "${PROFILE}" with ${[...toolHandles.values()].filter((h) => h.enabled).length}/${registeredToolNames.length} tools enabled; ` +
-      `mode "${MODE.mode}"`
+      `mode "${MODE.mode}"${READ_ONLY ? "; READ-ONLY: every command that changes anything is refused" : ""}`
   );
   if (MODE_WARNING) {
     console.error(`unreal-mcp-server: ${MODE_WARNING}`);

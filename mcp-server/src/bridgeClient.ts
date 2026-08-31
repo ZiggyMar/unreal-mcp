@@ -1,3 +1,4 @@
+import { isWrite } from "./journal.js";
 import { Socket } from "node:net";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -21,6 +22,20 @@ export interface BridgeClientOptions {
   port?: number;
   /** Milliseconds to wait for a response before rejecting. Overrides the per-command defaults. */
   timeoutMs?: number;
+  /**
+   * Refuse every command that changes anything, before it is sent.
+   *
+   * The profiles decide what a model is HANDED; this decides what it can DO. They are different
+   * questions and only the first had an answer: a model on any profile can call unreal_enable_tools
+   * and turn the writes back on, which is correct behaviour for a session that is meant to build and
+   * exactly wrong for one that is meant to look.
+   *
+   * The set of commands that change nothing is not guessed here. It is READ_ONLY_COMMANDS in
+   * journal.ts - 38 commands, each read out of its C++ handler and confirmed to touch nothing, with
+   * check:journal failing if a read-named command drifts out of it. That list already had to be
+   * exactly right, because the session change log is built from its complement.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -243,6 +258,7 @@ export class UnrealBridgeClient {
   private readonly host: string;
   private readonly port: number;
   private readonly timeoutOverrideMs?: number;
+  private readonly readOnly: boolean = false;
   /**
    * Read from the file the editor writes at startup, so there is nothing for anyone to configure.
    * Absent is a normal state - an older plugin build writes no file - and the bridge decides
@@ -254,6 +270,7 @@ export class UnrealBridgeClient {
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 8765;
     this.timeoutOverrideMs = options.timeoutMs;
+    this.readOnly = options.readOnly === true;
   }
 
   private notConnectedHelp(reason: string): string {
@@ -272,6 +289,17 @@ export class UnrealBridgeClient {
   }
 
   async send<T = unknown>(cmd: string, rawParams?: Record<string, unknown>): Promise<T> {
+    // Refused before anything is sent, so "nothing was changed" is a fact rather than a hope. The
+    // same choke point the path expansion and the change journal use.
+    if (this.readOnly && isWrite(cmd)) {
+      throw new Error(
+        `read_only_session: "${cmd}" changes the project and this session is read-only, so nothing ` +
+          `was sent. Reads are unaffected - list, read, find, describe, search, and every audit and ` +
+          `review built on them all work normally. If this session is meant to make changes, start ` +
+          `the server without UNREAL_MCP_READONLY set.`
+      );
+    }
+
     // Every command crosses here, which is why the path expansion lives here and nowhere else.
     const params = expandPathParams(rawParams);
     const id = randomUUID();

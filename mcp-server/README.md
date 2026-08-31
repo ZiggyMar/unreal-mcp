@@ -4739,6 +4739,32 @@ in the other one instead.
 Running two projects deliberately is fine: give each editor its own port with `-MCPBridgePort=<n>`
 and point each MCP server at it with `UNREAL_MCP_BRIDGE_PORT`.
 
+**4. `UNREAL_MCP_READONLY` lets a session look without touching.** The profiles decide what a model
+is *handed*; this decides what it can *do*, and only the first question had an answer — on any
+profile a model can call `unreal_enable_tools` and turn the writes back on, which is right for a
+session meant to build and wrong for one meant to review.
+
+```text
+read_only_session: "create_blueprint" changes the project and this session is read-only, so
+nothing was sent. Reads are unaffected - list, read, find, describe, search, and every audit
+and review built on them all work normally.
+```
+
+The classification is **not a second list**. It is `READ_ONLY_COMMANDS` in `journal.ts`: 38 commands,
+each read out of its C++ handler and confirmed to touch nothing, with `check:journal` failing if a
+read-named command drifts out of it. That list already had to be exactly right, because the session
+change log is built from its complement — and a private copy here would be two things describing one
+fact, with a write slipping through a session that promised it could not as the failure mode.
+
+Refused at the same choke point the path expansion and the journal use, before the socket is opened,
+so "nothing was sent" is a fact rather than a hope. Verified against the editor: reads and
+`audit_project` work normally, `create_blueprint` is refused, and a *composite* that writes —
+`scaffold_blueprint` — is refused at its first write having created nothing. `1`, `true`, `yes` and
+`on` all enable it, because a session that stayed writable because someone typed "true" instead of
+"1" would be the worst possible outcome for a flag whose whole job is safety.
+
+It costs nothing in standing context: no new tool, no description change.
+
 ### Knowing what the agent touched
 
 Handing an AI direct control of a game engine introduces a failure mode that does not exist when a

@@ -112,3 +112,62 @@ test("a bare asset name is not guessed at", () => {
   // tool that lists the real ones.
   assert.equal(toObjectPath("BP_X"), "BP_X");
 });
+
+test("a read-only session refuses a write before anything is sent", async () => {
+  // The profiles decide what a model is HANDED. This decides what it can DO, and only the first
+  // question had an answer: on any profile a model can call unreal_enable_tools and turn the writes
+  // back on, which is right for a session meant to build and wrong for one meant to review.
+  //
+  // Refused at the same choke point the path expansion and the change journal use, so "nothing was
+  // changed" is a fact rather than a hope - there is no socket connection to race.
+  const client = new UnrealBridgeClient({ port: 1, readOnly: true });
+  await assert.rejects(
+    () => client.send("create_blueprint", { packagePath: "/Game/Nope" }),
+    (err) => {
+      assert.match(err.message, /read_only_session/);
+      assert.match(err.message, /nothing was sent/);
+      assert.match(err.message, /UNREAL_MCP_READONLY/, "and says how to turn it off");
+      return true;
+    }
+  );
+});
+
+test("a read-only session lets reads through to the socket", async () => {
+  // The refusal must be keyed on what the command DOES, not on it being read-only mode. Port 1 has
+  // nothing listening, so a read gets a connection error - which is the proof it was sent.
+  const client = new UnrealBridgeClient({ port: 1, readOnly: true });
+  await assert.rejects(
+    () => client.send("list_blueprints", {}),
+    (err) => {
+      assert.ok(!/read_only_session/.test(err.message), `a read was refused: ${err.message}`);
+      return true;
+    }
+  );
+});
+
+test("the classification is the journal's, not a second copy", async () => {
+  // READ_ONLY_COMMANDS in journal.ts is 38 commands, each read out of its C++ handler and confirmed
+  // to touch nothing, with check:journal failing if a read-named command drifts out of it. A second
+  // list here would be two things describing one fact, which is this repo's most repeated defect -
+  // and the failure mode would be a write slipping through a session that promised it could not.
+  const { isWrite } = await import("../dist/journal.js");
+  const client = new UnrealBridgeClient({ port: 1, readOnly: true });
+  for (const command of ["list_variables", "read_class_defaults", "describe_class", "project_health"]) {
+    assert.equal(isWrite(command), false, `${command} is classified as a read`);
+    await assert.rejects(
+      () => client.send(command, {}),
+      (err) => !/read_only_session/.test(err.message),
+      `${command} should reach the socket`
+    );
+  }
+});
+
+test("an ordinary session is unaffected", async () => {
+  // The flag defaults off, and a change that made every session read-only would be far worse than
+  // the gap it closes.
+  const client = new UnrealBridgeClient({ port: 1 });
+  await assert.rejects(
+    () => client.send("create_blueprint", { packagePath: "/Game/Yes" }),
+    (err) => !/read_only_session/.test(err.message)
+  );
+});
