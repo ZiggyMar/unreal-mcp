@@ -21,6 +21,7 @@
 #include "Engine/Blueprint.h"
 #include "K2Node_Variable.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "ScopedTransaction.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -161,6 +162,15 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameVariable(const TSharedPt
 	// This is the whole reason the command exists rather than the caller editing NewVariables: it
 	// rebinds every GET and SET node to the new name. Doing it by hand leaves the nodes pointing at a
 	// name that is gone, which breaks graphs nobody was looking at.
+	// Undoable, like every other edit this bridge makes and like the editor's own rename.
+	//
+	// The thirty commands in MCPCommandHandler.cpp each open a named transaction; the eight added
+	// since did not, so a human watching an agent rename a variable across a dozen nodes could not
+	// Ctrl+Z it. Found by reading what Epic's own plugin and other MCP servers do about undo, and
+	// noticing this project had the habit everywhere except in its newest code.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRenameVariable", "MCP: Rename Variable"));
+	Blueprint->Modify();
+
 	FBlueprintEditorUtils::RenameMemberVariable(Blueprint, FName(*OldName), FName(*NewName));
 
 	if (DeclaresVariable(Blueprint, FName(*OldName)))
@@ -231,6 +241,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveVariable(const TSharedPt
 				TEXT("Pass force:true if that is what you mean, or rewire them first. Nothing has been changed."),
 				*Name, Nodes, *FString::Join(Graphs, TEXT(", "))));
 	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveVariable", "MCP: Remove Variable"));
+	Blueprint->Modify();
 
 	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, FName(*Name));
 

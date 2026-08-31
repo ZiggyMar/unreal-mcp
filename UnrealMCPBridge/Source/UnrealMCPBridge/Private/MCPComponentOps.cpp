@@ -17,6 +17,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "K2Node_CallFunction.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "ScopedTransaction.h"
 
 namespace
 {
@@ -118,6 +119,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameComponent(const TSharedP
 	// with the node - setting the name directly leaves every node that used the component pointing at
 	// a name that is gone. (USimpleConstructionScript has no RenameComponent at all, which is what
 	// the compiler said when this was written the obvious way.)
+	// The Modify() below did nothing before this transaction existed: marking an object dirty for
+	// undo outside a transaction records the change nowhere. See the note in MCPVariableOps.cpp.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRenameComponent", "MCP: Rename Component"));
+	Blueprint->Modify();
 	Blueprint->SimpleConstructionScript->Modify();
 	FBlueprintEditorUtils::RenameComponentMemberVariable(Blueprint, Node, FName(*NewName));
 
@@ -166,7 +171,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveComponent(const TSharedP
 	// between removing one component and removing a subtree without noticing.
 	const int32 ChildCount = Node->GetChildNodes().Num();
 
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveComponent", "MCP: Remove Component"));
+	Blueprint->Modify();
 	Blueprint->SimpleConstructionScript->Modify();
+	Node->Modify();
 	Blueprint->SimpleConstructionScript->RemoveNodeAndPromoteChildren(Node);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -236,6 +244,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveFunction(const TSharedPt
 				TEXT("force:true if that is what you mean, or remove the calls first. Nothing has been changed."),
 				*FunctionName, Calls, *FString::Join(Callers, TEXT(", "))));
 	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveFunction", "MCP: Remove Function"));
+	Blueprint->Modify();
+	Target->Modify();
 
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, Target);
 

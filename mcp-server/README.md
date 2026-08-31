@@ -6044,6 +6044,48 @@ describes.
 The grammar text costs 135 standing tokens. `minimal`, the profile built for a 14B at 8k, went 4,008
 to 4,143 against a 5,000 ceiling — worth it for the containers most real state is made of.
 
+### Ctrl+Z, and what checking Epic's plugin turned up
+
+Epic shipped their own MCP plugin in UE 5.8 and brought it to UEFN on 20 August 2026. Reading how it
+and other servers handle undo — Epic's is one operation per call with a separate undo entry each —
+sent me to look at ours, and the answer was worse than theirs.
+
+Thirty commands in `MCPCommandHandler.cpp` open a named `FScopedTransaction` and behave exactly like
+the editor. **Every command added since opened none.** Their edits were permanent the moment they
+landed. Two even called `Modify()`, which records a change for undo and does nothing at all outside a
+transaction: the habit was there, the mechanism was not.
+
+This is the expectation a person brings and never states. They watch an agent rename a variable
+across a dozen nodes, decide they preferred it the old way, and press Ctrl+Z. Nothing caught it —
+`check:parity` counts commands, `check:journal` sorts them read from write, and neither asks whether
+a change can be taken back.
+
+`check:undo` asks. Every command that changes the project must open a transaction or be listed with
+the reason it cannot, and the reason has to be about the **engine**, not about the effort of writing
+the code — *"the editor cannot undo asset creation either"* is a good reason; *"we didn't get to it"*
+is the case this exists to stop. It also fails when an exemption outlives what it exempts, and when
+an exemption claims something is permanent that has since learned to transact.
+
+Writing it corrected me four times, which is the point of writing it:
+
+| what I assumed | what was true |
+|---|---|
+| only the eight new commands lacked transactions | four older ones did too — all three data-table row edits and `set_asset_property`, every one of them undoable in the editor |
+| `add_node` had a transaction | it does — but my first version reported it as permanent, because `HandleAddNode` delegates to `AddNodeCore` and I only read the named handler |
+| the `create_*` commands can't be undone | six of them already transact; my exemptions said the opposite of the code |
+| `compile_cpp` and `hot_reload_cpp` are commands | they are not; I had exempted two names that don't exist |
+
+The false alarm on `add_node` was the one worth fixing carefully. A guard that cries wolf is one
+people learn to skip — which had already happened to the lifecycle trial two days earlier — so it now
+follows delegation and matches braces properly instead of slicing to the next line-start brace.
+
+**Where we stand against Epic's plugin.** Theirs is deliberately minimal and foundational; the gaps
+its reviewers name are tool breadth, context efficiency, transactional batching, read-back, and
+production hardening. Ours answers four of those already — 115 tools, a 2,292-token `search` profile
+with full schema recovery on demand, whole-graph authoring in one call, and `explain_graph` /
+`review_blueprint` / `verify_feature` for read-back. Undo was the one where we were genuinely behind,
+and in our own newest code rather than by design.
+
 ### The numbers a model reads are guarded too
 
 Three token figures in tool descriptions have gone stale and been caught **by accident** — each one

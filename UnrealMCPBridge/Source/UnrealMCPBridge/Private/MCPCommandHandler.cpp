@@ -8007,6 +8007,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetAssetProperty(const TShared
 		return MakeErrorResponse(FString::Printf(TEXT("asset_not_found: %s"), *Path));
 	}
 
+	// Undoable, like changing the value in the details panel. The transaction opens before the write
+	// and covers the failure path too: a refused write inside a transaction records nothing, which is
+	// exactly right, while a successful one lands as a single Ctrl+Z for the human watching.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetAssetProperty", "MCP: Set Asset Property"));
+	Asset->Modify();
+
 	// The same helper the actor, component and class-default setters use, so a value that works in
 	// one of them works here and the silent-None guard applies to all four rather than three.
 	TSharedRef<FJsonObject> Response = SetPropertyFromString(
@@ -8195,6 +8201,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddDataTableRow(const TSharedP
 		}
 	}
 
+	// Undoable, like editing the row in the Data Table editor. See scripts/check-undo.mjs for why
+	// this is checked rather than remembered.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddDataTableRow", "MCP: Add Data Table Row"));
+	Table->Modify();
+
 	uint8* RowData = FDataTableEditorUtils::AddRow(Table, FName(*RowName));
 	if (!RowData)
 	{
@@ -8323,6 +8334,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetDataTableRow(const TSharedP
 	{
 		return MakeErrorResponse(TEXT("missing_param: values must name at least one field to change"));
 	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetDataTableRow", "MCP: Set Data Table Row"));
+	Table->Modify();
 
 	FDataTableEditorUtils::BroadcastPreChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowData);
 
@@ -8543,6 +8557,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveDataTableRow(const TShar
 	TSharedPtr<FJsonObject> Was = DescribeDataTableRow(Table->RowStruct, RowData);
 
 	FDataTableEditorUtils::BroadcastPreChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowList);
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveDataTableRow", "MCP: Remove Data Table Row"));
+	Table->Modify();
+
 	const bool bRemoved = FDataTableEditorUtils::RemoveRow(Table, FName(*RowName));
 	FDataTableEditorUtils::BroadcastPostChange(Table, FDataTableEditorUtils::EDataTableChangeInfo::RowList);
 
