@@ -4882,6 +4882,41 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### Asking about one column cost the whole table
+
+`list_data_table_rows` is the largest read left, and unlike the others it barely moved when the
+replies became compact — 4%, because it is not indentation, it is nine rows of nested CommonUI struct
+literals. You could page rows and pick a single row, but you could not pick a **column**.
+
+That matters because the change-request question is nearly always about one field — *what does
+everything cost*, *which rows have no UpgradeClass* — and answering it meant pulling every field of
+every row:
+
+```text
+every column                        5,472 tokens
+fields: ["DisplayName","NavBarPriority"]   229 tokens
+```
+
+Same name, same semantics and the same words as `list_blueprints`' existing `fields`, because two
+tools with a parameter of the same name behaving differently would be worse than one tool not having
+it: a view rather than a filter, every row still returned, and a name that matches nothing **reported
+rather than silently dropped**. Asking for `Cost` on a table whose column is `Price` now says the
+column does not exist — otherwise every row comes back present and empty, which reads as *no row has
+a cost* rather than *there is no such column*, and the caller draws a wrong conclusion about their own
+data.
+
+Two other things were measured here and **deliberately not built**:
+
+- **Dropping default members inside struct literals** — 706 of them (`=False`, `=0`, `=None`) in one
+  reply, close to half of it. The bridge already exports with a `DefaultPtr`, so anything that
+  survived that pruning is a genuine difference from the default. Dropping `X=0` where the default is
+  `1` would silently change the value. That is data corruption wearing compaction's clothes.
+- **Deduplicating repeated field values across rows** — 20% of long values are exact repeats, worth
+  ~2,560 tokens. But unlike the fix text, these are values a caller *writes back*, and a per-row
+  reference invites a model to paste `@ref` into a Data Table. The safe subset — fields identical in
+  every row — is worth only 309 tokens across every table in the project, which does not justify a
+  new reply shape.
+
 ### 23% of every reply was indentation
 
 Chasing repeated text one reply at a time led to the thing underneath all of them. The top repeated

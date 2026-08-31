@@ -444,3 +444,33 @@ test("all three property readers drop a value the type already implies", async (
     assert.match(body, /const targeted = /, `${reader} keeps values for a targeted question`);
   }
 });
+
+test("picking columns keeps every row and reports names that match nothing", () => {
+  // The change-request question is usually about one field - "what does everything cost", "which
+  // rows have no UpgradeClass" - and answering it meant pulling every field of every row. On
+  // DT_UniversalActions that is 5,472 tokens to read nine rows, almost all of it four nested
+  // CommonUI struct literals nobody asked about. Two named columns: 229 tokens.
+  //
+  // A view, not a filter: every row still comes back, carrying less.
+  const rows = [
+    { Cost: "300", Label: "Machine Gun", Brush: "(a huge struct literal)" },
+    { Cost: "150", Label: "Bullet Size", Brush: "(another huge one)" },
+  ];
+  const picked = pickFields(rows, ["Cost"]);
+  assert.deepEqual(picked.rows, [{ Cost: "300" }, { Cost: "150" }]);
+  assert.deepEqual(picked.unknown, []);
+});
+
+test("a column that does not exist is named, not answered with empty rows", () => {
+  // Asking for "Cost" on a table whose column is "Price" must not come back as every row present
+  // and nothing in any of them - that reads as "no row has a cost" rather than "there is no such
+  // column", and the caller would draw the wrong conclusion about their own data.
+  const picked = pickFields([{ Price: "300" }, { Price: "150" }], ["Cost", "Price"]);
+  assert.deepEqual(picked.rows, [{ Price: "300" }, { Price: "150" }]);
+  assert.deepEqual(picked.unknown, ["Cost"]);
+});
+
+test("asking for no columns changes nothing", () => {
+  const rows = [{ Cost: "300" }];
+  assert.equal(pickFields(rows, []).rows, rows, "an empty list is not a request to drop everything");
+});

@@ -3995,6 +3995,15 @@ register(
             "default, because somebody asking for one row by name is usually about to change it. Case " +
             "insensitive, and a name that matches nothing lists the ones that exist."
         ),
+      fields: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Return only these columns from each row, e.g. ["Cost"]. A view, not a filter - it changes what ' +
+            "each row carries, not which rows come back. Names that match nothing are reported rather than " +
+            "silently dropped. This is how you ask a question about one column across a whole table without " +
+            "paying for every other column."
+        ),
       full: z
         .boolean()
         .optional()
@@ -4005,7 +4014,7 @@ register(
         ),
     },
   },
-  async ({ path, limit, offset, full, rowName }) => {
+  async ({ path, limit, offset, full, rowName, fields }) => {
     try {
       // Asking for one row by name is a different job from listing a table, and it was not possible:
       // the only read was paged, so "what is WeaponDmg's price" meant 7,040 tokens of paging to find
@@ -4033,6 +4042,27 @@ register(
         table.rows = table.rows.map((row) =>
           row && typeof row === "object" && row.values ? { ...row, values: trimFloatPaddingIn(row.values) } : row
         );
+      }
+
+      // One column across the whole table, rather than every column.
+      //
+      // The change-request question is usually about a single field - "what does everything cost",
+      // "which rows have no UpgradeClass" - and answering it meant pulling every field of every row.
+      // On DT_UniversalActions that is 5,458 tokens to read nine rows, almost all of it four nested
+      // CommonUI struct literals nobody asked about.
+      //
+      // Same semantics and the same words as list_blueprints' `fields`, because two tools with a
+      // parameter of the same name that behaved differently would be worse than one tool not having
+      // it: a view rather than a filter, and a name matching nothing is reported rather than
+      // silently dropped.
+      let unknownFields: string[] = [];
+      if (Array.isArray(fields) && fields.length > 0 && Array.isArray(table.rows)) {
+        const picked = pickFields(
+          table.rows.map((row) => (row && typeof row === "object" ? (row.values ?? {}) : {})),
+          fields
+        );
+        unknownFields = picked.unknown;
+        table.rows = table.rows.map((row, i) => ({ ...row, values: picked.rows[i] }));
       }
 
       if (wantedRow) {
@@ -4066,16 +4096,33 @@ register(
       const rowCount = Array.isArray(table.rows) ? table.rows.length : 0;
       const size = JSON.stringify(table).length;
       const HEAVY_REPLY_CHARS = 8000;
+      // A requested column that does not exist must not come back as empty rows. Asking for "Cost" on
+      // a table whose column is "Price" would otherwise answer with every row present and nothing in
+      // any of them, which reads as "no row has a cost" rather than "there is no such column".
+      const unknownNote =
+        unknownFields.length > 0
+          ? {
+              unknownFields,
+              unknownFieldsNote:
+                `${unknownFields.length} requested column(s) do not exist on this row struct: ` +
+                `${unknownFields.join(", ")}. The rows below are missing them because there is nothing ` +
+                `to show, not because the values are empty. unreal_list_struct_fields on the row struct ` +
+                `lists the real column names.`,
+            }
+          : {};
+
       return jsonResult(
         size >= HEAVY_REPLY_CHARS && rowCount > 1
           ? {
               ...table,
+              ...unknownNote,
               cheaper:
                 `These rows are large (~${Math.round(size / 4)} tokens for ${rowCount} rows). ` +
-                `\`limit: 1\` shows every column and its shape for a fraction of that, and ` +
-                `unreal_list_struct_fields on the row struct lists the columns without any row data.`,
+                `\`fields: ["ColumnName"]\` answers a question about one column across every row, ` +
+                `\`limit: 1\` shows every column and its shape, and unreal_list_struct_fields on the ` +
+                `row struct lists the columns without any row data.`,
             }
-          : table
+          : { ...table, ...unknownNote }
       );
     } catch (err) {
       return errorResult(err);
