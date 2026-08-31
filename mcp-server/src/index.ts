@@ -475,7 +475,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -3868,6 +3868,94 @@ register(
   async ({ query, pathPrefix, maxResults }) => {
     try {
       return jsonResult(await findInDataTables(bridge, query, { pathPrefix, maxResults }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_rename_asset",
+  {
+    title: "Rename or move an asset, fixing every reference to it",
+    description:
+      "Renames an asset, moves it to another folder, or both - through the editor's asset tools, so every " +
+      "Blueprint, Data Table and level that referred to the old path is updated to the new one.\n\n" +
+      "**Do not rename by any other means.** Moving the .uasset yourself leaves every reference pointing at a " +
+      "path that no longer exists, which looks like it worked until the next time anything loads. This is also " +
+      "how you move an asset: give `newFolder` alone to move without renaming.\n\n" +
+      "Saves afterwards, because a rename that fixed every reference and was never written to disk reverts on " +
+      "the next editor restart. Refuses if the destination name is already taken rather than silently suffixing it.",
+    inputSchema: {
+      path: z.string().describe('The asset to rename, e.g. "/Game/Upgrades/BP_DamageUpgrade".'),
+      newName: z.string().optional().describe('New asset name without any path, e.g. "BP_FireRateUpgrade". Omit to keep the name and only move.'),
+      newFolder: z.string().optional().describe('New folder, e.g. "/Game/Upgrades/Weapons". Omit to keep it where it is.'),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true; an unsaved rename reverts on restart."),
+    },
+  },
+  async ({ path, newName, newFolder, save }) => {
+    try {
+      const result = (await bridge.send("rename_asset", { path, newName, newFolder })) as { path?: string };
+      // Composed here rather than in the bridge: see the note in MCPAssetOps.cpp. It keeps the bridge
+      // command doing one thing and makes the save visible in the reply instead of implied.
+      let saved = false;
+      let saveError: string | undefined;
+      if (save !== false && typeof result.path === "string") {
+        try {
+          await bridge.send("save_asset", { path: result.path });
+          saved = true;
+        } catch (err) {
+          saveError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      return jsonResult({
+        ...result,
+        saved,
+        ...(saveError ? { saveError, warning: "The rename happened but the save did not, so it will revert on restart. Call unreal_save_asset on the new path." } : {}),
+      });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_duplicate_asset",
+  {
+    title: "Copy an asset",
+    description:
+      "Copies an asset to a new name, in the same folder unless you name another. This is how you start " +
+      "\"one more like that one\" - a second upgrade from the one that works, a variant enemy, a Data Table " +
+      "shaped like an existing one.\n\n" +
+      "Prefer it to building a near-identical asset from scratch: the copy inherits the parent class, the " +
+      "components, the variables and their defaults, so what is left is the part that actually differs. " +
+      "unreal_plan_feature will tell you which existing asset is the one to copy.\n\n" +
+      "Saves afterwards. Refuses if the name is already taken rather than silently suffixing it.",
+    inputSchema: {
+      path: z.string().describe('The asset to copy, e.g. "/Game/Upgrades/BP_DamageUpgrade".'),
+      newName: z.string().describe('Name for the copy, without any path, e.g. "BP_FireRateUpgrade".'),
+      newFolder: z.string().optional().describe("Folder for the copy. Defaults to the original's folder."),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, newName, newFolder, save }) => {
+    try {
+      const result = (await bridge.send("duplicate_asset", { path, newName, newFolder })) as { path?: string };
+      let saved = false;
+      let saveError: string | undefined;
+      if (save !== false && typeof result.path === "string") {
+        try {
+          await bridge.send("save_asset", { path: result.path });
+          saved = true;
+        } catch (err) {
+          saveError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      return jsonResult({
+        ...result,
+        saved,
+        ...(saveError ? { saveError, warning: "The copy exists but was not saved, so it will be gone on restart. Call unreal_save_asset on it." } : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }

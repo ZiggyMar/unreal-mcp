@@ -104,6 +104,10 @@ private:
 
 	// --- Asset management: delete with reference safety ---
 	static TSharedRef<FJsonObject> HandleDeleteAsset(const TSharedPtr<FJsonObject>& Params);
+	/** Rename or move an asset through AssetTools, so every reference to it is fixed up. */
+	static TSharedRef<FJsonObject> HandleRenameAsset(const TSharedPtr<FJsonObject>& Params);
+	/** Copy an asset, which is how a person starts "one more like that one". */
+	static TSharedRef<FJsonObject> HandleDuplicateAsset(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Components and class defaults (challenge tooling, part B) ---
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);

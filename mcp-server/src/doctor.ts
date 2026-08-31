@@ -110,6 +110,11 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     { cmd: "map_input_key", feature: "binding a key to an Input Action" },
     { cmd: "unmap_input_key", feature: "removing a key binding" },
     { cmd: "live_coding_status", feature: "hot-reloading C++ into the running editor" },
+    // rename_asset and duplicate_asset both refuse a request with no `path` before they touch
+    // anything, which is what makes them safe to probe: the reply distinguishes "this command does
+    // not exist" from "you did not give it a path", and only the first is what this is asking.
+    { cmd: "rename_asset", feature: "renaming or moving an asset with its references fixed up" },
+    { cmd: "duplicate_asset", feature: "copying an asset" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 

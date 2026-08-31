@@ -233,6 +233,8 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_data_table` | `create_data_table` | Create a Data Table backed by a struct. The data-driven route: item 200 is a row, not a rewire. |
 | `unreal_add_data_table_row` | `add_data_table_row` | Add one named row and set its values. Field names are checked before anything is written. |
 | `unreal_list_data_table_rows` | `list_data_table_rows` | Read rows with their values, paged, because a Data Table is the one asset built to get large. |
+| `unreal_rename_asset` | `rename_asset` | Rename or move an asset through the editor's asset tools, so every reference to the old path is fixed up. Moving the `.uasset` yourself breaks them silently. |
+| `unreal_duplicate_asset` | `duplicate_asset` | Copy an asset — how you start "one more like that one" rather than rebuilding a near-identical asset from scratch. |
 | `unreal_find_in_data_tables` | *(composed: `list_assets` + `list_data_table_rows`)* | The only tool that looks **inside** Data Table contents: searches every row name and cell value and returns table, row and field — not the rows. `unreal_search_project` does not index them. |
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
@@ -4881,6 +4883,44 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### You could delete an asset but not rename one
+
+A coverage question, asked by listing what a person does in the content browser every day and checking
+which of them exist:
+
+```text
+rename     nothing
+duplicate  nothing
+move       nothing
+delete     delete_asset
+```
+
+That is a gap worth being embarrassed about, because *"rename FireRate to RateOfFire"* is one of the
+sentences the change-request routing was **built and tested against**. The routing worked, the tools
+it named could find the thing — and then nothing could change it. Duplicating matters for the other
+half: `plan_feature` says to extend what already exists, and duplicating `BP_DamageUpgrade` is exactly
+how a person starts a second upgrade.
+
+Both go through `FAssetToolsModule` rather than moving files, because **that is what fixes up the
+references**. A rename that leaves every referencing Blueprint pointing at the old path has not
+renamed anything, it has broken the project — and it looks like it worked until the next time
+anything loads.
+
+Two things the implementation had to bend to:
+
+- **The save is composed in the tool layer, not the bridge.** An unsaved rename reverts on restart, so
+  saving is not optional — but `SaveAssetPackage` lives in an anonymous namespace inside a
+  five-thousand-line file, and prying it out to share it is a bigger and riskier edit than the
+  feature. The MCP tool calls `save_asset` afterwards, which is the composite pattern used everywhere
+  here, keeps the bridge command doing one thing, and makes the save visible in the reply.
+- **`MakeErrorResponse` and `MakeOkResponse` are file-local too**, which is why every sibling file
+  (`MCPSequence.cpp`, `MCPInput.cpp`, `MCPConsole.cpp`) builds its own object and sets `error` and
+  `detail` directly. Following the codebase beat fighting it.
+
+Verified by `npm run check:engines`, which compiles into a temporary host project and so runs with the
+editor open: **5.6, 5.8 and the game target all build.** The commands are dark until the plugin is
+rebuilt, like the others — but they compile, which is the part that can be checked now.
 
 ### Asking about one column cost the whole table
 
