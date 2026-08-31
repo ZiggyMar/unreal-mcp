@@ -121,12 +121,43 @@ function describeSeconds(ms: number): string {
  * parameter also called `path`, and rewriting that would break it.
  */
 export function toObjectPath(value: string): string {
-  if (!value.startsWith("/")) return value;
   if (value.includes("\\") || /^[A-Za-z]:/.test(value)) return value;
-  const lastSlash = value.lastIndexOf("/");
-  const leaf = value.slice(lastSlash + 1);
-  if (!leaf || leaf.includes(".")) return value;
-  return `${value}.${leaf}`;
+
+  let path = value;
+
+  // /Content/ is the folder on disk; /Game/ is the path the engine uses for the same place. It is
+  // the single most common thing to get wrong about an Unreal path, and a model that has looked at
+  // the filesystem - or read a .uproject - has seen the wrong one of the two. Only a LEADING
+  // /Content/ is rewritten, so a project with its own /Game/Content/ folder is untouched.
+  if (/^\/Content\//i.test(path)) path = `/Game/${path.slice("/Content/".length)}`;
+
+  if (!path.startsWith("/")) return value;
+
+  // A trailing slash reads as a folder and means the same asset.
+  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+
+  const lastSlash = path.lastIndexOf("/");
+  const leaf = path.slice(lastSlash + 1);
+  if (!leaf) return path === value ? value : path;
+
+  if (leaf.includes(".")) {
+    // The _C form: /Game/Dir/BP_Thing.BP_Thing_C is the generated CLASS, and every tool here works
+    // on the ASSET. It matters because parentClass comes back as "BP_ShopUpgrade_C" - so a model
+    // that reads a Blueprint, sees its parent, and asks to inspect that parent writes exactly this.
+    //
+    // The test is that the object name is the asset name plus _C, not merely that it ends in _C: an
+    // asset genuinely called Foo_C has the object path /Game/Foo_C.Foo_C, whose object name equals
+    // the asset name and is correctly left alone.
+    const dot = leaf.indexOf(".");
+    const assetName = leaf.slice(0, dot);
+    const objectName = leaf.slice(dot + 1);
+    if (objectName === `${assetName}_C`) {
+      return `${path.slice(0, lastSlash + 1)}${assetName}.${assetName}`;
+    }
+    return path;
+  }
+
+  return `${path}.${leaf}`;
 }
 
 /** Every parameter that carries an asset path, so the expansion reaches all of them. */

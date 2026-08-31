@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:net";
 import { once } from "node:events";
 
-import { UnrealBridgeClient } from "../dist/bridgeClient.js";
+import { UnrealBridgeClient, toObjectPath } from "../dist/bridgeClient.js";
 
 /**
  * Stand up a fake bridge that writes a scripted reply, and let the test choose how that reply is
@@ -65,4 +65,50 @@ test("a reply delivered in one write still works", async () => {
     return client.send("ping");
   });
   assert.deepEqual(got, { ok: 1 });
+});
+
+test("the _C class path resolves to the asset it is generated from", () => {
+  // parentClass comes back as "BP_ShopUpgrade_C", so a model that reads a Blueprint, sees its
+  // parent, and asks to inspect that parent writes exactly this. Measured against the editor before
+  // the fix: /Game/Dir/BP_X.BP_X_C was blueprint_not_found.
+  assert.equal(toObjectPath("/Game/Dir/BP_X.BP_X_C"), "/Game/Dir/BP_X.BP_X");
+});
+
+test("an asset genuinely named Foo_C is not mangled", () => {
+  // The test is that the object name equals the asset name plus _C, not merely that it ends in _C.
+  // /Game/Dir/Foo_C.Foo_C is an ordinary asset whose name happens to end that way, and stripping
+  // blindly would send every call about it to an asset that does not exist.
+  assert.equal(toObjectPath("/Game/Dir/Foo_C.Foo_C"), "/Game/Dir/Foo_C.Foo_C");
+});
+
+test("/Content/ means /Game/", () => {
+  // The folder on disk is Content; the path the engine uses is /Game/. It is the single most common
+  // thing to get wrong about an Unreal path, and a model that has looked at the filesystem has seen
+  // the wrong one of the two.
+  assert.equal(toObjectPath("/Content/Dir/BP_X"), "/Game/Dir/BP_X.BP_X");
+  assert.equal(toObjectPath("/Content/Dir/BP_X.BP_X_C"), "/Game/Dir/BP_X.BP_X", "both corrections at once");
+});
+
+test("a project folder actually called Content is left alone", () => {
+  // Only a LEADING /Content/ is rewritten. /Game/Content/ is a real folder some projects have.
+  assert.equal(toObjectPath("/Game/Content/Thing"), "/Game/Content/Thing.Thing");
+});
+
+test("a trailing slash is a folder spelling of the same asset", () => {
+  assert.equal(toObjectPath("/Game/Dir/BP_X/"), "/Game/Dir/BP_X.BP_X");
+});
+
+test("filesystem paths are still untouched", () => {
+  // compile_cpp takes a FILESYSTEM path in a parameter also called `path`. Rewriting it would break
+  // the one tool that compiles C++, and none of the new rules may reach it.
+  assert.equal(toObjectPath("M:/Proj/Source/Foo.cpp"), "M:/Proj/Source/Foo.cpp");
+  assert.equal(toObjectPath("Source/AntiVirusSquad/Foo.cpp"), "Source/AntiVirusSquad/Foo.cpp");
+  assert.equal(toObjectPath("C:\Proj\Foo.cpp"), "C:\Proj\Foo.cpp");
+});
+
+test("a bare asset name is not guessed at", () => {
+  // Unlike the other four, this one is genuinely ambiguous - the same name can exist in several
+  // folders - so it stays an error. The bridge's message already names the right path shape and the
+  // tool that lists the real ones.
+  assert.equal(toObjectPath("BP_X"), "BP_X");
 });

@@ -1476,6 +1476,44 @@ already exists, because "make the" reads as a request to create something. Chang
 checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
 cost more" is a change, and only the second half of that sentence says so.
 
+### Four ways to write a path that all mean one asset
+
+The same hunt applied to `path`, which nearly every tool here takes. Six forms a caller would
+plausibly send, against the real editor:
+
+```text
+/Game/Dir/BP_X            accepted
+/Game/Dir/BP_X.BP_X       accepted
+/Game/Dir/BP_X.BP_X_C     REJECTED   blueprint_not_found
+/Content/Dir/BP_X         REJECTED   blueprint_not_found
+/Game/Dir/BP_X/           REJECTED   blueprint_not_found
+BP_X                      REJECTED   blueprint_not_found
+```
+
+The `_C` one is the sharp case, because this server hands it to you: `parentClass` comes back as
+`"BP_ShopUpgrade_C"`, so a model that reads a Blueprint, sees its parent, and asks to inspect that
+parent writes exactly the form that was refused. `/Content/` is the classic Unreal confusion — the
+folder on disk is `Content`, the path the engine uses is `/Game/` — and a model that has looked at
+the filesystem has seen the wrong one of the two.
+
+All four are now normalised in `toObjectPath`, which is where the short-to-long expansion already
+lived: *"the one place every command crosses into the bridge"*. Doing it per-call-site would have
+recreated the inconsistency the previous section just fixed for types.
+
+The care is in what it must **not** touch:
+
+- An asset genuinely named `Foo_C` has the object path `/Game/Foo_C.Foo_C`. The rule is that the
+  object name equals the asset name **plus** `_C`, not merely that it ends in `_C` — otherwise every
+  call about that asset would be redirected to one that does not exist.
+- Only a **leading** `/Content/` is rewritten, so a project with its own `/Game/Content/` folder is
+  untouched.
+- `compile_cpp` takes a **filesystem** path in a parameter also called `path`. `M:/Proj/Foo.cpp`,
+  `Source/Thing/Foo.cpp` and `C:\Proj\Foo.cpp` all pass through unchanged, and there is a test for
+  each, because breaking the one tool that compiles C++ is the way this change could do real damage.
+
+`BP_X` alone stays an error. It is genuinely ambiguous — the same name can exist in several folders —
+and the bridge's message already names the right path shape and the tool that lists the real ones.
+
 ### The C++ spelling of a type was refused, by the tool that C++ leads you to
 
 `{ Cost: 500 }` named a defect class worth hunting rather than waiting for: **the tool disagreeing
