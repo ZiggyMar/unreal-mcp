@@ -35,7 +35,8 @@
     "measure:groups": "node scripts/measure-groups.mjs",
     "trial:diagnose": "node scripts/trial-diagnose.mjs",
     "trial:runtime": "node scripts/trial-runtime.mjs",
-    "trial:parent-call": "node scripts/trial-parent-call.mjs"
+    "trial:parent-call": "node scripts/trial-parent-call.mjs",
+    "trial:chain": "node scripts/trial-chain.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

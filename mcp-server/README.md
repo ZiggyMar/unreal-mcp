@@ -1924,6 +1924,44 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### A trial for the joins, because that is where the last five bugs were
+
+Five defects in five iterations, and they share a shape: **two tools that each work, describing the
+same thing differently.**
+
+```text
+find_source returned AAVSGameState        describe_class refused it
+list_variables printed object:Mesh[]      its own `match` could not find it
+a read said type + subType                the write wanted object:<Class>
+read_class_defaults dropped the value     the change request needed it
+```
+
+None of those is visible in a single call, in a token measurement, or in a unit test with a fixture.
+They only exist in the join. `npm run trial:chain` walks the joins a real session makes and passes
+every value through **verbatim** - anything needing an edit on the way is a finding, not a step:
+
+```text
+find_node -> add_node
+  ok    line trace - KismetSystemLibrary::LineTraceSingle
+  ok    set timer - KismetSystemLibrary::K2_SetTimer
+list_blueprint_graphs -> read_blueprint_summary -> read_node_detail
+  ok    read_node_detail takes that id verbatim - 1 pins
+list_variables -> add_variable
+  ok    the type a read prints round-trips - object:StaticMesh[]
+find_source -> describe_class
+  ok    find_source said "UKronosGameInstance", describe_class takes it - KronosGameInstance
+```
+
+**The first version called the bridge directly, and that was the wrong instrument.** It reported the
+`find_source -> describe_class` join as still broken - which is true of the bridge, whose fix is dark
+until the plugin is rebuilt, and false of what a model experiences, because the tool layer carries a
+shim for exactly that gap. A model never touches the bridge. A trial that tests it is measuring
+something nobody experiences, and it would have sent the next session chasing a bug that is already
+handled.
+
+Going through the tools also made the trial simpler: `list_variables` returns the descriptor itself,
+so the check no longer has to import `asTypeDescriptor` to reconstruct what the caller would see.
+
 ### The same prefix problem in the other direction, and worse
 
 Having fixed `find_source` to return `AAVSGameState`, the obvious next question was what happens when
