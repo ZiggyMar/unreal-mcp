@@ -813,12 +813,43 @@ function enableGroup(group: string): string[] {
   return turnedOn;
 }
 
+/**
+ * Replies are compact JSON, not pretty-printed.
+ *
+ * Every reply used `JSON.stringify(value, null, 2)`, and the indentation is the single largest
+ * remaining cost on this surface. Measured across eight reads on the real project:
+ *
+ *   list_blueprints         3,328 -> 2,669   -20%
+ *   review_blueprint        4,235 -> 2,726   -36%
+ *   read_class_defaults     4,688 -> 3,237   -31%
+ *   read_blueprint_summary  3,110 -> 2,121   -32%
+ *   list_variables          2,449 -> 1,732   -29%
+ *   audit_project           3,442 -> 2,856   -17%
+ *   project_health          1,617 -> 1,267   -22%
+ *   list_data_table_rows    5,695 -> 5,458    -4%
+ *   ------------------------------------------------
+ *   total                  28,563 -> 22,066  -23%
+ *
+ * The spread is the shape of the data rather than anything else: a long list of small objects is
+ * mostly indentation, and a short list of enormous struct literals is mostly the literals.
+ *
+ * ## Why this loses nothing
+ *
+ * It is the same JSON. Any parser produces exactly the same object, no field changes, no field is
+ * dropped, and every newline that carries meaning - the paragraph breaks inside `next` and `fix`
+ * text - lives inside a string and is untouched by the indent setting. This is the purest form of
+ * the trade this project is trying to make: fewer tokens, nothing given up.
+ *
+ * The one thing it costs is a person eyeballing a raw reply, which is not who reads these. The CLI
+ * paths that a human does read - the doctor report, the audit written to a file, the measurement
+ * scripts - still pretty-print, because there the indentation is the product.
+ */
 function jsonResult(value: unknown) {
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(value, null, 2),
+        text: JSON.stringify(value),
       },
     ],
   };

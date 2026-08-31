@@ -4882,6 +4882,46 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### 23% of every reply was indentation
+
+Chasing repeated text one reply at a time led to the thing underneath all of them. The top repeated
+substring in `list_blueprints` was not a path or a class name — it was `
+    {
+      "path": "/G`,
+a hundred times. Every reply went out as `JSON.stringify(value, null, 2)`.
+
+Measured across eight reads on the real project:
+
+| read | before | after | |
+|---|---:|---:|---:|
+| `review_blueprint` | 4,235 | **2,726** | −36% |
+| `read_blueprint_summary` | 3,110 | **2,121** | −32% |
+| `read_class_defaults` | 4,688 | **3,237** | −31% |
+| `list_variables` | 2,449 | **1,732** | −29% |
+| `project_health` | 1,617 | **1,267** | −22% |
+| `list_blueprints` | 3,328 | **2,669** | −20% |
+| `audit_project` | 3,442 | **2,856** | −17% |
+| `list_data_table_rows` | 5,695 | **5,458** | −4% |
+| **total** | **28,563** | **22,066** | **−23%** |
+
+The spread is just the shape of the data: a long list of small objects is mostly indentation, and a
+short list of enormous struct literals is mostly the literals.
+
+**It is the same JSON.** Any parser produces exactly the same object; no field changes, none is
+dropped, and every newline that carries meaning — the paragraph breaks inside `next` and `fix` text —
+lives inside a string and is untouched by the indent setting. This is the purest form of the trade
+this project exists to make: fewer tokens, nothing given up. The three flagship journeys went from
+4,480 to **3,858 tokens** without a single assertion changing.
+
+The CLI paths a *human* reads — the doctor report, the audit written to a file, the measurement
+scripts — still pretty-print, because there the indentation is the product.
+
+One thing deliberately **not** done afterwards: the reply budgets in `check:replies` now sit well
+above what they measure, and the instinct is to re-cut them. That would be wrong. Those ceilings are
+*"budgets argued for, not observations rounded up"* — `list_tools match: 500` means "a narrow search
+should answer narrowly", and coming in at 149 is the budget being met, not a stale threshold. Lowering
+them to hug the new numbers would replace an argument with an observation.
+
 ### The same fix, said thirty times
 
 A review of `BP_Player` returns 30 findings drawn from **8 distinct checks**, and every one carried
