@@ -27,6 +27,7 @@
     "build:engines": "node scripts/build-engines.mjs",
     "check:fresh": "node scripts/check-binary-fresh.mjs",
     "check:protocol": "node scripts/check-protocol.mjs",
+    "test:bridge": "node scripts/run-automation.mjs",
     "audit": "node scripts/audit-project.mjs",
     "check:replies": "node scripts/check-response-budgets.mjs",
     "measure:reads": "node scripts/measure-reads.mjs",

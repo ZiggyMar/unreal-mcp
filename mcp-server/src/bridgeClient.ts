@@ -1,7 +1,13 @@
 import { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
-import { SessionTokenCache } from "./sessionToken.js";
+import {
+  isAcceptableSessionPath,
+  readSessionTokenAt,
+  sessionFileCandidates,
+  SessionTokenCache,
+  type SessionTokenSource,
+} from "./sessionToken.js";
 
 export interface BridgeRequest {
   cmd: string;
@@ -88,6 +94,20 @@ function describeSeconds(ms: number): string {
 }
 
 /**
+ * Raised by `sendOnce` when the bridge refused the call but named a session file worth reading.
+ *
+ * Carried as a distinct type rather than a flag on the client because `sendOnce` is a `new Promise`
+ * whose only channel back out is its rejection, and because it makes the retry impossible to
+ * trigger by accident: nothing else in this file constructs one.
+ */
+class RetryWithSessionFile extends Error {
+  constructor(readonly source: SessionTokenSource) {
+    super(`retrying with the session token the bridge named at ${source.path}`);
+    this.name = "RetryWithSessionFile";
+  }
+}
+
+/**
  * Thin client for the UnrealMCPBridge editor plugin's local TCP protocol:
  * one line of JSON in, one line of JSON out, per request, on a fresh
  * connection. The bridge is single-threaded on the Unreal game thread, so
@@ -129,7 +149,26 @@ export class UnrealBridgeClient {
     );
   }
 
+  /**
+   * Send one command, and give the bridge exactly one chance to correct where the token lives.
+   *
+   * `sessionToken.ts` guesses at UE's per-platform settings directory, and that guess cannot be
+   * checked from here. When it is wrong the bridge refuses the call and names the file it actually
+   * wrote; this reads that file and sends the command again. The retry terminates by construction
+   * rather than by a counter: the second attempt only asks for another one if the bridge names a
+   * DIFFERENT path than the one just used, and it will not, because it only ever names its own.
+   */
   async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
+    try {
+      return await this.sendOnce<T>(cmd, params);
+    } catch (err) {
+      if (!(err instanceof RetryWithSessionFile)) throw err;
+      this.tokens.remember(this.port, err.source);
+      return await this.sendOnce<T>(cmd, params);
+    }
+  }
+
+  private async sendOnce<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
     const id = randomUUID();
     const session = this.tokens.get(this.port);
     const requestLine =
@@ -250,6 +289,41 @@ export class UnrealBridgeClient {
               // call re-reads the file, and name the file that was used: a token mismatch is otherwise
               // the least diagnosable failure in the whole system.
               this.tokens.forget(this.port);
+
+              // The bridge names the file it wrote. Following that is what makes a wrong guess at
+              // UE's settings directory cost one round trip instead of the whole integration, and
+              // isAcceptableSessionPath is what stops an unauthenticated peer turning the hint into
+              // a file-read primitive. Only worth doing for a path other than the one just tried.
+              const hinted = typeof context.session_file === "string" ? context.session_file.trim() : "";
+              if (hinted && hinted !== session?.path && isAcceptableSessionPath(hinted, this.port)) {
+                const found = readSessionTokenAt(hinted, this.port);
+                if (found) {
+                  fail(new RetryWithSessionFile(found));
+                  return;
+                }
+              }
+
+              // Four distinct situations reach this point and they need four different sentences.
+              // Collapsing them loses the diagnosis, and a refusal nobody can diagnose is the worst
+              // failure this client can report.
+              let hintNote: string;
+              if (!hinted) {
+                hintNote =
+                  "The bridge did not say where its token is, which means it is a build older than this feature.";
+              } else if (hinted === session?.path) {
+                hintNote =
+                  `The bridge confirms its token is in ${hinted}, which is the file this call read. ` +
+                  "The two disagree on the contents, which is what an editor restart looks like from here.";
+              } else if (!isAcceptableSessionPath(hinted, this.port)) {
+                hintNote =
+                  `The bridge says its token is in ${hinted}, which is outside every settings directory this ` +
+                  "client reads from, so it was ignored. If that is genuinely where the editor wrote it, set " +
+                  "UNREAL_MCP_SESSION_FILE to that path.";
+              } else {
+                hintNote = `The bridge says its token is in ${hinted}, but that file could not be read.`;
+              }
+
+              const searched = sessionFileCandidates(this.port);
               fail(
                 new Error(
                   "The UnrealMCPBridge rejected this call as unauthorized. " +
@@ -257,7 +331,9 @@ export class UnrealBridgeClient {
                       ? `The token used came from ${session.path}. `
                       : "No session token file was found for this port. ") +
                     "That usually means the editor restarted since the last call. The stale token has been " +
-                    "discarded, so calling again normally succeeds; if it does not, run unreal_doctor."
+                    "discarded, so calling again normally succeeds; if it does not, run unreal_doctor.\n" +
+                    `Looked in:\n${searched.map((path) => `  - ${path}`).join("\n")}\n` +
+                    hintNote
                 )
               );
               return;

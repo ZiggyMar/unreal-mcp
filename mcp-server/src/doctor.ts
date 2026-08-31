@@ -15,6 +15,7 @@
  */
 
 import type { BridgeLike } from "./autoLayout.js";
+import { readSessionToken, sessionFileCandidates, type SessionTokenSource } from "./sessionToken.js";
 import type { FindNodeResult, GetProjectOverviewResult, PingResult } from "./types.js";
 
 /** The bridge protocol this server was written against. */
@@ -48,7 +49,12 @@ function message(err: unknown): string {
 export async function runDoctor(
   bridge: BridgeLike,
   connection: { host: string; port: number; expectedProject?: string },
-  now: () => number = () => Date.now()
+  now: () => number = () => Date.now(),
+  /**
+   * Injected so this module keeps its property of touching nothing but the bridge, and so the
+   * not-found case is testable without depending on what happens to be on the running machine.
+   */
+  readToken: (port: number) => SessionTokenSource | null = readSessionToken
 ): Promise<DoctorReport> {
   const expectedProject = connection.expectedProject;
   const checks: DoctorCheck[] = [];
@@ -118,6 +124,49 @@ export async function runDoctor(
       name: "which project",
       status: "ok",
       detail: `"${project}"${projectFile ? ` (${projectFile})` : ""}.`,
+    });
+  }
+
+  // Where the session token came from, or that there was not one.
+  //
+  // This exists because the failure it describes is otherwise invisible. The client works out where
+  // the editor writes its token by mirroring UE's per-platform settings directory, and nothing on
+  // this side can verify that mirroring. If it is wrong, no token is found, and while the bridge is
+  // not enforcing one nothing goes wrong at all - right up until someone launches the editor with
+  // -MCPRequireAuth, at which point every call fails at once and the reason is a path nobody has
+  // ever seen printed. So print it.
+  //
+  // Note what reaching this line already proves: the ping above succeeded. So a missing token here
+  // cannot mean authentication is broken, only that the bridge is not enforcing one. That is why
+  // both branches are "ok". Marking the tokenless case a warning would put every correct
+  // installation in existence into "degraded", since enforcement is off by default and no user has
+  // turned it on yet, and a check that cries wolf on everybody is one people learn to skip past.
+  //
+  // The case this cannot reach is the one that actually hurts - enforcement on, token not found -
+  // because then the ping fails and "bridge reachable" reports it, carrying the client's own error,
+  // which now lists every path that was searched. Both directions are diagnosable; only one of them
+  // is a problem.
+  const tokenSource = readToken(connection.port);
+  if (tokenSource) {
+    checks.push({
+      name: "session token",
+      status: "ok",
+      detail: `Read from ${tokenSource.path}, and sent with every call.`,
+    });
+  } else {
+    const searched = sessionFileCandidates(connection.port);
+    checks.push({
+      name: "session token",
+      status: "ok",
+      detail:
+        `No session file for port ${connection.port}, so calls go out without a token, and the bridge ` +
+        `answered anyway: it is not enforcing one. That is the default and nothing is wrong. It would ` +
+        `become fatal if this editor were launched with -MCPRequireAuth, so the ${searched.length} ` +
+        `path(s) searched are listed here rather than left to be guessed at:\n` +
+        searched.map((path) => `    - ${path}`).join("\n") +
+        `\n    The editor's Output Log names the path it really used, on the line beginning "session ` +
+        `token written to". If that path is not above, the mirroring of UE's settings directory is wrong ` +
+        `for this platform: set UNREAL_MCP_SESSION_FILE to it, and please report it.`,
     });
   }
 
