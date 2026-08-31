@@ -2709,11 +2709,24 @@ register(
       "unplugged the front of the old one and left the rest on the canvas, where it reads exactly like working " +
       "code. It is not a bug to fix; it means look elsewhere for what took over.",
     inputSchema: {
-      function: z.string().describe('Function name, or part of one, e.g. "SetSkeletalMeshAsset". Substring match.'),
+      function: z
+        .string()
+        .optional()
+        .describe('Function name, or part of one, e.g. "SetSkeletalMeshAsset". Substring match.'),
+      // The spelling six other tools use, accepted here so the seventh does not cost a failed call.
+      // Six tools take `functionName` and this one took `function`; a model primed by the six types
+      // `functionName` here, gets a validation error, and pays a round trip to learn a synonym. The
+      // error message was good and the call was still wasted - and this server's own instructions
+      // tell models not to guess, which only works if the names do not need guessing at.
+      functionName: z.string().optional().describe("Same as `function`."),
       pathPrefix: z.string().optional().describe('Scope the scan, e.g. "/Game/MyGame". Defaults to "/Game".'),
     },
   },
-  async ({ function: fn, pathPrefix }) => {
+  async ({ function: fnRaw, functionName, pathPrefix }) => {
+    const fn = fnRaw ?? functionName;
+    if (!fn) {
+      return errorResult(new Error("unreal_trace_function_calls needs a function name: pass `function` (or `functionName`)."));
+    }
     try {
       return jsonResult(await bridge.send("trace_function_calls", { function: fn, pathPrefix }));
     } catch (err) {
@@ -2736,11 +2749,17 @@ register(
       "**written but never read**, and **declared but never used**. A few seconds, against opening every " +
       "Blueprint one at a time.",
     inputSchema: {
-      variable: z.string().describe('Exact variable name, e.g. "ServerSkinMemory". Case-insensitive.'),
+      variable: z.string().optional().describe('Exact variable name, e.g. "ServerSkinMemory". Case-insensitive.'),
+      /** The spelling six other tools use. See the note on unreal_trace_function_calls. */
+      variableName: z.string().optional().describe("Same as `variable`."),
       pathPrefix: z.string().optional().describe('Scope the scan, e.g. "/Game/AntiVirusSquad". Defaults to "/Game".'),
     },
   },
-  async ({ variable, pathPrefix }) => {
+  async ({ variable: variableRaw, variableName, pathPrefix }) => {
+    const variable = variableRaw ?? variableName;
+    if (!variable) {
+      return errorResult(new Error("unreal_trace_variable needs a variable name: pass `variable` (or `variableName`)."));
+    }
     try {
       return jsonResult(await bridge.send("trace_variable", { variable, pathPrefix }));
     } catch (err) {
@@ -6015,7 +6034,11 @@ register(
       actions: z
         .array(
           z.object({
-            function: z.string().describe('Function to call, e.g. "PrintString".'),
+            function: z.string().optional().describe('Function to call, e.g. "PrintString".'),
+            // Six tools spell this `functionName`, so it is accepted here too - see
+            // scripts/check-param-names.mjs. A model that has read those six types `functionName`
+            // in this array and pays a failed call to learn a synonym.
+            functionName: z.string().optional().describe("Same as `function`."),
             className: z.string().optional().describe('Owning class, e.g. "KismetSystemLibrary". Looked up if omitted.'),
             params: z
               .record(engineValue)
@@ -6028,8 +6051,17 @@ register(
     },
   },
   async ({ path, graphName, event, actions, compile }) => {
+    // One shape reaches the builder, whichever spelling arrived. Refused here rather than deeper,
+    // so the caller is told which entry is missing a name instead of the builder failing on it.
+    const normalisedActions = (actions ?? []).map((a, i) => {
+      const fn = a.function ?? a.functionName;
+      if (!fn) {
+        throw new Error(`action ${i + 1} has no function name: give it \`function\` (or \`functionName\`).`);
+      }
+      return { ...a, function: fn };
+    });
     try {
-      const result = await addEventHandler(bridge, path, graphName ?? "EventGraph", event, actions, { compile });
+      const result = await addEventHandler(bridge, path, graphName ?? "EventGraph", event, normalisedActions, { compile });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
@@ -6084,7 +6116,8 @@ register(
             actions: z
               .array(
                 z.object({
-                  function: z.string(),
+                  function: z.string().optional(),
+                  functionName: z.string().optional(),
                   className: z.string().optional().describe("Looked up in the live engine when omitted."),
                   params: z.record(engineValue).optional(),
                 })
@@ -6107,7 +6140,18 @@ register(
         // keeps finding and would have introduced by fixing only half the surface.
         variables: normaliseFieldTypes(variables),
         components,
-        handlers,
+        // Same normalisation as unreal_add_event_handler: whichever spelling arrived, one shape
+        // reaches the builder.
+        handlers: (handlers ?? []).map((h) => ({
+          ...h,
+          actions: (h.actions ?? []).map((a, i) => {
+            const fn = a.function ?? a.functionName;
+            if (!fn) {
+              throw new Error(`handler "${h.event}" action ${i + 1} has no function name: give it \`function\` (or \`functionName\`).`);
+            }
+            return { ...a, function: fn };
+          }),
+        })),
         save,
       });
       return jsonResult(result);

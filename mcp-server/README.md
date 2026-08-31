@@ -188,10 +188,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2008 | four tools; hand it a sentence or a preset name |
-| `minimal` | 4143 | ten tools, fixed, for a small local model |
-| `core` | 12768 | the authoring spine |
-| `lazy` | 12781 | `core` plus deferred groups |
-| `full` | 39271 | everything, for a model that can afford it |
+| `minimal` | 4156 | ten tools, fixed, for a small local model |
+| `core` | 12782 | the authoring spine |
+| `lazy` | 12795 | `core` plus deferred groups |
+| `full` | 39307 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6132,6 +6132,39 @@ The one-time payload also broke a reply budget, which was right to complain: `en
 is written for the repeated case at 200 tokens. Two different things were sharing one ceiling, so
 they are budgeted separately now — an ordinary enable is **57** tokens, the first authoring enable
 **334** — rather than raising a number until the check went quiet.
+
+### What using it on a real game taught it
+
+Driving these tools through actual bugs in a 356-Blueprint project surfaced things no internal trial
+had. Two are worth recording because they are about the *shape* of the surface, not any one tool.
+
+**I got a parameter name wrong three times in one session, on my own tools.**
+
+```text
+unreal_trace_variable        takes `variable`      six other tools take `variableName`
+unreal_trace_function_calls  takes `function`      six other tools take `functionName`
+```
+
+That is not carelessness. A model that has just read six tools taking `variableName` types
+`variableName` at the seventh, because that is what the surface taught it. Each miss cost a round
+trip — and this server's own standing instructions say *"never guess a name; a guess costs a failed
+call"*, which only holds up if the names do not need guessing at.
+
+The validation errors were genuinely good: they named the right parameter and said "Nothing ran".
+Good errors are the second line of defence; the first is not needing them. Both minority spellings
+are now accepted alongside the common one, and `check:params` fails when a tool uses a different name
+for a concept several others share without accepting theirs too.
+
+Writing that guard found **two more** I did not know about — `unreal_add_event_handler` and
+`unreal_scaffold_blueprint` take `function` inside their nested action objects. It would have been
+easy to scope the check to top-level parameters and watch it pass, which is the same "raise the
+number until it goes quiet" move this repo has refused elsewhere. They accept `functionName` now too.
+
+**A search that could not find what the engine calls things.** `unreal_find_node` searches the
+function catalogue, so `"Array Length"` returns zero hits and `"DoN"` returns unrelated matches — the
+array and macro nodes are not functions. A model looking for the Length node has no way to find it
+from here. Recorded rather than fixed: the catalogue is the right place for the fix, and it is a
+larger change than this section's other findings.
 
 ### The numbers a model reads are guarded too
 
