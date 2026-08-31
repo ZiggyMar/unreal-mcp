@@ -1154,7 +1154,7 @@ register(
       "This is the first tier of the tiered-read strategy: call this before unreal_read_blueprint_summary to decide " +
       "which graph is worth reading in full.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
     },
   },
   async ({ path }) => {
@@ -1191,7 +1191,7 @@ register(
       "Deliberately lossy: it names what happens, not exact pins or node ids. When you need those, call " +
       "unreal_read_blueprint_summary for the one chain you are changing.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe('Graph to explain. Defaults to "EventGraph".'),
       maxChains: z
         .number()
@@ -1271,7 +1271,7 @@ register(
       "unconnected pins are omitted. " +
       "Use unreal_read_node_detail for the full pin and property detail of one node id from this result.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),
       match: z
         .string()
@@ -1314,7 +1314,7 @@ register(
       "identified by the node id returned from unreal_read_blueprint_summary. Use sparingly: this is the most " +
       "verbose tier of the tiered-read strategy and should follow a summary read, not replace it.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe('Node id as returned by unreal_read_blueprint_summary, e.g. "n12".'),
     },
@@ -1407,7 +1407,7 @@ register(
       "roughly left-to-right in execution order so the graph stays readable to a human. comment is an optional " +
       "annotation shown on the node; use it to explain WHY a node exists, as you place it.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
       nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
@@ -1484,7 +1484,7 @@ register(
       "node ids come from unreal_read_blueprint_summary or unreal_add_node. Fails with incompatible_pins if the schema " +
       "rejects the connection (e.g. mismatched data types). The error message explains why.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph name containing both nodes."),
       sourceNodeId: z.string().describe("Node id (GUID) owning the OUTPUT pin."),
       sourcePin: z.string().describe('Output pin name on the source node, e.g. "then" or "ReturnValue".'),
@@ -1517,7 +1517,7 @@ register(
       "Sets a literal (string-serialized) default value on an input pin, e.g. setting a float literal to \"1.5\" or a " +
       "bool literal to \"true\". Fails with pin_is_connected if the pin already has a link: disconnect it first.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe("Node id (GUID) of the node owning the pin."),
       pinName: z.string().describe("Input pin name."),
@@ -1546,7 +1546,7 @@ register(
     title: "Remove a node from a Blueprint graph",
     description: "Removes a node by id and breaks all of its pin links first. Does not recompile. Call unreal_compile_blueprint afterward.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe('Node id, e.g. "n5".'),
     },
@@ -1570,7 +1570,7 @@ register(
       "double, string, name, text, vector, rotator, transform, or object:<ClassName> / class:<ClassName> for object " +
       "references. Fails if a variable with that name already exists on this Blueprint.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       variableName: z.string().describe("New variable name."),
       type: z
         .string()
@@ -1625,7 +1625,7 @@ register(
       "already exist, reusing it if it does. Only variables the Blueprint declares itself can change; an inherited " +
       "one is reported with the class that actually owns it.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       variableName: z.string().describe("Variable to change. unreal_list_variables names the ones this Blueprint has."),
       mode: z
         .enum(["none", "replicated", "repnotify"])
@@ -1655,7 +1655,7 @@ register(
       "before telling the user it's done, since a graph can look structurally fine (nodes added, pins connected) " +
       "and still fail to compile (type mismatches, missing pins, unresolved variables, etc).",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
     },
   },
   async ({ path }) => {
@@ -1676,7 +1676,7 @@ register(
       "Saves the Blueprint's package to disk in place. Edits made via unreal_add_node/unreal_connect_pins/etc exist " +
       "only in the running editor's memory until this is called (or unreal_create_blueprint's default save=true ran).",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
     },
   },
   async ({ path }) => {
@@ -1905,7 +1905,7 @@ register(
       "10-node graph costs 1 round trip instead of ~25, and a human can undo the whole feature with one Ctrl+Z. " +
       "Errors name the failing ref or index and include available pin names or didYouMean suggestions.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph to build in, e.g. "EventGraph" or a function graph name.'),
       nodes: z
         .array(
@@ -2168,7 +2168,7 @@ register(
       "invalid cast target) which need a CoreRedirect or deletion instead. Recompiles by default and reports the " +
       "before/after error count so you can see what cleared.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/UI/W_Healthbar.W_Healthbar".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       compile: z.boolean().optional().describe("Recompile after refreshing. Defaults to true."),
     },
   },
@@ -2194,7 +2194,7 @@ register(
       "set to this name and no className. Type strings are the same compact descriptors unreal_add_variable uses " +
       '("bool", "int", "float", "string", "vector", "object:<Class>", "struct:<Struct>", "enum:<Enum>", ...).',
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       functionName: z.string().describe('Name for the new function, e.g. "HandleDamage". Fails if a graph with this name exists.'),
       inputs: z
         .array(z.object({ name: z.string(), type: z.string() }))
@@ -2236,7 +2236,7 @@ register(
       "Use comment boxes to group each logical section of a graph and node comments to explain non-obvious choices. " +
       "Positions are cosmetic to the compiler but matter to the human who opens the graph next.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph to organize."),
       action: z.enum(["set_node_comment", "add_comment_box", "move_node"]),
       nodeId: z.string().optional().describe("Required for set_node_comment and move_node."),
@@ -2430,7 +2430,7 @@ register(
       "exact parent name. Configure the new component with unreal_set_component_property, then " +
       "unreal_compile_blueprint and unreal_save_blueprint.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       componentClass: z.string().describe('Component class, e.g. "StaticMeshComponent", "SphereComponent", "CameraComponent", "SpringArmComponent", "AudioComponent".'),
       name: z.string().describe('Name for the component as it appears in the Components panel, e.g. "PickupCollision".'),
       parent: z.string().optional().describe("Existing component name to attach under. Defaults to the Blueprint's root component."),
@@ -2463,7 +2463,7 @@ register(
       "when it is not the type's zero** - no `defaultValue` means 0, False, \"\", None or () as the type dictates. On a real " +
       "86-variable Blueprint that is 53 of the defaults and 44% of what the flags used to cost.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       match: z
         .string()
         .optional()
@@ -2566,7 +2566,7 @@ register(
       "parent, or before unreal_set_component_property to get the exact component name, rather than guessing " +
       'names like "Mesh" or "Root".',
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
     },
   },
   async ({ path }) => {
@@ -2591,7 +2591,7 @@ register(
       "setting None, so a bad path is reported instead of shipping a broken Blueprint. Get exact component names " +
       "from unreal_list_components and verify asset paths with unreal_list_assets.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       component: z.string().describe("Component name, exactly as returned by unreal_list_components."),
       property: z.string().describe('Property name, e.g. "StaticMesh", "SphereRadius", "FieldOfView", "bGenerateOverlapEvents".'),
       value: engineValue.describe('The value. A number or boolean is accepted and stringified; anything structured is spelled the Unreal way: an asset path, or "(X=0,Y=0,Z=100)".'),
@@ -2845,7 +2845,7 @@ register(
       "movement defaults, or set the default value of any inherited variable. Same string coercion and same " +
       "fail-loudly-on-unresolved-asset behavior as unreal_set_component_property.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       property: z.string().describe('Property name on the class, e.g. "bReplicates", "NetUpdateFrequency", "InitialLifeSpan".'),
       value: engineValue.describe('The value. A number or boolean is accepted and stringified; anything structured is spelled the Unreal way: an asset path or a struct literal.'),
     },
@@ -3342,7 +3342,7 @@ register(
       "between output that compiles and output someone is happy to inherit. unreal_build_graph already applies the " +
       "positioning half automatically; call this to also get the comment boxes, or to tidy a graph built any other way.",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph to lay out, e.g. "EventGraph" or a function graph name.'),
       addCommentBoxes: z
         .boolean()
@@ -3391,7 +3391,7 @@ register(
       "costs about a fifth of the reply. `cleanGraphs` lists the graphs that were read and had nothing wrong, so " +
       "\"checked and clean\" stays distinguishable from \"never looked at\".",
     inputSchema: {
-      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe("Review only this graph. Omit to review every graph in the Blueprint."),
     },
   },
@@ -3960,7 +3960,7 @@ register(
       "of the same name, so this rebinds that variable too - setting the name any other way leaves every node " +
       "that used the component pointing at a name that is gone.",
     inputSchema: {
-      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       component: z.string().describe('Current component name, e.g. "Sphere".'),
       newName: z.string().describe('New name, e.g. "InteractionRange".'),
       save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
@@ -3985,7 +3985,7 @@ register(
       "rather than deleted, and the number is reported - the editor does the same thing silently, which is how " +
       "a subtree disappears without anyone noticing.",
     inputSchema: {
-      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       component: z.string().describe("The component to remove."),
       save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
     },
@@ -4009,7 +4009,7 @@ register(
       "count, because removing it leaves those calls broken - the same rule unreal_remove_variable and " +
       "unreal_delete_asset apply. Pass force:true when that is what you mean.",
     inputSchema: {
-      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       functionName: z.string().describe("The function to remove. An event is not a function; use unreal_remove_node for those."),
       force: z.boolean().optional().describe("Remove it even though calls remain, leaving them broken. Off by default."),
       save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
@@ -4036,7 +4036,7 @@ register(
       "was looking at. Reports how many nodes were updated and which graphs they were in.\n\n" +
       "Only variables the Blueprint itself declares. One inherited from a C++ parent has to change in the parent.",
     inputSchema: {
-      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       variableName: z.string().describe('Current name, e.g. "FireRate".'),
       newName: z.string().describe('New name, e.g. "RateOfFire".'),
       save: z.boolean().optional().describe("Save afterwards. Defaults to true; an unsaved rename reverts on restart."),
@@ -4064,7 +4064,7 @@ register(
       "Pass force:true when deleting the nodes is what you actually mean. Only variables the Blueprint itself " +
       "declares; an inherited one has to change in the parent class.",
     inputSchema: {
-      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       variableName: z.string().describe("The variable to remove."),
       force: z.boolean().optional().describe("Remove it even though nodes still use it, deleting those nodes. Off by default."),
       save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
@@ -5805,7 +5805,7 @@ register(
       "It is not a design decision: moving the state onto the GameState is often the better answer, and this cannot " +
       "know that.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph containing the node, e.g. "EventGraph".'),
       nodeId: z.string().describe("Node id from unreal_read_blueprint_summary. A leading prefix is enough."),
       dryRun: z.boolean().optional().describe("Report the edit without making it."),
@@ -5838,7 +5838,7 @@ register(
       "that leaves work on the table, because whoever runs it is least able to notice. Pass dryRun to see what " +
       "would change first.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       removeDeadNodes: z.boolean().optional().describe("Remove nodes connected to nothing. Defaults to true; they cannot affect behaviour."),
       labelSections: z.boolean().optional().describe("Lay out the graph and wrap each execution chain in a titled comment box. Defaults to true; purely cosmetic."),
       dryRun: z.boolean().optional().describe("Report what would change without changing anything. Defaults to false."),
@@ -5866,7 +5866,7 @@ register(
       "not have is refused before anything is built. Everything lands in one atomic call. " +
       "For branches, loops, or wiring one node's output into another's input, use unreal_build_graph.",
     inputSchema: {
-      path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe('Graph to build in. Defaults to "EventGraph".'),
       event: z
         .string()

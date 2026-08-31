@@ -188,10 +188,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2292 | four tools; hand it a sentence or a preset name |
-| `minimal` | 4014 | ten tools, fixed, for a small local model |
-| `core` | 12590 | the authoring spine |
-| `lazy` | 12603 | `core` plus deferred groups |
-| `full` | 38282 | everything, for a model that can afford it |
+| `minimal` | 4008 | ten tools, fixed, for a small local model |
+| `core` | 12578 | the authoring spine |
+| `lazy` | 12591 | `core` plus deferred groups |
+| `full` | 38288 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -5052,6 +5052,40 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### Looking for waste in the presets, and not finding it
+
+If standing context is the dominant cost, the presets are the answer to it — so a fat preset would
+undermine the whole strategy. `diagnose` costs 10,070 tokens against `core`'s 10,443, which looked
+like a preset buying almost nothing.
+
+It is not fat. It enables 29 tools averaging 347 tokens, the distribution is flat, and every entry
+carries the reason it was added — most of them earned from a real failure ("added because
+trial:diagnose --by-preset failed without it… a tool whose entire job is finding something wrong,
+absent from the preset for finding things wrong"). The one large entry, `build_graph` at 9%, is there
+deliberately: *"the fix half. A preset that can only diagnose leaves the model to enable more before
+it can act on what it just found."*
+
+**A negative result worth recording**, because the instinct on seeing 29 tools is to trim, and the
+trimming would have cost the preset its ability to fix what it finds.
+
+What the measurement did turn up was a different problem. The `path` parameter is described **five
+different ways** across the surface:
+
+```text
+15x  "Full asset path of the Blueprint, e.g. /Game/Blueprints/BP_Foo.BP_Foo."
+ 9x  "Blueprint asset path, e.g. /Game/Blueprints/BP_Player.BP_Player."
+ 5x  "The Blueprint, e.g. /Game/Player/BP_Player."
+```
+
+Three phrasings for one concept, and they disagree about something that matters: two insist on the
+**full** path while the third shows the **short** form. Both work — path normalisation accepts either,
+along with the `_C` class path and `/Content/` — and no parameter description said so, so a model
+reading "Full asset path" would reasonably conclude the short form is invalid.
+
+All 31 now read `Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.` Net effect on
+tokens is a wash — `core` down 12, `full` up 6 — so this is a correctness change wearing a token
+change's clothes, and worth saying so rather than claiming a saving it did not make.
 
 ### The biggest token lever was never mentioned to the profile that needed it
 
