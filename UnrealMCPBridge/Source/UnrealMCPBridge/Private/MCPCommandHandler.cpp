@@ -649,6 +649,35 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 		}
 	}
 
+	// The C++ spelling: strip an Unreal prefix rather than add one.
+	//
+	// The comment above says the prefixes are a fallback "for a caller who writes the C++ spelling",
+	// and adding a prefix is the opposite of what that needs. Somebody who has read a header has
+	// `ACharacter`, `AAVSGameState`, `UUserWidget` - and every one of those failed, because
+	// UClass::GetName() carries no prefix and the resolver only ever tried making the name longer.
+	//
+	// ACharacter failing is the sharp end of it. It is the most common class name in Unreal C++, it
+	// is what every tutorial and every header writes, and it is what find_source now hands back after
+	// resolving a Blueprint's parentClass - so the two tools disagreed about the same class.
+	//
+	// Safe because the EXACT name is tried first, several attempts ago. Stripping only runs when no
+	// class is actually called `AFoo`, so there is no case where it can shadow a real one. The
+	// uppercase check is what keeps it from mangling ordinary names: `ACharacter` is A + C, while
+	// `Actor` is A + lowercase and is left alone.
+	if (ClassName.Len() >= 3 && FChar::IsUpper(ClassName[1]))
+	{
+		const TCHAR Prefix = ClassName[0];
+		if (Prefix == TEXT('A') || Prefix == TEXT('U') || Prefix == TEXT('F') || Prefix == TEXT('E')
+			|| Prefix == TEXT('I') || Prefix == TEXT('S') || Prefix == TEXT('T'))
+		{
+			const FString Stripped = ClassName.Mid(1);
+			if (UClass* Found = FindFirstObject<UClass>(*Stripped, EFindFirstObjectOptions::None, ELogVerbosity::NoLogging))
+			{
+				return Found;
+			}
+		}
+	}
+
 	// A Blueprint's generated class is its asset name plus "_C", and the name that appears in a
 	// graph - "Cast To GM_Gameplay" - is the asset name. Trying the suffix here means the name a
 	// caller actually has in hand resolves, rather than only the one the engine uses internally.
@@ -662,7 +691,8 @@ UClass* FMCPCommandHandler::ResolveClassByName(const FString& ClassName, FString
 	}
 
 	OutError = FString::Printf(
-		TEXT("class_not_found: %s (tried the short name, A/U prefixes, and the _C form a Blueprint class ")
+		TEXT("class_not_found: %s (tried the short name, A/U prefixes, the C++ spelling with its prefix ")
+		TEXT("removed, and the _C form a Blueprint class ")
 		TEXT("uses; try a full path like /Script/Engine.%s or /Game/Folder/%s.%s_C)"),
 		*ClassName, *ClassName, *ClassName, *ClassName);
 	return nullptr;

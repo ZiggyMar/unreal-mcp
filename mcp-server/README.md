@@ -1924,6 +1924,49 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The same prefix problem in the other direction, and worse
+
+Having fixed `find_source` to return `AAVSGameState`, the obvious next question was what happens when
+that name is fed to the next tool:
+
+```text
+describe_class("AVSGameState")   OK
+describe_class("AAVSGameState")  class_not_found
+describe_class("Character")      OK
+describe_class("ACharacter")     class_not_found
+```
+
+**`ACharacter` is the most common class name in all of Unreal C++.** It is what every header writes,
+what every tutorial writes, and - as of the previous commit - what `find_source` hands back. The two
+tools disagreed about the same class.
+
+`UClass::GetName()` carries no prefix, so reflection knows it as `Character`. The resolver tried
+*adding* `A` and `U`, and its own comment said those were a fallback "for a caller who writes the C++
+spelling" - which is precisely the case that needs a prefix **removed**. The code did the opposite of
+what its comment intended.
+
+It strips now, and the ordering is what makes that safe: the exact name is tried several attempts
+earlier, so stripping only runs when nothing is actually called `AFoo` and there is no real class it
+can shadow. The uppercase check keeps it from mangling ordinary names - `ACharacter` is A followed by
+a capital, while `Actor` is A followed by lowercase and is left alone.
+
+That fix is in the bridge, where it covers every call site that takes a class name: `add_node`'s
+`className`, `create_blueprint`'s `parentClass`, `spawn_actor`'s `actorClass`, a Cast's
+`targetClass`. It is also dark until the plugin is rebuilt - and `find_source` is handing back
+prefixed names *now*. So `describe_class` carries the same retry on this side:
+
+```text
+ACharacter     -> Character       (foundAs reported)
+AAVSGameState  -> AVSGameState
+UUserWidget    -> UserWidget
+Nonexistent    -> still class_not_found, not a guess
+```
+
+Transitional, and the same shape as reading both `container` and the older `isArray`: it fires only
+on `class_not_found` and only for a name that looks like a C++ spelling, so once the plugin catches
+up it costs one comparison and never runs. A test asserts the bridge half exists, so the shim can be
+removed on purpose rather than forgotten.
+
 ### The C++ leg's entry point could not find a class from its Blueprint's parentClass
 
 The fourth leg, same method. A change request against C++ starts by finding where something is

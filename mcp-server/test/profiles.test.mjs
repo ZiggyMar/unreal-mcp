@@ -507,3 +507,43 @@ test("one data table row can be read by name, in full, without paging to it", ()
   // not know what the row is called.
   assert.match(handler, /rowNames/, "a name that matches nothing must say which names exist");
 });
+
+test("a class read out of a C++ header resolves, prefix and all", () => {
+  // The mirror of the find_source fix, and worse. UClass::GetName() carries no prefix, so
+  // describe_class("ACharacter") failed - the most common class name in all of Unreal C++, what
+  // every header and every tutorial writes, and what find_source now hands back after resolving a
+  // Blueprint's parentClass. The two tools disagreed about the same class.
+  //
+  // The bridge strips prefixes now. This checks the transitional shim on this side, which is what
+  // makes the chain work against a plugin older than the server - the same reason asTypeDescriptor
+  // reads both `container` and the older `isArray`.
+  const source = readFileSync(join(REPO_ROOT, "mcp-server/src/index.ts"), "utf8").replace(/\r\n/g, "\n");
+  const NEEDLE = `register(\n  "unreal_describe_class"`;
+  const start = source.indexOf(NEEDLE);
+  assert.ok(start > 0, "could not find the describe_class registration");
+  const handler = source.slice(start, source.indexOf(`\nregister(`, start + 10));
+
+  // Only on class_not_found, and only for a name that actually looks prefixed. Retrying every
+  // failure would turn a typo into a different class quietly.
+  assert.match(handler, /class_not_found/, "the retry must be gated on the specific failure");
+  assert.match(handler, /\[AUFEIST\]\[A-Z\]/, "and on the name looking like an Unreal C++ spelling");
+  assert.match(handler, /foundAs/, "and must say which name it actually resolved");
+});
+
+test("the bridge resolves the C++ spelling too, so the shim can eventually go", () => {
+  // The shim covers one tool. The resolver covers every call site that takes a class name -
+  // add_node's className, create_blueprint's parentClass, spawn_actor's actorClass, Cast's
+  // targetClass - so the fix belongs there and the shim is the transitional half.
+  const handler = readFileSync(
+    join(REPO_ROOT, "UnrealMCPBridge/Source/UnrealMCPBridge/Private/MCPCommandHandler.cpp"),
+    "utf8"
+  ).replace(/\r\n/g, "\n");
+  const resolver = handler.slice(handler.indexOf("UClass* FMCPCommandHandler::ResolveClassByName"));
+  const body = resolver.slice(0, resolver.indexOf("\n}\n"));
+  assert.match(body, /ClassName\.Mid\(1\)/, "the resolver must try the name with its prefix removed");
+  // The exact name has to be tried first, or stripping could shadow a class genuinely called AFoo.
+  assert.ok(
+    body.indexOf('Prefixes[] = { TEXT("")') < body.indexOf("ClassName.Mid(1)"),
+    "the exact name must be tried before any stripping"
+  );
+});

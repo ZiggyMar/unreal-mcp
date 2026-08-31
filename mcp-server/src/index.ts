@@ -2600,7 +2600,32 @@ register(
   },
   async ({ className }) => {
     try {
-      return jsonResult(await bridge.send("describe_class", { className }));
+      try {
+        return jsonResult(await bridge.send("describe_class", { className }));
+      } catch (err) {
+        // The C++ spelling, against a plugin that does not know it yet.
+        //
+        // UClass::GetName() carries no prefix, so `ACharacter` and `AAVSGameState` fail while
+        // `Character` and `AVSGameState` work. The bridge strips prefixes now, but the plugin inside
+        // a running editor is routinely older than this server - and find_source hands back exactly
+        // those prefixed names, so the two tools would disagree about the same class until a rebuild.
+        //
+        // Transitional, like reading both `container` and the older `isArray`. It fires only on
+        // class_not_found, so once the plugin catches up this costs one comparison and never runs.
+        const message = err instanceof Error ? err.message : String(err);
+        const prefixed = /^[AUFEIST][A-Z]/.test(className) && className.length >= 3;
+        if (!/class_not_found/.test(message) || !prefixed) throw err;
+        const stripped = className.slice(1);
+        const result = await bridge.send("describe_class", { className: stripped });
+        return jsonResult({
+          ...(result as Record<string, unknown>),
+          foundAs: stripped,
+          note:
+            `Nothing is registered as "${className}"; this is "${stripped}". Unreal's C++ prefixes ` +
+            `(A, U, F, E, I) are not part of the name reflection knows, so a class read out of a ` +
+            `header needs its prefix dropped here.`,
+        });
+      }
     } catch (err) {
       return errorResult(err);
     }
