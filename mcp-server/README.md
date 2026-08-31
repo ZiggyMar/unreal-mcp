@@ -28,6 +28,7 @@ written down next to the measurement that caused it.
 
 
 
+
 **Reference and rationale**
 [Tools exposed](#tools-exposed) — the full tool table, then the design notes. Start with
 *Tool profiles: paying only for what you use* if you care about context cost, *Security* if you are
@@ -5051,6 +5052,40 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### The prose inside the server was the last unguarded text
+
+The Epic check first, since it is a standing item: nothing new. Still the 5.8 experimental plugin,
+still Tool Search mode, still loopback-only with no auth, and still *"MCP Resources and Prompts are
+not advertised by any shipping toolset."*
+
+That last line pointed at a surface here nobody had looked at. This server **does** advertise three
+prompts — `unreal_handbook`, `unreal_recipes`, `unreal_workflow` — and they turn out to be current:
+the routing section added two sections ago flows through into `/unreal_workflow` automatically,
+because the prompt serves the file rather than a copy of it.
+
+What that trail did turn up is the last piece of unguarded text in the project. Four documents were
+already checked for tools that do not exist — the README, the complaint matrix, the workflow guide,
+and the guide documents. **`src/index.ts` was not**, and it carries three kinds of prose that name
+tools:
+
+- the **standing instructions**, read by every model before its first call;
+- the **reply hints**, read at the moment a model is deciding what to do next;
+- the **fallback text** served when the docs folder is missing — which is exactly when someone most
+  needs the names to be right.
+
+117 tool mentions, 0 phantom today, and nothing would have noticed a rename. Now guarded, verified by
+introducing one and watching it fail.
+
+That guard immediately found a second thing: **`check:docs` was already failing**, and it was mine.
+The contents check added last session scans `^## ` lines, and the section above quotes the old heading
+layout in a fenced code block — so it demanded the contents list five headings that do not exist. A
+documentation check tripped by documentation, and the same *matched a mention rather than a use*
+mistake this repo keeps making. Code blocks are now stripped before the scan.
+
+Worth being plain about how that slipped through: last session's verification piped `check:docs`
+through `tail -1`, which showed the *last* line rather than the failure above it. A check whose output
+you truncate is a check you are not reading.
 
 ### 97% of the README was one section
 

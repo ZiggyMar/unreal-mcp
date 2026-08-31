@@ -60,6 +60,17 @@ const mentionedIn = (text, label) => {
     );
   }
 };
+// The prose INSIDE the server, which is the highest-leverage text here and was the last unchecked.
+//
+// index.ts carries three kinds of writing that name tools: the standing instructions every model
+// reads before its first call, the reply hints a model reads at the moment it is deciding what to do
+// next, and the fallback text served when the docs folder is missing - which is exactly when someone
+// most needs the names to be right.
+//
+// The README, the complaint matrix, the workflow doc and the guide documents were all guarded. This
+// one, read on every single request, was not. A renamed tool would have told every model to call
+// something that does not exist, in the one place nobody can skip.
+mentionedIn(serverSrc, "mcp-server/src/index.ts (instructions, hints and fallbacks)");
 mentionedIn(serverReadme, "mcp-server/README.md");
 mentionedIn(complaints, "docs/COMPLAINTS_SOLVED.md");
 mentionedIn(workflow, "docs/AGENT_WORKFLOW.md");
@@ -74,7 +85,14 @@ mentionedIn(workflow, "docs/AGENT_WORKFLOW.md");
 // list, and the map stops matching the territory. Every other index in this repo learned that the
 // hard way, so this one is checked from the start.
 {
-  const topLevel = [...serverReadme.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((h) => h !== "Contents");
+  // Headings, not lines that look like headings.
+  //
+  // The first version scanned the raw file, and this very section quotes the old layout in a fenced
+  // block - "## Tools exposed            line 60" and four more - so the guard demanded the contents
+  // list five headings that do not exist. A documentation check tripped by documentation, and the
+  // same "matched a mention rather than a use" mistake this repo keeps making in other files.
+  const withoutCode = serverReadme.replace(/```[\s\S]*?```/g, "");
+  const topLevel = [...withoutCode.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((h) => h !== "Contents");
   const contents = new RegExp("## Contents([\\s\\S]*?)\\n## ").exec(serverReadme);
   if (!contents) {
     problems.push("README.md has no Contents section - 154 sections with no way in is not documentation");
