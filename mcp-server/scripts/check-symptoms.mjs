@@ -39,15 +39,22 @@ const named = new Set();
 for (const block of symptomSource.matchAll(/tools:\s*\[([^\]]*)\]/g)) {
   for (const tool of block[1].matchAll(/"([^"]+)"/g)) named.add(tool[1]);
 }
-// The intent lists are recommendations too, and the first version of this guard did not look at
-// them. Adding unreal_find_in_data_tables to CHANGE_TOOLS passed a check that reported "all
-// registered" - because the guard was reading one of the three lists it exists to protect.
-for (const list of ["BUILD_TOOLS", "CHANGE_TOOLS"]) {
+// The intent lists are recommendations too. Widened twice, and the second time by finding the lists
+// rather than naming them.
+//
+// It first read only SYMPTOMS[].tools, and adding unreal_find_in_data_tables to CHANGE_TOOLS passed
+// a check that reported "all registered". So BUILD_TOOLS and CHANGE_TOOLS were named explicitly -
+// and then RENAME_TOOLS and REMOVE_TOOLS were added and it was silently checking two lists out of
+// four again, verified by putting a typo in one and watching this print ok.
+//
+// A guard that has to be edited whenever the thing it guards grows will keep being a step behind.
+const listNames = [...symptomSource.matchAll(/const ([A-Z_]*TOOLS)\s*=\s*\[/g)].map((m) => m[1]);
+if (listNames.length === 0) {
+  problemsEarly.push("no *_TOOLS list found in symptoms.ts - this guard has drifted from the file it checks");
+}
+for (const list of listNames) {
   const block = new RegExp("const " + list + "\\s*=\\s*\\[([^\\]]*)\\]").exec(symptomSource);
-  if (!block) {
-    problemsEarly.push(`${list} was not found in symptoms.ts - this guard has drifted from the file it checks`);
-    continue;
-  }
+  if (!block) continue;
   for (const tool of block[1].matchAll(/"([^"]+)"/g)) named.add(tool[1]);
 }
 
@@ -88,5 +95,5 @@ if (problems.length > 0) {
 
 const phraseCount = entries.reduce((n, [, says]) => n + [...says.matchAll(/"[^"]*"/g)].length, 0);
 console.log(
-  `symptoms ok: ${entries.length} entries, ${phraseCount} phrases, ${named.size} tools recommended, all registered`
+  `symptoms ok: ${entries.length} entries, ${phraseCount} phrases, ${named.size} tools recommended across ${listNames.length} intent list(s), all registered`
 );

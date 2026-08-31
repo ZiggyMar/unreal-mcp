@@ -237,3 +237,48 @@ test("the change advice does not repeat the claim that was wrong", async () => {
   assert.match(why, /find_in_data_tables/, "the tool that does cover them is named");
   assert.match(why, /list_components/, "and component properties are separated from class defaults");
 });
+
+test("a rename is routed to the tools that rename, not to four ways of finding it", async () => {
+  // "Rename FireRate to RateOfFire" is the sentence this whole index was built against. It was
+  // routed correctly as a change, handed four tools that FIND things, and advice naming
+  // set_data_table_row and set_class_default - none of which renames anything. The answer was:
+  // here is how to locate it, and then nothing.
+  //
+  // That gap was real until rename_variable and rename_asset existed. Then they were built and this
+  // file was not updated, so the routing still said the same thing while the tool it should have
+  // named sat one directory away. Building a capability and not telling the router leaves it
+  // unreachable for exactly the caller it was built for.
+  const found = matchSymptoms("rename FireRate to RateOfFire");
+  assert.equal(found.intent, "changing");
+  assert.equal(found.tools[0], "unreal_rename_variable", "the commonest case leads");
+  assert.ok(found.tools.includes("unreal_rename_asset"));
+  assert.match(found.because.join(" "), /rebinds the references/);
+});
+
+test("a removal is routed to the tools that refuse when something still uses it", async () => {
+  for (const said of ["delete the old health variable", "get rid of the unused sphere component", "remove the debug function"]) {
+    const found = matchSymptoms(said);
+    assert.equal(found.intent, "changing", said);
+    assert.ok(
+      ["unreal_remove_variable", "unreal_remove_function", "unreal_remove_component"].includes(found.tools[0]),
+      `"${said}" led with ${found.tools[0]}`
+    );
+  }
+});
+
+test("a value change still routes to the finders", async () => {
+  // The rename and remove routes are checked first, so this is the case that proves they did not
+  // swallow the general one.
+  const found = matchSymptoms("the machine gun should cost 500 instead of 300");
+  assert.equal(found.tools[0], "unreal_find_in_data_tables");
+});
+
+test("every intent list names only tools that exist", async () => {
+  // check:symptoms asserts this against the registry. Repeated here because that guard had to be
+  // widened twice - first to look at the intent lists at all, then to FIND them rather than be told
+  // their names, after RENAME_TOOLS and REMOVE_TOOLS were added and it silently checked two of four.
+  const fs = await import("node:fs");
+  const source = fs.readFileSync(new URL("../src/symptoms.ts", import.meta.url), "utf8");
+  const lists = [...source.matchAll(/const ([A-Z_]*TOOLS)\s*=\s*\[/g)].map((m) => m[1]);
+  assert.ok(lists.length >= 4, `expected at least four intent lists, found ${lists.join(", ")}`);
+});

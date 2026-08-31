@@ -4889,6 +4889,45 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### The tools existed and the routing never heard about them
+
+Three commits went into closing "it finds it and then cannot change it" — rename and remove for
+assets, variables, components and functions. Then the sentence that started it was asked again:
+
+```text
+"rename FireRate to RateOfFire"
+  intent: changing
+  tools : find_in_data_tables, search_project, trace_variable, find_source
+  advice mentions a rename tool: false
+```
+
+Four tools that **find** things, and advice naming `set_data_table_row` and `set_class_default` —
+none of which renames anything. The capability was built and the router was never told, so the answer
+was still *here is how to locate it, and then nothing*, with the tool that does the job sitting one
+directory away. **Building something and not telling the router leaves it unreachable for exactly the
+caller it was built for.**
+
+A rename and a removal are now their own routes inside the change intent, checked before the generic
+one:
+
+| said | leads with |
+|---|---|
+| "rename FireRate to RateOfFire" | `rename_variable`, `rename_asset`, `rename_component` |
+| "delete the old health variable" | `remove_variable`, `remove_function`, `remove_component` |
+| "the machine gun should cost 500" | `find_in_data_tables`, `search_project`, … |
+
+The reasons differ too, because the risks do. A rename is dangerous because everything that referred
+to the old name is left pointing at nothing — so the advice is that each of these *rebinds the
+references as it goes*. A removal is dangerous because of what still depends on the thing — so the
+advice is that each of these *refuses while something still references it, and names what does*.
+
+`check:symptoms` had to be widened a second time, and this time properly. It first read only
+`SYMPTOMS[].tools`; then `BUILD_TOOLS` and `CHANGE_TOOLS` were named explicitly; then `RENAME_TOOLS`
+and `REMOVE_TOOLS` arrived and it was silently checking two lists out of four — confirmed by putting
+a typo in one and watching it print `ok`. It now **finds** every `*_TOOLS` list rather than being told
+their names, because a guard that must be edited whenever the thing it guards grows will keep being a
+step behind. 26 tools checked before, 33 across 4 lists now.
+
 ### Finishing the lifecycle, and a trim that was not there
 
 The asymmetry is now closed: everything this server can create, it can also remove or rename.

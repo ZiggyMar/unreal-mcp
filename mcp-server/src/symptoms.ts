@@ -241,6 +241,41 @@ const CHANGING = [
  * unreal_find_in_data_tables, which did not exist: nothing in this server could answer "which table
  * has a row called X".
  */
+/**
+ * A rename and a removal are changes with a tool of their own, and the routing did not know.
+ *
+ * "Rename FireRate to RateOfFire" is the sentence this whole index was built against. It was routed
+ * correctly as a change, handed four tools that FIND things, and advice that named set_data_table_row
+ * and set_class_default - none of which renames anything. So the answer was: here is how to locate
+ * it, and then nothing.
+ *
+ * That gap was real until rename_variable and rename_asset existed. Then they were built, and this
+ * file was not updated, so the routing still said the same thing while the tool it should have named
+ * sat one directory away. Building a capability and not telling the router about it leaves the
+ * capability unreachable for exactly the caller it was built for.
+ */
+const RENAMING = ["rename", "renaming", "call it", "name it", "should be called", "change the name"];
+const REMOVING = ["remove", "removing", "delete", "deleting", "get rid of", "take out", "no longer need"];
+
+/** Renaming reaches for the tool that rebinds what referenced the old name, not for a value setter. */
+const RENAME_TOOLS = ["unreal_rename_variable", "unreal_rename_asset", "unreal_rename_component", "unreal_search_project"];
+
+const RENAME_BECAUSE =
+  "A rename is not a value change, and doing it by editing the thing directly is what breaks a " +
+  "project: every node, Blueprint and Data Table that referred to the old name is left pointing at " +
+  "something that no longer exists. Each of these rebinds the references as it goes. Which one " +
+  "depends on what is being renamed - unreal_rename_variable for a Blueprint variable (the commonest " +
+  "case), unreal_rename_component for a component, unreal_rename_asset for the asset itself, which " +
+  "also moves it if you give newFolder. If you do not yet know which, unreal_search_project finds it.";
+
+const REMOVE_TOOLS = ["unreal_remove_variable", "unreal_remove_function", "unreal_remove_component", "unreal_delete_asset"];
+
+const REMOVE_BECAUSE =
+  "Removing something that other things still use is the risk here, so each of these refuses while " +
+  "anything still references what you are deleting and names what does - a variable still read by a " +
+  "graph, a function still called, an asset still referenced. That refusal is the useful part: pass " +
+  "force only when deleting the dependents is what you actually mean.";
+
 const CHANGE_TOOLS = ["unreal_find_in_data_tables", "unreal_search_project", "unreal_trace_variable", "unreal_find_source"];
 
 const CHANGE_BECAUSE =
@@ -325,9 +360,22 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
   // tools that plan against what exists, then the tools for that part of the engine.
   // Change before build: "make the health upgrade cost more" says both, and only the change reading
   // is right. A request to build something that already exists is the expensive mistake here.
-  const changeWord = CHANGING.find((phrase) => saysIt(said, phrase));
+  // A rename or a removal is a change with its own tool, so those are checked first and lead. The
+  // generic change route is for a VALUE change, and it answers a rename with four ways to find the
+  // thing and no way to rename it.
+  const renameWord = RENAMING.find((phrase) => saysIt(said, phrase));
+  const removeWord = renameWord ? undefined : REMOVING.find((phrase) => saysIt(said, phrase));
+  const changeWord = renameWord ?? removeWord ?? CHANGING.find((phrase) => saysIt(said, phrase));
   const buildWord = changeWord ? undefined : BUILDING.find((phrase) => saysIt(said, phrase));
-  if (changeWord) {
+  if (renameWord) {
+    matched.push(renameWord);
+    because.push(RENAME_BECAUSE);
+    tools.push(...RENAME_TOOLS);
+  } else if (removeWord) {
+    matched.push(removeWord);
+    because.push(REMOVE_BECAUSE);
+    tools.push(...REMOVE_TOOLS);
+  } else if (changeWord) {
     matched.push(changeWord);
     because.push(CHANGE_BECAUSE);
     tools.push(...CHANGE_TOOLS);
