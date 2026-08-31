@@ -49,6 +49,9 @@ private:
 	static TSharedRef<FJsonObject> HandleSetVariableReplication(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleWatchRuntime(const TSharedPtr<FJsonObject>& Params);
 
+	/** Level Sequences, in MCPSequence.cpp: what a cutscene animates, and how one silently does nothing. */
+	static TSharedRef<FJsonObject> HandleReadLevelSequence(const TSharedPtr<FJsonObject>& Params);
+
 	/** Enhanced Input, in MCPInput.cpp: the input system every modern Unreal project actually uses. */
 	static TSharedRef<FJsonObject> HandleReadInputContext(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleMapInputKey(const TSharedPtr<FJsonObject>& Params);

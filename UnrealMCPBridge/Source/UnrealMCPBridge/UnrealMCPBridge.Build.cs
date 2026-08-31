@@ -49,7 +49,13 @@ public class UnrealMCPBridge : ModuleRules
 			// plugin module, not an editor one, so reading a mapping context costs no editor
 			// machinery - and the legacy project-settings path this bridge already had returns
 			// nothing at all on a project that uses it, which is most of them.
-			"EnhancedInput"
+			"EnhancedInput",
+			// Level Sequences. MovieScene is the data model and LevelSequence is the asset; both are
+			// runtime modules, so reading a cutscene costs no editor machinery. Added after checking
+			// Epic's own toolset list against this project asset class by asset class: Control Rig
+			// zero, State Tree zero, Gameplay Ability System zero, Level Sequences nine.
+			"MovieScene",
+			"LevelSequence"
 		});
 
 		// Live coding is Windows-only and is compiled out of some targets entirely, so it is asked for

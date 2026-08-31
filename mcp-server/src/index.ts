@@ -451,6 +451,9 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // Enhanced Input is its own group for the same reason animation and AI are. A project on legacy
   // input has three tools here that answer nothing, and one on Enhanced Input - which is most of
   // them - could not answer "what is W bound to" at all before these.
+  // Cinematics is its own group for the same reason animation and AI are: a project with no Level
+  // Sequences should not carry the definition, and one with nine wants it in reach.
+  cine: ["unreal_read_level_sequence"],
   input: [
     // All four together, including the legacy reader that used to sit in `scene`. Splitting them
     // would mean a model looking for input tools finds half of them, and enabling "input" would not
@@ -486,6 +489,7 @@ const GROUP_SUMMARY: Record<string, string> = {
   data: "Structs, Enums, and asset lookup",
   scene: "Levels, actors, components, class defaults, project settings, Play In Editor",
   input: "key bindings: Enhanced Input contexts - read what is bound, bind a key, unbind one - and the legacy reader",
+  cine: "Level Sequences: what a cutscene animates, and the bindings and tracks that quietly animate nothing",
   maintenance: "reference lookup, asset deletion, Refresh Nodes repair",
 };
 
@@ -2652,6 +2656,35 @@ register(
   async ({ path, graphName, functionName, dryRun }) => {
     try {
       return jsonResult(await callParentFirst(bridge, path, graphName, functionName, { dryRun }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_read_level_sequence",
+  {
+    title: "Read what a Level Sequence animates",
+    description:
+      "What a cutscene actually drives: the actors it binds, the tracks on each, and the tracks the sequence " +
+      "itself owns (camera cuts, fades, events).\n\n" +
+      "Shaped around the three ways a sequence looks correct and does nothing, because none of them is an error " +
+      "and each is visible in the editor only by scrolling to it and noticing an absence: **a binding with no " +
+      "tracks** (the actor is in the sequence and nothing animates it), **a track with no sections** (it is in the " +
+      "outliner with no keys, so it never evaluates), and **a muted track** (identical to working in every static " +
+      "read). Each is counted, and the counts are absent when zero.\n\n" +
+      "Reading the asset with unreal_read_asset_properties instead returns the raw export text of the MovieScene - " +
+      "a wall of GUIDs with the one interesting fact buried in it.",
+    inputSchema: {
+      path: z
+        .string()
+        .describe('Level Sequence path, e.g. "/Game/Cinematics/LS_Intro". Find them with unreal_list_assets className=LevelSequence.'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      return jsonResult(await bridge.send("read_level_sequence", { path }));
     } catch (err) {
       return errorResult(err);
     }

@@ -203,6 +203,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_describe_class` | `describe_class` | A class's real ancestry, and whether it is server-only. Ask before casting in a networked game. |
 | `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
+| `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
 | `unreal_map_input_key` | `map_input_key` | Bind a key to an Input Action, with modifiers. Refuses unknown keys and duplicates. |
 | `unreal_unmap_input_key` | `unmap_input_key` | Remove one key binding, and say so honestly when it was not bound. |
 | `unreal_get_game_settings` | `get_game_settings` | Read the default GameMode and map, plus the open level's override. |
@@ -1922,6 +1923,48 @@ wiring so a model would not have to get it right from prose.
 The finding now names the tool instead of describing the procedure, and the graph name is threaded
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
+
+### Checking Epic's toolset list against the project, class by class
+
+Epic now ships an official [Claude Code skills plugin](https://github.com/EpicGames/unreal-engine-skills-for-claude-code-plugin)
+for their MCP, and their 5.8 plugin exposes 30+ toolsets: Control Rig, Sequencer, State Trees,
+Gameplay Ability System, automation testing. The obvious reaction is to start building all of it.
+
+The useful reaction is to ask which of them the project actually uses:
+
+```text
+LevelSequence        9        ControlRig      0
+NiagaraSystem       15        StateTree       0
+WidgetBlueprint    152        GameplayAbility 0
+AnimBlueprint        6        DataTable      20
+```
+
+**Control Rig, State Trees and GAS are zero.** Not built, and that check cost one call. Level
+Sequences are **nine**, and nothing here could read one - so "the cutscene does not play" and "the
+camera does not move" had exactly one available answer: `read_asset_properties` on the asset, which
+returns the raw export text of a `UMovieScene`, a wall of GUIDs with the one interesting fact buried
+in it.
+
+`unreal_read_level_sequence` is shaped around the three ways a sequence looks correct and does
+nothing, because that is the class of bug this project exists to find:
+
+```text
+a binding with no tracks     the actor is in the sequence and nothing animates it
+a track with no sections     it is in the outliner with no keys, so it never evaluates
+a track with evaluation off  muted, which is identical to working in every static read
+```
+
+None of the three is an error. None is a warning. The sequence plays perfectly while doing less than
+it appears to, and in the editor each is visible only by scrolling to it and noticing an absence.
+Each is counted, and each count is absent when it is zero.
+
+Track class names lose the noise the same way modifier names do - `MovieScene3DTransformTrack`
+becomes `3DTransform`, because the field it sits in already says these are tracks.
+
+Epic's own skill turns out to be a thin wrapper - enable two plugins, start the server, use tool
+search - with no engine ground truth and no workflow discipline in it. The confirmation worth having
+is architectural: their default is three meta-tools rather than registering hundreds, which is the
+same conclusion the profile system reached here, arrived at independently.
 
 ### 306 tokens per request to avoid one 540-token call
 

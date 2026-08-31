@@ -1083,6 +1083,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleWatchRuntime(Params);
 	}
+	else if (Cmd == TEXT("read_level_sequence"))
+	{
+		Response = HandleReadLevelSequence(Params);
+	}
 	else if (Cmd == TEXT("read_input_context"))
 	{
 		Response = HandleReadInputContext(Params);
