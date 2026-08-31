@@ -561,6 +561,33 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 	TMap<FString, int32> FolderCounts;
 	TMap<FString, int32> ParentClassCounts;
 
+	// What the editor currently has, so the summary can notice when this index disagrees with it.
+	//
+	// This is the first call a model is told to make, and its numbers come from a cache rather than
+	// from the editor. The cache follows the asset registry's add/remove/rename events, which is
+	// right until something changes an asset by a path those events do not cover - and then the
+	// overview reports a project that no longer exists, with nothing to suggest checking.
+	//
+	// Found by pointing the tools at a real 356-Blueprint project and noticing that
+	// get_project_overview said 356 while list_blueprints said 355. One deleted asset. Neither number
+	// was checkable from the reply, and the honest answer to "which is right" was "ask a third tool".
+	//
+	// Counted rather than trusted, and reported when they differ: a stale count that says it is stale
+	// costs a caller one extra call, and a stale count that looks authoritative costs them the whole
+	// mental model they build on top of it.
+	int32 RegistryBlueprints = 0;
+	{
+		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FAssetData> Found;
+		FARFilter Filter;
+		Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+		Filter.bRecursiveClasses = true;
+		Filter.PackagePaths.Add(FName(TEXT("/Game")));
+		Filter.bRecursivePaths = true;
+		AssetRegistry.GetAssets(Filter, Found);
+		RegistryBlueprints = Found.Num();
+	}
+
 	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
 	{
 		const FMCPIndexBlueprint& BP = Pair.Value;
@@ -592,6 +619,16 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetNumberField(TEXT("blueprintCount"), Entries.Num());
+	if (RegistryBlueprints != Entries.Num())
+	{
+		Result->SetNumberField(TEXT("blueprintCountInEditor"), RegistryBlueprints);
+		Result->SetStringField(TEXT("indexDrift"),
+			FString::Printf(
+				TEXT("This summary is built from a cached index holding %d Blueprints, and the editor currently has %d. ")
+				TEXT("The counts and totals below describe the cache, so treat them as approximate. unreal_list_blueprints ")
+				TEXT("and unreal_list_assets read the editor directly and are authoritative."),
+				Entries.Num(), RegistryBlueprints));
+	}
 	Result->SetNumberField(TEXT("totalFunctions"), TotalFunctions);
 	Result->SetNumberField(TEXT("totalVariables"), TotalVariables);
 	Result->SetNumberField(TEXT("totalGraphs"), TotalGraphs);

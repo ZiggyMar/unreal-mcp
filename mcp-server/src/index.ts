@@ -1141,12 +1141,32 @@ register(
         // by raising maxResults, so the reply is the biggest one the tool ever sends and nothing was
         // truncated to warn them.
         const rows = needle ? filtered : all;
+        // `count` is how many are in THIS reply, and nothing else.
+        //
+        // The bridge sets count to the number it sent, then this server filters by `match` and left
+        // the field alone - so unreal_list_blueprints({match:"Player"}) returned 19 Blueprints and
+        // reported count: 355. A model asking how many Player Blueprints exist read 355, and no
+        // field anywhere said 19. Found by pointing the tools at a real project instead of a
+        // scratch one, where the filter matches everything and the bug cannot show.
+        //
+        // Three sibling tools had three meanings for the same field name: list_assets used it for
+        // rows returned, list_actors omitted it, this one used it for the project total. `count` is
+        // the rows in front of you in all of them now; `totalBlueprints` is how many exist, and
+        // `matched` is how many the filter found when a filter was used.
         return jsonResult(
           withCheaperForm(
             withFieldNote(
               needle
-                ? { ...result, blueprints: compact(filtered), totalBlueprints: all.length }
-                : { ...result, blueprints: compact(all) }
+                ? {
+                    ...result,
+                    blueprints: compact(filtered),
+                    count: filtered.length,
+                    // No `matched` here: nothing was cut, so it would equal `count` in every reply
+                    // this branch sends - which is the duplication the line above removes. It
+                    // appears only where it says something count does not, in the truncated branch.
+                    totalBlueprints: all.length,
+                  }
+                : { ...result, blueprints: compact(all), count: all.length }
             ),
             rows.length
           )
@@ -1159,8 +1179,11 @@ register(
         withCheaperForm(withFieldNote({
         ...result,
         blueprints: compact(filtered.slice(0, limit)),
+        // `shown` used to sit here saying exactly what `count` now says. Two names for one number is
+        // the thing this project keeps having to undo, so there is one: count.
+        count: limit,
+        ...(needle ? { matched: filtered.length } : {}),
         totalBlueprints: all.length,
-        shown: limit,
         omitted: filtered.length - limit,
         truncated: true,
         next:
