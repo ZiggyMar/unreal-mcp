@@ -168,3 +168,41 @@ One problem, precisely the injected one, and nothing else. An earlier attempt at
 the broken copy outside the package, where it could not resolve `node_modules` and simply failed to
 start - which proved only that the checker notices a dead server. Worth the second attempt: the
 weaker version would have looked like success.
+
+## A bug the audit found and the tools fixed, end to end (2026-08-30)
+
+The first time the whole chain ran on its own against the live project: find, locate, verify the
+convention, change one pin, re-check. Nothing about it was seeded.
+
+`unreal_audit_project` reported one `session-lan-mismatch`, its most expensive check:
+
+```
+Hosting and searching disagree about LAN, so a lobby can be created and still never appear in
+the list. LAN hosts: WB_ServerList (Create Kronos Match). Online hosts: PC_MainMenu, WB_MainMenu,
+WB_HostGameButton. LAN searches: none. Online searches: WB_ServerList (Find Kronos Matches).
+```
+
+**The same widget** hosted on LAN and searched online. A lobby created from the server list is
+broadcast to the local network, and the very list it was created from looks online - so it never
+appears. Hosting from the main menu works, which is what makes it survive: the path people test is
+not the broken one, and neither side ever reports an error.
+
+Following the `HostParams` and `SearchParams` links to the nodes that build them:
+
+| Node | Pin | Was |
+| --- | --- | --- |
+| `WB_ServerList` / `BE59B028` Make Kronos Host Params | `bIsLanMatch` | `true` |
+| `WB_ServerList` / `D88EC2DF` Make Kronos Search Params | `bIsLanQuery` | `False` |
+
+Before changing anything, every other live host path was read to find the project's convention
+rather than guess one: `PC_MainMenu`, `WB_MainMenu` and `WB_HostGameButton` all build host params
+with `bIsLanMatch = False`. So `False` is what the project means by hosting, and the server list was
+the only path that disagreed. `unreal_set_pin_default_value`, compile, save.
+
+`unreal_audit_project` again, same editor: **790 findings to 788**, and both session checks gone -
+the mismatch and the `session-host-paths-disagree` that came with it. The verification is the audit
+re-run rather than a claim, which is the only reason to trust it.
+
+Worth noting what made this findable at all: the check is about the **project**, not about any one
+Blueprint. Every fact it needs sits in a different asset from every other, and no per-asset review
+could ever have put them together.
