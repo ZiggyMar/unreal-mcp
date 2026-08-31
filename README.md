@@ -23,6 +23,85 @@ Two pieces:
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
+## What it can do
+
+101 tools, grouped by the job rather than by the API they call. Every one is exercised against a real
+~1,000-Blueprint project, not a fixture.
+
+**Understand a project you did not write**
+`get_project_overview`, `search_project`, `find_references`, `map_system`, `explain_graph`,
+`list_blueprints`, `read_blueprint_summary`, `read_node_detail`, `describe_class`, `find_source`,
+`trace_variable`, `trace_function_calls`, `list_actors`, `read_class_defaults`, `undo_history`.
+Ask for "the countdown" and get the system back - the Blueprints, the functions, what calls what,
+ordered for reading - rather than a list of string matches.
+
+**Find bugs, in plain English**
+`audit_project`, `review_blueprint`, `project_health`, `find_orphans`, `check_data_tables`,
+`read_runtime_errors`, `doctor`. The audit prices every finding, so what surfaces first is what
+actually costs you: a missing `Parent: BeginPlay`, a replicated variable whose `OnRep_` is empty, a
+Data Table row pointing at a deleted asset, an event graph nothing reaches.
+
+**Build features, and prove they work**
+`plan_feature`, `scaffold_blueprint`, `scaffold_widget`, `build_graph`, `add_node`, `connect_pins`,
+`add_event_handler`, `create_function`, `add_variable`, `set_variable_replication`,
+`auto_layout_graph`, `cleanup_blueprint`, `compile_blueprint`, `verify_feature`. Graphs come out laid
+out and commented, because output that compiles and output someone is happy to inherit are different
+things.
+
+**Whatever the work happens to be made of**
+Blueprints, C++ (`find_source`, `compile_cpp`, `hot_reload_cpp`), Data Tables, Data Assets, structs,
+enums, materials and instances, UMG widgets, input mappings, levels and actors, Animation Blueprints,
+Behavior Trees, Niagara. Read support is deliberately wider than write support, and the README says
+which is which for each.
+
+**Watch it actually run**
+`start_pie`, `watch_runtime`, `pie_status`, `screenshot`, `run_console_command`, `stop_pie`. Every
+other read here says what a Blueprint *claims* it does. These say what it *did* - including the one
+class of bug a single person cannot reproduce alone:
+
+```text
+Authority: 0 -> 490  changed=true
+Client0:   0 -> 0    changed=false      <- the variable is not replicated
+```
+
+## Added in the last day
+
+115 commits. The parts worth knowing about:
+
+- **`watch_runtime` - observe a running game.** Samples variables on live actors during play, in every
+  PIE world, labelled by net role. Proven by planting a replication bug in a real project, watching
+  only the server's copy move, fixing it, and watching both move.
+- **`hot_reload_cpp` - the Ctrl+Alt+F11 a human presses.** Until this, a model could find a native
+  bug, write the fix and prove it compiled - and the change sat on disk, because the running editor
+  holds the DLL. Applying it meant *you* closing the editor. Now it is one call.
+- **`run_console_command` - the tilde key.** `ce StartWave` to fire an event nothing calls yet,
+  `Ke * ResetHealth` to call a function on every instance, `stat unit`, `slomo`, cvars, cheats. One
+  definition instead of forty, and it reports `recognised: false` for a typo rather than letting a
+  misspelled command look like a working one that did nothing.
+- **Reads got cheaper again, measured.** Against the same 809-node graph: `explain_graph` 3,671 ->
+  **2,329**, `get_project_overview` 1,698 -> **829**, and `find_references` and `list_blueprints` both
+  compacted as well. The whole plant-find-fix-prove loop is 9 calls and **~1,544 tokens**, which
+  `npm run trial:diagnose` runs against a live editor rather than asserting. Two further compactions
+  were measured and **reverted** - one saved 38 tokens and broke how you naturally identify an actor.
+- **Dead-graph detection.** A liveness fixpoint over the whole project, biased toward calling things
+  live: 176 of 1,007 graphs nothing reaches, in the project it was validated against. `map_system` and
+  `plan_feature` now say out loud that a system matching your search may be the replaced one, because
+  extending something nothing calls produces a feature that cannot run.
+- **New reads: Animation Blueprints, Behavior Trees, Niagara, Data Assets.** "The enemies are not
+  following" and "the effect does not play" are real sentences people say, and none of them had
+  anything to land on.
+- **A failure class named and hunted down.** *A check reporting "I found no problems" and "I could not
+  look" with the same word.* Four instances fixed - the doctor claiming an all-clear on a plugin that
+  was missing two commands, `find_orphans` saying "clean" when the class name matched nothing,
+  `check_data_tables` saying "clean" when a column was empty in every row, and a preset missing the
+  one tool its own job starts from.
+- **The tests were mutation-tested.** 444 tests, all with assertions - but *has assertions* is not
+  *can fail*. Twelve deliberate mutations; eleven caught, one not. That one led to a real defect: a
+  check name that drifts or was never priced silently scores 1 and sinks under every cosmetic finding.
+- **A feature built and then deleted.** A `SpawnActor` node the tool's own instructions had claimed
+  for months. It crashed the editor four times; the whole thing was reverted and the README now says
+  plainly that it is not buildable this way. A claim that is not true is worse than a missing feature.
+
 ## What's different about this one
 
 There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic ships its own experimental first-party MCP plugin (5.8 only, opt-in). Worth being direct about where this project actually differs, rather than just claiming "better":
@@ -31,11 +110,16 @@ There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic s
 - **A persistent, incrementally-updated project index.** The bridge indexes Blueprints, functions, variables, and cross-asset references once, caches it to disk, and updates it from `AssetRegistry` delegates as you edit, instead of rescanning the project on every query. `find_references` answers "what actually uses this Blueprint" without the model having to enumerate the project itself.
 - **Reads that fit in a context window.** Reading one real Blueprint graph — 807 nodes — used to
   return **126,477 tokens**, 63% of a 200k window in a single call, from a project whose whole premise
-  is that the model never sees a raw engine dump. It is 9,085 now, with the full graph one parameter
-  away and a `match` filter that answers a specific question for a fraction of that. Every read is
-  measured against a real project by `npm run measure:reads`, which finds the worst graph itself.
-- **A tool surface that costs ~1.2k tokens instead of ~25k.** Tool definitions are paid for on *every* request, before your message is read. The `search` profile stands up four tools and switches the other 77 off — and because they are switched off rather than hidden behind a generic dispatcher, `unreal_enable_tools` hands back their **real, fully typed schemas**. One extra call at the start of a session, nothing given up, and 24k tokens a turn saved for the rest of it. The numbers are measured by `npm run check:profiles`, which fails the build if a profile grows past its budget.
+  is that the model never sees a raw engine dump. It is **3,110** now, with the full graph one
+  parameter away and a `match` filter that answers a specific question for a fraction of that. Every
+  read is measured against a real project by `npm run measure:reads`, which finds the worst graph
+  itself and fails the build if any read grows past its ceiling.
+- **A tool surface that costs 2.4k tokens instead of 34.8k.** Tool definitions are paid for on *every* request, before your message is read. The `search` profile stands up four tools and switches the other 97 off — and because they are switched off rather than hidden behind a generic dispatcher, `unreal_enable_tools` hands back their **real, fully typed schemas**. One extra call at the start of a session, nothing given up, and 32k tokens a turn saved for the rest of it. The numbers are measured by `npm run check:profiles`, which fails the build if a profile grows past its budget.
 - **The server tells the model how to work before it starts.** MCP's `instructions` field carries the call order and the exact strings no model can recall reliably — the target pin is `self`, Sequence's outputs are `then_0`/`then_1` — so the model arrives knowing them instead of spending failed calls discovering them. `unreal_guide` then lets it look anything else up mid-task, a section at a time.
+- **It can see the game run, not just read the files.** `watch_runtime` samples variables on live actors during play, in every PIE world, labelled by net role. Replication bugs are the one class of defect a single person cannot reproduce alone — `Authority: 0 -> 490, Client0: 0 -> 0` is that bug observed rather than argued. No other project in the survey reads runtime state at all.
+- **It can finish a C++ change, not just check one.** `compile_cpp` proves an edit builds; `hot_reload_cpp` patches it into the editor that is already open, which is the Ctrl+Alt+F11 a human presses. Without it, every native fix ends with a human closing the editor.
+- **Findings are priced, so the important one is first.** The audit scores every finding by what it actually costs you, and every check name is guarded by a test — an unpriced name silently scored 1 and sank below every cosmetic result, which was found by mutation-testing the suite rather than by reading it.
+- **Verdicts distinguish "nothing is wrong" from "I could not look".** They used to share a word, in four places. A tool that says `clean` when it could not check is worse than one that says nothing.
 - **Targets both 5.6 and 5.8 from one codebase**, where several existing projects are pinned to a single engine version.
 
 Small local models are still supported and still measured — the `minimal` profile exists because a 14B on a 12 GB card loads at 8k context and fails at 16k — but they are now an explicit opt-in rather than what the install path quietly hands everyone. There is also an optional local-model hook for indexing (`UNREAL_MCP_LOCAL_LLM_URL`), which generates search summaries off your context budget. Fully optional; the index works without it.
