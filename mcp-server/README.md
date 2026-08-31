@@ -1599,8 +1599,26 @@ rather than a guess:
 For `explain_graph` the measurement was the argument: of 13,294 tokens, the **prose was 2,043** and
 the structured `chains` array was **7,296** across 89 chains — largely restating the prose, and
 carrying every visited node id. The prose is what the tool exists to produce, so it is untouched;
-the array is capped and drops the ids. `audit` and `review` call `explainGraph()` directly and still
-receive all of it.
+the array was capped and dropped the ids. `audit` and `review` call `explainGraph()` directly and
+still receive all of it.
+
+**Capping it was the wrong fix, and the reply said so itself.** The prose is 92 lines of
+`- FireWeapon -> Can Shoot -> Branch -> ...`, one per entry point, for **all 89** of them, ending
+with the unreachable nodes and their counts. The capped `chains` array then restated the first 25 of
+those same chains as JSON (872 tokens), and `unreachable` restated the same list again (110) — while
+the reply's own `chainsNote` read *"The prose above covers all of them"*.
+
+The array had exactly one thing the prose does not: the **entry node's id**, which is what lets a
+caller jump to a node instead of searching for it. That is 69 tokens of the 872, so it is what
+survives, as an `entryIds` map. The steps are stated once, in the prose, where they were already
+complete rather than capped.
+
+| | before | after |
+| --- | --- | --- |
+| `unreal_explain_graph` | 3,671 | **2,329** |
+
+A caller loses `steps` as an array and gets a line to split on `" -> "` instead — about 880 tokens,
+a quarter of the reply, for a string split against text that was being sent regardless.
 
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.

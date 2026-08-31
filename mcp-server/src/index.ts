@@ -907,30 +907,46 @@ register(
       // 89 chains and the prose - the thing this tool exists to produce - was 2,043. The array
       // largely restates the prose and carries every visited node id, which the caller of THIS tool
       // does not need: audit and review use explainGraph() directly and still get all of it.
+      // The chains and the unreachable list were both sent TWICE.
+      //
+      // `text` is 92 lines and 2,030 tokens of "- FireWeapon -> Can Shoot -> Branch -> ...", one per
+      // entry point, for all 89 of them, and it ends with the unreachable nodes and their counts.
+      // The `chains` array then restated the first 25 of those same chains as JSON (872 tokens) and
+      // `unreachable` restated the same list again (110). The old reply even said so out loud - its
+      // own chainsNote read "The prose above covers all of them" - and capped the array instead of
+      // removing it.
+      //
+      // The array had exactly one thing the prose does not: the entry node's id, which is what lets a
+      // caller jump straight to a node instead of searching for it. That is 69 tokens of the 872, so
+      // it is what survives. The steps are stated once, in the prose, where they were already
+      // complete rather than capped.
+      //
+      // What a caller loses is `steps` as an array instead of a line to split on " -> ". Measured at
+      // roughly 880 tokens, about a quarter of this reply, for a string split against text that was
+      // being sent regardless.
       const limit = Math.max(1, Math.min(maxChains ?? 25, 500));
-      const chains = explained.chains.slice(0, limit).map((c) => ({
-        entry: c.entry,
-        entryId: c.entryId,
-        steps: c.steps,
-        ...(c.truncated ? { truncated: true } : {}),
-      }));
-      const unreachableShown = explained.unreachable.slice(0, 20);
+      const entryIds: Record<string, string> = {};
+      for (const chain of explained.chains.slice(0, limit)) {
+        // First one wins. Two chains can share an entry name, and overwriting would leave an id
+        // pointing at a node the caller did not mean.
+        if (chain.entryId && !(chain.entry in entryIds)) entryIds[chain.entry] = chain.entryId;
+      }
 
       return jsonResult({
         path: explained.path,
         graphName: explained.graphName,
         nodeCount: explained.nodeCount,
         text: explained.text,
-        chains,
-        ...(explained.chains.length > chains.length
+        // Named for what it is rather than what it replaced: the ids, so a chain in the prose can be
+        // acted on. The steps themselves are in `text`, and all of them are, not the first 25.
+        entryIds,
+        ...(explained.chains.length > Object.keys(entryIds).length
           ? {
-              chainsOmitted: explained.chains.length - chains.length,
-              chainsNote: `${explained.chains.length} entry points in this graph; ${chains.length} listed. The prose above covers all of them. Raise maxChains for the rest.`,
+              entryIdsNote:
+                `${explained.chains.length} entry points; ids given for ${Object.keys(entryIds).length}. ` +
+                `Every chain is written out in \`text\` regardless - raise maxChains only if you need ` +
+                `an id for one further down.`,
             }
-          : {}),
-        unreachable: unreachableShown,
-        ...(explained.unreachable.length > unreachableShown.length
-          ? { unreachableOmitted: explained.unreachable.length - unreachableShown.length }
           : {}),
       });
     } catch (err) {
