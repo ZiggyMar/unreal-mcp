@@ -1924,6 +1924,48 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The audit was telling you to use tools it had not switched on
+
+Extracting every `unreal_*` mentioned in a finding's `fix` and holding it against the `diagnose`
+preset - whose stated job is *"find and fix a reported bug"*:
+
+```text
+NOT in diagnose: unreal_call_parent_function, unreal_remove_node,
+                 unreal_set_data_table_row, unreal_auto_layout_graph, ...
+```
+
+`call_parent_function` is the sharp one. `parent-event-not-called` costs 95, second only to the
+multiplayer checks, and its remedy is a single call a model on this preset could not make. Same for
+`set_data_table_row`: `check_data_tables` is in the preset, finds a row pointing at nothing, and
+names a repair tool that is off.
+
+The obvious fix is to put them in the preset. **Measured, that is the wrong answer:**
+
+```text
+diagnose with three added:   10,257 -> 11,127     (+870, on every request)
+enable_tools({tools:[...]}):    ~150 tokens, once, only when a finding names one
+```
+
+The same arithmetic that removed the group bullets from `enable_tools`, reaching the same verdict
+from the other direction. So it is said where the server actually knows what is enabled - only about
+tools that are genuinely off, and only when a finding actually named one:
+
+```json
+{"fixToolsNotEnabled": ["unreal_call_parent_function"],
+ "fixToolsNote": "1 tool(s) named in the fixes above are switched off in this session..."}
+```
+
+A complete answer pays nothing for it.
+
+The list is read **out of the fix text**, not declared beside each check. A declared list is a second
+place to update, and a second place not being updated is exactly how this was found - the same reason
+the group list is now derived in three places instead of written in four.
+
+Two bugs while writing it, both the kind this project keeps naming. The note was attached in one
+branch of a ternary and dropped in the other, so an audit with nothing elided silently lost it. And
+the first version scanned `examples[].fix`, a field that does not exist on that type - it would have
+found nothing, quietly, forever. TypeScript caught the second; only re-reading caught the first.
+
 ### "Find every bug" now includes the cutscenes
 
 Reading a Level Sequence was only half of it. `unreal_audit_project` swept Blueprints, Animation

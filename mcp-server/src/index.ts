@@ -17,7 +17,7 @@ import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
-import { auditProject } from "./audit.js";
+import { auditProject, toolsNamedInFixes } from "./audit.js";
 import { guardWithAuthority } from "./authorityGuard.js";
 import { RepeatGuard } from "./repeatGuard.js";
 import { reviewStatePlacement } from "./statePlacement.js";
@@ -4709,15 +4709,45 @@ register(
   async ({ pathPrefix, limit, examplesPerGroup, detailedGroups, check }) => {
     try {
       const audit = await auditProject(bridge, { pathPrefix, limit, examplesPerGroup, detailedGroups, check });
+
+      // Name the fix tools this session cannot currently call.
+      //
+      // Found by extracting every `unreal_*` mentioned in a `fix` string and holding it against the
+      // diagnose preset: a preset whose stated job is "find and fix a reported bug" was telling
+      // callers to use tools it does not switch on - call_parent_function among them, which is the
+      // whole remedy for a cost-95 finding.
+      //
+      // The obvious repair is to put them in the preset, and the arithmetic says no: three tools cost
+      // 870 tokens of standing context, on every request, to save one enable_tools call of about a
+      // hundred and fifty that most sessions never need. The same sum that removed the group bullets
+      // from enable_tools' own description.
+      //
+      // So it is said here, where the server knows what is actually enabled, only about tools that
+      // are actually off, and only when a finding actually named one. A complete answer pays nothing.
+      const notEnabled = toolsNamedInFixes(audit.groups ?? []).filter((name: string) => {
+        const handle = toolHandles.get(name);
+        return handle !== undefined && !handle.enabled;
+      });
       // The explanation of the cap lives in the reply rather than in the schema, so it is paid for
       // only when it actually applies. In the schema it was ~350 characters on every request of
       // every session, which pushed the `minimal` profile past the ceiling that exists to keep it
       // loadable on a 14B at 8k - a good sentence in the wrong place.
       const elided = audit.groups.filter((g) => g.detailElided).length;
+      const withFixTools =
+        notEnabled.length > 0
+          ? {
+              ...audit,
+              fixToolsNotEnabled: notEnabled,
+              fixToolsNote:
+                `${notEnabled.length} tool(s) named in the fixes above are switched off in this session: ` +
+                `${notEnabled.join(", ")}. unreal_enable_tools({ tools: [...] }) turns on exactly those, ` +
+                `which costs far less than a whole group.`,
+            }
+          : audit;
       return jsonResult(
         elided > 0
           ? {
-              ...audit,
+              ...withFixTools,
               detailNote:
                 `${elided} further finding kind(s) are listed with counts only and marked ` +
                 `detailElided. They have no \`fix\` field because the remedy was dropped to keep this ` +
@@ -4726,7 +4756,7 @@ register(
                   30
                 )} to see them.`,
             }
-          : audit
+          : withFixTools
       );
     } catch (err) {
       return errorResult(err);

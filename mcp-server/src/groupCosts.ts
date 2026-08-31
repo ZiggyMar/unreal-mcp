@@ -34,7 +34,7 @@ export const FEATURE_SET_TOKENS = 4563;
 
 /** Standing cost of each preset, enabled on its own from the `search` baseline. */
 export const PRESET_COST_TOKENS: Record<string, number> = {
-  diagnose: 10136,
+  diagnose: 11127,
   feature: 7605,
   ui: 5930,
   data: 6716,
