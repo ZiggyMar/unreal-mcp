@@ -99,6 +99,67 @@ function describeSeconds(ms: number): string {
  * `ECONNREFUSED` gives it nothing to act on.
  */
 /**
+ * Expand a package path to the object path the engine sometimes insists on.
+ *
+ * Unreal writes an asset's object path as `/Game/Folder/BP_Thing.BP_Thing` - the name twice. Across a
+ * listing of 339 Blueprints that repetition is 1,466 tokens of nothing, and dropping it was declined
+ * once for a good reason: five tools were verified to accept the shorter form, and five of
+ * eighty-eight is not evidence about the other eighty-three.
+ *
+ * So the other eighty-three were checked, by auditing how the bridge resolves a path rather than by
+ * sampling tools. Twenty-three sites go through LoadBlueprintByPath, eight through StaticLoadObject
+ * and fourteen through LoadObject, all of which take either form. TEN DO NOT: six FindObject, three
+ * StaticFindObject, and one GetAssetByObjectPath, which keys the asset registry by object path and
+ * would simply miss.
+ *
+ * Rather than fix ten C++ sites and wait for an editor restart to benefit, the expansion happens
+ * here - the one place every command crosses into the bridge. Replies can now carry the short form
+ * and a caller can paste it into anything, because by the time it arrives it is long again.
+ *
+ * Only paths that are unambiguously UE asset paths are touched: a leading slash, no backslash or
+ * drive letter, and no dot already in the last segment. compile_cpp takes a FILESYSTEM path in a
+ * parameter also called `path`, and rewriting that would break it.
+ */
+export function toObjectPath(value: string): string {
+  if (!value.startsWith("/")) return value;
+  if (value.includes("\\") || /^[A-Za-z]:/.test(value)) return value;
+  const lastSlash = value.lastIndexOf("/");
+  const leaf = value.slice(lastSlash + 1);
+  if (!leaf || leaf.includes(".")) return value;
+  return `${value}.${leaf}`;
+}
+
+/** Every parameter that carries an asset path, so the expansion reaches all of them. */
+const PATH_PARAMS = ["path", "assetPath", "targetPath", "parentClass", "actorClass"];
+
+/** Apply toObjectPath to the path-shaped parameters of one request, leaving everything else alone. */
+export function expandPathParams(params: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!params) return params;
+  let changed = false;
+  const out: Record<string, unknown> = { ...params };
+  for (const key of PATH_PARAMS) {
+    const value = out[key];
+    if (typeof value === "string") {
+      const expanded = toObjectPath(value);
+      if (expanded !== value) {
+        out[key] = expanded;
+        changed = true;
+      }
+    }
+  }
+  // `paths` is the plural form on delete_asset, and it is the one place a caller passes several.
+  if (Array.isArray(out.paths)) {
+    const list = out.paths as unknown[];
+    const expanded = list.map((p) => (typeof p === "string" ? toObjectPath(p) : p));
+    if (expanded.some((p, i) => p !== list[i])) {
+      out.paths = expanded;
+      changed = true;
+    }
+  }
+  return changed ? out : params;
+}
+
+/**
  * Name the modal dialog that is blocking the editor, when there is one and the platform will say.
  *
  * A timeout past the connect means the game thread is blocked, and the reply used to list four
@@ -179,7 +240,9 @@ export class UnrealBridgeClient {
     );
   }
 
-  async send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
+  async send<T = unknown>(cmd: string, rawParams?: Record<string, unknown>): Promise<T> {
+    // Every command crosses here, which is why the path expansion lives here and nowhere else.
+    const params = expandPathParams(rawParams);
     const id = randomUUID();
     const session = this.tokens.get(this.port);
     const requestLine =

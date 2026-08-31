@@ -1605,6 +1605,33 @@ receive all of it.
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### A path that says the name twice, and now says it once
+
+An Unreal object path repeats the asset name: `/Game/Folder/BP_Thing.BP_Thing`. Across a listing of
+339 Blueprints that suffix is **1,466 tokens of nothing**, and `list_blueprints` is the most
+expensive read left.
+
+Dropping it was declined once, and correctly. Five commands had been verified to accept the package
+form, and *five tools of eighty-eight is not evidence about the other eighty-three* - these paths get
+pasted into all of them, and a path that always works is worth more than the tokens.
+
+What changed is that the objection was **settled instead of weighed**. Auditing how the bridge turns
+a path into an asset, rather than sampling tools: 23 sites use `LoadBlueprintByPath`, 8
+`StaticLoadObject`, 14 `LoadObject` - all of which take either form. **Ten do not**: six
+`FindObject`, three `StaticFindObject`, and one `GetAssetByObjectPath`, which keys the asset registry
+by object path and would simply miss. The short form really would have broken things, in ten specific
+places.
+
+So `bridgeClient` expands a package path back to an object path on the way out, at the single
+boundary every command crosses. Replies carry the short form; anything pasted back is long again
+before it resolves. `list_blueprints` **3,689 to 3,293**, and "a path that always works" is no longer
+the price.
+
+Only the exact `/Path/Name.Name` shape is shortened - any other suffix is somebody's real path, and
+touching it would be corruption rather than compaction. `compile_cpp` takes a *filesystem* path in a
+parameter also called `path`; the expansion ignores anything with a drive letter or a backslash. The
+round trip has its own test, and if it ever stops holding the saving has to go back.
+
 ### The `minimal` profile was telling weak models to call tools it does not have
 
 The standing `instructions` text is sent to the model on every turn, and it was written once for

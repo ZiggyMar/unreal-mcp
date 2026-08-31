@@ -68,16 +68,30 @@ export function compactVariable(variable: Row): Row {
  * carried every name three times over. Measured: `path` was 7,076 tokens of a 12,264-token reply and
  * `name` another 2,102 for nothing new.
  *
- * The larger saving next door was NOT taken. Emitting the package form /Game/Folder/BP_Thing without
- * the object suffix would cut another 1,466 tokens, and it was verified to resolve - list_variables,
- * list_blueprint_graphs, list_components, compile_blueprint and find_references all accept it,
- * because 21 call sites funnel through StaticLoadObject which takes either form. Five tools of
- * eighty-eight is not evidence about the other eighty-three, and these paths get pasted into all of
- * them. A path that always works is worth more than 1,466 tokens.
+ * The larger saving next door is now taken as well: the object suffix goes, so a row reads
+ * /Game/Folder/BP_Thing. That was declined once, correctly - five tools had been verified to accept
+ * the shorter form, and five of eighty-eight is not evidence about the other eighty-three, while a
+ * path that always works is worth more than 1,466 tokens.
+ *
+ * What changed is that the objection was settled rather than weighed. Auditing how the bridge
+ * resolves a path, rather than sampling tools: 23 sites use LoadBlueprintByPath, 8 StaticLoadObject
+ * and 14 LoadObject, all of which take either form - and TEN do not, six FindObject, three
+ * StaticFindObject, and GetAssetByObjectPath, which keys the asset registry by object path and would
+ * simply miss. So the short form really would have broken things, in ten specific places.
+ *
+ * bridgeClient now expands a package path back to an object path on the way out, at the single
+ * boundary every command crosses. The path a caller pastes is long again by the time anything
+ * resolves it, so "a path that always works" and the 1,466 tokens are no longer a trade.
  */
 export function compactBlueprintRow(row: Row): Row {
-  const { name: _dropped, ...rest } = row;
-  return rest;
+  const { name: _dropped, path, ...rest } = row;
+  if (typeof path !== "string") return { ...rest, ...(path === undefined ? {} : { path }) };
+  const lastSlash = path.lastIndexOf("/");
+  const leaf = path.slice(lastSlash + 1);
+  const dot = leaf.indexOf(".");
+  // Only when the suffix really is the name repeated. Anything else is left exactly as it came.
+  const shortened = dot > 0 && leaf.slice(dot + 1) === leaf.slice(0, dot) ? path.slice(0, lastSlash + 1 + dot) : path;
+  return { path: shortened, ...rest };
 }
 
 /**

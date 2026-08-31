@@ -1,3 +1,4 @@
+import { toObjectPath } from "../dist/bridgeClient.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -78,25 +79,34 @@ test("compaction never runs before a filter that reads the flags it removes", ()
   assert.equal(compactedThenFiltered.length, 2, "this is the wrong order, and it is wrong by 2 to 1");
 });
 
-test("a Blueprint row drops the name, because the path already says it twice", () => {
+test("a Blueprint row drops the name and the repeated suffix", () => {
   // An Unreal object path is /Game/Folder/BP_Thing.BP_Thing, so a listing of 339 Blueprints carried
-  // every name three times. Measured: name was 2,102 tokens of a 12,264-token reply for nothing new.
+  // every name three times. Measured: `name` was 2,102 tokens of a 12,264-token reply, and the
+  // suffix another 1,466.
   const out = compactBlueprintRow({
     name: "BP_Thing",
     path: "/Game/Folder/BP_Thing.BP_Thing",
     parentClass: "Actor",
   });
   assert.equal(out.name, undefined);
-  assert.equal(out.path, "/Game/Folder/BP_Thing.BP_Thing", "the path must stay whole and pasteable");
+  assert.equal(out.path, "/Game/Folder/BP_Thing");
   assert.equal(out.parentClass, "Actor");
 });
 
-test("the path keeps its object suffix even though the short form resolves", () => {
-  // The short form /Game/Folder/BP_Thing does resolve - verified against five commands - and would
-  // save another 1,466 tokens. It is not taken: five tools of eighty-eight is not evidence about the
-  // other eighty-three, and these paths get pasted into all of them.
-  const out = compactBlueprintRow({ name: "BP_Thing", path: "/Game/Folder/BP_Thing.BP_Thing" });
-  assert.match(out.path, /BP_Thing\.BP_Thing$/);
+test("what makes the short path safe is that it expands again on the way out", () => {
+  // Dropping the suffix was declined once, correctly: ten bridge sites resolve a path with
+  // FindObject, StaticFindObject or GetAssetByObjectPath, none of which accept the package form.
+  // It is taken now only because bridgeClient expands it back at the single boundary every command
+  // crosses. This is the round trip, and if it ever stops holding the saving has to go back.
+  const shortened = compactBlueprintRow({ name: "BP_Thing", path: "/Game/Folder/BP_Thing.BP_Thing" });
+  assert.equal(toObjectPath(shortened.path), "/Game/Folder/BP_Thing.BP_Thing");
+});
+
+test("a suffix that is not the name repeated is left alone", () => {
+  // Only the exact /Path/Name.Name shape is redundant. Anything else is somebody's real path and
+  // shortening it would be corruption, not compaction.
+  const out = compactBlueprintRow({ name: "X", path: "/Game/Folder/BP_Thing.SomethingElse" });
+  assert.equal(out.path, "/Game/Folder/BP_Thing.SomethingElse");
 });
 
 test("a field view keeps only what was asked for", () => {
