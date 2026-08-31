@@ -4889,6 +4889,32 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### The guide never mentioned the way in
+
+`unreal_guide` serves three documents — the Blueprint handbook, the recipes, the agent workflow — and
+they are teaching a model **fetches and follows**. The workflow doc opens well: `unreal_doctor` if
+anything is broken, then `unreal_plan_feature` with the user's request in their own words.
+
+It has never mentioned `unreal_list_tools({ match: "<what the user said>" })`. That matters twice
+over. A session that starts on the `search` profile has four tools and **cannot reach step 1** until
+it enables something, and the routing built over the last several sessions — the thing that reads a
+sentence and answers with the tools for it — was reachable only by a model that already knew it
+existed.
+
+There is now a *Starting from a sentence* section, 577 tokens when fetched, with the table of what
+each intent gets and the two traps a caller most needs warned about: a rename is not a value change,
+and a C++ edit is not finished when the file is right.
+
+**And nothing guarded these documents at all.** `check:docs` covers the README, `check:symptoms`
+covers the routing table, and the three files a model actually reads had no check — so a renamed
+tool would leave a recipe telling a model to call something that does not exist, at the moment it had
+gone looking for instructions. That is worse than the same mistake in the README: a human reading a
+stale README is puzzled, a model reading a stale recipe follows it.
+
+`npm run check:guides` reads the guide list from the tool's own map rather than a hardcoded list, so a
+fourth document cannot be added without it noticing. 70 tool mentions, all registered — verified by
+breaking one and watching it fail.
+
 ### The C++ leg stopped one step short of working
 
 Applying the same question to the substrate the goal names last: *"whether it's C++ or Blueprints or a

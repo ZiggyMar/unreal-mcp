@@ -5,6 +5,37 @@ because the difference between a smooth run and a flailing one is almost never m
 is tool-call order. Ship this to your agent as context (a system prompt block, a Claude Code
 Skill, or CLAUDE.md section) when working on an Unreal project through this MCP server.
 
+## Starting from a sentence
+
+The golden path below assumes you already have the tools for the job switched on. If the session
+started on the `search` profile - four tools, about 2,200 tokens - or you have a request in the
+user's words and no plan yet, this is the step before step 0.
+
+**`unreal_list_tools({ match: "<what the user actually said>" })`.** `match` searches tool names and
+summaries first; when that finds nothing, a second index reads the sentence as a description of a
+problem and answers with the tools for it, saying which words it matched so you can judge the
+suggestion. It reads three intents, and they want different tools:
+
+| the user said | read as | you get |
+|---|---|---|
+| "upgrades aren't showing up in the shop" | something broken | `check_data_tables`, `list_data_table_rows`, `audit_project` |
+| "add a shop upgrade that increases fire rate" | something to build | `plan_feature`, `map_system` |
+| "the machine gun should cost 500 instead of 300" | a value to change | `find_in_data_tables`, `search_project`, `trace_variable`, `find_source` |
+| "rename FireRate to RateOfFire" | a rename | `rename_variable`, `rename_asset`, `rename_component` |
+| "delete the old health variable" | a removal | `remove_variable`, `remove_function`, `remove_component` |
+| "I edited the header file" | C++ | `find_source`, `compile_cpp`, `hot_reload_cpp` |
+
+Then `unreal_enable_tools({ groups: [...] })` with the groups it names, and continue below. Measured
+end to end on a real project: **three calls and about 1,600 tokens** from the sentence to the tool
+that finds the bug.
+
+Two things this saves you from. A rename is not a value change - editing the thing directly leaves
+everything that referred to the old name pointing at nothing, and the rename tools rebind those
+references as they go. And a C++ edit is not finished when the file is right: the running editor has
+never read that file, so `unreal_hot_reload_cpp` is what makes the change real. Skipping it leaves
+the code correct on disk and the editor running the old version, which looks exactly like the change
+not working.
+
 ## The golden path for building a feature
 
 0. **If anything is not working, `unreal_doctor` first.** One call checks reachability, plugin
