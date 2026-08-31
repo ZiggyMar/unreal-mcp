@@ -1623,6 +1623,35 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### A census that spelled its own column headings 79 times
+
+`get_project_overview` returned its parent-class breakdown as an array of two-key objects:
+
+```json
+[{"parentClass":"SaveGame","count":2},{"parentClass":"Actor","count":70}, ...]
+```
+
+The names and the numbers are the whole content. `"parentClass"` and `"count"` are punctuation with
+a salary, and they were sent **79 times**. As a plain map it says exactly the same thing:
+
+```json
+{"SaveGame":2,"Actor":70, ...}
+```
+
+| | before | after |
+| --- | --- | --- |
+| `unreal_get_project_overview` | 1,698 | **829** |
+
+This is the same finding this repo already made about the word `"node"` appearing 1,642 times in one
+graph reply, in a different place - so it is a shared `asCountMap` rather than a local fix, and the
+next one is a one-line change instead of a rediscovery. A duplicate key keeps the **larger** count
+rather than the last written: two rows with one name should not happen, and silently halving a census
+if it ever did would be worse than the duplication being replaced.
+
+`unreal_plan_feature` reads this breakdown too, and is untouched - it calls the bridge directly and
+still gets the array, the same tool-layer split that made the node cap safe. Verified rather than
+assumed: it still reports `Actor (70)`, `Interface (8)` after the change.
+
 ### A path that says the name twice, and now says it once
 
 An Unreal object path repeats the asset name: `/Game/Folder/BP_Thing.BP_Thing`. Across a listing of

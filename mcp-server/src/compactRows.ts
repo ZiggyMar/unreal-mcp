@@ -124,3 +124,30 @@ export function pickFields<T extends Row>(rows: T[], fields: string[]): { rows: 
     unknown: wanted.filter((f) => !present.has(f)),
   };
 }
+
+/**
+ * Turn `[{k: "Actor", v: 70}, ...]` into `{Actor: 70, ...}`.
+ *
+ * get_project_overview's parent-class census was an array of objects, so the words "parentClass" and
+ * "count" were spelled out once per entry - 79 times on the project this is developed against, for
+ * about 475 tokens of a 926-token field. The names and the numbers are the whole content; the keys
+ * are punctuation with a salary.
+ *
+ * This repo has made exactly this finding before, about the word "node" appearing 1,642 times in one
+ * graph reply. It is the same shape in a different place, and worth a shared function so the next one
+ * is a one-line change rather than a rediscovery.
+ *
+ * A duplicate key keeps the LARGER count rather than the last one written. Two rows with the same
+ * name should not happen, and silently halving a census if it ever did would be worse than the
+ * duplication this replaces.
+ */
+export function asCountMap<T extends Row>(rows: T[] | undefined, keyField: string, countField: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const row of rows ?? []) {
+    const key = row[keyField];
+    const count = row[countField];
+    if (typeof key !== "string" || typeof count !== "number") continue;
+    out[key] = Math.max(out[key] ?? 0, count);
+  }
+  return out;
+}

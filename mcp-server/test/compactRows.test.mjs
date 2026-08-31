@@ -9,6 +9,7 @@ import {
   compactBlueprintRow,
   pickFields,
   VARIABLE_FLAGS,
+  asCountMap,
 } from "../dist/compactRows.js";
 
 /** A variable shaped exactly as the engine returns one. */
@@ -138,4 +139,42 @@ test("a field absent from one row but present in another is not reported unknown
   // so a field genuinely present in the data may be missing from any given row.
   const { unknown } = pickFields([{ path: "a" }, { path: "b", replicated: true }], ["replicated"]);
   assert.deepEqual(unknown, []);
+});
+
+test("a census is a map, not a list of two-key objects", () => {
+  // get_project_overview's parent-class breakdown was [{parentClass, count}, ...], so the words
+  // "parentClass" and "count" were spelled out once per entry - 79 times on the real project, about
+  // 475 tokens of a 926-token field. The names and the numbers are the whole content.
+  const out = asCountMap(
+    [
+      { parentClass: "Actor", count: 70 },
+      { parentClass: "Interface", count: 8 },
+    ],
+    "parentClass",
+    "count"
+  );
+  assert.deepEqual(out, { Actor: 70, Interface: 8 });
+});
+
+test("a duplicated census key keeps the larger count, not the last one", () => {
+  // Two rows with one name should not happen. If it ever does, silently halving a census is worse
+  // than the duplication this replaces.
+  const out = asCountMap(
+    [
+      { parentClass: "Actor", count: 70 },
+      { parentClass: "Actor", count: 3 },
+    ],
+    "parentClass",
+    "count"
+  );
+  assert.deepEqual(out, { Actor: 70 });
+});
+
+test("a malformed census row is skipped rather than poisoning the map", () => {
+  const out = asCountMap(
+    [{ parentClass: "Actor", count: 70 }, { parentClass: "Broken" }, { count: 5 }],
+    "parentClass",
+    "count"
+  );
+  assert.deepEqual(out, { Actor: 70 });
 });

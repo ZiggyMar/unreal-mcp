@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, pickFields } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, pickFields, asCountMap } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -1405,7 +1405,13 @@ register(
   async () => {
     try {
       const result = await bridge.send<GetProjectOverviewResult>("get_project_overview");
-      return jsonResult(result);
+      // The census as a map rather than a list of two-key objects. Same information, and the words
+      // "parentClass" and "count" stop being sent 79 times. planFeature and everything else internal
+      // read the bridge's own shape, which is untouched.
+      return jsonResult({
+        ...result,
+        byParentClass: asCountMap(result.byParentClass as never, "parentClass", "count"),
+      });
     } catch (err) {
       return errorResult(err);
     }
