@@ -1,4 +1,5 @@
 import { Socket } from "node:net";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
 import { SessionTokenCache } from "./sessionToken.js";
@@ -97,6 +98,55 @@ function describeSeconds(ms: number): string {
  * about it?"), because the model reading the error is the one that has to act on it, and a bare
  * `ECONNREFUSED` gives it nothing to act on.
  */
+/**
+ * Name the modal dialog that is blocking the editor, when there is one and the platform will say.
+ *
+ * A timeout past the connect means the game thread is blocked, and the reply used to list four
+ * things it might be. One of them - a modal dialog - is by far the commonest and is the only one a
+ * caller can do nothing about without being told, because the dialog is behind the editor window and
+ * nobody is looking at the editor.
+ *
+ * Windows will sometimes simply say. An editor sitting on its normal window is titled
+ * "<Project> - Unreal Editor"; an editor showing a modal that OWNS the main window is titled after
+ * the modal, so "Restore Packages" IS the answer. Half an hour went into working that one out by
+ * hand, which is exactly the kind of half hour this file exists to prevent.
+ *
+ * It does not catch every case, and saying so matters more than the feature does. A save prompt
+ * raised from inside the editor (InternalPromptForCheckoutAndSave, which is what blocks when
+ * something tries to save an Engine template map) leaves the main window title unchanged, and this
+ * returns null for it. So a null here means "no dialog owns the main window", NOT "no dialog is
+ * open" - which is why the generic line is still printed when this finds nothing.
+ *
+ * Best effort in every direction: only on win32, only on a path that has already spent its whole
+ * timeout so the cost of spawning a shell does not matter, and every failure returns null rather
+ * than turning a diagnosable timeout into an undiagnosable crash.
+ */
+function blockingDialogTitle(): string | null {
+  if (process.platform !== "win32") return null;
+  try {
+    const out = execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-Process -Name UnrealEditor -ErrorAction SilentlyContinue | " +
+          "Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle }",
+      ],
+      { timeout: 5000, encoding: "utf8", windowsHide: true }
+    );
+    const titles = String(out)
+      .split(/\r?\n/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    // The ordinary editor window ends in "Unreal Editor". Anything else with a window is a dialog.
+    const dialog = titles.find((t) => !/Unreal Editor$/.test(t));
+    return dialog ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export class UnrealBridgeClient {
   private readonly host: string;
   private readonly port: number;
@@ -176,6 +226,7 @@ export class UnrealBridgeClient {
         }
         // We connected, so the bridge exists and the plugin is loaded. A silent socket past this
         // point means the editor's game thread is busy or blocked, not that anything is misconfigured.
+        const dialogTitle = blockingDialogTitle();
         fail(
           new Error(
             `The UnrealMCPBridge plugin accepted the connection but did not answer '${cmd}' within ` +
@@ -183,7 +234,10 @@ export class UnrealBridgeClient {
               `Usually one of:\n` +
               `  - A long operation genuinely still running (a big compile, the first project-index build, a level load). ` +
               `Wait and retry the same call rather than assuming it failed.\n` +
-              `  - A modal dialog open in the editor, which halts the game thread until a human clicks it.\n` +
+              (dialogTitle
+                ? `  - A modal dialog titled "${dialogTitle}" IS OPEN in the editor right now. That is almost ` +
+                  `certainly the whole answer: it halts the game thread until a human clicks it.\n`
+                : `  - A modal dialog open in the editor, which halts the game thread until a human clicks it.\n`) +
               `  - The editor mid-PIE-transition. Call unreal_pie_status once the editor is responsive again.\n` +
               `IMPORTANT: a timeout is not a rollback. The operation may have completed, so read the current state ` +
               `(unreal_read_blueprint_summary, unreal_list_components, ...) before retrying a write, or you may apply it twice.`

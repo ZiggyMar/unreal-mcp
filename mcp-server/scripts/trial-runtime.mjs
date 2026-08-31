@@ -116,6 +116,38 @@ async function playAndWatch(phase) {
 }
 
 // -------------------------------------------------------------------------------------------------
+// Check the editor can answer at all, before spending twenty-three calls finding out.
+//
+// The first run of this took eleven minutes to fail and printed nothing while it did, because every
+// call sat on its own 60-second timeout and the whole run was buffered. The editor was up, the
+// bridge was listening and the game thread was blocked - the project's startup map was an Open World
+// template, which does enough work on load to stop answering.
+//
+// One ping first turns eleven silent minutes into one sentence.
+// -------------------------------------------------------------------------------------------------
+{
+  const r = await server.request("tools/call", { name: "unreal_ping", arguments: {} });
+  const text = ((r.result && r.result.content) || []).map((c) => c.text || "").join("");
+  let ok = false;
+  try {
+    ok = Boolean(JSON.parse(text).project || JSON.parse(text).ok);
+  } catch {
+    ok = false;
+  }
+  if (!ok) {
+    console.error("the editor is not answering, so there is nothing to trial:" + NL);
+    console.error("  " + text.slice(0, 400).split(NL).join(NL + "  "));
+    console.error(
+      NL +
+        "A bridge that accepts a connection and never replies means the game thread is blocked." + NL +
+        "An Open World startup map will do it. Open a simple level and run this again."
+    );
+    process.exit(1);
+  }
+  console.log(`editor answering: ${text.slice(0, 120).split(NL).join(" ")}`);
+}
+
+// -------------------------------------------------------------------------------------------------
 // Build the thing. An actor that counts, but only where it has authority.
 //
 // The authority branch is what makes this a replication demonstration rather than two machines
@@ -168,7 +200,17 @@ await step("put one in the level", "unreal_spawn_actor",
   { actorClass: PATH, label: "MCPRuntimeTrial", locX: 0, locY: 0, locZ: 200 },
   (t, j) => (j && (j.spawned || j.name || j.label) ? null : "nothing was spawned"));
 
-await step("save the level", "unreal_save_level", {});
+// Deliberately NOT saving the level.
+//
+// PIE runs the world that is in memory, so a spawned actor is there whether or not the map has been
+// written to disk - and saving it is actively harmful. The first run of this trial saved a level
+// that happened to be an ENGINE template map, which cannot be written in place, so the editor opened
+// InternalPromptForCheckoutAndSave and sat on it. Every call after that timed out.
+//
+// Worth recording because the window title did NOT change: the editor still read
+// "UnrealMCPTest56 - Unreal Editor" while blocked, so the dialog-naming diagnostic in
+// bridgeClient.ts would not have caught this one. It catches the dialogs that own the main window,
+// like Restore Packages, and not the ones that do not.
 
 // -------------------------------------------------------------------------------------------------
 // The bug, observed.
