@@ -172,19 +172,24 @@ await step("count, but only with authority", "unreal_build_graph", {
   graphName: "EventGraph",
   nodes: [
     { ref: "tick", nodeType: "Event", eventName: "ReceiveTick" },
-    // NOT pure. Actor.h declares HasAuthority as UFUNCTION(BlueprintCallable) with no BlueprintPure,
-    // so it is an impure node with exec pins and has to sit IN the chain rather than feed it from
-    // the side. Checked against the engine header rather than assumed - a pure node here would have
-    // failed to wire and the trial would have blamed the wrong thing.
-    { ref: "auth", nodeType: "CallFunction", functionName: "HasAuthority" },
+    // Pure, and the header does not say so.
+    //
+    // Actor.h declares this UFUNCTION(BlueprintCallable) with no BlueprintPure, so reading the
+    // header says "impure, wire it into the exec chain". The real node has no exec pins at all:
+    // UHT promotes a CONST BlueprintCallable with a return value to pure automatically, and
+    // `bool HasAuthority() const` is exactly that.
+    //
+    // Worth keeping as a comment because it is the whole argument for asking the running engine
+    // instead of reading source. The bridge said it outright - "input pin 'execute' not found.
+    // Use one of: self" - which named the mistake and the fix in one line.
+    { ref: "auth", nodeType: "CallFunction", functionName: "HasAuthority", pure: true },
     { ref: "br", nodeType: "Branch" },
     { ref: "get", nodeType: "VariableGet", variableName: "Ticks" },
     { ref: "add", nodeType: "CallFunction", functionName: "Add_IntInt", className: "KismetMathLibrary", pure: true },
     { ref: "set", nodeType: "VariableSet", variableName: "Ticks" },
   ],
   connections: [
-    { from: "tick.then", to: "auth.execute" },
-    { from: "auth.then", to: "br.execute" },
+    { from: "tick.then", to: "br.execute" },
     { from: "auth.ReturnValue", to: "br.Condition" },
     { from: "br.then", to: "set.execute" },
     { from: "get.Ticks", to: "add.A" },

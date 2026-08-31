@@ -1,6 +1,6 @@
 # Competitive landscape: Unreal Engine MCP servers
 
-Survey date: 2026-08-07. Scope: the 9 third-party GitHub repos identified as of this date as
+Survey date: 2026-08-07, with the first-party section re-checked 2026-08-31. Scope: the 9 third-party GitHub repos identified as of this date as
 competing/related "MCP server for Unreal Engine" projects, plus Epic's own first-party
 experimental plugin in UE 5.8 as a non-competitor comparison point.
 
@@ -275,6 +275,31 @@ headers, and has no authentication layer.
 
 As of 20 August 2026 the same plugin, and the same Toolset Registry, also ships in **Unreal Editor
 for Fortnite**, with UEFN-specific toolsets.
+
+### Re-checked 31 August 2026: two things worth knowing
+
+**UE 5.9 is confirmed**, announced at Unreal Fest Seoul, and Epic say it carries further work on the
+MCP plugin and "more AI integrations". Nothing actionable yet - there is no changelog to read - but
+it means the first-party surface is still moving and this document will need checking again rather
+than trusted.
+
+**The City Sample update is the interesting one, and it is an idea rather than a feature.** Epic
+shipped it with combined PCG and Unreal MCP workflows and a new PCG Primitives plugin, framed as
+letting an LLM *use PCG as its spatial language*.
+
+That is worth sitting with, because it is a genuinely different answer to a question this project
+has open. Level and geometry work is one of the gaps named in [../ROADMAP.md](../ROADMAP.md), and
+the obvious way to close it is the way everything else here works: more tools, finer control -
+place an actor, set a transform, repeat. Epic's answer is that an LLM should not be placing actors
+one at a time at all. It should be describing intent to a procedural system that does the placing,
+because the description is small and the result is large.
+
+The parallel to this project's own central finding is exact. Reading a graph node-by-node cost
+126,477 tokens and reading what the graph DOES costs 3,804; placing a city actor-by-actor is the
+same mistake in a different medium. **Nothing has been built here on the strength of it** - this is
+a note that the shape of the answer is probably "describe intent to a generator", not "add fifty
+placement tools", and the next person to open the level-authoring question should read Epic's
+version before designing ours.
 
 ### Correcting what this document said before
 
