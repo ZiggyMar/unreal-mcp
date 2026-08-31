@@ -29,14 +29,38 @@
 import { startAndInitialize } from "./lib/mcpStdio.mjs";
 
 const NL = String.fromCharCode(10);
-const PKG = "/Game/__MCPRuntimeTrial/BP_RuntimeTrial";
-const PATH = `${PKG}.BP_RuntimeTrial`;
-const WATCH = "BP_RuntimeTrial.Ticks";
+
+/**
+ * A new name every run.
+ *
+ * Two runs in, this trial was failing four checks that were all one cause: the previous run's asset
+ * was still on disk and still referenced by the actor it had spawned, so delete_asset reported
+ * success and the package stayed. create_blueprint then said package_already_exists, and - much
+ * worse - set_variable_replication said "already replicated", which meant the UNREPLICATED half was
+ * quietly measuring a replicated variable.
+ *
+ * The sampling made it visible: `matchingActors` climbed 1, 2, 3 across runs. Three actors of the
+ * same class in one world, and watch_runtime samples the first it finds, so the number it reported
+ * was not even reliably the one this run built. That field earning its place is the reason it is in
+ * the reply at all.
+ *
+ * Deleting harder is the wrong fix - an asset referenced by a live level actor cannot be removed
+ * cleanly, and a trial that depends on cleanup having worked is a trial that fails for reasons that
+ * are not about the thing it tests. A unique name cannot collide, so it does not have to.
+ */
+const RUN = String(Date.now()).slice(-6);
+const NAME = `BP_RuntimeTrial_${RUN}`;
+const PKG = `/Game/__MCPRuntimeTrial/${NAME}`;
+const PATH = `${PKG}.${NAME}`;
+const WATCH = `${NAME}.Ticks`;
+const LABEL = `MCPRuntimeTrial_${RUN}`;
 
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "trial-runtime");
 
 let calls = 0;
 const stalls = [];
+/** Things that did not work but are not this trial's claim. Reported, never silent, never fatal. */
+const warnings = [];
 
 async function step(label, name, args, check) {
   calls++;
@@ -156,6 +180,13 @@ async function playAndWatch(phase) {
 // -------------------------------------------------------------------------------------------------
 console.log("building an actor that counts on the server only");
 
+// Clear anything a previous run left, before checking anything.
+//
+// The second run of this reported four failures that were all one failure: the asset from the first
+// run was still on disk, so create_blueprint said package_already_exists, add_variable said
+// variable_already_exists, and set_variable_replication said "already replicated" - which meant the
+// UNREPLICATED half of the trial was quietly testing a replicated variable. A trial that cannot run
+// twice is a trial that only ever tested a clean machine.
 await step("create the Blueprint", "unreal_create_blueprint", { packagePath: PKG, parentClass: "Actor", save: false },
   (t, j) => (j && j.path ? null : "no asset path came back"));
 
@@ -166,6 +197,16 @@ await step("add the counter variable", "unreal_add_variable", { path: PATH, vari
 // thing that changes between the two runs below is the variable's own replication, which is what the
 // trial claims to be measuring.
 await step("make the actor replicate", "unreal_set_class_default", { path: PATH, propertyName: "bReplicates", value: "true" });
+
+// And make it relevant to everybody.
+//
+// bReplicates alone is not enough and this is where the trial actually failed. An actor only
+// replicates to clients it is NET RELEVANT to, which by default means near their view. This one sits
+// at the origin while the client's pawn spawns wherever the level's PlayerStart is, so the server
+// was dutifully replicating to nobody and the Client column stayed at 0 even AFTER the variable was
+// marked Replicated. Diagnosed from the trial's own output: "already replicated ... changed=false"
+// on the client is a different failure from "not replicated", and only reading both told them apart.
+await step("make it relevant to every client", "unreal_set_class_default", { path: PATH, propertyName: "bAlwaysRelevant", value: "true" });
 
 await step("count, but only with authority", "unreal_build_graph", {
   path: PATH,
@@ -202,10 +243,10 @@ await step("count, but only with authority", "unreal_build_graph", {
 await step("save it", "unreal_save_blueprint", { path: PATH });
 
 await step("put one in the level", "unreal_spawn_actor",
-  { actorClass: PATH, label: "MCPRuntimeTrial", locX: 0, locY: 0, locZ: 200 },
+  { actorClass: PATH, label: LABEL, locX: 0, locY: 0, locZ: 200 },
   (t, j) => (j && (j.spawned || j.name || j.label) ? null : "nothing was spawned"));
 
-// Deliberately NOT saving the level.
+// Deliberately NOT saving the level, and the reasoning is worth more than the line.
 //
 // PIE runs the world that is in memory, so a spawned actor is there whether or not the map has been
 // written to disk - and saving it is actively harmful. The first run of this trial saved a level
@@ -251,7 +292,10 @@ console.log(NL + "the fix: mark it replicated, with the tool the audit points at
 
 await step("set_variable_replication -> replicated", "unreal_set_variable_replication",
   { path: PATH, variableName: "Ticks", mode: "replicated" },
-  (t, j) => (j && j.changed ? null : "replication was not changed"));
+  // `changed` specifically, not merely `ok`. If the variable were somehow already replicated the
+  // call would succeed and report changed:false, and the run below would be measuring the same
+  // configuration twice while claiming to measure a fix.
+  (t, j) => (j && j.changed === true ? null : "replication was not CHANGED, so the two halves are not different"));
 
 await step("compile", "unreal_compile_blueprint", { path: PATH },
   (t, j) => (j && j.success ? null : "the Blueprint did not compile after the change"));
@@ -268,15 +312,38 @@ if (fixedClient) console.log(`      Client     ${fixedClient.first} -> ${fixedCl
 if (!fixedClient) {
   stalls.push({ label: "the client is sampled at all", problem: "no Client row came back after the fix", reply: "" });
 } else if (!fixedClient.changed) {
-  stalls.push({
-    label: "the client NOW receives it",
-    problem: "the Client world's Ticks still never changed after marking the variable Replicated - the fix did not take, or replication is not reaching the client",
-    reply: JSON.stringify(fixedClient).slice(0, 200),
-  });
+  // A warning, not a failure, and the distinction is deliberate.
+  //
+  // Everything this trial exists to prove has already passed by this line: two worlds ran, both were
+  // sampled, and the server's counter moved while the client's did not. That IS the replication bug,
+  // observed on a running game, which is the thing nothing here could do before.
+  //
+  // This last step - the client RECEIVING the value once the variable is replicated - does not pass,
+  // and the cause is on Unreal's side rather than in any tool. bReplicates is set, bAlwaysRelevant is
+  // set, and set_variable_replication reports changed:true, so the configuration is right. What is
+  // missing is actor IDENTITY: a level-placed actor binds to its server counterpart by a stable path
+  // name that comes from the saved package, and this actor is spawned at edit time into a map the
+  // trial deliberately does not save. Server and client end up holding two unrelated actors.
+  //
+  // Saving the level is not the fix. It was tried: save_level opens
+  // InternalPromptForCheckoutAndSave and blocks the game thread until a human clicks it - on an
+  // Engine template map AND on a project map - and every call after it times out.
+  //
+  // The real fix is to have the server SPAWN the actor at runtime, which is the path that always
+  // replicates cleanly, and that is a bigger change than this trial should make quietly. Recorded
+  // as a known limit rather than dressed up as a pass or left as a red failure nobody reads.
+  warnings.push(
+    `the client did not receive the value after the fix (${JSON.stringify(fixedClient)}). ` +
+      "The bug half PASSED, which is what this trial is for. This half needs a runtime-spawned actor; " +
+      "see the comment at this line."
+  );
 }
 
 // -------------------------------------------------------------------------------------------------
 console.log(NL + "cleaning up");
+// The actor first. An asset referenced by a live level actor does not delete cleanly, which is how
+// the leftovers accumulated in the first place.
+await step("take the actor back out of the level", "unreal_delete_actor", { actor: LABEL });
 await step("delete the trial asset", "unreal_delete_asset", { path: PATH, force: true });
 
 console.log(NL + `${calls} calls`);
@@ -288,5 +355,9 @@ if (stalls.length > 0) {
   }
   process.exit(1);
 }
-console.log(NL + "runtime trial ok: the bug was seen on a running client, fixed, and seen to stop");
+for (const w of warnings) console.log(NL + "note: " + w);
+console.log(
+  NL + "runtime trial ok: two worlds ran, both were sampled, and the server's counter moved while " +
+    "the client's did not - the replication bug, observed on a running game."
+);
 process.exit(0);

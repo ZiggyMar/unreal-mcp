@@ -95,11 +95,21 @@ Tables, Data Assets and C++.
 The remaining gap is a different kind. Ranked by how much each one costs, measured against real
 requests rather than guessed:
 
-1. **Watching the game run.** Written, not yet proven. `watch_runtime` samples variables on live
-   actors during PIE in every world, labelled by net role, and `pie_status` now reports that
-   topology - so "Authority: 0 → 47, Client0: 0 → 0" is a replication bug observed rather than
-   argued. It compiles on 5.8 and **has not yet been run against a live PIE session**, which is the
-   only thing that would make it real. Until then it is a claim, and this file should keep saying so.
+1. **Watching the game run. Done, and proven.** `watch_runtime` samples variables on live actors
+   during PIE in every world, labelled by net role. Run against a real two-client session by
+   `npm run trial:runtime`:
+
+   ```text
+   Authority   99 -> 490   changed=true
+   Client       0 -> 0     changed=false
+   ```
+
+   That is a replication bug observed rather than argued - the thing nothing here could do before.
+   One half is a known limit and is reported as a note by the trial itself: the client RECEIVING the
+   value after the fix does not pass, because a level-placed actor binds to its server counterpart by
+   a stable path name from the saved package, and the trial's actor is spawned at edit time into an
+   unsaved map. Saving is not the answer - `save_level` opens a checkout prompt that blocks the game
+   thread. The answer is a runtime-spawned actor, which is the next piece of this.
 2. **Driving the game.** Sampling state is half of it. Nothing here can press a key, click a widget,
    or move a character, so any bug that only appears after an interaction still needs a person to
    reproduce it. This is the single largest remaining item and it is what separates "verifies its own

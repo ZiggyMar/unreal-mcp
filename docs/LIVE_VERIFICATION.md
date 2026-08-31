@@ -206,3 +206,59 @@ re-run rather than a claim, which is the only reason to trust it.
 Worth noting what made this findable at all: the check is about the **project**, not about any one
 Blueprint. Every fact it needs sits in a different asset from every other, and no per-asset review
 could ever have put them together.
+
+
+## Watching a replication bug happen, on a running game (2026-08-31)
+
+The first time anything in this repository observed runtime behaviour rather than reading assets.
+`npm run trial:runtime` against a live UE 5.6 editor, two PIE clients under one process:
+
+```text
+the bug: Ticks is not replicated
+  unreplicated: worlds up                        2
+      Authority  99 -> 490   changed=true
+      Client       0 -> 0    changed=false
+```
+
+The trial builds an actor whose server copy increments a non-replicated counter, plays with two
+players, and reads the value out of **both worlds**. The server counted to 490 and the client never
+moved. That is `server-writes-unreplicated` - the check this project prices at the top of its scale,
+whose entire difficulty is that it works for the host and one person cannot reproduce it - seen
+happening.
+
+### What it took, because none of it was the feature
+
+Five runs, and every failure was somewhere else:
+
+| Run | Failed on | Actually wrong |
+| --- | --- | --- |
+| 1 | everything, silently, for 11 minutes | Open World startup map blocked the game thread |
+| 2 | `ping`, in 15 seconds | the preflight added after run 1, working |
+| 3 | `build_graph` | `HasAuthority` is pure; the header says `BlueprintCallable` |
+| 4 | `create_blueprint` | previous run's asset survived; `matchingActors` climbed 1, 2, 3 |
+| 5 | — | passes |
+
+Run 3 is the one worth keeping. `Actor.h` declares `HasAuthority` as `UFUNCTION(BlueprintCallable)`
+with no `BlueprintPure`, so reading the header says "impure, wire it into the exec chain". The real
+node has no exec pins at all - UHT promotes a **const** BlueprintCallable with a return value to pure
+automatically. The bridge said so in one line: *"input pin 'execute' not found. Use one of: self"*.
+That is the whole argument for asking the running engine instead of reading source, and it is the
+error message added two days earlier paying for itself.
+
+Run 4 is the second: `watch_runtime`'s own `matchingActors` field is what exposed the leftovers.
+Three actors of one class in one world, and the sampler takes the first it finds, so the number being
+reported was not reliably from the actor under test. A field added because "several actors" seemed
+worth mentioning turned out to be the thing that caught a broken trial.
+
+### What it does not prove, stated by the trial itself
+
+The client **receiving** the value after `set_variable_replication` does not pass. The configuration
+is right - `bReplicates`, `bAlwaysRelevant`, and `changed: true` from the replication call - and the
+missing piece is actor identity: a level-placed actor binds to its server counterpart by a stable
+path name that comes from the saved package, and this one is spawned at edit time into a map the
+trial deliberately does not save. Saving was tried and is worse: `save_level` opens
+`InternalPromptForCheckoutAndSave`, which blocks the game thread until a human clicks it, on an
+Engine template map **and** on a project map.
+
+The trial reports that as a `note` and still exits 0, because everything it was written to prove
+passed. Turning it into a red failure would train somebody to ignore a red failure.
