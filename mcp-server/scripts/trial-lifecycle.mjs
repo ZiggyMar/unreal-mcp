@@ -1,12 +1,12 @@
 // Everything this server can create, it should be able to rename and remove - and each of those
 // operations should leave the project consistent rather than merely different.
 //
-// Seven bridge commands were added across three sessions to close that gap: rename_asset,
+// Eight bridge commands were added across four sessions to close that gap: rename_asset,
 // duplicate_asset, rename_variable, remove_variable, rename_component, remove_component,
-// remove_function. Every one compiles against 5.6, 5.8 and the game target, and not one has been
-// RUN, because the plugin binary in the editor predates all of them.
+// remove_function, create_asset. Every one compiles against 5.6, 5.8 and the game target, and not
+// one has been RUN, because the plugin binary in the editor predates all of them.
 //
-// That is a real risk and it grows quietly: the day the plugin is rebuilt, seven commands go live
+// That is a real risk and it grows quietly: the day the plugin is rebuilt, eight commands go live
 // having never been executed once. This trial is the thing that runs the moment they exist. Today it
 // reports what it cannot run and exits 2; after a rebuild it either passes or finds what compiling
 // could not.
@@ -178,6 +178,46 @@ try {
         paths.map((p) => p.split("/").pop()).join(", ")
       );
     }
+  }
+  // ---------------------------------------------------------------------------------------------
+  console.log("");
+  console.log("an asset of a type with no dedicated tool");
+  const IA = `${SCRATCH_ROOT}/IA_Life${stamp}`;
+  const madeAsset = await call("unreal_create_asset", { path: IA, assetClass: "InputAction" });
+  if (madeAsset.unavailable) {
+    skipped("create_asset", "the plugin has never heard of it");
+  } else {
+    cleanup.push(IA);
+    // The class, not just the path. A factory that matched something close would report a path and
+    // hand back the wrong type, which is the exact failure the exact-match rule exists to prevent.
+    check(
+      "an InputAction is created, and is an InputAction",
+      madeAsset.ok && madeAsset.json?.class === "InputAction",
+      madeAsset.json?.class ?? madeAsset.body.slice(0, 80)
+    );
+    check("and it is saved, not just made", madeAsset.json?.saved === true, `saved: ${madeAsset.json?.saved}`);
+
+    const listed = await call("unreal_list_assets", { className: "InputAction", pathPrefix: SCRATCH_ROOT, maxResults: 20 });
+    const found = (listed.json?.assets ?? []).map((a) => (typeof a === "string" ? a : a.path));
+    check("the editor can find it afterwards", found.some((p) => p.includes(`IA_Life${stamp}`)), found.join(", ") || "(none)");
+
+    // Two refusals, both of which must NOT create anything. A creation tool that half-works is worse
+    // than one that fails, because the caller believes the asset is usable.
+    const again = await call("unreal_create_asset", { path: IA, assetClass: "InputAction" });
+    check("it refuses to overwrite what is already there", /already_exists/.test(again.body), again.body.slice(0, 90));
+
+    const wrongTool = await call("unreal_create_asset", { path: `${SCRATCH_ROOT}/BP_Nope${stamp}`, assetClass: "Blueprint" });
+    check(
+      "a Blueprint is refused and the right tool named",
+      /use_dedicated_tool/.test(wrongTool.body) && /create_blueprint/.test(wrongTool.body),
+      wrongTool.body.slice(0, 90)
+    );
+    const leaked = await call("unreal_list_blueprints", { pathPrefix: SCRATCH_ROOT, maxResults: 60 });
+    check(
+      "and the refused Blueprint was not created anyway",
+      !(leaked.json?.blueprints ?? []).some((b) => (b.path ?? "").includes(`BP_Nope${stamp}`)),
+      "nothing left behind"
+    );
   }
 } finally {
   await cleanUpScratch(

@@ -11,32 +11,32 @@ export const SEARCH_BASELINE_TOKENS = 1135;
 
 /** Tokens added by enabling each group. */
 export const GROUP_COST_TOKENS: Record<string, number> = {
-  core: 10443,
+  core: 10469,
   ai: 294,
   anim: 306,
   cine: 299,
   cpp: 745,
   data: 4798,
-  edit: 4092,
+  edit: 4084,
   input: 946,
-  maintenance: 4016,
+  maintenance: 4452,
   materials: 1359,
-  scene: 6610,
+  scene: 6611,
   ui: 1900,
   vfx: 315,
 };
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
-export const ALL_GROUPS_TOKENS = 37257;
+export const ALL_GROUPS_TOKENS = 37712;
 
 /** Naming the eight tools one Blueprint feature needs, instead of enabling the `core` group. */
-export const FEATURE_SET_TOKENS = 4531;
+export const FEATURE_SET_TOKENS = 4524;
 
 /** Standing cost of each preset, enabled on its own from the `search` baseline. */
 export const PRESET_COST_TOKENS: Record<string, number> = {
-  diagnose: 10070,
-  feature: 7525,
-  ui: 5728,
-  data: 6697,
-  cpp: 4323,
+  diagnose: 10099,
+  feature: 7517,
+  ui: 5723,
+  data: 6696,
+  cpp: 4322,
 };

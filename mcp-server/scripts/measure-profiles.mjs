@@ -158,7 +158,7 @@ export const PROFILES = [
  * the two: a total ceiling can be argued up when real capability arrives, and this one cannot,
  * because nothing about new capability makes the average tool more expensive.
  */
-const PER_TOOL_CEILING = 420;
+export const PER_TOOL_CEILING = 420;
 
 async function measure(profile) {
   const server = await startAndInitialize({ UNREAL_MCP_PROFILE: profile }, "measure-profiles");

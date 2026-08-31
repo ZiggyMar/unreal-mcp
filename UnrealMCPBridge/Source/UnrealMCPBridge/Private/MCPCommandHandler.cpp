@@ -1173,6 +1173,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleRenameComponent(Params);
 	}
+	else if (Cmd == TEXT("create_asset"))
+	{
+		Response = HandleCreateAsset(Params);
+	}
 	else if (Cmd == TEXT("remove_component"))
 	{
 		Response = HandleRemoveComponent(Params);

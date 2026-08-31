@@ -191,7 +191,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4008 | ten tools, fixed, for a small local model |
 | `core` | 12616 | the authoring spine |
 | `lazy` | 12629 | `core` plus deferred groups |
-| `full` | 38327 | everything, for a model that can afford it |
+| `full` | 38737 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -408,6 +408,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
+| `unreal_create_asset` | `create_asset` | Create any asset type the editor's New Asset menu can create — InputAction, InputMappingContext, Blackboard, BehaviorTree, SoundCue, CurveFloat, LevelSequence, NiagaraSystem, DataAsset. Refuses the eight types with a dedicated tool, and refuses to overwrite. |
 | `unreal_create_enum` | `create_enum` | Create a user-defined Enum with named entries. |
 | `unreal_list_enum_entries` | `list_enum_entries` | Read an Enum's entries. Works on engine enums too, for looking up exact value spellings. |
 
@@ -5929,6 +5930,42 @@ All four create paths now check memory first and return `asset_name_in_use` with
 and the exact create-delete-create sequence is a regression check that also asserts the editor is
 still answering afterwards. A tool that can crash the editor from a plain input mistake is worse
 than one missing the feature.
+
+### Everything else the New Asset menu can make
+
+This server could create eight kinds of asset — Blueprint, Widget Blueprint, Data Table, Enum,
+Struct, Material, Material Instance, Level — each through a handler that hard-codes one factory.
+Every other kind was unreachable, and the gap was not exotic. An ordinary UE5 request:
+
+> add a dash on Left Shift
+
+needs an `InputAction` asset. This server could *bind* an InputAction to a key with
+`unreal_map_input_key` and could never *make* one, so the feature dead-ended at step one on any
+modern project. Enhanced Input was supported in every respect except the first.
+
+The fix is the thing the editor already does. Every creatable asset type has a `UFactory` whose
+`GetSupportedClass()` names it, and "New Asset" is a menu built by walking those factories.
+`unreal_create_asset` finds the factory the same way and calls the same `IAssetTools::CreateAsset`
+the eight specific handlers call. **What the editor can make, this can make** — without a
+handler per asset type, forever.
+
+Three decisions in it are load-bearing:
+
+- **`CreateAsset`, not `CreateAssetWithDialog`.** The dialog form calls `ConfigureProperties()`,
+  which opens a *modal window* — and a modal window in a headless bridge command is a hang that
+  takes the editor with it.
+- **Exact class match only.** A factory registered for a parent class would produce an asset of the
+  wrong type while reporting success. "Close enough" is the failure this project keeps finding in
+  other tools.
+- **The eight with dedicated tools are refused, by name.** A `UBlueprintFactory` with no parent
+  class, or a `UDataTableFactory` with no row struct, produces an asset that exists and is broken —
+  worse than an error, because the caller believes it worked. It refuses and says which tool to use.
+  It also refuses to overwrite an existing asset.
+
+It compiles against 5.6, 5.8 and the game target. Like the other seven commands added since the
+plugin binary was last built, it is verified by `npm run trial:lifecycle`, which asserts the created
+asset is *of the class asked for*, that both refusals refuse, and that a refused creation left
+nothing behind.
 
 ### The numbers a model reads are guarded too
 

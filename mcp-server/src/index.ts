@@ -524,7 +524,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -4507,6 +4507,54 @@ register(
         // through is correct. See the note on read_class_defaults.
         ...(Array.isArray(result.fields) ? { fields: result.fields.map(compactStructField) } : {}),
       });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_create_asset",
+  {
+    title: "Create any other kind of asset",
+    description:
+      "Creates an asset of any type the editor's own New Asset menu can create - InputAction, InputMappingContext, " +
+      "Blackboard, BehaviorTree, SoundCue, CurveFloat, LevelSequence, NiagaraSystem, DataAsset, and the rest. It " +
+      "finds the same factory the menu would and uses it, so what the editor can make, this can make.\n\n" +
+      "Reach for it when a feature needs an asset that does not exist yet. The common case on UE5 is input: " +
+      "unreal_map_input_key binds an InputAction to a key, but something has to make the InputAction first, and " +
+      '"add a dash on Left Shift" starts here with assetClass "InputAction".\n\n' +
+      "It REFUSES the eight types that have their own tool - Blueprint, Widget Blueprint, Data Table, Enum, Struct, " +
+      "Material, Material Instance, Level - and names the one to use instead. Those need a parent class, a row " +
+      "struct or a parent material, and making one without that produces an asset that exists and is broken, which " +
+      "is worse than an error. It also refuses to overwrite an asset that already exists.",
+    inputSchema: {
+      path: z.string().describe('Where to create it, folder and name together, e.g. "/Game/Input/IA_Dash".'),
+      assetClass: z
+        .string()
+        .describe(
+          'The C++ type without the U prefix, e.g. "InputAction", "InputMappingContext", "BehaviorTree", ' +
+            '"SoundCue", "CurveFloat".'
+        ),
+      save: z.boolean().optional().describe("Write it to disk. Default true; an unsaved asset reverts on restart."),
+    },
+  },
+  async ({ path, assetClass, save }) => {
+    try {
+      const result = (await bridge.send("create_asset", { path, assetClass })) as { path?: string };
+      // Composed here rather than in the bridge, for the reason in MCPAssetOps.cpp: the bridge command
+      // does one thing and the save is visible in the reply instead of implied.
+      let saved = false;
+      let saveError: string | undefined;
+      if (save !== false && typeof result.path === "string") {
+        try {
+          await bridge.send("save_asset", { path: result.path });
+          saved = true;
+        } catch (err) {
+          saveError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      return jsonResult({ ...result, saved, ...(saveError ? { saveError } : {}) });
     } catch (err) {
       return errorResult(err);
     }

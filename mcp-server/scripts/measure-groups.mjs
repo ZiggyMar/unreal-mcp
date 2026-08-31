@@ -24,7 +24,7 @@
 // Usage: node scripts/measure-groups.mjs [--json] [--write]
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
-import { PROFILES } from "./measure-profiles.mjs";
+import { PROFILES, PER_TOOL_CEILING } from "./measure-profiles.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -58,7 +58,18 @@ const GROUPS = await discoverGroups();
  * recorded argument, and this was left at 32,000, so a surface inside its documented budget was
  * reported as over a stale one. Deriving it means the argument only has to be made in one place.
  */
-const ALL_GROUPS_CEILING = PROFILES.find((p) => p.name === "full").ceilingTokens;
+// Every group enabled is judged the way `full` is judged: per tool, not in total.
+//
+// This read PROFILES.find(p => p.name === "full").ceilingTokens, and `full` deliberately has no such
+// field - it is the one profile with no fixed size, budgeted per tool instead. So the ceiling was
+// `undefined`, `everything.tokens > undefined` is always false, and this check has been unable to
+// fail since that change. It still printed "groups ok: ... everything-on within undefined tokens",
+// which is the exact shape this project keeps finding: a guard reporting success while watching
+// nothing, with the word `undefined` sitting in the output where a number should be.
+//
+// Using the per-tool rule rather than restoring a total is the honest fix. Enabling every group is
+// the same surface `full` stands, so it should answer to the same standard, and a total would go
+// stale every time a group gains a tool.
 
 /**
  * Every group the server actually has, from its own census.
@@ -288,15 +299,17 @@ async function main() {
     }
   }
 
-  if (everything.tokens > ALL_GROUPS_CEILING) {
+  const everythingPerTool = Math.round(everything.tokens / everything.tools.length);
+  if (everythingPerTool > PER_TOOL_CEILING) {
     console.error(
       NEWLINE +
-        `every group enabled is ~${everything.tokens} tokens, over the ${ALL_GROUPS_CEILING} ceiling. ` +
-        `That is the whole surface, so this is the same budget \`full\` is held to.`
+        `every group enabled averages ~${everythingPerTool} tokens across ${everything.tools.length} tools, ` +
+        `over the ${PER_TOOL_CEILING} per-tool ceiling. That is the whole surface, so it answers to the ` +
+        `same budget \`full\` does: descriptions are bloating, or a group gained something expensive.`
     );
     process.exit(1);
   }
-  console.log(NEWLINE + `groups ok: ${rows.length} measured, everything-on within ${ALL_GROUPS_CEILING} tokens`);
+  console.log(NEWLINE + `groups ok: ${rows.length} measured, everything-on averages ~${everythingPerTool} tokens a tool across ${everything.tools.length}, within ${PER_TOOL_CEILING}`);
 }
 
 main().catch((err) => {

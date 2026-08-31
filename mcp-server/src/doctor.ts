@@ -120,6 +120,10 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     { cmd: "rename_component", feature: "renaming a component" },
     { cmd: "remove_component", feature: "removing a component" },
     { cmd: "remove_function", feature: "removing a function" },
+    // Safe to probe for the same reason as the two above: it refuses a request with no `path` or
+    // `assetClass` before it looks for a factory, so the reply tells "this command does not exist"
+    // apart from "you did not give it a class".
+    { cmd: "create_asset", feature: "creating any asset the New Asset menu can create" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 
