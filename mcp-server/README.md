@@ -1623,6 +1623,40 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### The doctor said everything was fine while two commands were missing
+
+`unreal_doctor` reported *"The plugin implements every command this server probes for"* against an
+editor that did not have `watch_runtime` or `set_variable_replication`. The sentence was true and
+useless: the probe list is maintained by hand, it had gone stale, and a model calling either tool
+would get `unknown_cmd` from the one check that exists to explain things like that.
+
+Two changes, and the second is the one that matters.
+
+**The probe now says how many it probed.** `"5 probed commands are all implemented. That is a
+sample, not the whole surface"` cannot be mistaken for an all-clear the way the old wording could.
+
+**And there is a freshness check.** A hand-maintained list catches the commands somebody remembered
+to add to it; comparing the running plugin's build stamp against the newest C++ source on disk
+catches **every command at once**, because a plugin older than the source is missing all of them by
+definition:
+
+```text
+[warn] plugin freshness: The running plugin was built Aug 30 2026 19:42:16, and the C++ source on
+       disk is newer.
+       -> Every bridge command added since that build answers unknown_cmd, and nothing else looks
+          wrong. Close the editor, run `npm run build:engines`, reopen - and check that
+          build-targets.json lists the project you actually have open.
+```
+
+That last clause is there because it is the failure that actually happened: the project being worked
+in was not a build target, so it never received anything, for days, while everything looked healthy.
+
+The source-time lookup is **injected**, like the clock, so the module keeps its property of touching
+nothing but the bridge and the check is testable without a source tree that happens to look right.
+When there are no sources beside the server — an installed copy — it returns 0 and the check is
+**silent rather than reassuring**, because reporting freshness from their absence would be inventing
+an answer.
+
 ### Two compactions measured and reverted, which is also a result
 
 The repeated-key scan scored every row-shaped reply. `list_blueprint_graphs` came out highest at 44%

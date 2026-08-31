@@ -12,6 +12,8 @@ const PROBE_REPLIES = {
   list_variables: new Error("missing_param: path"),
   create_data_table: new Error("missing_param: packagePath and rowStruct are required"),
   save_asset: new Error("missing_param: path"),
+  set_variable_replication: new Error("missing_param: path, variableName and mode are required"),
+  watch_runtime: new Error("missing_param: watch is required"),
 };
 
 const HEALTHY = {
@@ -57,6 +59,11 @@ const clock = (stepMs = 5) => {
   let t = 0;
   return () => (t += stepMs);
 };
+
+/** runDoctor with a fake bridge and an injected source-mtime, since the real tree is not a fixture. */
+function doctorWith(overrides, newestSource) {
+  return runDoctor(fakeBridge(overrides), CONN, clock(), newestSource);
+}
 
 test("a healthy editor reports ready, with every check ok and no remedies", async () => {
   const report = await runDoctor(fakeBridge(), CONN, clock());
@@ -261,4 +268,44 @@ test("a current plugin reports no missing features", async () => {
   const report = await runDoctor(fakeBridge(), CONN, clock());
   const features = check(report, "plugin features");
   assert.equal(features.status, "ok");
+});
+
+test("a plugin older than the C++ source is reported, with what to do", async () => {
+  // The check that would have made two days shorter. A hand-maintained probe list catches the
+  // commands somebody remembered to add to it; this catches every command at once, because a plugin
+  // older than the source is missing all of them by definition. Measured against a real editor: it
+  // was running a build from Aug 30 19:42 while the source had moved on, and `plugin features`
+  // reported everything implemented.
+  const built = "Aug 30 2026 19:42:16";
+  const sourceNewer = Date.parse(built) + 60 * 60 * 1000;
+  const report = await doctorWith({ ping: { ...HEALTHY.ping, pluginBuiltAt: built } }, () => sourceNewer);
+  const check = report.checks.find((c) => c.name === "plugin freshness");
+  assert.ok(check, `expected a freshness check; got ${report.checks.map((c) => c.name).join(", ")}`);
+  assert.equal(check.status, "warn");
+  assert.match(check.remedy, /build:engines/);
+  assert.match(check.remedy, /build-targets\.json/, "a project that is not a target never receives anything");
+});
+
+test("a plugin built from the current source is not nagged about", async () => {
+  const built = "Aug 31 2026 09:00:00";
+  const report = await doctorWith({ ping: { ...HEALTHY.ping, pluginBuiltAt: built } }, () => Date.parse(built) - 1000);
+  const check = report.checks.find((c) => c.name === "plugin freshness");
+  assert.equal(check.status, "ok");
+});
+
+test("no sources on disk means no verdict, not a clean bill of health", async () => {
+  // An installed copy of this server has no UnrealMCPBridge sources beside it. Reporting freshness
+  // from their absence would be inventing an answer.
+  const report = await doctorWith({ ping: { ...HEALTHY.ping, pluginBuiltAt: "Aug 30 2026 19:42:16" } }, () => 0);
+  assert.ok(!report.checks.some((c) => c.name === "plugin freshness"), "silent when it cannot tell");
+});
+
+test("the feature probe says how many it probed, not that everything is fine", async () => {
+  // "The plugin implements every command this server probes for" was true and useless: it reported
+  // an all-clear on an editor that was missing two commands, because they were not in the list.
+  const report = await doctorWith({}, () => 0);
+  const check = report.checks.find((c) => c.name === "plugin features");
+  assert.equal(check.status, "ok");
+  assert.match(check.detail, /\d+ probed commands/);
+  assert.match(check.detail, /sample, not the whole surface/);
 });

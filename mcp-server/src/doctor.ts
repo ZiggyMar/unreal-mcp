@@ -14,6 +14,10 @@
  * it.
  */
 
+import { readdirSync, statSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { BridgeLike } from "./autoLayout.js";
 import type { FindNodeResult, GetProjectOverviewResult, PingResult } from "./types.js";
 
@@ -45,10 +49,52 @@ function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * Newest modification time across the plugin's C++ sources, or 0 when they are not there.
+ *
+ * Zero is a real answer and means "cannot tell", not "up to date". An installed copy of this server
+ * has no UnrealMCPBridge sources beside it, and reporting a freshness verdict from their absence
+ * would be inventing one.
+ *
+ * Injected into runDoctor rather than called from it, so the module keeps its property of touching
+ * nothing but the bridge, and so the check is testable without a filesystem that happens to look
+ * right.
+ */
+export function newestSourceMs(root?: string): number {
+  const dir = root ?? join(dirname(fileURLToPath(import.meta.url)), "..", "..", "UnrealMCPBridge", "Source");
+  let newest = 0;
+  const walk = (at: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(at, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(at, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(cpp|h|cs)$/i.test(entry.name)) {
+        try {
+          newest = Math.max(newest, statSync(full).mtimeMs);
+        } catch {
+          /* a file that vanished mid-walk is not a freshness signal */
+        }
+      }
+    }
+  };
+  walk(dir);
+  return newest;
+}
+
 export async function runDoctor(
   bridge: BridgeLike,
   connection: { host: string; port: number; expectedProject?: string },
-  now: () => number = () => Date.now()
+  now: () => number = () => Date.now(),
+  /**
+   * Injected so this module keeps its property of touching nothing but the bridge, and so the
+   * freshness check can be tested without a source tree that happens to look right.
+   */
+  newestSource: () => number = newestSourceMs
 ): Promise<DoctorReport> {
   const expectedProject = connection.expectedProject;
   const checks: DoctorCheck[] = [];
@@ -160,6 +206,8 @@ export async function runDoctor(
     { cmd: "list_variables", feature: "reading a Blueprint's variables" },
     { cmd: "create_data_table", feature: "Data Tables" },
     { cmd: "save_asset", feature: "saving anything that is not a Blueprint" },
+    { cmd: "set_variable_replication", feature: "changing a variable's replication" },
+    { cmd: "watch_runtime", feature: "watching values change during Play-In-Editor" },
   ];
   const missing: string[] = [];
   for (const probe of FEATURE_PROBES) {
@@ -174,7 +222,13 @@ export async function runDoctor(
     checks.push({
       name: "plugin features",
       status: "ok",
-      detail: `The plugin implements every command this server probes for.`,
+      // Says HOW MANY, because the sentence without a number was actively misleading. This list is
+      // maintained by hand, it went stale, and the editor it was run against was missing
+      // watch_runtime and set_variable_replication while this line reported everything implemented.
+      // "Every command this server probes for" was true and useless.
+      detail:
+        `${FEATURE_PROBES.length} probed commands are all implemented. That is a sample, not the ` +
+        `whole surface - "plugin freshness" is what catches a plugin missing something newer.`,
     });
   } else {
     checks.push({
@@ -187,6 +241,45 @@ export async function runDoctor(
         "your project's Plugins/ directory, let the editor rebuild it, and restart. Until then the " +
         "affected tools fail with unknown_cmd and nothing explains why.",
     });
+  }
+
+  // 2a. Is the running plugin built from the source on disk?
+  //
+  // The check that would have made the last two days shorter. A hand-maintained probe list catches
+  // the commands somebody remembered to add to it; this catches every command at once, because a
+  // plugin older than the source is missing all of them by definition.
+  //
+  // The failure it names is quiet and common. The C++ half arrives only through
+  // `npm run build:engines`, into the projects listed in build-targets.json, and an editor keeps
+  // answering perfectly on whatever binary it loaded at launch. Nothing is broken, so nothing says
+  // so - until a tool returns unknown_cmd and the reason is a rebuild nobody knew was needed.
+  //
+  // Best effort, and silent when it cannot tell: an installed copy has no C++ sources beside it, and
+  // a plugin old enough not to report pluginBuiltAt predates the field rather than being stale.
+  {
+    const stamp = (ping as PingResult & { pluginBuiltAt?: string }).pluginBuiltAt;
+    const built = typeof stamp === "string" ? Date.parse(stamp) : NaN;
+    const newestSourceTime = newestSource();
+    if (!Number.isNaN(built) && newestSourceTime > 0) {
+      if (newestSourceTime > built) {
+        checks.push({
+          name: "plugin freshness",
+          status: "warn",
+          detail: `The running plugin was built ${stamp}, and the C++ source on disk is newer.`,
+          remedy:
+            "Every bridge command added since that build answers unknown_cmd, and nothing else looks " +
+            "wrong. Close the editor, run `npm run build:engines`, reopen - and check that " +
+            "build-targets.json lists the project you actually have open, because a project that is " +
+            "not a target never receives anything.",
+        });
+      } else {
+        checks.push({
+          name: "plugin freshness",
+          status: "ok",
+          detail: "The running plugin is built from the current C++ source.",
+        });
+      }
+    }
   }
 
   // 2b. Source control, because it decides whether a save can succeed at all.
