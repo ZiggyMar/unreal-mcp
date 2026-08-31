@@ -1923,6 +1923,41 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### 306 tokens per request to avoid one 540-token call
+
+The `search` profile is what a frontier session starts on, and it had drifted to **2,457 tokens
+against a 2,500 ceiling** - 43 tokens of headroom, with the next tool addition guaranteed to break
+it. Of its 1,425 tool tokens, `unreal_enable_tools` was 538, and **306 of those were a bullet list of
+all twelve groups**.
+
+That list is the same catalogue `unreal_list_tools` returns at runtime, with measured costs instead
+of prose, for 540 tokens. So the arithmetic:
+
+```text
+keep the bullets:   306 tokens x every request of the session
+call list_tools:    540 tokens, once
+```
+
+**Break-even is two requests.** A forty-request session pays 12,240 tokens to avoid one call of 540.
+Tool definitions are billed on every request before your message is read, which is the whole premise
+of the profile system, and this was the largest thing in the profile that premise exists to protect.
+
+This is not the "trim descriptions" lever that was measured and rejected here long ago - that was
+about cutting the *teaching* a weaker model relies on, and it buys about a tenth of the total while
+making every model worse at sequencing. This removes a duplicated **catalogue**, and replaces it with
+one line naming the call that returns it better. The two groups worth knowing without a lookup -
+`core` is large and for authoring, `edit` is surgery you usually do not need - stayed.
+
+```text
+search   2,457 -> 2,209        headroom 43 -> 291
+```
+
+The same pass found a **fourth** hand-written copy of the group list, and the stalest yet:
+`list_tools`' own `group` filter offered seven of the twelve, so a model reading it learned that
+filtering by `input`, `anim`, `ai`, `vfx` or `cpp` was not possible. It is. Derived now, like the
+other two, and the guard test covers it - a listing that disagrees with the behaviour sends a caller
+looking elsewhere for something that was here all along.
+
 ### The doctor said "missing 2" when eight were missing
 
 Running `unreal_doctor` against the editor this is developed on:

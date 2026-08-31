@@ -417,8 +417,17 @@ test("every group the census reports is one enable_tools will accept and describ
   const notAccepted = advertised.filter((g) => !accepted.includes(g));
   assert.deepEqual(notAccepted, [], `the census offers groups enable_tools refuses: ${notAccepted.join(", ")}`);
 
-  const undescribed = advertised.filter((g) => !enableTool.description.includes(`"${g}"`));
-  assert.deepEqual(undescribed, [], `groups exist but the description never mentions them: ${undescribed.join(", ")}`);
+  // list_tools' own `group` filter was a FOURTH copy of this list and the stalest - it offered seven
+  // of the twelve, so a model reading it learned that filtering by "input" or "anim" was impossible.
+  // It is derived now, and this holds it to the same set.
+  const listTool = messages.find((m) => m.id === 3).result.tools.find((t) => t.name === "unreal_list_tools");
+  const filterable = listTool.inputSchema.properties.group.description;
+  const unfilterable = advertised.filter((g) => !filterable.includes(g));
+  assert.deepEqual(
+    unfilterable,
+    [],
+    `list_tools offers a group filter that does not mention: ${unfilterable.join(", ")}`
+  );
 
   // And the price is real, not the "~?" that a missing measurement produces.
   const unpriced = Object.entries(census.groups).filter(([, line]) => line.includes("~? tok"));

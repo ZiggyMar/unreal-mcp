@@ -3639,7 +3639,13 @@ register(
       group: z
         .string()
         .optional()
-        .describe('Only tools in this group: core, edit, ui, materials, data, scene, maintenance.'),
+        .describe(
+          // Derived, because this was a FOURTH hand-written copy of the group list and the stalest of
+          // them: it offered seven of the twelve, so a model reading it learned that filtering by
+          // "input", "anim", "ai", "vfx" or "cpp" was not possible. It is. A listing that disagrees
+          // with the behaviour sends a caller looking somewhere else for something that was here.
+          `Only tools in this group: ${ENABLEABLE_GROUPS.join(", ")}.`
+        ),
       all: z
         .boolean()
         .optional()
@@ -3734,26 +3740,13 @@ register(
     title: "Turn on a group of Unreal tools",
     description:
       "Most tools stay off until asked, so a session that never builds UI never pays for the UI tools. Call this " +
-      "the moment you need one from a group, then use it normally. Groups:\n" +
-      '  - "core": the authoring spine - read a project, find a function, scaffold a Blueprint, build a ' +
-      "graph, compile, review, and save. Much the largest: enable it to author, not to look around. " +
-      "unreal_list_tools reports what each group costs.\n" +
-      '  - "cpp": the C++ in this project - find where a symbol is declared, and compile a file to see if an ' +
-      "edit built. Only useful on a project that has C++.\n" +
-      '  - "edit": single-node graph editing (add/remove one node, wire one pin, set one default, change a ' +
-      "variable's replication). You usually do NOT need this: unreal_build_graph places whole graphs in one call " +
-      "and lays them out. Enable it to adjust an existing graph surgically.\n" +
-      '  - "ui": UMG. Create Widget Blueprints, build the widget tree, set widget and layout-slot properties.\n' +
-      '  - "materials": Materials and Material Instances - create them, parameterise them, override them.\n' +
-      '  - "data": Structs, Enums, and asset lookup by class.\n' +
-      '  - "scene": Levels, actors, components, class defaults (including replication), project settings, and ' +
-      "Play In Editor.\n" +
-      '  - "input": key bindings. Enhanced Input contexts - read what is bound, bind a key, unbind one - plus ' +
-      "the legacy project-settings reader.\n" +
-      '  - "anim": Animation Blueprints - state machines, states, and transition conditions.\n' +
-      '  - "ai": Behavior Trees and their blackboards.\n' +
-      '  - "vfx": Niagara systems - emitters, and the parameters a Blueprint may set on them.\n' +
-      '  - "maintenance": what references an asset, deleting assets safely, and the Refresh Nodes repair.\n\n' +
+      "the moment you need one from a group, then use it normally.\n\n" +
+      "**unreal_list_tools names every group, what it is for, and what enabling it costs** - measured, not " +
+      "estimated - in about 540 tokens, once. The two you will reach for most often: \"core\" is the authoring " +
+      "spine (read a project, scaffold, build a graph, compile, save) and is much the largest, so enable it to " +
+      "author rather than to look around; \"edit\" is single-node surgery you usually do NOT need, because " +
+      "unreal_build_graph places whole graphs in one call.\n\n" +
+      "Better still, if the job has a name, `preset` beats picking groups by hand - see below.\n\n" +
       "Immediate, lasts the session, and re-calling is harmless. Ask for everything the job needs in one call.",
     inputSchema: {
       groups: z
