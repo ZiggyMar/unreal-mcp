@@ -108,7 +108,31 @@ export async function sweepScratch({ list, remove, log = console.log }) {
  *
  * The reverse order matters: a child is deleted before the parent it derives from.
  */
-export async function cleanUpScratch(paths, remove, log = console.log) {
+export async function cleanUpScratch(paths, remove, log = console.log, removeAll) {
+  // Delete the whole set in one call when the caller can.
+  //
+  // This is why the trials leaked. A Blueprint that a saved CHILD derives from cannot be deleted on
+  // its own once the child has been deleted separately - bisected against the editor, and the exact
+  // shape the parent-call trial builds. One call per asset, oldest-child-first, hits that every
+  // time; one call with every path in it deletes the family together and succeeds. The bridge said
+  // so all along: paths[] exists because "its members reference each other, and force-delete breaks
+  // those intra-set links".
+  //
+  // Falls back to one-at-a-time when no batch remover is supplied, so a caller that only has a
+  // single-path deleter still gets the honest reporting below.
+  if (removeAll && paths.length > 1) {
+    try {
+      const outcome = await removeAll([...paths]);
+      if (!deletedNothing(outcome)) {
+        log(`cleaned up ${paths.length} asset(s)`);
+        return true;
+      }
+      log(`a batch delete of ${paths.length} asset(s) removed none; falling back to one at a time`);
+    } catch (err) {
+      log(`a batch delete failed (${String(err?.message ?? err).slice(0, 90)}); falling back to one at a time`);
+    }
+  }
+
   const failed = [];
   for (const path of [...paths].reverse()) {
     try {

@@ -4818,6 +4818,36 @@ Three decisions worth naming:
 - **The report states its own limits.** It sees what this server did, not hand edits in the editor
   or another tool, and it says so rather than leaving that to be discovered at a bad moment.
 
+### Why that delete deleted nothing
+
+Left unexplained across two earlier passes, and the honest position at the time was that the cause
+was not established. It is now, by bisecting against the editor rather than reading engine source.
+Each row was run:
+
+```text
+parent alone, saved                                     deletes
+parent + graph + compile, no child                      deletes
+parent + saved child, NO graphs                         deletes
+parent + saved child, graphs on both   -> child deletes, PARENT REFUSES
+the same pair in one paths[] call      -> both delete
+```
+
+So it is the combination — **a saved parent, a saved child deriving from it, and built graphs.**
+Delete the child on its own and the parent is left holding a reference nothing in the session
+releases. That is exactly the shape `trial:parent-call` builds, which is why that trial and only that
+trial leaked one Blueprint per run.
+
+**The bridge knew all along.** `paths[]` exists because *"its members reference each other, and
+force-delete breaks those intra-set links"* — the tool simply never said so on the failure, and the
+cleanup helper deleted one asset at a time. Both fixed: the warning now names the cause and the cure,
+and `cleanUpScratch` deletes the set in one call, falling back to one-at-a-time if the batch removes
+nothing. The parent-call trial now cleans up completely.
+
+One thing this does **not** fix: eleven Blueprints already in that state. A batch delete of all
+eleven removes none, because whatever holds them — the child that derived from them — is already
+gone. An editor restart is the only thing known to release them, and the message says so rather than
+implying a retry will help.
+
 ### A delete that deleted nothing reported success
 
 `unreal_delete_asset` answers `{"requested": 1, "deleted": 0, "forced": true}` when the engine

@@ -111,5 +111,5 @@ try {
 
   console.log(ok && twice.alreadyPresent && !twice.added ? "\nPARENT-CALL TRIAL OK" : "\nPARENT-CALL TRIAL FAILED");
 } finally {
-  await cleanUpScratch(cleanup, (path) => b.send("delete_asset", { path, force: true }));
+  await cleanUpScratch(cleanup, (path) => b.send("delete_asset", { path, force: true }), console.log, (paths) => b.send("delete_asset", { paths, force: true }));
 }

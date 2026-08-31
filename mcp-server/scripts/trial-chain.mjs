@@ -269,7 +269,7 @@ try {
   }
   if (checked === 0) console.log("  --    no parent class in this project has a differing C++ name");
 } finally {
-  await cleanUpScratch(cleanup, (path) => call("unreal_delete_asset", { path, force: true }));
+  await cleanUpScratch(cleanup, (path) => call("unreal_delete_asset", { path, force: true }), console.log, (paths) => call("unreal_delete_asset", { paths, force: true }));
   server.child.kill();
   console.log("");
   console.log(

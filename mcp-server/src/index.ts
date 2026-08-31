@@ -1998,10 +1998,22 @@ register(
       // not read-only. Shipping advice I had just watched fail would have been worse than the
       // silence it replaced, because a caller would have followed it.
       //
-      // What IS established: a fresh Blueprint deletes, a child deletes, a parent deletes after its
-      // child, and both together in one paths[] call delete - all verified against the editor. The
-      // Blueprints that refuse are the ones a trial has built graphs on and compiled. Why that
-      // matters to ObjectTools::DeleteAssets is not established, so the message does not say.
+      // The cause is established now, by bisection against the editor rather than by reading engine
+      // source. Each of these was run and the result recorded:
+      //
+      //   parent alone, saved                                    deletes
+      //   parent + graph + compile, no child                     deletes
+      //   parent + saved child, NO graphs                        deletes
+      //   parent + saved child, graphs on both  -> child deletes, PARENT REFUSES
+      //   the same pair in one paths[] call     -> both delete
+      //
+      // So it is the combination: a saved parent, a saved child deriving from it, and built graphs.
+      // Delete the child on its own and the parent is left holding a reference that nothing in the
+      // session releases - eleven such Blueprints accumulated here, and a batch delete of all eleven
+      // still removes none, because the thing holding them is already gone.
+      //
+      // The bridge already knew: paths[] exists because "its members reference each other, and
+      // force-delete breaks those intra-set links". The tool just never said so on the failure.
       const requested = result.requested ?? 0;
       const deleted = result.deleted ?? 0;
       if (requested > 0 && deleted < requested) {
@@ -2011,10 +2023,14 @@ register(
             `${requested} asset(s) were requested and ${deleted} were deleted. The rest are still there: ` +
             `list_assets and list_blueprints will still show them and they still open, so do not treat ` +
             `this call as done. The engine refuses a delete without reporting why. ` +
-            `unreal_find_references says whether anything still points at it and ` +
-            `unreal_asset_status says whether it is on disk, read-only or checked out. Both can come ` +
-            `back clean and the delete still refuse, so check the asset is not open in an editor tab ` +
-            `before assuming it cannot be removed at all.`,
+            `The commonest cause is now known: a saved Blueprint that a saved CHILD derives from, ` +
+            `where both have graphs, cannot be deleted on its own once the child has been deleted ` +
+            `separately - the parent is left holding a reference nothing can now release. Delete the ` +
+            `whole family in ONE call instead: unreal_delete_asset({ paths: [child, parent], force: true }) ` +
+            `succeeds where two single calls leave the parent behind, which is what the paths[] form ` +
+            `is for. If the child is already gone, an editor restart is the only thing known to ` +
+            `release it. Otherwise unreal_find_references says whether anything still points at it and ` +
+            `unreal_asset_status says whether it is on disk or read-only.`,
         });
       }
       return jsonResult(result);

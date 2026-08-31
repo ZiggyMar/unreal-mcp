@@ -212,3 +212,87 @@ test("a listing that fails does not stop the trial, but does say so", async () =
   assert.deepEqual(result, { found: 0, removed: 0, failed: [] });
   assert.ok(said.some((line) => /could not check/.test(line)), "starting on an unknown state is stated, not assumed");
 });
+
+test("the whole family is deleted in one call, because one at a time cannot", async () => {
+  // This is why the trials leaked, bisected against the editor rather than guessed:
+  //
+  //   parent alone, saved                                    deletes
+  //   parent + graph + compile, no child                     deletes
+  //   parent + saved child, NO graphs                        deletes
+  //   parent + saved child, graphs on both  -> child deletes, PARENT REFUSES
+  //   the same pair in one paths[] call     -> both delete
+  //
+  // Deleting the child first leaves the parent holding a reference nothing in the session releases.
+  // The bridge said so all along - paths[] exists because "its members reference each other, and
+  // force-delete breaks those intra-set links" - the cleanup just never used it.
+  const { cleanUpScratch } = await import("../scripts/lib/scratch.mjs");
+  const singles = [];
+  const batches = [];
+  const ok = await cleanUpScratch(
+    ["/Game/MCPTrial/Parent", "/Game/MCPTrial/Child"],
+    async (p) => {
+      singles.push(p);
+      return { requested: 1, deleted: 1 };
+    },
+    () => {},
+    async (paths) => {
+      batches.push(paths);
+      return { requested: paths.length, deleted: paths.length };
+    }
+  );
+  assert.equal(ok, true);
+  assert.deepEqual(batches, [["/Game/MCPTrial/Parent", "/Game/MCPTrial/Child"]], "one call for the set");
+  assert.deepEqual(singles, [], "and no per-asset calls at all");
+});
+
+test("a batch that removes nothing falls back rather than reporting success", async () => {
+  // The failure this whole thread began with: delete_asset answers {requested: n, deleted: 0}
+  // WITHOUT raising. A batch path that trusted the absence of an exception would reintroduce exactly
+  // the silent leak it was written to stop.
+  const { cleanUpScratch } = await import("../scripts/lib/scratch.mjs");
+  const singles = [];
+  const said = [];
+  const ok = await cleanUpScratch(
+    ["/Game/MCPTrial/A", "/Game/MCPTrial/B"],
+    async (p) => {
+      singles.push(p);
+      return { requested: 1, deleted: 0 };
+    },
+    (line) => said.push(line),
+    async () => ({ requested: 2, deleted: 0 })
+  );
+  assert.equal(ok, false, "nothing was deleted, so this is not success");
+  assert.deepEqual(singles, ["/Game/MCPTrial/B", "/Game/MCPTrial/A"], "it fell back, child-first");
+  assert.ok(said.some((l) => /falling back/.test(l)), "and said so");
+});
+
+test("a caller with no batch remover still works", async () => {
+  // Not every caller can delete a set. The single-path path has to keep its honest reporting.
+  const { cleanUpScratch } = await import("../scripts/lib/scratch.mjs");
+  const removed = [];
+  const ok = await cleanUpScratch(
+    ["/Game/MCPTrial/Only"],
+    async (p) => {
+      removed.push(p);
+      return { requested: 1, deleted: 1 };
+    },
+    () => {}
+  );
+  assert.equal(ok, true);
+  assert.deepEqual(removed, ["/Game/MCPTrial/Only"]);
+});
+
+test("one asset does not need a batch call", async () => {
+  const { cleanUpScratch } = await import("../scripts/lib/scratch.mjs");
+  let batched = false;
+  await cleanUpScratch(
+    ["/Game/MCPTrial/Solo"],
+    async () => ({ requested: 1, deleted: 1 }),
+    () => {},
+    async () => {
+      batched = true;
+      return { requested: 1, deleted: 1 };
+    }
+  );
+  assert.equal(batched, false, "a single path is a single call either way");
+});
