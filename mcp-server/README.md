@@ -1882,6 +1882,46 @@ obvious way to write it.
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
 
+### A read and a write that disagreed about type names
+
+`list_variables` was the next most expensive read, and looking at it for tokens found something else
+first. Reading a variable answered:
+
+```json
+{"type":"Object","subType":"SkeletalMesh","isArray":true}
+```
+
+and **creating that same variable takes `"object:SkeletalMesh[]"`** - the compact descriptor
+documented on `unreal_add_variable` and `unreal_create_function`. Two languages for one idea, inside
+one tool surface, with the model expected to translate between them. Every round trip - read a
+variable, recreate it on another Blueprint - was a chance to get the translation wrong, and nothing
+would have caught it except the create failing.
+
+So the read answers in the language the write accepts. 56 characters become 23, and a value copied
+out of one call can be pasted into the next.
+
+That exposed a second half of the same mismatch: `match` was searching the raw fields, so a caller
+pasting back `"object:SkeletalMesh"` - a string this tool had just printed - matched nothing and got
+an empty list, as though the variable did not exist. The descriptor is in the haystack now. **A
+string the tool prints is a string the tool accepts.**
+
+The token work, in the same pass. Measured on a real 86-variable Blueprint, **53 of the defaults were
+zeros** - `()` on every delegate, `None` on every object reference, `0` and `False` on the rest -
+about 1,060 characters repeating what `mcdelegate` and `object:WB_Pause_C` had already said. The 33
+that survive are the ones somebody chose: 100.0 health, 1500.0 push speed. Float padding goes too,
+since the engine writes `100.000000` and a reader wants `100`.
+
+```text
+list_variables  2,986 -> 2,397
+```
+
+This **reverses an earlier decision in this repo**, and the test that encoded it said "a default of 0
+is data, not an absent field". That was right about the danger and wrong about the remedy. The danger
+is a reader unable to tell "no default" from "not reported"; the remedy is to state the contract
+rather than keep paying for it, which is what the tool description now does: *no `defaultValue` means
+the type's zero.* The protection that test was really providing is kept as its own test - the zero
+list is a decision per value, not a falsy check, so `"0.0.0"`, `"none"` and `"(0)"` all survive.
+
 ### The same gap again, on the two reads the feature trial was paying most for
 
 `npm run trial:feature` walks the whole authoring path - Blueprints, data, C++, components, UI - and

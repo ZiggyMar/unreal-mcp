@@ -57,7 +57,93 @@ export const VARIABLE_FLAGS = ["isArray", "instanceEditable", "blueprintReadOnly
  * anywhere. A real category is a deliberate act by a human and is kept.
  */
 export function compactVariable(variable: Row): Row {
-  return omitDefault(omitFalseFlags(variable, VARIABLE_FLAGS), "category", "Default");
+  const withDescriptor = asTypeDescriptor(variable);
+  const withoutZero = omitZeroDefault(withDescriptor);
+  return omitDefault(omitFalseFlags(withoutZero, VARIABLE_FLAGS), "category", "Default");
+}
+
+/**
+ * Collapse `type` + `subType` + `isArray` into the one descriptor the WRITE side already speaks.
+ *
+ * This started as a token saving and turned out to be a correctness problem. Reading a variable gave:
+ *
+ *   {"type":"Object","subType":"SkeletalMesh","isArray":true}
+ *
+ * and creating the same variable takes `"object:SkeletalMesh[]"` - the compact descriptor documented
+ * on add_variable and create_function. Two languages for one idea, inside one tool surface, with the
+ * model expected to translate between them. Every round trip - read a variable, recreate it on
+ * another Blueprint - was a chance to get the translation wrong, and nothing would have caught it
+ * except the create failing.
+ *
+ * So the read now answers in the language the write accepts. 56 characters become 23, and a value
+ * copied out of one call can be pasted into the next.
+ *
+ * Only the descriptor heads are lowercased, and only when there is a subType to attach: the engine
+ * writes "Object" where the descriptor says "object", but a bare type is passed through exactly as it
+ * came rather than being guessed at.
+ */
+const DESCRIPTOR_HEADS = new Set(["object", "class", "struct", "enum", "interface", "softobject", "softclass"]);
+
+export function asTypeDescriptor(variable: Row): Row {
+  const { type, subType, isArray, ...rest } = variable;
+  if (typeof type !== "string") return variable;
+
+  let descriptor = type;
+  if (typeof subType === "string" && subType.length > 0) {
+    const head = DESCRIPTOR_HEADS.has(type.toLowerCase()) ? type.toLowerCase() : type;
+    descriptor = `${head}:${subType}`;
+  }
+  if (isArray === true) descriptor += "[]";
+
+  // isArray is now carried by the "[]", so it must not also be spelled out - that would be the same
+  // fact twice, which is the thing this whole file exists to remove.
+  //
+  // `name` first and `type` immediately after it, because that is the order the pair is read in.
+  // Rebuilding from a destructure would otherwise push `type` to the end, behind whichever flags
+  // happened to survive, and split the one pairing every reader looks for.
+  const { name, ...others } = rest as Row;
+  return { ...(name === undefined ? {} : { name }), type: descriptor, ...others };
+}
+
+/**
+ * Values that mean "this variable was never given a default".
+ *
+ * Deliberately a fixed list rather than a falsy check. `omitFalseFlags` must never eat a
+ * `defaultValue`, and the difference between "the engine reported nothing" and "the engine reported
+ * the zero for this type" has to stay a decision made here, on purpose, per value.
+ */
+const ZERO_DEFAULTS = new Set(["", "()", "None", "0", "False", "0.0"]);
+
+/**
+ * Drop a default that is the type's zero, because the type already says what it is.
+ *
+ * Measured on a real 86-variable Blueprint: 53 of the defaults were zeros - "()" on every delegate,
+ * "None" on every object reference, "0" and "False" on the rest - about 1,060 characters spent
+ * repeating what "mcdelegate" and "object:WB_Pause_C" had already said. The 33 that survive are the
+ * ones somebody chose: 100.0 health, 1500.0 push speed, True.
+ *
+ * The contract is stated on the tool rather than left to be inferred, because silence that means two
+ * things is the failure this project keeps finding: **a variable with no `defaultValue` has its
+ * type's zero value.** One sentence of standing context, ~265 tokens saved per call.
+ *
+ * A float default keeps its meaning and loses its padding - the engine writes 100.000000 and a reader
+ * wants 100. Trailing zeros after a decimal point carry nothing, and trimming them cannot change the
+ * number.
+ */
+export function omitZeroDefault(variable: Row): Row {
+  const value = variable.defaultValue;
+  if (typeof value !== "string") return variable;
+  if (ZERO_DEFAULTS.has(value) || /^0\.0+$/.test(value)) {
+    const { defaultValue: _dropped, ...rest } = variable;
+    return rest;
+  }
+  // 100.000000 -> 100, 0.100000 -> 0.1. Only a plain decimal number, so nothing inside a struct
+  // literal or an asset path is touched.
+  if (/^-?\d+\.\d+$/.test(value)) {
+    const trimmed = value.replace(/0+$/, "").replace(/\.$/, "");
+    return { ...variable, defaultValue: trimmed };
+  }
+  return variable;
 }
 
 /**

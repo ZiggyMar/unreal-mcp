@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, asTypeDescriptor, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -2045,9 +2045,12 @@ register(
       "asking about an unfamiliar one. " +
       "This is a direct read, so unlike unreal_search_project it cannot lag behind a write you just made." +
       "\n\n" +
-      "The flags `isArray`, `instanceEditable`, `blueprintReadOnly` and `replicated` appear only when true, and " +
-      "`category` only when it is not the default one - an absent flag means no, not unknown. On a Blueprint with " +
-      "84 variables those four flags were 44% of the reply and were false almost every time.",
+      "`type` is the same compact descriptor unreal_add_variable accepts - \"int\", \"object:SkeletalMesh[]\", " +
+      "\"struct:TimerHandle\" - so a type read here can be pasted straight into a call that creates one.\n\n" +
+      "Absent means the ordinary value, never unknown: `instanceEditable`, `blueprintReadOnly` and `replicated` " +
+      "appear only when true, `category` only when it is not the default one, and **`defaultValue` only when it is " +
+      "not the type’s zero** - no `defaultValue` means 0, False, \"\", None or () as the type dictates. On a real " +
+      "86-variable Blueprint that is 53 of the defaults and 44% of what the flags used to cost.",
     inputSchema: {
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
       match: z
@@ -2077,8 +2080,15 @@ register(
       // the very flag that compaction removes.
       let filtered = all;
       if (needle) {
+        // The descriptor is in the haystack as well as the raw fields, so a string this tool PRINTED
+        // is a string it accepts. Without it the reply says "object:SkeletalMesh[]" and a caller who
+        // pastes that back as `match` gets nothing, because the raw row spells it "Object" plus a
+        // separate subType. A filter that cannot find what the tool just showed you is the same
+        // quiet mismatch as a read and a write disagreeing about type names.
         filtered = filtered.filter((v) =>
-          `${v.name ?? ""} ${v.type ?? ""} ${v.subType ?? ""} ${v.category ?? ""}`.toLowerCase().includes(needle)
+          `${v.name ?? ""} ${v.type ?? ""} ${v.subType ?? ""} ${asTypeDescriptor(v).type ?? ""} ${v.category ?? ""}`
+            .toLowerCase()
+            .includes(needle)
         );
       }
       if (replicatedOnly === true) {

@@ -11,6 +11,7 @@ import {
   VARIABLE_FLAGS,
   asCountMap,
   compactAssetRef,
+  asTypeDescriptor,
 } from "../dist/compactRows.js";
 
 /** A variable shaped exactly as the engine returns one. */
@@ -42,19 +43,77 @@ test("nothing but the named flags is dropped", () => {
   assert.equal(out.someNewEngineFlag, false, "an unnamed flag is not this function's business");
 });
 
-test("the facts a variable actually carries are never touched", () => {
-  const out = compactVariable(variable({ defaultValue: "0", type: "int" }));
-  assert.equal(out.name, "isAlive");
-  assert.equal(out.type, "int");
-  assert.equal(out.defaultValue, "0", "a default of 0 is data, not an absent field");
+test("a default that is the type's zero is dropped, and the tool says so", () => {
+  // This reverses an earlier decision in this file, which read "a default of 0 is data, not an
+  // absent field". That was right about the danger and wrong about the remedy: the danger is a
+  // reader unable to tell "no default" from "not reported", and the remedy is to state the contract
+  // rather than to keep paying for it. Measured on a real 86-variable Blueprint, 53 of the defaults
+  // were zeros - "()" on every delegate, "None" on every object reference - about 1,060 characters
+  // spent repeating what the type had already said.
+  //
+  // unreal_list_variables now states it outright: no `defaultValue` means the type's zero.
+  for (const zero of ["0", "", "()", "None", "False", "0.0", "0.000000"]) {
+    const out = compactVariable(variable({ defaultValue: zero, type: "int" }));
+    assert.equal("defaultValue" in out, false, `${JSON.stringify(zero)} should be dropped`);
+  }
+  // And a default somebody actually chose survives, which is the whole point of dropping the others.
+  assert.equal(compactVariable(variable({ defaultValue: "True", type: "bool" })).defaultValue, "True");
+  assert.equal(compactVariable(variable({ defaultValue: "100.000000", type: "float" })).defaultValue, "100");
 });
 
-test("a falsy value that is not the flag's false is left alone", () => {
-  // defaultValue "0" and "" are real answers. Confusing them with an unset flag would report a
-  // variable as having no default when it defaults to zero.
-  const out = compactVariable(variable({ defaultValue: "" }));
-  assert.equal("defaultValue" in out, true);
-  assert.equal(out.defaultValue, "");
+test("the zero list is a decision per value, not a falsy check", () => {
+  // The protection the reversed test was really providing. omitFalseFlags must never reach
+  // defaultValue, and a value that merely LOOKS empty to JavaScript is not automatically a zero:
+  // "0.0.0" and "none" are not, and treating them as such would delete real data.
+  for (const kept of ["0.0.0", "none", "NONE", "false", "(0)", "0,0,0"]) {
+    const out = compactVariable(variable({ defaultValue: kept }));
+    assert.equal(out.defaultValue, kept, `${JSON.stringify(kept)} is not a zero`);
+  }
+});
+
+test("float padding is trimmed without changing the number", () => {
+  // The engine writes 100.000000 and a reader wants 100. Trailing zeros after a decimal point carry
+  // nothing, and only a plain decimal is touched - a struct literal or an asset path is left alone.
+  const cases = [
+    ["100.000000", "100"],
+    ["0.100000", "0.1"],
+    ["-2.500000", "-2.5"],
+    ["1500.000000", "1500"],
+  ];
+  for (const [raw, want] of cases) {
+    assert.equal(compactVariable(variable({ defaultValue: raw })).defaultValue, want, raw);
+  }
+  const structLiteral = "(X=1.000000,Y=2.000000)";
+  assert.equal(compactVariable(variable({ defaultValue: structLiteral })).defaultValue, structLiteral);
+});
+
+test("type, subType and isArray become the descriptor the write side accepts", () => {
+  // This began as a token saving and was really a correctness problem: reading a variable answered
+  // in one language and creating one took another, inside the same tool surface, with the model
+  // expected to translate. Every read-then-recreate was a chance to get it wrong.
+  const cases = [
+    [{ type: "Object", subType: "SkeletalMesh", isArray: true }, "object:SkeletalMesh[]"],
+    [{ type: "Object", subType: "WB_Pause_C" }, "object:WB_Pause_C"],
+    [{ type: "struct", subType: "TimerHandle" }, "struct:TimerHandle"],
+    [{ type: "name", isArray: true }, "name[]"],
+    [{ type: "int" }, "int"],
+    // No subType to attach, so the engine's own spelling is passed through rather than guessed at.
+    [{ type: "mcdelegate" }, "mcdelegate"],
+  ];
+  for (const [input, want] of cases) {
+    const out = compactVariable(variable(input));
+    assert.equal(out.type, want, JSON.stringify(input));
+    assert.equal("subType" in out, false, "subType is carried by the descriptor now");
+    assert.equal("isArray" in out, false, "and so is isArray, via the []");
+  }
+});
+
+test("name and type stay adjacent, because that is the pair every reader looks for", () => {
+  const out = compactVariable(
+    variable({ type: "int", replicated: true, repNotify: "OnRep_X", defaultValue: "7" })
+  );
+  // Rebuilding the row from a destructure pushes type to the end unless it is put back deliberately.
+  assert.deepEqual(Object.keys(out).slice(0, 2), ["name", "type"]);
 });
 
 test("the default category is dropped and a real one is kept", () => {
@@ -214,4 +273,17 @@ test("a name that is not derivable from the package is kept", () => {
     assetClass: "Blueprint",
   });
   assert.equal(out.assetName, "SomethingElse");
+});
+
+test("a type the reply prints is a type the filter accepts", () => {
+  // The round trip that would otherwise fail silently. The reply says "object:SkeletalMesh[]"; a
+  // caller pastes that back as `match`; the raw row spells it "Object" plus a separate subType, so
+  // nothing matches and the list comes back empty as though the variable did not exist.
+  const row = variable({ name: "AvailableMeshes", type: "Object", subType: "SkeletalMesh", isArray: true });
+  const printed = compactVariable(row).type;
+  assert.equal(printed, "object:SkeletalMesh[]");
+  const haystack = `${row.name} ${row.type} ${row.subType} ${asTypeDescriptor(row).type} ${row.category}`.toLowerCase();
+  for (const needle of ["object:skeletalmesh", "object:skeletalmesh[]", "skeletalmesh"]) {
+    assert.ok(haystack.includes(needle), `filtering by ${needle} must find what the reply showed`);
+  }
 });
