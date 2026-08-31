@@ -299,6 +299,30 @@ export async function mapSystem(
     asset.summary = summariseReasons(asset.reasons);
   }
 
+  // Say that a matching system might be the dead one.
+  //
+  // This is the tool a plain-text bug report lands on - "the countdown never shows up" comes here
+  // first - and it answers "what is this system made of" without ever asking whether the system
+  // still runs. That is the exact gap that cost this project an entire iteration: a skin system was
+  // found, read and modified before anyone noticed a newer one had replaced it, with the old graphs
+  // still on the canvas and still compiling.
+  //
+  // It is not free to answer here. Deciding liveness needs every graph in the project, which this
+  // tool does not read - it works from the index. So it names the one call that does answer it,
+  // rather than guessing or going quiet. Measured against the real project, the countdown query
+  // returns ShowCountdown, UpdateCountdown and HideCountdown across four Blueprints, and nothing
+  // calls any of them.
+  //
+  // About forty tokens, on the reply where the mistake actually happens.
+  const namedFunctions = assets.some((a) => /function/i.test(a.summary ?? ""));
+  if (namedFunctions) {
+    notes.push(
+      "Before changing any of this, check the system still runs: unreal_trace_function_calls on one " +
+        "of the functions above says whether anything reaches it. A system that was replaced and left " +
+        "on the canvas matches a search exactly like a live one does, and reads the same."
+    );
+  }
+
   const lines: string[] = [];
   lines.push(`"${query}" spans ${assets.length} asset(s).`);
   for (const asset of assets.slice(0, 12)) {

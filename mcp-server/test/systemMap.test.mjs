@@ -268,3 +268,30 @@ test("the prose names the assets and how to read them", async () => {
   assert.match(map.text, /BP_Core/);
   assert.match(map.text, /asset\(s\)/);
 });
+
+test("a map that names functions warns that the system may be the dead one", async () => {
+  // This is the tool a plain-text bug report lands on, and it answered "what is this system made
+  // of" without ever asking whether the system still runs. That gap cost this project an entire
+  // iteration: a skin system found, read and modified before anyone noticed a newer one had replaced
+  // it, the old graphs still on the canvas and still compiling. The fixture's health system includes
+  // ApplyHealthChange, so the warning applies.
+  const map = await mapSystem(fakeBridge(), "health");
+  assert.match(map.text, /unreal_trace_function_calls/);
+  assert.match(map.text, /replaced and left/);
+});
+
+test("a map with no functions in it does not carry the warning", async () => {
+  // The advice is about functions. Putting it on a variables-only map would be noise on every reply,
+  // which is how a warning stops being read.
+  // fakeBridge takes per-command overrides, so the search is replaced rather than the fixture.
+  const map = await mapSystem(
+    fakeBridge({
+      search_project: (params) => {
+        const hits = PROJECT.search.health.filter((h) => h.kind !== "function");
+        return { query: params.query, hits, hitCount: hits.length, truncated: false };
+      },
+    }),
+    "health"
+  );
+  assert.doesNotMatch(map.text, /unreal_trace_function_calls/);
+});

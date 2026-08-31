@@ -1623,6 +1623,35 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### The tool a plain-text bug lands on now asks whether the system still runs
+
+`unreal_map_system` is where "the countdown never shows up" goes first, and it answered *what this
+system is made of* without ever asking whether the system still runs. Against the real project:
+
+```text
+"countdown" spans 25 asset(s).
+- GM_Gameplay (AVSBaseGameMode): 3 matching variable(s) ... [21 referencers - changing it has reach]
+- GS_Gameplay (AVSGameState): 3 matching function(s): ShowCountdown, UpdateCountdown, HideCountdown
+- GS_TutGameplay (GameStateBase): 3 matching function(s): ShowCountdown, UpdateCountdown, HideCountdown
+```
+
+A precise, useful answer in ~600 tokens - and **nothing calls any of those six functions.** The
+liveness pass finds that, but it lives in the audit, and a bug report does not start at the audit.
+
+That gap is the one that cost this project an entire iteration: a skin system found, read and
+modified before anyone noticed a newer one had replaced it, the old graphs still on the canvas and
+still compiling. A replaced system matches a search exactly like a live one, and reads the same.
+
+Deciding liveness here is not free - it needs every graph in the project, and this tool works from
+the index - so it names the one call that *does* answer it rather than guessing or going quiet:
+
+> Before changing any of this, check the system still runs: `unreal_trace_function_calls` on one of
+> the functions above says whether anything reaches it.
+
+About forty tokens, on the reply where the mistake actually happens, and only when the map names
+functions at all - putting it on a variables-only map would be noise on every reply, which is how a
+warning stops being read.
+
 ### "Clean" was doing two jobs, and one of them was lying
 
 Having found the doctor giving an all-clear it had not earned, the same question was asked of every
