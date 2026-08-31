@@ -76,3 +76,20 @@ test("it errs toward live, which is the direction that matters", () => {
   ]);
   assert.equal(r.dead.size, 0, "an ambiguous name match resolves to live, not dead");
 });
+
+test("an animation Blueprint's graphs are never reported dead", () => {
+  // Its graphs are EVALUATED by the animation system, not called by a node: AnimGraph itself, one
+  // per state, one per transition rule. Measured on the real project, ABP_NewPlayer alone
+  // contributed 25 of 219 - Locomotion, Idle, Jump and eighteen graphs all named Transition - and
+  // every one was wrong. Detected by the presence of an AnimGraph rather than by parentClass,
+  // because the parent is usually the project's own C++ anim instance.
+  const r = findDeadGraphs([
+    { blueprint: "ABP_Hero", graphName: "AnimGraph", nodes: [], parentClass: "AVSAnimInstance" },
+    { blueprint: "ABP_Hero", graphName: "Locomotion", nodes: [], parentClass: "AVSAnimInstance" },
+    { blueprint: "ABP_Hero", graphName: "Transition", nodes: [], parentClass: "AVSAnimInstance" },
+    { blueprint: "BP_Other", graphName: "EventGraph", nodes: [{ type: "K2Node_Event", title: "Event BeginPlay" }] },
+    { blueprint: "BP_Other", graphName: "ReallyUncalled", nodes: [] },
+  ]);
+  assert.equal([...r.dead].filter((k) => k.startsWith("ABP_Hero")).length, 0, "no anim graph is reported");
+  assert.ok(r.dead.has(graphKey("BP_Other", "ReallyUncalled")), "ordinary Blueprints are unaffected");
+});

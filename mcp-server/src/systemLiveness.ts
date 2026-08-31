@@ -78,6 +78,20 @@ function isEntryGraph(graph: LivenessGraph): boolean {
 }
 
 export function findDeadGraphs(graphs: LivenessGraph[]): LivenessResult {
+  // Animation Blueprints are excluded whole, and it is not a judgement call.
+  //
+  // Their graphs are EVALUATED by the animation system, not called by a node: AnimGraph itself, one
+  // graph per state, and one per transition rule. On the project this was measured against,
+  // ABP_NewPlayer alone contributed 25 of 219 - Locomotion, Idle, Jump, and eighteen graphs all
+  // called Transition - and every one of them was wrong. Across three anim blueprints it was 37.
+  //
+  // Detected by the presence of an AnimGraph rather than by parentClass, because the parent is often
+  // a project's own C++ anim instance and matching names would miss it. Only an animation Blueprint
+  // has one.
+  const animBlueprints = new Set(
+    graphs.filter((g) => /^AnimGraph$/i.test(g.graphName)).map((g) => g.blueprint)
+  );
+
   const byKey = new Map<string, LivenessGraph>();
   // Normalised graph name -> the keys of every graph with that name, anywhere. Matching across
   // Blueprints rather than within one is deliberate: a call in a child reaches a function on its
@@ -90,6 +104,7 @@ export function findDeadGraphs(graphs: LivenessGraph[]): LivenessResult {
     // implementing Blueprint's copy is what runs - so every one of them looks abandoned and none of
     // them is. On the project this was measured against they were pure noise at the top of the list.
     if (/^Interface$/i.test(String(graph.parentClass ?? ""))) continue;
+    if (animBlueprints.has(graph.blueprint)) continue;
     byKey.set(key, graph);
     if (isEntryGraph(graph)) continue;
     const name = normalise(graph.graphName);

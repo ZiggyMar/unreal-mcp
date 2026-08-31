@@ -1695,10 +1695,28 @@ with everything but letters and digits removed, because Unreal renders a graph c
 node as "Set Input"; and an ambiguous match resolves to **live**. Reporting live code as dead would
 send somebody to delete something that runs, which is far worse than missing a dead graph.
 
-Checked against the bridge's own reachability on seven functions, including four this pass flagged:
-they agree, and where they differed - `PushAVSWidget` - this pass called a dead graph live. It errs
-in the direction it was built to err in. Interface Blueprints are excluded outright: their graphs are
-declarations, nothing calls them by name, and all of them would otherwise head the list.
+Two whole categories are excluded, and both were found by looking at what it flagged rather than by
+reasoning about it.
+
+**Interface Blueprints.** Their graphs are declarations; nothing calls them by name, the implementing
+Blueprint's copy is what runs, and all of them headed the list until they were excluded.
+
+**Animation Blueprints.** Their graphs are *evaluated* by the animation system, not called: `AnimGraph`
+itself, one graph per state, one per transition rule. `ABP_NewPlayer` alone contributed 25 - `Locomotion`,
+`Idle`, `Jump`, and eighteen graphs all named `Transition` - and every one was wrong. Across three anim
+blueprints it was 37 of 219. They are detected by the presence of an `AnimGraph`, not by parent class,
+because the parent is usually a project's own C++ anim instance.
+
+Checked against the bridge's own reachability, which is exact where this is heuristic. Every graph
+this pass flagged, the bridge also reports as having no live call site - and it correctly left alone
+three that do (`GetNextTicket`, `BurnTicket`, `EnsureDeckExists`). Where the two differ it is in the
+safe direction: `PushAVSWidget` and `UpdateEnergy` are dead by the bridge's exact reckoning and this
+pass calls them live.
+
+Worth recording how that was nearly got wrong. The first pass at validating it sampled names from the
+Blueprint's *graph list* rather than from what had actually been flagged, "found" three false
+positives, and would have condemned a working feature. The flagged set is the only thing worth
+checking against.
 
 ### The project you actually work in has to be a build target
 
