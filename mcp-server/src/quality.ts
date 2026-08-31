@@ -71,7 +71,31 @@ function variableName(node: LayoutNode): string | undefined {
   return node.title.replace(/^set\s+/i, "").trim();
 }
 
-export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityReport {
+export interface ReviewContext {
+  /**
+   * This Blueprint is an Interface.
+   *
+   * A Blueprint Interface declares signatures and nothing else - its function graphs are empty by
+   * design, and that is the whole point of an interface rather than a defect. Reporting every one of
+   * them as "has no body" is the same mistake unhandled-cast-failure made: a check firing on
+   * ordinary, correct practice, at a cost that puts it near real bugs.
+   */
+  isInterface?: boolean;
+  /**
+   * Names that are really event dispatchers, not functions.
+   *
+   * An event dispatcher is a `mcdelegate` VARIABLE, and Unreal also exposes its signature as a graph
+   * with a K2Node_FunctionEntry and nothing wired to it - because a signature has no body, by
+   * definition. Without this, `empty-function` reports every dispatcher in the project.
+   *
+   * Caught on BP_Player: `ChangeHealth` and `SendMessageToHUD` appear in the graph list AND in the
+   * variable list as mcdelegate. The graph read shows an entry node with connectedPins: [], which is
+   * indistinguishable from an unfinished function unless you know what the name is.
+   */
+  delegateNames?: Set<string>;
+}
+
+export function reviewGraph(graphName: string, allNodes: LayoutNode[], context: ReviewContext = {}): QualityReport {
   const nodes = allNodes.filter((node) => !isComment(node));
   const commentBoxes = allNodes.filter(isComment);
   const findings: Finding[] = [];
@@ -207,6 +231,56 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityR
       message: `${dead.length} node(s) are not connected to anything and will never run.`,
       fix: "Remove them with unreal_remove_node, or wire them into the graph if they were meant to be used.",
       nodeIds: dead.map((node) => node.id),
+    });
+  }
+
+  // --- A function with nothing in it ---
+  //
+  // Found by asking a real question. "The countdown never shows up" on the project this is developed
+  // against: GS_Gameplay has ShowCountdown, UpdateCountdown and HideCountdown, and every one of them
+  // is a function entry node with nothing wired to it. Ten more like it on the same Blueprint -
+  // RoundBegin, RoundEnd, PlayerJoined, TutorialEnd - a system scaffolded and never filled in.
+  //
+  // The audit said nothing about any of them. `empty-event` covers events; nothing covered a
+  // FUNCTION whose body is empty, which is the case where a caller exists and its call does nothing.
+  //
+  // Two exclusions, both to avoid reporting something already reported or never wrong:
+  //
+  //   UserConstructionScript  every Blueprint has one and empty is the normal state
+  //   OnRep_*                 repnotify-does-nothing already covers these, at its own cost
+  //   a Blueprint Interface   its graphs are signatures; empty is the entire point
+  //   an event dispatcher     Unreal exposes its signature as a graph with an empty entry node,
+  //                           and BP_Player has two - ChangeHealth and SendMessageToHUD - which are
+  //                           mcdelegate VARIABLES that also appear in the graph list
+  //
+  // Whether it matters turns on something this check cannot see - is it called? - so the fix names
+  // the call that settles it rather than asserting. That is the same shape as the parent-call and
+  // replaced-system findings, and it is why this is priced below repnotify-does-nothing: an empty
+  // RepNotify is definitely wrong, because choosing RepNotify and then writing nothing has no reading
+  // in which it is intended. An empty function might be a stub somebody means to fill this afternoon.
+  const functionEntry = nodes.find((node) => /^K2Node_FunctionEntry/.test(node.type));
+  const isConstructionScript = /^UserConstructionScript$/i.test(graphName);
+  const isRepNotify = /^OnRep_/i.test(graphName);
+  const isDelegateSignature = context.delegateNames?.has(graphName) === true;
+  if (
+    functionEntry &&
+    !context.isInterface &&
+    !isConstructionScript &&
+    !isRepNotify &&
+    !isDelegateSignature &&
+    execTargets(functionEntry).length === 0
+  ) {
+    findings.push({
+      check: "empty-function",
+      severity: "warning",
+      message: `${graphName} has no body: its entry node runs into nothing.`,
+      fix:
+        `Whether this matters depends on whether anything calls it. unreal_trace_function_calls on ` +
+        `"${graphName}" settles that in one call: a caller means every one of those calls silently ` +
+        `does nothing, which is the hardest kind of bug to find from the outside because there is no ` +
+        `error and no missing node - the call is right there in the graph. No caller means it is a ` +
+        `stub, and the only question is whether it was meant to be filled in.`,
+      nodeIds: [functionEntry.id],
     });
   }
 

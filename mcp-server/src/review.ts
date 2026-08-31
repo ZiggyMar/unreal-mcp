@@ -58,6 +58,25 @@ export async function reviewBlueprint(
   const reports: QualityReport[] = [];
   // Kept because the multiplayer check needs the graph AND the variables together: whether a write
   // is a bug depends on where it runs and on whether the thing written replicates.
+  // Fetched BEFORE the graph loop, because one per-graph check needs it: a Blueprint Interface
+  // declares signatures and its function graphs are empty by design, so "this function has no body"
+  // is the whole point rather than a defect. Everything derived from it still happens after the
+  // loop, where the node list it needs exists.
+  let state: {
+    parentClass?: string;
+    variables?: Array<{ name: string; type?: string; subType?: string; replicated?: boolean; repNotify?: string }>;
+  } = {};
+  try {
+    state = await bridge.send("list_variables", { path });
+  } catch {
+    /* the graph review is worth returning without it; the checks below handle an empty state */
+  }
+  const isInterface = /^interface$/i.test(state.parentClass ?? "");
+  // Dispatcher signatures show up in the graph list looking exactly like unfinished functions.
+  const delegateNames = new Set(
+    (state.variables ?? []).filter((v) => /delegate/i.test(String(v.type ?? ""))).map((v) => v.name)
+  );
+
   const allNodes: Array<{ id: string; type: string; title: string; connectedPins?: unknown[] }> = [];
   const graphNodes: Array<{ graphName: string; nodes: unknown[] }> = [];
   for (const name of graphNames) {
@@ -65,7 +84,7 @@ export async function reviewBlueprint(
       path,
       graphName: name,
     });
-    reports.push(reviewGraph(name, summary.nodes ?? []));
+    reports.push(reviewGraph(name, summary.nodes ?? [], { isInterface, delegateNames }));
     allNodes.push(...(summary.nodes ?? []));
     // Handing the raw nodes back on request means a caller that needs them - the whole-project
     // audit - does not read every graph a second time. Off by default: an ordinary review has no
@@ -85,10 +104,6 @@ export async function reviewBlueprint(
   let stateFindings: StateFinding[] = [];
   let mpFindings: MpFinding[] = [];
   try {
-    const state = await bridge.send<{
-      parentClass?: string;
-      variables?: Array<{ name: string; type?: string; subType?: string; replicated?: boolean; repNotify?: string }>;
-    }>("list_variables", { path });
     stateFindings = reviewStatePlacement(state.parentClass ?? "", state.variables ?? []);
     mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? []);
     variables = state.variables ?? [];

@@ -1924,6 +1924,49 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The bug behind the question I had been asking all session
+
+`unreal_explain_graph` on the function at the centre of *"the countdown never shows up"*:
+
+```text
+ShowCountdown: 1 nodes, 1 entry point(s).
+- ShowCountdown: nothing wired to it.
+```
+
+**It is empty.** So are `UpdateCountdown` and `HideCountdown`, and ten more on the same Blueprint -
+`RoundBegin`, `RoundEnd`, `PlayerJoined`, `TutorialEnd`. A system scaffolded and never filled in.
+
+The audit said **nothing** about any of them. `empty-event` covers events; nothing covered a
+*function* whose body is empty - which is the case where a caller exists and every one of its calls
+silently does nothing. There is no error and no missing node; the call sits right there in the graph.
+
+The interesting part is what happened next, because the first number was wrong three times:
+
+```text
+63  every graph whose entry reaches nothing
+48  minus Blueprint Interfaces - BI_Power/PowerOn, BPI_MenuButton/VirtualClick.
+     An interface declares signatures; empty IS the point.
+ 7  minus event dispatchers. This is the one that nearly shipped.
+```
+
+An event dispatcher is a `mcdelegate` **variable**, and Unreal *also* exposes its signature as a
+graph with a `K2Node_FunctionEntry` and `connectedPins: []`. On BP_Player that is `ChangeHealth` and
+`SendMessageToHUD` - indistinguishable from an unfinished function unless you know what the name is.
+Without that exclusion the check reports every dispatcher in the project.
+
+The seven that survive are real: `ShowCountdown`, `UpdateCountdown`, `HideCountdown`,
+`SetChallengeWaveVisuals`, `CalculateNetDotDirection`, `Interacted`.
+
+Priced at **50** - between `empty-event` (40) and `repnotify-does-nothing` (60), and the gap is the
+argument. An empty RepNotify is definitely wrong: choosing RepNotify and then writing nothing has no
+reading in which it is intended. An empty function might be a stub somebody means to fill this
+afternoon, and it only becomes a defect when something calls it - which this check cannot see, so the
+fix names `unreal_trace_function_calls` rather than asserting.
+
+Every exclusion was found by reading the findings rather than trusting the count, which is the same
+discipline that took `unhandled-cast-failure` from 142 to 111 and then to a lower price. A check that
+fires 63 times on a 150-Blueprint project is telling you about the check, not the project.
+
 ### Widening the join trial to the ones nobody had tested
 
 The joins the last five bugs came from are covered. The interesting question is the ones that are

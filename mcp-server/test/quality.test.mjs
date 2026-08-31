@@ -351,3 +351,63 @@ test("a cast on a setup path is still reported, which is the point", () => {
   assert.ok(finding, "a setup cast with no failure path is the real finding");
   assert.deepEqual(finding.nodeIds, ["cast"]);
 });
+
+/** A graph containing only a function entry with nothing wired to it. */
+const emptyFunction = (name) => [{ id: "entry", type: "K2Node_FunctionEntry", title: name, connectedPins: [] }];
+
+test("a function with no body is reported, because a caller's call does nothing", () => {
+  // Found by asking a real question. "The countdown never shows up": GS_Gameplay has ShowCountdown,
+  // UpdateCountdown and HideCountdown, and every one is an entry node with nothing wired to it.
+  // empty-event covered events; nothing covered a FUNCTION whose body is empty, which is the case
+  // where a caller exists and its call silently does nothing.
+  const report = reviewGraph("ShowCountdown", emptyFunction("ShowCountdown"));
+  const finding = report.findings.find((f) => f.check === "empty-function");
+  assert.ok(finding);
+  assert.match(finding.message, /no body/);
+  // Whether it matters turns on something this check cannot see, so the fix names the call that
+  // settles it rather than asserting.
+  assert.match(finding.fix, /unreal_trace_function_calls/);
+});
+
+test("a Blueprint Interface's graphs are signatures, and empty is the point", () => {
+  // Reported 63 findings before this exclusion, and BI_Power/PowerOn was among them. An interface
+  // declares signatures; its graphs have no body by design. Reporting them is the same mistake
+  // unhandled-cast-failure made - a check firing on ordinary, correct practice.
+  const report = reviewGraph("PowerOn", emptyFunction("PowerOn"), { isInterface: true });
+  assert.equal(report.findings.find((f) => f.check === "empty-function"), undefined);
+});
+
+test("an event dispatcher is not an unfinished function", () => {
+  // The one that nearly shipped. An event dispatcher is a `mcdelegate` VARIABLE, and Unreal also
+  // exposes its signature as a graph with a K2Node_FunctionEntry and connectedPins: []. On BP_Player
+  // that is ChangeHealth and SendMessageToHUD - indistinguishable from an unfinished function unless
+  // you know what the name is, and without this the check reports every dispatcher in the project.
+  const report = reviewGraph("ChangeHealth", emptyFunction("ChangeHealth"), {
+    delegateNames: new Set(["ChangeHealth", "SendMessageToHUD"]),
+  });
+  assert.equal(report.findings.find((f) => f.check === "empty-function"), undefined);
+});
+
+test("the construction script and a RepNotify are left to the checks that own them", () => {
+  // Every Blueprint has a UserConstructionScript and empty is its normal state. An empty OnRep_ is
+  // already reported by repnotify-does-nothing, at its own cost - reporting it twice would double
+  // count one defect, which is what the cast check was doing with cast-to-server-only-class.
+  for (const name of ["UserConstructionScript", "OnRep_Health"]) {
+    const report = reviewGraph(name, emptyFunction(name));
+    assert.equal(report.findings.find((f) => f.check === "empty-function"), undefined, name);
+  }
+});
+
+test("a function with a body is not reported", () => {
+  // Narrowing a check must not turn it off.
+  const nodes = [
+    { id: "entry", type: "K2Node_FunctionEntry", title: "Heal", connectedPins: [
+      { pin: "then", direction: "out", linkedTo: [{ node: "do", pin: "execute" }] },
+    ] },
+    { id: "do", type: "K2Node_CallFunction", title: "Set Health", connectedPins: [
+      { pin: "execute", direction: "in", linkedTo: [{ node: "entry", pin: "then" }] },
+    ] },
+  ];
+  const report = reviewGraph("Heal", nodes);
+  assert.equal(report.findings.find((f) => f.check === "empty-function"), undefined);
+});

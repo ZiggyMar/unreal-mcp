@@ -116,6 +116,11 @@ export const FINDING_COST: Record<string, number> = {
   // The actor is bound and nothing animates it. Usually what is left after the tracks were deleted,
   // harmless to run and misleading to read - which is where debug-print-left-in sits.
   "sequence-binding-no-tracks": 25,
+  // Between empty-event and repnotify-does-nothing, and the gap is the point. An empty RepNotify is
+  // definitely wrong - choosing RepNotify and writing nothing has no reading in which it is intended.
+  // An empty function might be a stub somebody means to fill this afternoon, and it only becomes a
+  // defect when something calls it, which this check cannot see.
+  "empty-function": 50,
   "empty-event": 40,
   "dead-node": 30,
   "debug-print-left-in": 25,
