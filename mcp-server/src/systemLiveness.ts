@@ -47,6 +47,32 @@ export interface LivenessResult {
   considered: number;
   /** Graphs that can fire on their own and therefore seed the walk. */
   entryPoints: number;
+  /**
+   * Where the dead graphs are concentrated, worst first.
+   *
+   * The useful unit is the Blueprint, not the graph. "GS_Gameplay.ShowCountdown" is a name;
+   * "GS_Gameplay: 15 of 26 uncalled" is a system that was replaced, and the second is what somebody
+   * acts on. A ratio also carries its own confidence: one uncalled helper in forty is ordinary
+   * housekeeping, and fifteen in twenty-six is not.
+   */
+  byBlueprint: Array<{ blueprint: string; dead: number; of: number }>;
+  /**
+   * DELIBERATELY ABSENT: "the same function name is dead in several Blueprints".
+   *
+   * It was built, measured, and removed. The idea was that one name dead in several places names a
+   * replaced FEATURE rather than a graph, and on this project two entries did exactly that -
+   * CountdownUpdated and PlayerJoined, each uncalled across GM_Gameplay, GM_TutGameplay, GS_Gameplay
+   * and GS_TutGameplay.
+   *
+   * The other four were engine-called overrides. BP_GetDesiredFocusTarget appeared in eleven
+   * unrelated widgets, GetPrimaryGamepadFocusWidget in five, GetPressProgress in four: all CommonUI
+   * virtuals, invoked by the framework and never by a node. There is no way from a graph name to
+   * tell a C++ override from an abandoned function, so the signal was mostly noise presented as the
+   * strongest thing in the reply, which is the worst combination available.
+   *
+   * The per-Blueprint ratio below already surfaces what the good entries pointed at: GS_Gameplay and
+   * GS_TutGameplay are near the top of it on their own.
+   */
 }
 
 /** Comparable form of a name: letters and digits only, lowercased. */
@@ -92,6 +118,19 @@ export function findDeadGraphs(graphs: LivenessGraph[]): LivenessResult {
     graphs.filter((g) => /^AnimGraph$/i.test(g.graphName)).map((g) => g.blueprint)
   );
 
+  // Interface FUNCTION NAMES, gathered from the interface Blueprints before they are skipped.
+  //
+  // An implementation lives in the implementing Blueprint and is invoked by interface dispatch, so
+  // no node anywhere calls it by name and every implementation of every interface looked abandoned.
+  // Measured: EnemyScalePriority was flagged in five gameplay Blueprints at once and is declared by
+  // an interface in all five. Any graph whose name an interface declares is left alone.
+  const interfaceFunctions = new Set(
+    graphs
+      .filter((g) => /^Interface$/i.test(String(g.parentClass ?? "")))
+      .map((g) => normalise(g.graphName))
+      .filter(Boolean)
+  );
+
   const byKey = new Map<string, LivenessGraph>();
   // Normalised graph name -> the keys of every graph with that name, anywhere. Matching across
   // Blueprints rather than within one is deliberate: a call in a child reaches a function on its
@@ -105,6 +144,7 @@ export function findDeadGraphs(graphs: LivenessGraph[]): LivenessResult {
     // them is. On the project this was measured against they were pure noise at the top of the list.
     if (/^Interface$/i.test(String(graph.parentClass ?? ""))) continue;
     if (animBlueprints.has(graph.blueprint)) continue;
+    if (interfaceFunctions.has(normalise(graph.graphName))) continue;
     byKey.set(key, graph);
     if (isEntryGraph(graph)) continue;
     const name = normalise(graph.graphName);
@@ -153,5 +193,29 @@ export function findDeadGraphs(graphs: LivenessGraph[]): LivenessResult {
   for (const key of byKey.keys()) {
     if (!live.has(key)) dead.add(key);
   }
-  return { dead, considered: byKey.size, entryPoints };
+
+  const deadPerBlueprint = new Map<string, number>();
+  const totalPerBlueprint = new Map<string, number>();
+  for (const key of byKey.keys()) {
+    const blueprint = byKey.get(key)!.blueprint;
+    totalPerBlueprint.set(blueprint, (totalPerBlueprint.get(blueprint) ?? 0) + 1);
+    if (dead.has(key)) deadPerBlueprint.set(blueprint, (deadPerBlueprint.get(blueprint) ?? 0) + 1);
+  }
+  // Below this many graphs a proportion is noise rather than a signal.
+  //
+  // Sorting purely by ratio put "W_ExperienceList: 3 of 4" and "W_ChangeLog_Item: 2 of 3" at the top
+  // of the real project - Lyra sample widgets whose handful of graphs are CommonUI overrides the
+  // framework calls and no node does. Three quarters of four graphs is not evidence of anything.
+  // With the floor in place the list is GS_TutGameplay 13 of 19, GS_Gameplay 15 of 26, WBP_HUD 8 of
+  // 14: actual systems, in the project's own code.
+  const ENOUGH_GRAPHS_TO_MEAN_SOMETHING = 8;
+
+  const byBlueprint = [...deadPerBlueprint.entries()]
+    .map(([blueprint, n]) => ({ blueprint, dead: n, of: totalPerBlueprint.get(blueprint) ?? n }))
+    .filter((b) => b.of >= ENOUGH_GRAPHS_TO_MEAN_SOMETHING)
+    // By proportion, then by count. A Blueprint that is mostly dead is a replaced system; a big one
+    // with a few strays is just a big one, and sorting on the raw count puts the big ones on top.
+    .sort((a, b) => b.dead / b.of - a.dead / a.of || b.dead - a.dead);
+
+  return { dead, considered: byKey.size, entryPoints, byBlueprint };
 }

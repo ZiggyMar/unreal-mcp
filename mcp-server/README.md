@@ -1683,7 +1683,23 @@ and the function that would consume it has one call site, itself dead.
 
 So the reply now carries a `possiblyReplaced` section: function graphs no Blueprint node appears to
 call, by the same fixpoint the bridge uses - an event graph can fire, a function is live if a live
-graph calls it, repeat. On the project this is developed against: **219 of 1,100 graphs**.
+graph calls it, repeat. On the project this is developed against: **176 of 1,007 graphs**.
+
+**Grouped by Blueprint, not listed by graph.** Twelve graph names out of 176 was the weakest thing it
+could return. `GS_Gameplay.ShowCountdown` is a name; `GS_Gameplay: 15 of 26 uncalled` is a system
+that was replaced, and the ratio carries its own confidence - one stray helper in forty is
+housekeeping, fifteen in twenty-six is not:
+
+```text
+GS_TutGameplay: 13 of 19    PC_TutGameplay: 12 of 27
+GS_Gameplay:    15 of 26    GM_Gameplay:    10 of 28
+WBP_HUD:         8 of 14    BP_FireWall:     4 of 9
+```
+
+A Blueprint needs at least eight graphs to be ranked at all. Sorting purely by proportion put
+`W_ExperienceList: 3 of 4` and `W_ChangeLog_Item: 2 of 3` on top - Lyra sample widgets whose few
+graphs are CommonUI overrides the framework calls and no node does. Three quarters of four graphs is
+not evidence of anything.
 
 It costs **no extra calls** - every graph was already read for the checks above - and about 240
 tokens.
@@ -1698,8 +1714,10 @@ send somebody to delete something that runs, which is far worse than missing a d
 Two whole categories are excluded, and both were found by looking at what it flagged rather than by
 reasoning about it.
 
-**Interface Blueprints.** Their graphs are declarations; nothing calls them by name, the implementing
-Blueprint's copy is what runs, and all of them headed the list until they were excluded.
+**Interface Blueprints, and their implementations.** An interface's own graphs are declarations, and
+an implementation in some other Blueprint is invoked by dispatch rather than called by name - so
+every implementation of every interface looked abandoned. `EnemyScalePriority` was flagged in five
+gameplay Blueprints at once and is interface-declared in all five. Both are now left alone.
 
 **Animation Blueprints.** Their graphs are *evaluated* by the animation system, not called: `AnimGraph`
 itself, one graph per state, one per transition rule. `ABP_NewPlayer` alone contributed 25 - `Locomotion`,
@@ -1712,6 +1730,15 @@ this pass flagged, the bridge also reports as having no live call site - and it 
 three that do (`GetNextTicket`, `BurnTicket`, `EnsureDeckExists`). Where the two differ it is in the
 safe direction: `PushAVSWidget` and `UpdateEnergy` are dead by the bridge's exact reckoning and this
 pass calls them live.
+
+**One signal was built, measured, and deleted.** "The same function name is dead in several
+Blueprints" should name a replaced *feature* rather than a graph, and two entries did exactly that:
+`CountdownUpdated` and `PlayerJoined`, each uncalled across `GM_Gameplay`, `GM_TutGameplay`,
+`GS_Gameplay` and `GS_TutGameplay`. The other four were engine-called overrides -
+`BP_GetDesiredFocusTarget` in eleven unrelated widgets, `GetPrimaryGamepadFocusWidget` in five,
+`GetPressProgress` in four, all CommonUI virtuals. There is no way from a graph name to tell a C++
+override from an abandoned function, so it was mostly noise presented as the strongest thing in the
+reply. The per-Blueprint ratio already surfaces what the good entries pointed at.
 
 Worth recording how that was nearly got wrong. The first pass at validating it sampled names from the
 Blueprint's *graph list* rather than from what had actually been flagged, "found" three false

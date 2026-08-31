@@ -93,3 +93,45 @@ test("an animation Blueprint's graphs are never reported dead", () => {
   assert.equal([...r.dead].filter((k) => k.startsWith("ABP_Hero")).length, 0, "no anim graph is reported");
   assert.ok(r.dead.has(graphKey("BP_Other", "ReallyUncalled")), "ordinary Blueprints are unaffected");
 });
+
+test("dead graphs are grouped by Blueprint, worst proportion first", () => {
+  // The useful unit is the Blueprint, not the graph. A ratio also carries its own confidence: one
+  // uncalled helper in forty is housekeeping, and most of a Blueprint being uncalled is a system
+  // that was replaced. Sorting on the raw count would put the big Blueprints on top instead.
+  const graphs = [
+    { blueprint: "BP_Big", graphName: "EventGraph", nodes: [{ type: "K2Node_Event", title: "Event BeginPlay" }] },
+    ...Array.from({ length: 20 }, (_, i) => ({ blueprint: "BP_Big", graphName: `Used${i}`, nodes: [] })),
+    { blueprint: "BP_Big", graphName: "StrayOne", nodes: [] },
+    { blueprint: "BP_Big", graphName: "StrayTwo", nodes: [] },
+    { blueprint: "BP_Replaced", graphName: "OldA", nodes: [] },
+    { blueprint: "BP_Replaced", graphName: "OldB", nodes: [] },
+    { blueprint: "BP_Replaced", graphName: "OldC", nodes: [] },
+  ];
+  // Make BP_Big's twenty Used* graphs genuinely reachable.
+  graphs[0].nodes.push(...Array.from({ length: 20 }, (_, i) => ({ type: "K2Node_CallFunction", title: `Used${i}` })));
+
+  const r = findDeadGraphs(graphs);
+  // BP_Replaced is 3 of 3, but three graphs is not enough for a proportion to mean anything: on the
+  // real project that ranking put Lyra sample widgets ("3 of 4") above the game's own GameState.
+  assert.ok(!r.byBlueprint.some((b) => b.blueprint === "BP_Replaced"), "too small to rank");
+  const big = r.byBlueprint.find((b) => b.blueprint === "BP_Big");
+  assert.equal(big.dead, 2);
+  assert.equal(big.of, 23);
+});
+
+test("an interface's function is never reported dead in its implementers", () => {
+  // An implementation lives in the implementing Blueprint and is invoked by interface dispatch, so
+  // no node calls it by name and every implementation of every interface looked abandoned.
+  // Measured: EnemyScalePriority flagged in five gameplay Blueprints at once, declared by an
+  // interface in all five.
+  const r = findDeadGraphs([
+    { blueprint: "BPI_Thing", graphName: "EnemyScalePriority", nodes: [], parentClass: "Interface" },
+    { blueprint: "BP_A", graphName: "EventGraph", nodes: [{ type: "K2Node_Event", title: "Event BeginPlay" }] },
+    { blueprint: "BP_A", graphName: "EnemyScalePriority", nodes: [] },
+    { blueprint: "BP_B", graphName: "EnemyScalePriority", nodes: [] },
+    { blueprint: "BP_B", graphName: "GenuinelyUncalled", nodes: [] },
+  ]);
+  assert.ok(!r.dead.has(graphKey("BP_A", "EnemyScalePriority")), "an interface implementation is not abandoned");
+  assert.ok(!r.dead.has(graphKey("BP_B", "EnemyScalePriority")));
+  assert.ok(r.dead.has(graphKey("BP_B", "GenuinelyUncalled")), "ordinary functions are still checked");
+});

@@ -721,7 +721,12 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       : {
           count: liveness.dead.size,
           ofGraphs: liveness.considered,
-          examples: [...liveness.dead].slice(0, 12),
+          // Grouped, not listed. Twelve graph names out of 180 is the weakest thing this could
+          // return: "GS_Gameplay.ShowCountdown" is a name, and "GS_Gameplay: 15 of 26 uncalled" is a
+          // system that was replaced. The ratio carries its own confidence too - one stray helper in
+          // forty is housekeeping, fifteen in twenty-six is not - and it costs fewer tokens than the
+          // list it replaces.
+          worst: liveness.byBlueprint.slice(0, 8).map((b) => `${b.blueprint}: ${b.dead} of ${b.of}`),
           note:
             "Function graphs no Blueprint node appears to call. A place to look, not a verdict. Blind " +
             "to calls from C++, to delegates bound at runtime, to interface dispatch, and to Set Timer " +
