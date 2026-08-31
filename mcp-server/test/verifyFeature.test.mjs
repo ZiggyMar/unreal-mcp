@@ -236,3 +236,90 @@ test("one asset under two spellings is checked once, not twice", async () => {
   assert.deepEqual(r.checked, ["/Game/X/BP_Alpha.BP_Alpha", "/Game/X/BP_Beta.BP_Beta"]);
   assert.equal(compiles, 2, "two assets, two compiles - not four");
 });
+
+/** A bridge that compiles clean, reviews perfectly, and answers a scripted trace. */
+function tracingBridge(trace) {
+  return {
+    async send(cmd, params) {
+      if (cmd === "compile_blueprint") return { success: true, errorCount: 0, warningCount: 0 };
+      if (cmd === "trace_function_calls") {
+        if (trace instanceof Error) throw trace;
+        return trace;
+      }
+      if (cmd === "review_blueprint") return { score: 100, nextAction: undefined, graphNodes: [], variables: [] };
+      if (cmd === "list_assets") return { assets: [] };
+      return {};
+    },
+  };
+}
+
+const ASSET = "/Game/X/BP_Thing.BP_Thing";
+
+test("a function nothing calls does not pass verification silently", async () => {
+  // The gap this closes. Everything else here asks "does it compile and is it well made" - and a
+  // function can pass all of that, score 100, and be called by nothing at all. Saying "pass" for that
+  // is agreeing the feature is done when it does nothing.
+  const result = await verifyFeature(tracingBridge({ reachable: [], unreachable: [] }), {
+    paths: [ASSET],
+    touchedGraphs: [{ asset: ASSET, graph: "ShowCountdown" }],
+  });
+  assert.equal(result.notReached.length, 1);
+  assert.equal(result.notReached[0].why, "no Blueprint calls it at all");
+  assert.ok(result.blockers.some((b) => /ShowCountdown/.test(b)), "and it leads the blockers");
+});
+
+test("the weak case says it is weak, and names why", async () => {
+  // "No Blueprint call site" is not proof: a delegate binding, an interface dispatch, an override,
+  // or a call from C++ all look identical from here. A first draft treated this as conclusive and
+  // would have raised an alarm on every interface implementation in the project.
+  const result = await verifyFeature(tracingBridge({ reachable: [], unreachable: [] }), {
+    paths: [ASSET],
+    touchedGraphs: [{ asset: ASSET, graph: "OnSomethingHappened" }],
+  });
+  const blocker = result.blockers.find((b) => /OnSomethingHappened/.test(b));
+  assert.match(blocker, /not conclusive/i);
+  assert.match(blocker, /delegate|interface|C\+\+/);
+});
+
+test("the strong case says it is strong", async () => {
+  // Call sites exist and nothing runs them. There is no blind spot that explains this away.
+  const result = await verifyFeature(
+    tracingBridge({
+      reachable: [],
+      unreachable: [{ blueprint: "BP_Other", graph: "Unused", calls: "DoTheThing" }],
+    }),
+    { paths: [ASSET], touchedGraphs: [{ asset: ASSET, graph: "DoTheThing" }] }
+  );
+  assert.match(result.notReached[0].why, /every call site is itself unreachable/);
+  assert.match(result.blockers.find((b) => /DoTheThing/.test(b)), /conclusive/);
+});
+
+test("a function something calls is not reported", async () => {
+  const result = await verifyFeature(
+    tracingBridge({ reachable: [{ blueprint: "BP_Caller", graph: "EventGraph", calls: "DoTheThing" }], unreachable: [] }),
+    { paths: [ASSET], touchedGraphs: [{ asset: ASSET, graph: "DoTheThing" }] }
+  );
+  assert.deepEqual(result.notReached, []);
+});
+
+test("call sites for a DIFFERENT function do not count as callers", async () => {
+  // trace_function_calls matches on substring, so asking about "Show" returns "ShowCountdown" and
+  // "ShowHUD" alike. Counting those as callers of the function actually asked about would report a
+  // dead function as alive - which is the failure this whole check exists to prevent.
+  const result = await verifyFeature(
+    tracingBridge({ reachable: [{ blueprint: "BP_Caller", graph: "EventGraph", calls: "ShowHUD" }], unreachable: [] }),
+    { paths: [ASSET], touchedGraphs: [{ asset: ASSET, graph: "ShowCountdown" }] }
+  );
+  assert.equal(result.notReached.length, 1, "a call to a different function is not a call to this one");
+});
+
+test("a trace that could not run says so instead of passing quietly", async () => {
+  // The first version swallowed every error here, and it swallowed a wrong parameter name for a
+  // whole debugging session: the check reported nothing and looked exactly like it was working.
+  const result = await verifyFeature(tracingBridge(new Error("missing_param: function")), {
+    paths: [ASSET],
+    touchedGraphs: [{ asset: ASSET, graph: "DoTheThing" }],
+  });
+  assert.match(result.notReached[0].why, /could not be traced/);
+  assert.match(result.notReached[0].why, /missing_param/);
+});

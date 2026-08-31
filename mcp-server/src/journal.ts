@@ -75,6 +75,14 @@ export interface ChangeRecord {
   command: string;
   /** The asset this touched, when the command names one. */
   target?: string;
+  /**
+   * The graph or function this touched, when the command names one.
+   *
+   * Recorded so verify_feature can ask the one question it never asked: is the thing that was built
+   * actually reached by anything? A function that compiles perfectly and nothing calls scores 95 and
+   * does nothing, and "the countdown never shows up" is what that looks like from the outside.
+   */
+  graph?: string;
   ok: boolean;
   error?: string;
 }
@@ -95,6 +103,22 @@ export interface SessionSummary {
   failures: ChangeRecord[];
   scope: string;
   undo: string;
+}
+
+/**
+ * The graph a write created or edited, when there is one.
+ *
+ * Only the commands that produce something CALLABLE. build_graph on an existing EventGraph is not a
+ * new entry point and asking whether anything calls "EventGraph" is meaningless - an event graph IS
+ * the thing that calls. create_function is the case that matters: a function nobody calls is the
+ * commonest way a finished-looking feature does nothing.
+ */
+export function graphOf(command: string, params: Record<string, unknown> | undefined): string | undefined {
+  if (!params) return undefined;
+  const name = command === "create_function" ? params.functionName : params.graphName;
+  if (typeof name !== "string" || name.length === 0) return undefined;
+  if (/^EventGraph$/i.test(name)) return undefined;
+  return name;
 }
 
 export function isWrite(command: string): boolean {
@@ -120,7 +144,7 @@ export class SessionJournal {
   /** Record one attempted command. Reads are ignored: they change nothing and would drown the log. */
   record(command: string, params: Record<string, unknown> | undefined, ok: boolean, error?: string): void {
     if (!isWrite(command)) return;
-    this.records.push({ seq: ++this.seq, command, target: targetOf(params), ok, error });
+    this.records.push({ seq: ++this.seq, command, target: targetOf(params), graph: graphOf(command, params), ok, error });
   }
 
   /** Everything recorded, oldest first. */

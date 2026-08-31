@@ -1923,6 +1923,51 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### "Is it finished?" never asked whether anything calls it
+
+`unreal_verify_feature` is the last call of the loop - compile every asset written this session,
+review it, check the Data Table rows, read the runtime log, return one verdict. It answers *does it
+compile and is it well made*.
+
+A function can pass all of that - clean compile, score 100, laid out and commented - and be **called
+by nothing at all**. Saying "pass" for that is agreeing the feature is done when it does nothing, and
+it is the commonest way a finished-looking feature turns out not to work.
+
+So the journal now records the graph a write created, not just the asset, and verification asks
+`trace_function_calls` about exactly the functions this session wrote. Scoped that way deliberately:
+sweeping every function on every touched Blueprint would report the 176 pre-existing dead graphs that
+project already has and bury the one just written.
+
+**The trace answers in three states, and getting that wrong is how this becomes noise:**
+
+```text
+reachable non-empty                      something calls it, on a path that runs.  Fine.
+reachable empty, unreachable non-empty   only called from dead code.               Conclusive.
+both empty                               no Blueprint call site at all.            Not conclusive.
+```
+
+The first draft treated "both empty" as proof, and it would have raised an alarm on **every interface
+implementation in the project** - a delegate binding, an interface dispatch, an override, or a call
+from C++ all look identical from there. The command names those blind spots itself; the reply now
+says which of the two cases it found and how much it is worth.
+
+Verified against real functions on the project it was built from:
+
+```text
+ShowCountdown      no Blueprint calls it at all
+isChallengeWave    every call site is itself unreachable (5), so nothing runs it
+```
+
+It does not flip the verdict, and that is a limit rather than caution: failing a build on evidence
+with three known blind spots teaches people to ignore the tool.
+
+**Two mistakes in writing this, both worth recording.** The parameter is `function`, not
+`functionName`, and the reply has `reachable`/`unreachable`, not `callers` - the first draft got both
+wrong. It reported nothing and **looked exactly like a working check**, because the whole thing sat
+inside a bare `catch {}`. That silent catch hid a wrong parameter name for an entire debugging
+session, which is the same failure this project keeps finding: silence that means two different
+things. A trace that cannot run now says so, in the reply, with the error in it.
+
 ### The loudest check in the audit was mostly not a bug
 
 Ranking the real project's findings by cost times count asked an obvious question: what is the

@@ -39,6 +39,12 @@ export interface VerifyFeatureResult {
   verdict: "pass" | "fail";
   /** Data Table rows written this session that point at nothing. */
   dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
+  /**
+   * Functions written this session that no Blueprint appears to call.
+   *
+   * Not part of the verdict, deliberately - see where it is filled in.
+   */
+  notReached: Array<{ path: string; graph: string; why: string }>;
   checked: string[];
   scope: string;
   assets: VerifiedAsset[];
@@ -70,11 +76,30 @@ function canonicalAssetPath(path: string): string {
   return name.includes(".") ? trimmed : `${trimmed}.${name}`;
 }
 
+interface TraceCallSite {
+  blueprint?: string;
+  graph?: string;
+  calls?: string;
+  why?: string;
+}
+
+interface TraceReply {
+  reachable?: TraceCallSite[];
+  unreachable?: TraceCallSite[];
+}
+
+export interface TouchedGraph {
+  asset: string;
+  graph: string;
+}
+
 export interface VerifyOptions {
   /** Paths to check. Defaults to every asset the session actually wrote to. */
   paths?: string[];
   /** Assets written this session, in write order, from the journal. */
   touched?: string[];
+  /** Function graphs created this session, from the journal, so "is it reached" can be asked. */
+  touchedGraphs?: TouchedGraph[];
 }
 
 /**
@@ -104,6 +129,7 @@ export async function verifyFeature(
       scope,
       assets: [],
       dataTableNulls: [],
+      notReached: [],
       blockers: [],
       next:
         "Nothing to verify: no Blueprint has been written this session and no paths were given. " +
@@ -166,7 +192,71 @@ export async function verifyFeature(
     /* the sweep is a bonus; a bridge too old to read tables must not fail the whole verification */
   }
 
+  // The question this tool never asked: is what was built actually reached?
+  //
+  // Everything above answers "does it compile and is it well made". A function can pass all of that -
+  // clean compile, score 95, laid out and commented - and be called by nothing at all. A verification
+  // step that says "pass" for that is agreeing the feature is done when it does nothing.
+  //
+  // Scoped to the graphs THIS SESSION created, from the journal. Sweeping every function on every
+  // touched Blueprint would report the pre-existing dead graphs a real project already has (176 on
+  // the one this was built against) and bury the one just written.
+  //
+  // trace_function_calls answers in three states, not two, and getting that wrong is how this check
+  // would have become noise. It lists CALL SITES and classifies them:
+  //
+  //   reachable non-empty                  something calls it, on a path that runs. Fine.
+  //   reachable empty, unreachable non-empty   it is only called from dead code. Strong finding.
+  //   both empty                           no Blueprint call site at all - which is the finding, OR
+  //                                        the function is bound to a delegate, dispatched through
+  //                                        an interface, overridden from a parent, or called from
+  //                                        C++. The command names those blind spots itself.
+  //
+  // The first draft of this treated "both empty" as proof and would have raised an alarm on every
+  // interface implementation in the project. It is reported as the weaker of the two, saying which.
+  const notReached: VerifyFeatureResult["notReached"] = [];
+  for (const touched of options.touchedGraphs ?? []) {
+    const canonical = canonicalAssetPath(touched.asset);
+    if (!paths.includes(canonical)) continue;
+    let trace: TraceReply;
+    try {
+      trace = await bridge.send<TraceReply>("trace_function_calls", { function: touched.graph });
+    } catch (err) {
+      // Not silence. The first version swallowed everything here, and it swallowed a wrong parameter
+      // name for an entire debugging session - the check reported nothing and looked like it worked.
+      notReached.push({
+        path: canonical,
+        graph: touched.graph,
+        why: `could not be traced: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`,
+      });
+      continue;
+    }
+    const reachable = (trace.reachable ?? []).filter((c) => c.calls === touched.graph);
+    if (reachable.length > 0) continue;
+    const unreachable = (trace.unreachable ?? []).filter((c) => c.calls === touched.graph);
+    notReached.push({
+      path: canonical,
+      graph: touched.graph,
+      why:
+        unreachable.length > 0
+          ? `every call site is itself unreachable (${unreachable.length}), so nothing runs it`
+          : "no Blueprint calls it at all",
+    });
+  }
+
   const blockers: string[] = [];
+  for (const n of notReached) {
+    blockers.push(
+      `${n.path}: ${n.graph} was written this session and ${n.why}. A function that compiles, scores ` +
+        `well and is reached by nothing does nothing - it is the commonest way a finished-looking ` +
+        `feature turns out not to work. ` +
+        (n.why === "no Blueprint calls it at all"
+          ? `This one is not conclusive on its own: a function bound to a delegate, dispatched through ` +
+            `an interface, overriding a parent, or called from C++ also has no Blueprint call site. ` +
+            `If it is none of those, wire the call.`
+          : `This one is conclusive: the calls exist and nothing runs them.`)
+    );
+  }
   for (const a of assets.filter((x) => x.unavailable)) {
     blockers.push(`${a.path}: could not be checked - ${a.unavailable}`);
   }
@@ -198,6 +288,7 @@ export async function verifyFeature(
     scope,
     assets,
     dataTableNulls,
+    notReached,
     blockers,
     worstScore,
     next:

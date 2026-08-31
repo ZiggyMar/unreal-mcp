@@ -3958,7 +3958,13 @@ register(
       const touched = journal
         .summary()
         .byAsset.map((entry) => entry.asset);
-      return jsonResult(await verifyFeature(bridge, { paths, touched }));
+      // The graphs this session created, so verification can ask whether anything calls them. Only
+      // successful writes: a create_function that failed produced nothing to be reached.
+      const touchedGraphs = journal
+        .all()
+        .filter((r) => r.ok && r.target && r.graph)
+        .map((r) => ({ asset: r.target as string, graph: r.graph as string }));
+      return jsonResult(await verifyFeature(bridge, { paths, touched, touchedGraphs }));
     } catch (err) {
       return errorResult(err);
     }
