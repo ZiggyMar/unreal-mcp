@@ -397,3 +397,55 @@ test("a read is judged by where its value goes, not by the Get node itself", () 
   assert.doesNotMatch(finding.observed, /worth fixing/i);
 });
 
+
+test("a cast to a class reference is looked up under the class's real name", async () => {
+  // Unreal titles a cast to a CLASS REFERENCE "Cast To BP_ShopUpgrade Class", not
+  // "Cast To BP_ShopUpgrade". The obvious regex captures a name with a word on the end that is not
+  // part of it, and four such nodes exist across this project's 1,209 graphs. Every one was looked
+  // up under a name no class has: the audit asked describe_class for "BP_ShopUpgrade Class", got
+  // class_not_found, and swallowed it.
+  //
+  // cast-to-server-only-class is the most expensive check in the table, and a cast whose class
+  // cannot be resolved can never trigger it. The check was silently blind to class casts.
+  const { classNameFromCastTitle } = await import("../dist/multiplayer.js");
+  assert.equal(classNameFromCastTitle("Cast To BP_ShopUpgrade Class"), "BP_ShopUpgrade");
+  assert.equal(classNameFromCastTitle("Cast To UserWidget Class"), "UserWidget");
+  assert.equal(classNameFromCastTitle("Cast To BP_Player"), "BP_Player", "an ordinary cast is untouched");
+  assert.equal(classNameFromCastTitle("Cast To AVSGameState"), "AVSGameState");
+});
+
+test("only a trailing 'Class' is stripped, and only when something precedes it", async () => {
+  // A class genuinely named Class is absurd but the parse should not depend on that. Stripping a
+  // word that is the whole name would turn a real lookup into an empty one.
+  const { classNameFromCastTitle } = await import("../dist/multiplayer.js");
+  assert.equal(classNameFromCastTitle("Cast To Class"), "Class", "the name itself is not stripped away");
+  assert.equal(classNameFromCastTitle("Cast To ClassRoom"), "ClassRoom", "a name merely ending in those letters is left alone");
+  assert.equal(classNameFromCastTitle("Cast To BP_Class Class"), "BP_Class", "only the trailing word goes");
+});
+
+test("a title that is not a cast, or is empty, yields nothing", async () => {
+  const { classNameFromCastTitle } = await import("../dist/multiplayer.js");
+  assert.equal(classNameFromCastTitle("Print String"), undefined);
+  assert.equal(classNameFromCastTitle(""), undefined);
+  assert.equal(classNameFromCastTitle(undefined), undefined);
+});
+
+test("every file that reads a cast title uses the one parser", async () => {
+  // There were three copies of `/^Cast To (.+)$/` - audit.ts, clientSync.ts and multiplayer.ts.
+  // Fixing the first two still left the third reporting "BP_ShopUpgrade Class" as unresolvable,
+  // which is what three copies of one parse buys: a fix that looks complete and is not.
+  const fs = await import("node:fs");
+  for (const file of ["audit.ts", "clientSync.ts", "multiplayer.ts"]) {
+    const source = fs.readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
+    // Counting the regex alone matched the doc comment that QUOTES it as the thing not to do -
+    // the same "matched a mention rather than a use" trap this repo has hit before. Only a copy
+    // that is actually executed counts.
+    const spelledOut = [...source.matchAll(/\/\^Cast To \(\.\+\)\$\/i?\.exec/g)].length;
+    const allowed = file === "multiplayer.ts" ? 1 : 0; // the parser itself
+    assert.equal(
+      spelledOut,
+      allowed,
+      `${file} spells the cast-title regex out itself instead of calling classNameFromCastTitle`
+    );
+  }
+});

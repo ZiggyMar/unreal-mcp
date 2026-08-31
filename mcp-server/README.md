@@ -4359,6 +4359,40 @@ Three decisions worth naming:
 - **The report states its own limits.** It sees what this server did, not hand edits in the editor
   or another tool, and it says so rather than leaving that to be discovered at a bad moment.
 
+### A delete that deleted nothing reported success
+
+`unreal_delete_asset` answers `{"requested": 1, "deleted": 0, "forced": true}` when the engine
+refuses, wrapped in an OK response. Every caller that checks for an error sees success.
+
+It surfaced from the other end. Seven `BP_TrialParent*` Blueprints had accumulated in
+`/Game/MCPTrial`, the namespace the trials build in, over seven runs that each printed `cleaned up 2
+assets`. Nothing complained, because the next run creates its own uniquely-stamped assets and never
+looks at what is already there - so a leak nobody was paying for became a confusing failure
+somewhere else entirely, when an unrelated script crashed reading a Blueprint whose file had gone
+while `list_blueprints` still reported it.
+
+The tool now states the mismatch and says not to treat the call as done. What it does **not** do is
+name a cause. The first version of the message advised saving the asset and deleting again; that was
+tested against the real leftovers and made no difference, on an asset `find_references` reports
+nothing referencing and `asset_status` reports on disk, writable and not read-only. Shipping advice
+that had just been watched failing would have been worse than the silence it replaced, because a
+caller would have followed it. A fresh Blueprint deletes, a child deletes, a parent deletes after
+its child, and both together in one `paths[]` call delete - all verified against the editor. Why the
+compiled trial Blueprints refuse is not established, so the message does not say.
+
+The trials changed with it, on three rules:
+
+- **Sweep on the way in, not only on the way out.** An exit path cannot clean up after a process
+  that is no longer running, and it is the killed runs that leak by definition.
+- **A delete is judged by what it deleted**, not by whether it threw.
+- **A failed delete is reported.** `.catch(() => {})` in a cleanup block is how a trial prints
+  `cleaned up 2 assets` while leaving both behind.
+
+The sweep runs `force:true` against the real project, so it matches on a path boundary rather than a
+string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
+was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
+bug it exists to prevent.
+
 ### The loop test: `npm run trial:feature`
 
 The unit tests cover the pieces, and all 315 were green while five separate defects sat in the path

@@ -28,7 +28,7 @@
 import type { BridgeLike } from "./autoLayout.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { reviewBlueprint } from "./review.js";
-import { findServerOnlyCasts } from "./multiplayer.js";
+import { findServerOnlyCasts, classNameFromCastTitle } from "./multiplayer.js";
 import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
@@ -225,6 +225,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   // neither of which contains "GameModeBase".
   const pathOfBlueprint = new Map(all.map((bp) => [bp.name, bp.path]));
   const serverOnly = new Map<string, boolean>();
+  /** Classes the engine could not resolve, so the checks that depend on them could not run. */
+  const unresolvedClasses = new Set<string>();
   const widgetClasses = new Map<string, boolean>();
   const learn = async (className: string) => {
     if (serverOnly.has(className) && widgetClasses.has(className)) return;
@@ -237,6 +239,17 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       // is answered from the ancestry and never from the name.
       widgetClasses.set(className, (described.ancestry ?? []).some((a) => /UserWidget/i.test(a)));
     } catch {
+      // A class the engine could not resolve is NOT a class that turned out to be fine.
+      //
+      // This used to record `false` for both and say nothing, so "checked, not server-only" and
+      // "could not look" produced identical output. cast-to-server-only-class is the most expensive
+      // check in the table; a class that fails to resolve can never trigger it, and until now
+      // nothing anywhere reported that it had not been checked.
+      //
+      // The values still default to false because the alternative - reporting a finding about a
+      // class nothing is known about - would be a guess dressed as a result. What changes is that
+      // the audit now says so, once, at the end.
+      unresolvedClasses.add(className);
       serverOnly.set(className, false);
       widgetClasses.set(className, false);
     }
@@ -328,8 +341,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       for (const graph of review.graphNodes ?? []) {
         const nodes = (graph.nodes ?? []) as Array<{ title?: string }>;
         for (const node of nodes) {
-          const match = /^Cast To (.+)$/i.exec(String(node.title ?? "").trim());
-          if (match) await learn(match[1].trim());
+          const castTarget = classNameFromCastTitle(String(node.title ?? ""));
+          if (castTarget) await learn(castTarget);
         }
         for (const finding of findServerOnlyCasts(graph.nodes as never, isServerOnlyClass, ownerIsServerOnly)) {
           findings.push({
@@ -865,6 +878,19 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             `${checksSkipped.length} check(s) could not run, so this is not a complete audit: ` +
             `${checksSkipped.map((c) => c.name).join(", ")}. "No findings" from a check that never ran ` +
             `looks exactly like a clean result.`,
+        }
+      : {}),
+    // Partial blindness rather than a skipped check, but the same principle: a check that could not
+    // look must not read as a check that found nothing. These are the classes the engine refused to
+    // resolve, so every check that asks what they inherit from was answered "no" by default.
+    ...(unresolvedClasses.size > 0
+      ? {
+          classesNotResolved: [...unresolvedClasses].sort(),
+          classesNotResolvedNote:
+            `${unresolvedClasses.size} class name(s) could not be resolved, so the checks that ask ` +
+            `what a class inherits from - cast-to-server-only-class above all - could not run for ` +
+            `them: ${[...unresolvedClasses].sort().join(", ")}. They are absent from the findings ` +
+            `because nothing is known about them, not because they are clean.`,
         }
       : {}),
     blueprintsScanned: blueprints.length,

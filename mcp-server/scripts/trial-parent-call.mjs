@@ -11,6 +11,7 @@
 // event's exec pin displaces it. The trial's own setup did that by accident, which is how sharp
 // the edge is.
 import { UnrealBridgeClient } from "../dist/bridgeClient.js";
+import { sweepScratch, cleanUpScratch, SCRATCH_ROOT } from "./lib/scratch.mjs";
 import { callParentFirst } from "../dist/parentCall.js";
 
 
@@ -38,6 +39,18 @@ const PARENT = `/Game/MCPTrial/BP_TrialParent${stamp}`;
 const CHILD = `/Game/MCPTrial/BP_TrialChild${stamp}`;
 
 const cleanup = [];
+
+// This trial is where the seven leftover Blueprints came from - runs killed before `finally` could
+// execute. An exit path cannot clean up after a process that is no longer running, so the sweep
+// happens on the way in.
+await sweepScratch({
+  list: async () => {
+    const listed = await b.send("list_blueprints", { pathPrefix: SCRATCH_ROOT, maxResults: 200 });
+    return (listed.blueprints ?? []).map((bp) => bp.path);
+  },
+  remove: (path) => b.send("delete_asset", { path, force: true }),
+});
+
 try {
   await b.send("create_blueprint", { packagePath: PARENT, parentClass: "Actor" });
   cleanup.push(PARENT);
@@ -98,8 +111,5 @@ try {
 
   console.log(ok && twice.alreadyPresent && !twice.added ? "\nPARENT-CALL TRIAL OK" : "\nPARENT-CALL TRIAL FAILED");
 } finally {
-  for (const p of cleanup.reverse()) {
-    await b.send("delete_asset", { path: p, force: true }).catch(() => {});
-  }
-  console.log("cleaned up", cleanup.length, "assets");
+  await cleanUpScratch(cleanup, (path) => b.send("delete_asset", { path, force: true }));
 }

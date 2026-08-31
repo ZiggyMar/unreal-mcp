@@ -150,3 +150,65 @@ test("a clean Blueprint is left alone and reports nothing to do", async () => {
   assert.deepEqual(report.leftForYou, []);
   assert.equal(report.scoreBefore, 100);
 });
+
+test("a delete that deleted nothing is not counted as cleaned up", async () => {
+  // delete_asset answers {requested: 1, deleted: 0} as a SUCCESS response when the engine refuses,
+  // so a cleanup block that only catches exceptions counts that as done. Seven BP_TrialParent*
+  // Blueprints accumulated in /Game/MCPTrial that way, over seven runs that each printed
+  // "cleaned up 2 assets", until an unrelated script crashed reading one of them.
+  const { cleanUpScratch } = await import("../scripts/lib/scratch.mjs");
+  const said = [];
+  const log = (line) => said.push(line);
+
+  assert.equal(await cleanUpScratch(["/Game/MCPTrial/A"], async () => ({ requested: 1, deleted: 1 }), log), true);
+  assert.equal(
+    await cleanUpScratch(["/Game/MCPTrial/A"], async () => ({ requested: 1, deleted: 0 }), log),
+    false,
+    "a delete that removed nothing is a failure however calmly it reported itself"
+  );
+  assert.ok(said.some((line) => /left behind/.test(line)), "and it is said out loud");
+});
+
+test("a reply without the counts is left alone rather than assumed broken", async () => {
+  // Only an explicit report of deleting nothing counts. Treating an unrecognised shape as a failure
+  // would turn every future change to the reply into a wall of false alarms.
+  const { cleanUpScratch } = await import("../scripts/lib/scratch.mjs");
+  assert.equal(await cleanUpScratch(["/Game/MCPTrial/A"], async () => ({ ok: true }), () => {}), true);
+  assert.equal(await cleanUpScratch(["/Game/MCPTrial/A"], async () => undefined, () => {}), true);
+});
+
+test("the sweep only ever touches the scratch namespace", async () => {
+  // It runs at the start of a trial against the real project. A path outside /Game/MCPTrial must
+  // never reach the remove callback, whatever the listing hands back.
+  const { sweepScratch } = await import("../scripts/lib/scratch.mjs");
+  const removed = [];
+  await sweepScratch({
+    list: async () => ["/Game/MCPTrial/Mine", "/Game/AntiVirusSquad/_Core/BP_Player", "/Game/MCPTrialish/NotMine"],
+    remove: async (path) => {
+      removed.push(path);
+      return { requested: 1, deleted: 1 };
+    },
+    log: () => {},
+  });
+  // /Game/MCPTrialish is the case worth having: it starts with the scratch root as a STRING and is
+  // a different folder. The first version of this test asserted it WOULD be swept, which is how a
+  // test ends up encoding the bug it was written to prevent - and this one runs force:true against
+  // the real project.
+  assert.deepEqual(removed, ["/Game/MCPTrial/Mine"]);
+  assert.ok(!removed.includes("/Game/AntiVirusSquad/_Core/BP_Player"), "a real asset is never swept");
+  assert.ok(!removed.includes("/Game/MCPTrialish/NotMine"), "and neither is a folder that merely starts with the same letters");
+});
+
+test("a listing that fails does not stop the trial, but does say so", async () => {
+  const { sweepScratch } = await import("../scripts/lib/scratch.mjs");
+  const said = [];
+  const result = await sweepScratch({
+    list: async () => {
+      throw new Error("bridge not answering");
+    },
+    remove: async () => {},
+    log: (line) => said.push(line),
+  });
+  assert.deepEqual(result, { found: 0, removed: 0, failed: [] });
+  assert.ok(said.some((line) => /could not check/.test(line)), "starting on an unknown state is stated, not assumed");
+});

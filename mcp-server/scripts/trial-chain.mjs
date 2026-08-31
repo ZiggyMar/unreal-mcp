@@ -12,6 +12,7 @@
 // older than this server. A model never sees the bridge, so a trial that tests it is measuring
 // something nobody experiences.
 import { startAndInitialize } from "./lib/mcpStdio.mjs";
+import { sweepScratch, cleanUpScratch, SCRATCH_ROOT } from "./lib/scratch.mjs";
 
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "trial-chain");
 const stamp = String(Date.now()).slice(-6);
@@ -30,6 +31,15 @@ const check = (name, ok, detail) => {
   console.log(`  ${ok ? "ok  " : "FAIL"}  ${name}${detail ? ` - ${detail}` : ""}`);
   if (!ok) failures.push(name);
 };
+
+// Anything already in the scratch namespace is from a run that was killed before it could clean up.
+await sweepScratch({
+  list: async () => {
+    const listed = await call("unreal_list_blueprints", { pathPrefix: SCRATCH_ROOT, maxResults: 200 });
+    return (listed.blueprints ?? []).map((b) => b.path);
+  },
+  remove: (path) => call("unreal_delete_asset", { path, force: true }),
+});
 
 try {
   console.log("find_node -> add_node");
@@ -179,9 +189,7 @@ try {
   }
   if (checked === 0) console.log("  --    no parent class in this project has a differing C++ name");
 } finally {
-  for (const p of cleanup.reverse()) {
-    await call("unreal_delete_asset", { path: p, force: true }).catch(() => {});
-  }
+  await cleanUpScratch(cleanup, (path) => call("unreal_delete_asset", { path, force: true }));
   server.child.kill();
   console.log("");
   console.log(

@@ -1921,7 +1921,47 @@ register(
   },
   async ({ path, paths, force }) => {
     try {
-      const result = await bridge.send("delete_asset", { path, paths, force });
+      const result = await bridge.send<{ requested?: number; deleted?: number; forced?: boolean }>(
+        "delete_asset",
+        { path, paths, force }
+      );
+
+      // A delete that deleted nothing is not a successful delete.
+      //
+      // The bridge is honest - it returns {requested: 1, deleted: 0, forced: true} - but it wraps
+      // that in an OK response, so every caller that checks for an error sees success. Found when a
+      // trial's cleanup reported "cleaned up 2 assets" seven runs in a row while the assets piled
+      // up in /Game/MCPTrial, and again when a later script crashed reading one of them.
+      //
+      // ObjectTools::DeleteAssets returns a count and no reason, and the reason cannot be recovered
+      // from here. So this says exactly what is known - the count did not match - and points at the
+      // two reads that can narrow it down, rather than inventing a cause.
+      //
+      // The first version of this message did invent one. It advised saving the asset and deleting
+      // again; that was tested on the real leftovers and made no difference, on an asset that
+      // find_references reports nothing referencing and asset_status reports on disk, writable and
+      // not read-only. Shipping advice I had just watched fail would have been worse than the
+      // silence it replaced, because a caller would have followed it.
+      //
+      // What IS established: a fresh Blueprint deletes, a child deletes, a parent deletes after its
+      // child, and both together in one paths[] call delete - all verified against the editor. The
+      // Blueprints that refuse are the ones a trial has built graphs on and compiled. Why that
+      // matters to ObjectTools::DeleteAssets is not established, so the message does not say.
+      const requested = result.requested ?? 0;
+      const deleted = result.deleted ?? 0;
+      if (requested > 0 && deleted < requested) {
+        return jsonResult({
+          ...result,
+          warning:
+            `${requested} asset(s) were requested and ${deleted} were deleted. The rest are still there: ` +
+            `list_assets and list_blueprints will still show them and they still open, so do not treat ` +
+            `this call as done. The engine refuses a delete without reporting why. ` +
+            `unreal_find_references says whether anything still points at it and ` +
+            `unreal_asset_status says whether it is on disk, read-only or checked out. Both can come ` +
+            `back clean and the delete still refuse, so check the asset is not open in an editor tab ` +
+            `before assuming it cannot be removed at all.`,
+        });
+      }
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

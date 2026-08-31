@@ -276,6 +276,34 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
  *   - A cast behind `Switch Has Authority` is fine, because it only runs on the server by
  *     construction. That guard is detected rather than assumed.
  */
+/**
+ * The class a "Cast To ..." node targets, taken from its title.
+ *
+ * Unreal titles a cast to a CLASS REFERENCE "Cast To BP_ShopUpgrade Class" rather than
+ * "Cast To BP_ShopUpgrade", so the obvious `/^Cast To (.+)$/` captures a name with a word on the end
+ * that is not part of it. Four such nodes exist across this project's 1,209 graphs - two to
+ * BP_ShopUpgrade, one to BP_BaseEnemy, one to UserWidget - and every one of them was being looked up
+ * under a name no class has. The audit asked describe_class for "BP_ShopUpgrade Class", got
+ * class_not_found, and swallowed it.
+ *
+ * That matters beyond the wasted call: cast-to-server-only-class is the most expensive check in the
+ * table, and a cast whose class cannot be resolved can never trigger it. The check was silently
+ * blind to class casts.
+ *
+ * Lives here and is exported because three separate files had spelled this regex out for
+ * themselves - audit.ts, clientSync.ts and this one. Every copy was asking about a class name no
+ * class has, and fixing the first two still left the third reporting "BP_ShopUpgrade Class" as
+ * unresolvable. That is what three copies of one parse buys: a fix that looks complete and is not.
+ */
+export function classNameFromCastTitle(title: string | undefined): string | undefined {
+  const match = /^Cast To (.+)$/i.exec((title ?? "").trim());
+  if (!match) return undefined;
+  // Only the trailing word, and only when something precedes it: a class genuinely called "Class"
+  // would be left alone.
+  const name = match[1].trim().replace(/\s+Class$/i, "").trim();
+  return name.length > 0 ? name : undefined;
+}
+
 export function findServerOnlyCasts(
   nodes: MpNode[],
   isServerOnlyClass: (className: string) => boolean,
@@ -350,9 +378,8 @@ export function findServerOnlyCasts(
   for (const node of nodes) {
     if (!/K2Node_DynamicCast/.test(node.type)) continue;
     if (serverGuarded.has(node.id)) continue;
-    const match = /^Cast To (.+)$/i.exec((node.title ?? "").trim());
-    if (!match) continue;
-    const target = match[1].trim();
+    const target = classNameFromCastTitle(node.title);
+    if (!target) continue;
     if (!isServerOnlyClass(target)) continue;
     if (alreadyReported.has(target)) continue;
     alreadyReported.add(target);

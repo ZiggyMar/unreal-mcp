@@ -25,6 +25,7 @@
  * always the half that makes the game work for people who are not hosting.
  */
 
+import { classNameFromCastTitle } from "./multiplayer.js";
 import type { FlowNode } from "./execFlow.js";
 
 export interface SyncFinding {
@@ -85,8 +86,11 @@ export async function findServerSideUi(
         touched.push(title);
         continue;
       }
-      const cast = /^Cast To (.+)$/i.exec(title);
-      if (cast && (await options.isWidgetClass(cast[1].trim()))) touched.push(title);
+      // The third copy of this parse. See classNameFromCastTitle: a cast to a class reference is
+      // titled "Cast To W_Thing Class", and each copy that spelled the regex itself was asking about
+      // a class name no class has.
+      const cast = classNameFromCastTitle(title);
+      if (cast && (await options.isWidgetClass(cast))) touched.push(title);
     }
     if (touched.length === 0) continue;
 

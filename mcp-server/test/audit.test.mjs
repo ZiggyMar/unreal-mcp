@@ -376,3 +376,23 @@ test("a missing command is one skipped check, not one unreadable asset per file"
   assert.equal(result.unreadable.length, 0, "a missing command is not an unreadable asset");
 });
 
+
+test("a class the engine could not resolve is reported, not counted as clean", () => {
+  // The bare `catch {}` recorded serverOnly=false and widgetClass=false for a class that failed to
+  // resolve, then said nothing. "Checked, not server-only" and "could not look" produced identical
+  // output. cast-to-server-only-class is the most expensive check in the table and can never fire
+  // for a class nothing is known about.
+  //
+  // The values still default to false - reporting a finding about an unknown class would be a guess
+  // dressed as a result. What changed is that the audit now says which classes those were, in the
+  // same spirit as checksSkipped: a check that could not look must not read as one that found
+  // nothing.
+  const source = readFileSync(join(SRC_DIR, "audit.ts"), "utf8");
+  assert.match(source, /unresolvedClasses\.add\(className\)/, "the failure is recorded rather than swallowed");
+  assert.match(source, /classesNotResolvedNote/, "and surfaced in the reply");
+  assert.match(
+    source,
+    /not because they are clean/,
+    "and the note says what the absence of findings about them actually means"
+  );
+});
