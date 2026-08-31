@@ -4321,6 +4321,25 @@ Three decisions worth naming:
   untrue about their own project, and a change log that is wrong is worse than none.
 - **An unrecognised command counts as a write.** A command added later must not escape the log
   because `journal.ts` has not heard of it. Under-reporting a change is the dangerous direction.
+
+  That default is right and it still went wrong, in the way a safe default does: quietly. Fifteen
+  read commands were added to the bridge after the read-only list was written - `list_variables`,
+  `read_class_defaults`, `describe_class` and twelve more - and every one of them was being logged
+  as a change. After a session of nothing but `audit_project`, `map_system`, `find_orphans` and
+  `plan_feature`, this tool reported **359 writes across 190 assets**, at 9,871 tokens. It is now
+  0 writes and 130 tokens.
+
+  The token cost is the smaller half. A model that calls `session_changes` to check its own work
+  and is told it modified 190 assets it never touched has been actively misled by the one tool that
+  has to be trustworthy about this.
+
+  `npm run check:journal` is what stops it recurring. It reads the bridge's own dispatch chain, so
+  a command cannot exist without being considered, and fails if anything named `read_*`, `list_*`,
+  `find_*`, `describe_*`, `get_*` or `search_*` is being logged as a change. It checks that one
+  direction only: plenty of pure reads are named otherwise (`pie_status`, `project_health`,
+  `trace_variable`), and those are still added by hand after reading the C++ handler - the slow half,
+  kept slow on purpose. A read filed as a write is noise in a log; a write filed as a read vanishes
+  from the journal entirely, and the journal is what the undo advice is built from.
 - **The report states its own limits.** It sees what this server did, not hand edits in the editor
   or another tool, and it says so rather than leaving that to be discovered at a bad moment.
 

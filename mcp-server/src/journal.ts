@@ -17,23 +17,75 @@
  */
 
 /** Commands that only read. Everything else is treated as a write, which is the safe default. */
+/**
+ * Every bridge command that changes nothing.
+ *
+ * `isWrite` is the negation of this set, which makes it a denylist: a command missing from here is
+ * a write by default. That default was wrong 15 times. describe_class, find_broken_names,
+ * get_game_settings, list_actors, list_data_table_rows, list_input_mappings,
+ * list_material_parameters, list_variables, read_anim_blueprint, read_asset_properties,
+ * read_behavior_tree, read_class_defaults, read_input_context, read_level_sequence and
+ * read_niagara_system were all added to the bridge after this list was written, and every one of
+ * them was being logged as a change to the project.
+ *
+ * What that cost: unreal_session_changes - the tool whose entire job is answering "what did I change
+ * this session" - reported 359 writes across 190 assets after a session that made none. 9,871 tokens
+ * of it. A model that calls it to check its own work gets a wall of false positives, which is worse
+ * than the token cost: it is the one tool that has to be trustworthy about this.
+ *
+ * Each of these was read out of the C++ handler and confirmed to touch nothing, rather than trusted
+ * because of its name. The direction of error matters here and is not symmetric: a read filed as a
+ * write is noise, but a write filed as a read vanishes from the journal entirely, and the journal is
+ * what the undo advice is built from. When unsure, leave it out.
+ *
+ * take_screenshot is deliberately NOT here. It touches no asset, but it does put a file on disk, and
+ * a side effect that leaves something behind is worth one line in the log.
+ */
 const READ_ONLY_COMMANDS = new Set([
   "ping",
+  // Blueprint and asset inspection.
   "list_blueprints",
   "list_blueprint_graphs",
   "read_blueprint_graph_summary",
   "read_blueprint_node_detail",
-  "search_project",
-  "find_references",
-  "get_project_overview",
-  "find_node",
-  "get_node_signature",
-  "list_assets",
+  "list_variables",
   "list_components",
   "list_widgets",
   "list_struct_fields",
   "list_enum_entries",
+  "read_class_defaults",
+  "read_asset_properties",
+  "list_assets",
+  "list_data_table_rows",
+  // Searching and describing.
+  "search_project",
+  "find_references",
+  "find_node",
+  "find_broken_names",
+  "get_node_signature",
+  "get_project_overview",
+  "describe_class",
+  // Specialised asset reads.
+  "read_anim_blueprint",
+  "read_behavior_tree",
+  "read_niagara_system",
+  "read_level_sequence",
+  "read_input_context",
+  "list_input_mappings",
+  "list_material_parameters",
+  // The world and the session, as they are.
+  "list_actors",
+  "get_game_settings",
   "pie_status",
+  "asset_status",
+  "project_health",
+  "undo_history",
+  "watch_runtime",
+  "trace_function_calls",
+  "trace_variable",
+  // Reports on a compile that already happened. It drains its own capture buffer, so calling it
+  // twice gives different answers, but it changes nothing in the project.
+  "live_coding_status",
 ]);
 
 /** Plain-language names, because "set_class_default" means nothing to the person being told. */

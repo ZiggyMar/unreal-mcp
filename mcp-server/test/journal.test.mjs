@@ -115,3 +115,73 @@ test("the full log preserves order and outcome", () => {
   assert.equal(log[0].ok, true);
   assert.equal(log[1].ok, false);
 });
+
+test("the reads that a whole-project audit issues are not logged as changes", () => {
+  // The regression, exactly as it was found. audit_project, map_system, find_orphans and
+  // plan_feature loop over the project and issue hundreds of reads. Fifteen of those read commands
+  // were missing from READ_ONLY_COMMANDS, so unreal_session_changes - the tool whose entire job is
+  // answering "what did I change this session" - reported 359 writes across 190 assets after a
+  // session that changed nothing, at 9,871 tokens. It is now 130.
+  //
+  // The token cost is the smaller half. A model that calls session_changes to check its own work
+  // and is told it modified 190 assets it never touched has been actively misled by the one tool
+  // that has to be right about this.
+  const j = new SessionJournal();
+  for (const command of [
+    "describe_class",
+    "find_broken_names",
+    "get_game_settings",
+    "list_actors",
+    "list_data_table_rows",
+    "list_input_mappings",
+    "list_material_parameters",
+    "list_variables",
+    "read_anim_blueprint",
+    "read_asset_properties",
+    "read_behavior_tree",
+    "read_class_defaults",
+    "read_input_context",
+    "read_level_sequence",
+    "read_niagara_system",
+  ]) {
+    assert.equal(isWrite(command), false, `${command} only looks at things`);
+    j.record(command, { path: "/Game/BP_A.BP_A" }, true);
+  }
+  assert.equal(j.summary().totalWrites, 0, "a session that only read changed nothing");
+  assert.equal(j.summary().byAsset.length, 0, "and touched no assets");
+});
+
+test("a read next to a write does not hide the write", () => {
+  // The fix has an obvious failure mode: classify everything as a read and the false positives
+  // vanish along with the true ones. Reads going quiet is only correct if writes still land.
+  const j = new SessionJournal();
+  j.record("create_blueprint", { packagePath: "/Game/BP_New" }, true);
+  j.record("list_variables", { path: "/Game/BP_New" }, true);
+  j.record("add_variable", { path: "/Game/BP_New", variableName: "Health" }, true);
+  j.record("read_class_defaults", { path: "/Game/BP_New" }, true);
+
+  const s = j.summary();
+  assert.equal(s.totalWrites, 2, "both writes recorded");
+  assert.deepEqual(s.byAsset.map((a) => a.writeCount), [2]);
+});
+
+test("status reads are reads, including the ones whose names do not say so", () => {
+  // These are the half the naming guard cannot check. project_health, pie_status and the traces
+  // inspect and report; they were read out of the C++ handler one at a time rather than assumed,
+  // which is the slow half of keeping this list honest.
+  for (const command of ["ping", "pie_status", "asset_status", "project_health", "undo_history", "trace_function_calls", "trace_variable", "watch_runtime"]) {
+    assert.equal(isWrite(command), false, `${command} changes nothing in the project`);
+  }
+});
+
+test("take_screenshot is still logged, because it leaves a file behind", () => {
+  // It touches no asset, so the mutation scan calls it a read. It is kept as a write deliberately:
+  // a side effect that leaves something on disk is worth one line in the log.
+  assert.equal(isWrite("take_screenshot"), true);
+});
+
+test("a command that writes is still a write even if it is called after a read", () => {
+  assert.equal(isWrite("run_console_command"), true, "a console command can do anything");
+  assert.equal(isWrite("live_coding_compile"), true, "compiling changes the running editor");
+  assert.equal(isWrite("live_coding_status"), false, "asking whether it compiled does not");
+});
