@@ -84,7 +84,7 @@ Client0:   0 -> 0    changed=false      <- the variable is not replicated
   `npm run trial:diagnose` runs against a live editor rather than asserting. Two further compactions
   were measured and **reverted** - one saved 38 tokens and broke how you naturally identify an actor.
 - **Dead-graph detection.** A liveness fixpoint over the whole project, biased toward calling things
-  live: 176 of 1,007 graphs nothing reaches, in the project it was validated against. `map_system` and
+  live: 52 of 511 graphs nothing reaches, in the project it was validated against. `map_system` and
   `plan_feature` now say out loud that a system matching your search may be the replaced one, because
   extending something nothing calls produces a feature that cannot run.
 - **New reads: Animation Blueprints, Behavior Trees, Niagara, Data Assets.** "The enemies are not

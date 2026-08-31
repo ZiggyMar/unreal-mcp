@@ -1924,6 +1924,38 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The same discovery corrected a number on the front page
+
+Finding that event dispatchers appear in the graph list raised an obvious question: what else counts
+them? The dead-graph section did.
+
+```text
+before   88 of 552 graphs nothing reaches
+after    52 of 511
+```
+
+Per Blueprint the correction is larger than the total suggests:
+
+```text
+BP_Player      13 of 54  ->  3 of 42
+GM_Gameplay    10 of 28  ->  1 of 18
+GS_Gameplay    15 of 26  ->  8 of 19
+```
+
+**41% of what that section reported was a normal event dispatcher.** A model told "13 of BP_Player's
+graphs are unreachable" goes hunting through ten dispatchers that are working exactly as intended,
+and the finding this section exists for - a system replaced and left on the canvas - is buried in
+them.
+
+This is the third class of graph the engine reaches by a route other than a call node, after
+animation graphs and interface implementations, and all three were found the same way: by reading
+what the list actually contained instead of trusting the number. The published figure was **176 of
+1,007**; it is 52 of 511, and the front page says so now.
+
+The test for it pins the property rather than the plumbing: passed a dispatcher, `findDeadGraphs`
+still reports it - correctly, because it cannot tell - so the filter belongs where the variable list
+is in hand, and the test asserts both halves.
+
 ### The bug behind the question I had been asking all session
 
 `unreal_explain_graph` on the function at the centre of *"the countdown never shows up"*:
@@ -3588,7 +3620,15 @@ and the function that would consume it has one call site, itself dead.
 
 So the reply now carries a `possiblyReplaced` section: function graphs no Blueprint node appears to
 call, by the same fixpoint the bridge uses - an event graph can fire, a function is live if a live
-graph calls it, repeat. On the project this is developed against: **176 of 1,007 graphs**.
+graph calls it, repeat. On the project this is developed against: **52 of 511 graphs**.
+
+That figure was **176 of 1,007** for a long time, and most of the difference was the check being
+wrong rather than the project changing. Three classes of graph are reached by the engine rather than
+by a call node, and each was found by looking at what the list actually contained: animation graphs
+(37 across three anim Blueprints), interface implementations, and - most recently - **event
+dispatcher signatures**, which Unreal puts in the graph list with a function entry and nothing wired
+to it. Those alone were 41% of what remained: BP_Player fell from 13 dead graphs to 3, GM_Gameplay
+from 10 to 1.
 
 **Grouped by Blueprint, not listed by graph.** Twelve graph names out of 176 was the weakest thing it
 could return. `GS_Gameplay.ShowCountdown` is a name; `GS_Gameplay: 15 of 26 uncalled` is a system

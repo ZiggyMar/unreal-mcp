@@ -135,3 +135,39 @@ test("an interface's function is never reported dead in its implementers", () =>
   assert.ok(!r.dead.has(graphKey("BP_B", "EnemyScalePriority")));
   assert.ok(r.dead.has(graphKey("BP_B", "GenuinelyUncalled")), "ordinary functions are still checked");
 });
+
+test("an event dispatcher signature is not an abandoned function", () => {
+  // Unreal exposes a `mcdelegate` variable's signature in the graph list, with a function entry and
+  // nothing wired to it. Nothing calls it BY NAME - it is bound to - so every dispatcher in the
+  // project counted as an abandoned function.
+  //
+  // Measured on the real project: 88 of 552 became 52 of 511 once they were excluded. BP_Player went
+  // from 13 dead graphs to 3 and GM_Gameplay from 10 to 1, so 41% of what this section reported was
+  // a normal dispatcher.
+  //
+  // The exclusion happens where the graphs are gathered, because that is the only place the variable
+  // list is in hand. This pins the property it produces: a graph nothing calls, whose name is a
+  // delegate, must never reach findDeadGraphs at all.
+  const graphs = [
+    { blueprint: "BP_Player", graphName: "EventGraph", nodes: [{ title: "Event BeginPlay", type: "K2Node_Event" }] },
+    // Eight more so the pass has enough to mean anything - it stays silent on a tiny project.
+    ...Array.from({ length: 8 }, (_, i) => ({
+      blueprint: "BP_Player",
+      graphName: `Helper${i}`,
+      nodes: [{ title: `Helper${i}`, type: "K2Node_FunctionEntry" }],
+    })),
+  ];
+  const withDispatcher = [
+    ...graphs,
+    { blueprint: "BP_Player", graphName: "ChangeHealth", nodes: [{ title: "ChangeHealth", type: "K2Node_FunctionEntry" }] },
+  ];
+
+  // Passed in, it looks exactly like an abandoned function - which is why the filter cannot live here.
+  const naive = findDeadGraphs(withDispatcher);
+  assert.ok(naive.dead.has("BP_Player.ChangeHealth"), "unfiltered, a dispatcher is indistinguishable");
+
+  // Filtered out before the pass, as the audit now does.
+  const filtered = findDeadGraphs(graphs);
+  assert.ok(!filtered.dead.has("BP_Player.ChangeHealth"));
+  assert.equal(filtered.considered, naive.considered - 1, "and it is not counted as considered either");
+});

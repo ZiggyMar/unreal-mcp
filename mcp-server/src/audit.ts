@@ -371,7 +371,22 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         }
       }
 
+      // Event dispatcher signatures are not graphs anyone calls.
+      //
+      // Unreal exposes a `mcdelegate` variable's signature in the graph list, with a function entry
+      // and nothing wired to it. Nothing calls it by name - it is BOUND to - so every dispatcher in
+      // the project counted as an abandoned function. On GS_Gameplay that is 7 of 26 "graphs", and
+      // the section reported 15 of 26 as possibly replaced; on BP_Player it is 12.
+      //
+      // Same reasoning as the interface and animation exclusions already here: a graph the engine
+      // reaches by a route other than a call node is not evidence of anything.
+      const dispatcherNames = new Set(
+        (review.variables ?? [])
+          .filter((v) => /delegate/i.test(String((v as { type?: string }).type ?? "")))
+          .map((v) => v.name)
+      );
       for (const graph of review.graphNodes ?? []) {
+        if (dispatcherNames.has(graph.graphName)) continue;
         allGraphs.push({
           blueprint: bp.name,
           graphName: graph.graphName,
