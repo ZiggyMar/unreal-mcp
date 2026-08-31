@@ -2467,6 +2467,10 @@ register(
         : undefined;
       return jsonResult({
         ...result,
+        // Safe form of the spread that bit find_references: when `properties` is undefined there was
+        // nothing to compact, and the raw value from `...result` is exactly the right answer. The
+        // harmful version is a condition that means "should the caller SEE this", where falling
+        // through leaves the uncompacted original in place.
         ...(properties ? { properties } : {}),
         // The largest saving in the whole surface, and the reply never mentioned it. Measured on
         // BP_Player: the full read is 4,685 tokens and `match` answers a specific question for 292 -
@@ -3613,8 +3617,34 @@ register(
   },
   async ({ path, limit, offset, full }) => {
     try {
+      const table = (await bridge.send("list_data_table_rows", {
+        path,
+        limit,
+        offset,
+        omitDefaults: full !== true,
+      })) as { rows?: unknown[] };
+
+      // The largest read in the whole surface, and the one where row COUNT says nothing about cost.
+      // DT_UniversalActions is nine rows and 6,985 tokens, because a single untouched FSlateBrush
+      // column exports as 900 characters. Every other hint here is keyed on how many rows came back;
+      // this one has to be keyed on how big the reply actually is, or it stays silent on exactly the
+      // table that needed it.
+      //
+      // `limit: 1` is the lever that works today: one row shows every column and its shape for a
+      // fraction of the whole table, which is what "what is in this table" usually means.
+      const rowCount = Array.isArray(table.rows) ? table.rows.length : 0;
+      const size = JSON.stringify(table).length;
+      const HEAVY_REPLY_CHARS = 8000;
       return jsonResult(
-        await bridge.send("list_data_table_rows", { path, limit, offset, omitDefaults: full !== true })
+        size >= HEAVY_REPLY_CHARS && rowCount > 1
+          ? {
+              ...table,
+              cheaper:
+                `These rows are large (~${Math.round(size / 4)} tokens for ${rowCount} rows). ` +
+                `\`limit: 1\` shows every column and its shape for a fraction of that, and ` +
+                `unreal_list_struct_fields on the row struct lists the columns without any row data.`,
+            }
+          : table
       );
     } catch (err) {
       return errorResult(err);
@@ -3700,6 +3730,8 @@ register(
       // field add_struct_field accepts. This reply was going out completely raw.
       return jsonResult({
         ...result,
+        // Same safe form: not an array means nothing to compact, and passing the bridge's own value
+        // through is correct. See the note on read_class_defaults.
         ...(Array.isArray(result.fields) ? { fields: result.fields.map(compactStructField) } : {}),
       });
     } catch (err) {

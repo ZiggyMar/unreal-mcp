@@ -1924,6 +1924,42 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The most expensive read of all, where row count says nothing about cost
+
+`list_data_table_rows` is the largest read in the surface and the last one with no guidance in its
+reply. It also breaks the rule every other hint uses.
+
+Every other expensive read costs in proportion to how many rows came back, so `ADVISE_WHEN_ROWS_AT_LEAST`
+is the right gate. **`DT_UniversalActions` is nine rows and 6,985 tokens** - because one untouched
+`FSlateBrush` column exports as 900 characters of `ImageSize`, `Margin` and `OutlineSettings`. A
+row-count gate stays silent on exactly the table that needed the advice.
+
+So that one is keyed on the size of the reply, and the lever it names is the one that works today:
+
+```text
+DT_UniversalActions              7,040 tok
+DT_UniversalActions, limit: 1      945 tok      (-87%)
+```
+
+One row shows every column and its shape, which is what *"what is in this table"* usually means. The
+hint also points at `unreal_list_struct_fields` on the row struct, which lists the columns with no
+row data at all.
+
+The guard now checks both keying rules and asserts at least one hint is size-keyed - because the
+instinct is to reach for the row count everywhere, and on this tool that would produce a check that
+passes while helping nobody.
+
+### Two places that look like the find_references bug and are not
+
+The spread that bit `find_references` has a benign twin, and it appears twice - `read_class_defaults`
+and `list_struct_fields` both do `{...result, ...(compacted ? { key: compacted } : {})}`. Those are
+correct: the condition means *"was there anything to compact"*, and when there was not, the raw value
+from the spread is exactly the right answer.
+
+The harmful version is a condition meaning *"should the caller see this"*, where falling through
+leaves the uncompacted original in place. Both sites now say which they are, so the shape is not
+mistaken for the bug - or copied as if it were the fix.
+
 ### find_references answered two questions when you asked one
 
 `find_references` returned both directions at once - what references this asset, and what this asset

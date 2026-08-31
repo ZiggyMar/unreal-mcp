@@ -452,7 +452,7 @@ test("an expensive read tells you how to ask for less, and a cheap one does not"
   // size and on no filter having been given - against the handler's own source.
   const source = readFileSync(join(REPO_ROOT, "mcp-server/src/index.ts"), "utf8").replace(/\r\n/g, "\n");
   const hints = [...source.matchAll(/cheaper:\s*\n?\s*`/g)];
-  assert.ok(hints.length >= 3, `expected the three expensive reads to advise, found ${hints.length}`);
+  assert.ok(hints.length >= 5, `expected every expensive read to advise, found ${hints.length}`);
 
   // Each hint must be gated on the reply actually being large, or it fires on a two-variable
   // Blueprint where the advice costs more than it can save. One shared constant rather than three
@@ -461,9 +461,17 @@ test("an expensive read tells you how to ask for less, and a cheap one does not"
   // The first version of this assertion matched the source for `.length >= <number>`, which is
   // testing syntax rather than behaviour: one of the three sites spelled the same rule differently
   // and the test failed for a reason that had nothing to do with the property it cares about.
-  const gated = [...source.matchAll(/ADVISE_WHEN_ROWS_AT_LEAST/g)];
+  //
+  // Two gates, because there are two kinds of expensive. Most replies cost in proportion to how many
+  // rows came back, and ADVISE_WHEN_ROWS_AT_LEAST is the rule for those. list_data_table_rows does
+  // not: DT_UniversalActions is NINE rows and 6,985 tokens, because one untouched FSlateBrush column
+  // exports as 900 characters. A row-count gate stays silent on exactly the table that needed the
+  // advice, so that one is keyed on the size of the reply instead.
+  const byRows = [...source.matchAll(/ADVISE_WHEN_ROWS_AT_LEAST/g)].length;
+  const bySize = [...source.matchAll(/HEAVY_REPLY_CHARS/g)].length;
   assert.ok(
-    gated.length >= hints.length,
-    `each of the ${hints.length} hints must be gated on ADVISE_WHEN_ROWS_AT_LEAST; found ${gated.length} uses`
+    byRows + bySize >= hints.length,
+    `each of the ${hints.length} hints must be gated on reply size or row count; found ${byRows} + ${bySize}`
   );
+  assert.ok(bySize > 0, "the read whose cost is unrelated to row count must be gated on size");
 });
