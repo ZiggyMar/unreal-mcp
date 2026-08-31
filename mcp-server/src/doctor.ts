@@ -115,6 +115,8 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     // not exist" from "you did not give it a path", and only the first is what this is asking.
     { cmd: "rename_asset", feature: "renaming or moving an asset with its references fixed up" },
     { cmd: "duplicate_asset", feature: "copying an asset" },
+    { cmd: "rename_variable", feature: "renaming a variable and rebinding the nodes that read it" },
+    { cmd: "remove_variable", feature: "removing a variable" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 

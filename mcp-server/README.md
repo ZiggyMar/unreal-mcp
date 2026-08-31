@@ -233,6 +233,8 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_data_table` | `create_data_table` | Create a Data Table backed by a struct. The data-driven route: item 200 is a row, not a rewire. |
 | `unreal_add_data_table_row` | `add_data_table_row` | Add one named row and set its values. Field names are checked before anything is written. |
 | `unreal_list_data_table_rows` | `list_data_table_rows` | Read rows with their values, paged, because a Data Table is the one asset built to get large. |
+| `unreal_rename_variable` | `rename_variable` | Rename a variable and rebind every GET and SET node that reads it, in every graph. Editing the descriptor by hand breaks the Blueprint. |
+| `unreal_remove_variable` | `remove_variable` | Delete a variable, refusing while graph nodes still use it unless forced — and naming which graphs. |
 | `unreal_rename_asset` | `rename_asset` | Rename or move an asset through the editor's asset tools, so every reference to the old path is fixed up. Moving the `.uasset` yourself breaks them silently. |
 | `unreal_duplicate_asset` | `duplicate_asset` | Copy an asset — how you start "one more like that one" rather than rebuilding a near-identical asset from scratch. |
 | `unreal_find_in_data_tables` | *(composed: `list_assets` + `list_data_table_rows`)* | The only tool that looks **inside** Data Table contents: searches every row name and cell value and returns table, row and field — not the rows. `unreal_search_project` does not index them. |
@@ -4883,6 +4885,40 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### You could add a variable but never remove or rename one
+
+The same coverage question, asked of the authoring surface rather than the content browser:
+
+```text
+add_variable      yes      remove / rename   nothing
+add_component     yes      remove / rename   nothing
+add_struct_field  yes      remove / rename   nothing
+create_function   yes      remove / rename   nothing
+```
+
+Everything could be created and nothing taken away. And the rename is the one that stings, because
+**"rename FireRate to RateOfFire" is a *variable* rename** — the sentence this repo has quoted all
+along as the change-request example. The asset rename added alongside it is a real gap closed, and it
+is not the thing that sentence asks for. Worth saying plainly: the wrong rename got built first.
+
+`unreal_rename_variable` goes through `FBlueprintEditorUtils::RenameMemberVariable`, which rebinds
+every GET and SET node in every graph, and reports how many nodes moved and which graphs they were
+in. Editing the descriptor by hand leaves nodes bound to a name that no longer exists — the Blueprint
+stops compiling and the damage is spread across graphs nobody was looking at.
+
+`unreal_remove_variable` **refuses while any node still reads it**, naming the graphs and the count,
+because removing it deletes those nodes too. That is the same rule `delete_asset` applies to an asset
+something still references, for the same reason: the damage lands where the caller is not looking.
+`force: true` when that is genuinely what you mean.
+
+A variable inherited from a C++ parent is refused with the reason, and a name that does not match
+lists the ones that do — the commonest cause being a case difference in your own Blueprint.
+
+Compiled against 5.6, 5.8 and the game target. One thing the compiler caught that reading would not
+have: `LoadBlueprintByPath` is a **private** static on `FMCPCommandHandler`, so a namespace-level
+helper cannot call it. The handlers are members and do the load themselves; only the half that does
+not need the access stayed shared.
 
 ### You could delete an asset but not rename one
 

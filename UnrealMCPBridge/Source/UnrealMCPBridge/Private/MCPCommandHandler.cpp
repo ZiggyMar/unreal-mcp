@@ -1161,6 +1161,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleDuplicateAsset(Params);
 	}
+	else if (Cmd == TEXT("rename_variable"))
+	{
+		Response = HandleRenameVariable(Params);
+	}
+	else if (Cmd == TEXT("remove_variable"))
+	{
+		Response = HandleRemoveVariable(Params);
+	}
 	else if (Cmd == TEXT("open_level"))
 	{
 		Response = HandleOpenLevel(Params);

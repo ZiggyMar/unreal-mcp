@@ -475,7 +475,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -3868,6 +3868,89 @@ register(
   async ({ query, pathPrefix, maxResults }) => {
     try {
       return jsonResult(await findInDataTables(bridge, query, { pathPrefix, maxResults }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+/**
+ * Save after a bridge write, and say whether it happened.
+ *
+ * The bridge commands added here deliberately do not save: SaveAssetPackage is file-local to
+ * MCPCommandHandler.cpp and sharing it means prying a function out of a five-thousand-line file. The
+ * composite belongs in this layer anyway - it keeps each bridge command doing one thing, and it makes
+ * the save a visible field rather than an implied side effect.
+ *
+ * An unsaved rename looks correct for the rest of the session and reverts on the next editor restart,
+ * which is the worst kind of failure: invisible now, total later.
+ */
+async function savedAfter<T extends object>(result: T, path: string, save?: boolean): Promise<T & { saved: boolean }> {
+  if (save === false) return { ...result, saved: false };
+  try {
+    await bridge.send("save_asset", { path });
+    return { ...result, saved: true };
+  } catch (err) {
+    return {
+      ...result,
+      saved: false,
+      saveError: err instanceof Error ? err.message : String(err),
+      warning:
+        "The change was made but not written to disk, so it will revert when the editor restarts. " +
+        "Call unreal_save_asset on this path.",
+    } as T & { saved: boolean };
+  }
+}
+
+register(
+  "unreal_rename_variable",
+  {
+    title: "Rename a Blueprint variable everywhere it is used",
+    description:
+      "Renames a variable a Blueprint declares, rebinding every GET and SET node that reads it, in every graph.\n\n" +
+      "**This is the only safe way to rename one.** Editing the descriptor by hand leaves every node bound to a " +
+      "name that no longer exists: the Blueprint stops compiling and the damage is spread across graphs nobody " +
+      "was looking at. Reports how many nodes were updated and which graphs they were in.\n\n" +
+      "Only variables the Blueprint itself declares. One inherited from a C++ parent has to change in the parent.",
+    inputSchema: {
+      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      variableName: z.string().describe('Current name, e.g. "FireRate".'),
+      newName: z.string().describe('New name, e.g. "RateOfFire".'),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true; an unsaved rename reverts on restart."),
+    },
+  },
+  async ({ path, variableName, newName, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("rename_variable", { path, variableName, newName });
+      return jsonResult(await savedAfter(result, path, save));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_variable",
+  {
+    title: "Remove a Blueprint variable",
+    description:
+      "Deletes a variable a Blueprint declares. **Refuses while any graph node still reads or writes it**, " +
+      "naming the graphs and the node count, because removing it takes those nodes with it - the same rule " +
+      "unreal_delete_asset applies to an asset something still references, and for the same reason: the damage " +
+      "lands in graphs you are not looking at.\n\n" +
+      "Pass force:true when deleting the nodes is what you actually mean. Only variables the Blueprint itself " +
+      "declares; an inherited one has to change in the parent class.",
+    inputSchema: {
+      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      variableName: z.string().describe("The variable to remove."),
+      force: z.boolean().optional().describe("Remove it even though nodes still use it, deleting those nodes. Off by default."),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, variableName, force, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("remove_variable", { path, variableName, force });
+      return jsonResult(await savedAfter(result, path, save));
     } catch (err) {
       return errorResult(err);
     }

@@ -108,6 +108,10 @@ private:
 	static TSharedRef<FJsonObject> HandleRenameAsset(const TSharedPtr<FJsonObject>& Params);
 	/** Copy an asset, which is how a person starts "one more like that one". */
 	static TSharedRef<FJsonObject> HandleDuplicateAsset(const TSharedPtr<FJsonObject>& Params);
+	/** Rename a Blueprint variable, rebinding every GET and SET node that reads it. */
+	static TSharedRef<FJsonObject> HandleRenameVariable(const TSharedPtr<FJsonObject>& Params);
+	/** Remove a Blueprint variable, refusing while graph nodes still use it unless forced. */
+	static TSharedRef<FJsonObject> HandleRemoveVariable(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Components and class defaults (challenge tooling, part B) ---
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);

@@ -117,7 +117,19 @@ export const PROFILES = [
     //
     // The number that says whether this is bloat is the per-tool average, and it did not move: 339
     // before and 339 after, against a 420 cap. The profile is larger because it does more.
-    ceilingTokens: 37_500,
+    // Raised a fifth time, to 38,000, for four tools that close the same kind of gap: you could
+    // create things here and never remove or rename them. rename_asset and duplicate_asset are the
+    // two content-browser operations a person does every day; rename_variable and remove_variable
+    // are the same asymmetry one level down, and rename_variable is what "rename FireRate to
+    // RateOfFire" - the sentence the change-request routing was built against - actually asks for.
+    //
+    // The number that says whether this is bloat went DOWN: 331 tokens per tool before these four,
+    // 330 after, against a 420 cap. The surface grew because it does more.
+    //
+    // Raised rather than left at four tokens of headroom, which is where these four landed it. A
+    // ceiling that cannot absorb a typo fix is not a budget, it is a tripwire for whoever works here
+    // next - and the point of this number is to force an argument, not to block one.
+    ceilingTokens: 38_000,
     why: "everything, for frontier models that can afford it",
   },
 ];
