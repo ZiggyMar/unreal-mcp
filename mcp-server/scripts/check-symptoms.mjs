@@ -22,6 +22,7 @@ const registered = new Set(
 );
 
 const symptomSource = readFileSync(symptomsPath, "utf8");
+const problemsEarly = [];
 
 // Only the tools: arrays, not every unreal_* mentioned in prose. The `because` text names tools too,
 // and quoting one in an explanation is not the same as routing a caller to it.
@@ -38,8 +39,19 @@ const named = new Set();
 for (const block of symptomSource.matchAll(/tools:\s*\[([^\]]*)\]/g)) {
   for (const tool of block[1].matchAll(/"([^"]+)"/g)) named.add(tool[1]);
 }
+// The intent lists are recommendations too, and the first version of this guard did not look at
+// them. Adding unreal_find_in_data_tables to CHANGE_TOOLS passed a check that reported "all
+// registered" - because the guard was reading one of the three lists it exists to protect.
+for (const list of ["BUILD_TOOLS", "CHANGE_TOOLS"]) {
+  const block = new RegExp("const " + list + "\\s*=\\s*\\[([^\\]]*)\\]").exec(symptomSource);
+  if (!block) {
+    problemsEarly.push(`${list} was not found in symptoms.ts - this guard has drifted from the file it checks`);
+    continue;
+  }
+  for (const tool of block[1].matchAll(/"([^"]+)"/g)) named.add(tool[1]);
+}
 
-const problems = [];
+const problems = [...problemsEarly];
 
 const missing = [...named].filter((name) => !registered.has(name)).sort();
 if (missing.length > 0) {

@@ -119,9 +119,18 @@ test("a short word does not match inside an unrelated one", async () => {
   // This is the exact failure the module comment warns about, shipped in the same file.
   for (const said of ["build a new weapon", "explain the chain", "change the flag", "the animal spawns", "a monkey and a guide", "the status is fine"]) {
     const found = matchSymptoms(said);
-    // A build request may still match on intent; what must not happen is a DOMAIN match on a
-    // fragment of an unrelated word.
-    const domain = (found?.tools ?? []).filter((t) => !["unreal_plan_feature", "unreal_map_system"].includes(t));
+    // An INTENT match is fine and often right - "change the flag" really is a change request, and
+    // "build a new weapon" really is a build. What must not happen is a DOMAIN match on a fragment
+    // of an unrelated word, which is what sent "build a new weapon" to the widget tools.
+    const intentTools = [
+      "unreal_plan_feature",
+      "unreal_map_system",
+      "unreal_find_in_data_tables",
+      "unreal_search_project",
+      "unreal_trace_variable",
+      "unreal_find_source",
+    ];
+    const domain = (found?.tools ?? []).filter((t) => !intentTools.includes(t));
     assert.deepEqual(domain, [], `"${said}" matched ${JSON.stringify(found?.matched)}`);
   }
 });
@@ -168,4 +177,63 @@ test("a bug report is not mistaken for a build request", async () => {
   for (const said of ["the game crashes on startup", "upgrades aren't showing up in the shop", "the jump key does nothing"]) {
     assert.equal(matchSymptoms(said).intent, "broken", said);
   }
+});
+
+test("a change request is not a build request and not a bug report", async () => {
+  // The third thing this project promises - "I have a change request, it finds it and changes it" -
+  // and the one that landed worst:
+  //
+  //   "change the player walk speed"                    -> nothing at all
+  //   "rename FireRate to RateOfFire"                   -> nothing at all
+  //   "the machine gun should cost 500 instead of 300"  -> nothing at all
+  //   "make the health upgrade cost more"               -> read as BUILDING
+  //
+  // The last is the dangerous one: plan_feature would set about planning a health upgrade system
+  // that already exists, because "make the" reads as a request to create something.
+  for (const said of [
+    "change the player walk speed",
+    "rename FireRate to RateOfFire",
+    "the machine gun should cost 500 instead of 300",
+    "make the health upgrade cost more",
+    "increase the max health to 200",
+    "swap the icon on the damage upgrade",
+  ]) {
+    const found = matchSymptoms(said);
+    assert.ok(found, `"${said}" matched nothing`);
+    assert.equal(found.intent, "changing", `"${said}" was read as ${found.intent}`);
+  }
+});
+
+test("change beats build when a sentence says both", async () => {
+  // "Make a health upgrade" is building. "Make the health upgrade cost more" is a change, and only
+  // the second half of the sentence says so - so change vocabulary is checked first.
+  assert.equal(matchSymptoms("make a health upgrade").intent, "building");
+  assert.equal(matchSymptoms("make the health upgrade cost more").intent, "changing");
+});
+
+test("a feature description is not mistaken for a change request", async () => {
+  // "increases fire rate" describes what a new thing does; "increase the fire rate" asks to change
+  // an existing one. Only the space tells them apart, which is why those markers are multi-word.
+  assert.equal(matchSymptoms("add a new shop upgrade that increases fire rate").intent, "building");
+  assert.equal(matchSymptoms("increase the fire rate").intent, "changing");
+});
+
+test("a change request is pointed at every substrate, not just one", async () => {
+  // A cost lives in a Data Table, a walk speed on a component, a hard limit in C++ - and the person
+  // asking for the change is exactly the one who does not know which.
+  const found = matchSymptoms("change the player walk speed");
+  assert.ok(found.tools.includes("unreal_find_in_data_tables"), "Data Tables");
+  assert.ok(found.tools.includes("unreal_search_project"), "Blueprints");
+  assert.ok(found.tools.includes("unreal_find_source"), "C++");
+});
+
+test("the change advice does not repeat the claim that was wrong", async () => {
+  // The first version said search_project "covers Data Table rows and Blueprint contents at once".
+  // It does not, and that was written as advice before being tried: searching it for a real row name
+  // in this project returns zero hits. Finding that out is what produced find_in_data_tables.
+  const found = matchSymptoms("change the player walk speed");
+  const why = found.because.join(" ");
+  assert.ok(!/search_project[^.]*Data Table/.test(why), "search_project is not claimed to cover tables");
+  assert.match(why, /find_in_data_tables/, "the tool that does cover them is named");
+  assert.match(why, /list_components/, "and component properties are separated from class defaults");
 });

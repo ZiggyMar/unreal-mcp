@@ -233,6 +233,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_data_table` | `create_data_table` | Create a Data Table backed by a struct. The data-driven route: item 200 is a row, not a rewire. |
 | `unreal_add_data_table_row` | `add_data_table_row` | Add one named row and set its values. Field names are checked before anything is written. |
 | `unreal_list_data_table_rows` | `list_data_table_rows` | Read rows with their values, paged, because a Data Table is the one asset built to get large. |
+| `unreal_find_in_data_tables` | *(composed: `list_assets` + `list_data_table_rows`)* | The only tool that looks **inside** Data Table contents: searches every row name and cell value and returns table, row and field — not the rows. `unreal_search_project` does not index them. |
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
@@ -1457,6 +1458,53 @@ the only place here where a recommendation is curated by hand rather than derive
 That guard also had to be fixed: it captured `/"(unreal_[a-z0-9_]+)"/`, so a tool renamed to
 anything with a capital in it *vanished from the set* instead of being reported - the guard failing
 in the way it existed to prevent.
+
+### "Change this" is neither of the other two
+
+The third thing this project promises — *"I have a change request, it finds it and changes it,
+whether it's C++ or Blueprints or a Data Table"* — landed worst of the three:
+
+```text
+"change the player walk speed"                    ->  nothing at all
+"rename FireRate to RateOfFire"                   ->  nothing at all
+"the machine gun should cost 500 instead of 300"  ->  nothing at all
+"make the health upgrade cost more"               ->  read as BUILDING
+```
+
+The last is the dangerous one: `plan_feature` would set about planning a health upgrade system that
+already exists, because "make the" reads as a request to create something. Change vocabulary is now
+checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
+cost more" is a change, and only the second half of that sentence says so.
+
+### An entire substrate was unsearchable
+
+Following that change request to its end found something worse than a routing gap. To change what the
+machine gun costs you first have to find the number, and nothing here could:
+
+```text
+unreal_search_project "Weapon_MachineGun"  ->  { "hits": [], "hitCount": 0 }
+```
+
+`Weapon_MachineGun` is a real row in this project's `DT_Upgrades`. `search_project` indexes Blueprint
+names, parent classes, function names and variable names — row names and cell values are simply not
+in the index, and the reply said so nowhere. `check_data_tables` walks every table but reports
+*problems*, not values. So the substrate a data-driven game keeps all its tuning in could not be
+searched at all, which made "or a Data Table" untrue.
+
+`unreal_find_in_data_tables` closes it: every row name and cell value, returning table, row and field
+— never the rows. Composed from `list_assets` + `list_data_table_rows` rather than a new bridge
+command, so it works against the plugin binary you already have. On this project, "MachineGun" costs
+**280 tokens** to locate across 20 tables and 128 rows.
+
+It also found that `BP_HealthUpgrade` is referenced from **two** tables — `DT_Upgrades` as
+`Stat_HealthNum` and `DT_UpgradesBP` as `Stat_HealthNumber`.
+
+Worth recording how the wrong version of this nearly shipped: the routing advice was first written to
+say `search_project` "covers Data Table rows and Blueprint contents at once". That was written as
+advice before being tried, and it is false. The same paragraph claimed a walk speed lives in a class
+default; `read_class_defaults` on `BP_Player` is 4,728 tokens and never mentions `MaxWalkSpeed`,
+because it is a property on the movement component. Both claims were replaced with what was actually
+verified.
 
 ### "Build me this" is not a bug report
 

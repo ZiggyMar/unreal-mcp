@@ -198,6 +198,62 @@ const BUILDING = [
   "hook up a", "wire up a", "make the", "give the", "give me a",
 ];
 
+/**
+ * Words that mean "this exists and I want it different".
+ *
+ * The third thing this project promises - "I have a change request, it finds it and changes it,
+ * whether it's C++ or Blueprints or a Data Table" - and the one that landed worst:
+ *
+ *   "change the player walk speed"                  -> nothing at all
+ *   "rename FireRate to RateOfFire"                 -> nothing at all
+ *   "the machine gun should cost 500 instead of 300" -> nothing at all
+ *   "make the health upgrade cost more"             -> read as BUILDING -> plan_feature
+ *
+ * The last is the dangerous one: plan_feature would set about planning a health upgrade system that
+ * already exists, because "make the" reads as a request to create something.
+ *
+ * Checked BEFORE the build words, because change vocabulary is the more specific of the two. "Make a
+ * health upgrade" is building; "make the health upgrade cost more" is a change, and only the second
+ * half of that sentence says so.
+ */
+const CHANGING = [
+  "change", "rename", "instead of", "should be", "should cost", "cost more", "cost less",
+  "tweak", "swap", "replace the", "bump the", "set the", "adjust",
+  // Multi-word on purpose: "increases fire rate" is a feature description, "increase the fire rate"
+  // is a change request, and only the space tells them apart.
+  "increase the", "decrease the", "raise the", "lower the", "reduce the",
+];
+
+/**
+ * The tools that find a value before you change it.
+ *
+ * Deliberately spans the substrates rather than guessing which one holds it. A cost lives in a Data
+ * Table, a walk speed on a component, a hard limit in C++ - and the caller asking for the change is
+ * exactly the person who does not know which.
+ *
+ * The first version of this list said search_project "covers Data Table rows and Blueprint contents
+ * at once". It does not: it indexes Blueprint names, parent classes, function names and variable
+ * names. Searching it for "Weapon_MachineGun", a real row in this project's DT_Upgrades, returns
+ * zero hits - and searching for "MaxWalkSpeed" returns zero too, because that is a property on the
+ * movement component and read_class_defaults does not carry it either.
+ *
+ * Both were written as advice before being tried. Finding that out is what produced
+ * unreal_find_in_data_tables, which did not exist: nothing in this server could answer "which table
+ * has a row called X".
+ */
+const CHANGE_TOOLS = ["unreal_find_in_data_tables", "unreal_search_project", "unreal_trace_variable", "unreal_find_source"];
+
+const CHANGE_BECAUSE =
+  "This is a change to something that already exists, so the work is finding it before editing it, " +
+  "and a value lives in one of four places. A Data Table row: unreal_find_in_data_tables searches " +
+  "row names and cell values across every table. A Blueprint variable or function: " +
+  "unreal_search_project, which indexes names, parent classes, functions and variables - but NOT " +
+  "table rows and NOT default values. A component property like walk speed or a collision radius: " +
+  "unreal_list_components then unreal_set_component_property, because those are set on the component " +
+  "and never appear in read_class_defaults. A C++ default: unreal_find_source. " +
+  "Check more than one before concluding a value is not there - a number missing from all of them is " +
+  "usually spelled differently, not absent.";
+
 /** The tools that answer "build me this", before anything domain-specific. */
 const BUILD_TOOLS = ["unreal_plan_feature", "unreal_map_system"];
 
@@ -212,8 +268,12 @@ export interface SymptomMatch {
   matched: string[];
   tools: string[];
   because: string[];
-  /** "building" when the text asks for something new; otherwise a report of something wrong. */
-  intent: "building" | "broken";
+  /**
+   * What the caller is asking for: something new, something existing made different, or something
+   * that is misbehaving. The three want entirely different tools, and reading it wrong sends a model
+   * to plan a system that already exists.
+   */
+  intent: "building" | "changing" | "broken";
 }
 
 /**
@@ -263,8 +323,15 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
 
   // Read the intent before the subject. A build request that also names a domain gets both: the
   // tools that plan against what exists, then the tools for that part of the engine.
-  const buildWord = BUILDING.find((phrase) => saysIt(said, phrase));
-  if (buildWord) {
+  // Change before build: "make the health upgrade cost more" says both, and only the change reading
+  // is right. A request to build something that already exists is the expensive mistake here.
+  const changeWord = CHANGING.find((phrase) => saysIt(said, phrase));
+  const buildWord = changeWord ? undefined : BUILDING.find((phrase) => saysIt(said, phrase));
+  if (changeWord) {
+    matched.push(changeWord);
+    because.push(CHANGE_BECAUSE);
+    tools.push(...CHANGE_TOOLS);
+  } else if (buildWord) {
     matched.push(buildWord);
     because.push(BUILD_BECAUSE);
     tools.push(...BUILD_TOOLS);
@@ -288,5 +355,10 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
   if (tools.length === 0) return undefined;
   // Four tools at most. Two entries of three tools each cost 667 tokens on "the game crashes when I
   // open the menu", for a sentence whose first three words already said where to look.
-  return { matched, tools: tools.slice(0, 4), because, intent: buildWord ? "building" : "broken" };
+  return {
+    matched,
+    tools: tools.slice(0, 4),
+    because,
+    intent: changeWord ? "changing" : buildWord ? "building" : "broken",
+  };
 }

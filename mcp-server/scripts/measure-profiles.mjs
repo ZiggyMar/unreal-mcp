@@ -101,7 +101,23 @@ export const PROFILES = [
     // sessions ago - they are the teaching a model relies on, and the per-tool average is 339
     // against a 420 ceiling, so there is no bloat to reclaim. The surface grew because the tool can
     // do more, which is the only reason this number is ever allowed to move.
-    ceilingTokens: 37_000,
+    // Raised a fourth time, to 37,500, for unreal_find_in_data_tables. The gap it closes was found
+    // by trying to answer a change request - "the machine gun should cost 500 instead of 300" - and
+    // discovering that nothing in this server could locate the number. search_project indexes
+    // Blueprint names, parents, functions and variables; a search for "Weapon_MachineGun", a real
+    // row in this project, returned zero hits. An entire substrate of a data-driven game was
+    // unsearchable, which made "whether it's C++ or Blueprints or a Data Table" untrue for one of
+    // the three.
+    //
+    // Same order of moves as the last raise, and the raise was again not the first of them: the new
+    // tool's own description was cut from 963 to 660 characters and its parameter prose tightened,
+    // which took it from 263 tokens over to 180. Every tool description was then scanned for
+    // repeated sentences - the whole surface holds 18 tokens of duplication, so there is nothing to
+    // reclaim there either.
+    //
+    // The number that says whether this is bloat is the per-tool average, and it did not move: 339
+    // before and 339 after, against a 420 cap. The profile is larger because it does more.
+    ceilingTokens: 37_500,
     why: "everything, for frontier models that can afford it",
   },
 ];

@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { findInDataTables } from "./findInDataTables.js";
 import { matchSymptoms } from "./symptoms.js";
 import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
@@ -419,6 +420,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_remove_data_table_row",
     "unreal_check_data_tables",
     "unreal_list_data_table_rows",
+    "unreal_find_in_data_tables",
     "unreal_create_struct",
     "unreal_add_struct_field",
     "unreal_list_struct_fields",
@@ -3656,6 +3658,32 @@ register(
 );
 
 register(
+  "unreal_find_in_data_tables",
+  {
+    title: "Find a value in the project's Data Tables",
+    description:
+      "Search every Data Table's row names and cell values for a substring. Returns table, row and field " +
+      "for each match - not the rows.\n\n" +
+      "**The only tool that looks inside Data Table contents.** unreal_search_project indexes Blueprint " +
+      "names, parents, functions and variables; rows and cell values are not in that index, so it returns " +
+      "zero hits for a row name and does not say why. Use this when a change request names a thing rather " +
+      "than an asset (\"the machine gun should cost 500\"). One read per table, so call it deliberately.",
+    inputSchema: {
+      query: z.string().describe('Case-insensitive substring, matched against row names and cell values, e.g. "MachineGun".'),
+      pathPrefix: z.string().optional().describe("Only search tables under this content path."),
+      maxResults: z.number().optional().describe("Cap on hits. Defaults to 50, clamped to [1, 500]."),
+    },
+  },
+  async ({ query, pathPrefix, maxResults }) => {
+    try {
+      return jsonResult(await findInDataTables(bridge, query, { pathPrefix, maxResults }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_check_data_tables",
   {
     title: "Find Data Table rows that point at nothing",
@@ -4131,8 +4159,14 @@ register(
                     `something rather than a report of something broken, so these are the tools for that: ` +
                     `plan first against what the project already has, then the tools for the part of the ` +
                     `engine the request names.`
-                  : `No tool name or summary contains "${needle}", but it reads like a description of a ` +
-                    `symptom, so these are the tools that find that class of problem.`) +
+                  : symptom!.intent === "changing"
+                    ? `No tool name or summary contains "${needle}", but it reads like a request to CHANGE ` +
+                      `something that already exists rather than to build or to diagnose. The work is ` +
+                      `finding the value before editing it, and it could be in a Data Table row, a ` +
+                      `Blueprint class default, a literal wired into a graph, or a C++ default - so these ` +
+                      `tools search all of those rather than assuming one.`
+                    : `No tool name or summary contains "${needle}", but it reads like a description of a ` +
+                      `symptom, so these are the tools that find that class of problem.`) +
                 ` This is a keyword match on the words listed in matchedSymptomWords, not an ` +
                 `understanding of the sentence - check the suggestions against what you actually want.` +
                 (groupsFor.length > 0
