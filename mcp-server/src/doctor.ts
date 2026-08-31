@@ -86,6 +86,32 @@ export function newestSourceMs(root?: string): number {
   return newest;
 }
 
+/**
+ * Commands the doctor pokes to find out whether the plugin is older than this server.
+ *
+ * Exported so a test can hold it against the bridge's actual command list. This list is maintained
+ * by hand and it has gone stale twice: once missing set_variable_replication and watch_runtime while
+ * reporting everything implemented, and again missing six more after a session that added the
+ * console, Enhanced Input and live coding. Both times the doctor was confidently wrong in the one
+ * place somebody looks when nothing works.
+ *
+ * Every probe must be SAFE TO SEND WITH NO PARAMETERS - which is why this is a chosen list and not
+ * every command. Sending `delete_asset` to find out whether it exists would be a poor way to ask.
+ */
+export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
+    { cmd: "list_variables", feature: "reading a Blueprint's variables" },
+    { cmd: "create_data_table", feature: "Data Tables" },
+    { cmd: "save_asset", feature: "saving anything that is not a Blueprint" },
+    { cmd: "set_variable_replication", feature: "changing a variable's replication" },
+    { cmd: "watch_runtime", feature: "watching values change during Play-In-Editor" },
+    { cmd: "run_console_command", feature: "the console - ce, Ke, cheats, cvars, stat" },
+    { cmd: "read_input_context", feature: "reading Enhanced Input key bindings" },
+    { cmd: "map_input_key", feature: "binding a key to an Input Action" },
+    { cmd: "unmap_input_key", feature: "removing a key binding" },
+    { cmd: "live_coding_status", feature: "hot-reloading C++ into the running editor" },
+    { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
+  ];
+
 export async function runDoctor(
   bridge: BridgeLike,
   connection: { host: string; port: number; expectedProject?: string },
@@ -202,13 +228,8 @@ export async function runDoctor(
   // So probe. Each of these is called with no arguments, which every one of them rejects with
   // `missing_param` before doing any work, so the probe is free and safe. `unknown_cmd` back means
   // the command is genuinely absent.
-  const FEATURE_PROBES: Array<{ cmd: string; feature: string }> = [
-    { cmd: "list_variables", feature: "reading a Blueprint's variables" },
-    { cmd: "create_data_table", feature: "Data Tables" },
-    { cmd: "save_asset", feature: "saving anything that is not a Blueprint" },
-    { cmd: "set_variable_replication", feature: "changing a variable's replication" },
-    { cmd: "watch_runtime", feature: "watching values change during Play-In-Editor" },
-  ];
+  const FEATURE_PROBES = FEATURE_PROBE_LIST;
+
   const missing: string[] = [];
   for (const probe of FEATURE_PROBES) {
     try {
@@ -234,7 +255,14 @@ export async function runDoctor(
     checks.push({
       name: "plugin features",
       status: "fail",
-      detail: `The plugin is missing ${missing.length} command(s) this server uses: ${missing.join(", ")}.`,
+      // "At least", and the sample size, for the same reason the ok branch says it: this list is
+      // hand-maintained and it has now gone stale twice. Saying "missing 2" when the probe list
+      // covers 11 of 84 bridge commands states a precision it does not have - the editor this ran
+      // against was missing eight, and a reader told "2" would think six features were fine.
+      detail:
+        `At least ${missing.length} of the ${FEATURE_PROBES.length} probed commands are missing from this ` +
+        `plugin: ${missing.join(", ")}. The probe list is a sample, so there may be more - ` +
+        `"plugin freshness" below answers that for every command at once.`,
       remedy:
         "The plugin in your project is older than this MCP server - most likely a prebuilt release " +
         "downloaded before these were added. Copy the UnrealMCPBridge folder from this checkout into " +

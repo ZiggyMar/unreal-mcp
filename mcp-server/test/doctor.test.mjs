@@ -1,7 +1,46 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { runDoctor, formatDoctorReport } from "../dist/doctor.js";
+/** The repo root, from this test file, so the bridge source can be read.*/
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/**
+ * Bridge commands deliberately NOT probed, each with the reason.
+ *
+ * A probe sends the command with no parameters and reads `unknown_cmd` off the reply, so anything
+ * that could act without parameters, or that costs real time, stays out.
+ */
+const NOT_PROBED = new Set([
+  // Everything that already existed when this guard was written. They are covered generically by the
+  // "plugin freshness" check, which compares the plugin's build time against the C++ source and so
+  // catches a plugin missing ANY command at once. The probe list exists to name WHICH feature is
+  // dark, which is only worth spending a round trip on for the newest few.
+  //
+  // The point of this set is not its contents. It is that adding a bridge command from now on fails
+  // this test until somebody decides which side it belongs on - because the alternative, twice
+  // already, was a doctor confidently reporting "missing 2" when it was missing eight.
+  "add_component", "add_data_table_row", "add_input_mapping", "add_node", "add_struct_field",
+  "add_variable", "add_widget", "asset_status", "build_graph", "compile_blueprint",
+  "connect_pins", "create_blueprint", "create_enum", "create_function", "create_level",
+  "create_material", "create_material_instance", "create_struct", "create_widget_blueprint", "delete_actor",
+  "delete_asset", "describe_class", "find_broken_names", "find_node", "find_references",
+  "get_game_settings", "get_node_signature", "get_project_overview", "list_actors", "list_assets",
+  "list_blueprint_graphs", "list_blueprints", "list_components", "list_data_table_rows", "list_enum_entries",
+  "list_input_mappings", "list_material_parameters", "list_struct_fields", "list_widgets", "open_level",
+  "organize_graph", "pie_status", "ping", "project_health", "read_anim_blueprint",
+  "read_asset_properties", "read_behavior_tree", "read_blueprint_graph_summary", "read_blueprint_node_detail", "read_class_defaults",
+  "read_niagara_system", "refresh_blueprint", "remove_data_table_row", "remove_node", "save_blueprint",
+  "save_level", "search_project", "set_actor_property", "set_asset_property", "set_class_default",
+  "set_component_property", "set_data_table_row", "set_game_settings", "set_material_parameter", "set_pin_default_value",
+  "set_widget_property", "spawn_actor", "start_pie", "stop_pie", "take_screenshot",
+  "trace_function_calls", "trace_variable", "undo_history",
+]);
+
+
+import { runDoctor, formatDoctorReport, FEATURE_PROBE_LIST } from "../dist/doctor.js";
 
 const CONN = { host: "127.0.0.1", port: 8765 };
 
@@ -42,7 +81,11 @@ const HEALTHY = {
 
 /** A bridge whose per-command replies can be overridden, or replaced with a thrown error. */
 function fakeBridge(overrides = {}) {
-  const replies = { ...HEALTHY, ...overrides };
+  // A healthy plugin answers every command the doctor probes for, derived from the probe list rather
+  // than listed again here. Adding a probe used to leave this fixture behind, and the test then
+  // failed for the fixture's reason rather than the code's.
+  const probesAnswered = Object.fromEntries(FEATURE_PROBE_LIST.map((probe) => [probe.cmd, {}]));
+  const replies = { ...probesAnswered, ...HEALTHY, ...overrides };
   return {
     async send(cmd) {
       const reply = replies[cmd];
@@ -308,4 +351,35 @@ test("the feature probe says how many it probed, not that everything is fine", a
   assert.equal(check.status, "ok");
   assert.match(check.detail, /\d+ probed commands/);
   assert.match(check.detail, /sample, not the whole surface/);
+});
+
+test("every bridge command is either probed or deliberately not, with a reason", () => {
+  // The doctor's probe list is hand-maintained and it has gone stale TWICE - once missing
+  // set_variable_replication and watch_runtime while reporting everything implemented, and again
+  // missing six more after a session that added the console, Enhanced Input and live coding. Both
+  // times it was confidently wrong in the one place somebody looks when nothing works.
+  //
+  // This does not demand that everything be probed - most commands cannot be, because a probe sends
+  // no parameters and `delete_asset` is a poor way to ask whether a command exists. It demands a
+  // DECISION, recorded here, whenever a command is added. The next stale probe list is a failing
+  // test rather than a wrong diagnosis.
+  const handler = readFileSync(
+    join(REPO_ROOT, "UnrealMCPBridge/Source/UnrealMCPBridge/Private/MCPCommandHandler.cpp"),
+    "utf8"
+  );
+  const commands = new Set([...handler.matchAll(/Cmd\s*==\s*TEXT\("([a-z0-9_]+)"\)/g)].map((m) => m[1]));
+  assert.ok(commands.size > 50, `expected to find the bridge's command list, found ${commands.size}`);
+
+  const probed = new Set(FEATURE_PROBE_LIST.map((p) => p.cmd));
+  const unaccounted = [...commands].filter((c) => !probed.has(c) && !NOT_PROBED.has(c)).sort();
+  assert.deepEqual(
+    unaccounted,
+    [],
+    `these bridge commands are neither probed nor listed as deliberately unprobed, so a plugin ` +
+      `missing them would be reported as healthy: ${unaccounted.join(", ")}`
+  );
+
+  // And nothing probed should have been retired from the bridge.
+  const gone = [...probed].filter((c) => !commands.has(c));
+  assert.deepEqual(gone, [], `probing commands the bridge no longer has: ${gone.join(", ")}`);
 });

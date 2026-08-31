@@ -1923,6 +1923,53 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The doctor said "missing 2" when eight were missing
+
+Running `unreal_doctor` against the editor this is developed on:
+
+```text
+FAIL | plugin features: The plugin is missing 2 command(s) this server uses:
+       set_variable_replication, watch_runtime
+```
+
+Eight were missing. The probe list is maintained by hand, and this is the **second** time it has gone
+stale - the first was the commit that added the count to its success message, after it reported an
+all-clear on a plugin missing two commands. A session that added the console, Enhanced Input and live
+coding added six more bridge commands and none of them reached the list.
+
+Two things were wrong, and the second is the interesting one. The list needed the six new entries.
+But the *message* also claimed a precision it never had: the success branch already said "that is a
+sample, not the whole surface", while the failure branch said a flat "missing 2". **The reassuring
+branch was careful and the alarming one overstated.** It now reads:
+
+```text
+At least 8 of the 11 probed commands are missing from this plugin: ...
+The probe list is a sample, so there may be more - "plugin freshness" below
+answers that for every command at once.
+```
+
+The durable half is a guard, in the shape that has worked twice before here. Every command in the
+bridge's own `Cmd == TEXT("...")` chain must be either probed or listed as deliberately unprobed:
+
+```text
+not ok - every bridge command is either probed or deliberately not, with a reason
+    these bridge commands are neither probed nor listed as deliberately unprobed,
+    so a plugin missing them would be reported as healthy: brand_new_thing
+```
+
+Seventy-three existing commands are seeded into the "deliberately not" set with one shared reason -
+they are covered generically by the freshness check, and the probe list exists to name *which*
+feature is dark rather than to enumerate everything. The point is not the contents. It is that
+adding a command from now on fails this test until somebody decides which side it belongs on.
+
+The healthy-plugin fixture in the tests is now derived from the probe list too, rather than listing
+the same commands a second time. Adding a probe used to leave the fixture behind, and the test then
+failed for the fixture's reason instead of the code's.
+
+Confirmed by adding a command to the bridge and watching it fail - the first attempt to confirm it
+grepped the wrong stream and reported a pass, which is its own small lesson about verifying the
+verification.
+
 ### Sweeping for silent catches, and what the sweep found
 
 Having written a bare `catch {}` that hid a wrong parameter name for a whole debugging session, the
