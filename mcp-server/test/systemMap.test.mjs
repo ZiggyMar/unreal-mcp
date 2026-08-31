@@ -427,3 +427,64 @@ test("a trailing index is not part of the word", () => {
   assert.equal(matchesAsWord("WBP_HUD2", "hud"), true);
   assert.equal(matchesAsWord("BP_Player3", "player"), true);
 });
+
+test("a concept of more than one word matches the name it is the name of", async () => {
+  // matchesAsWord compared a whole lowercased concept against single tokens, so "ShopUpgrade" was
+  // tested against ["bp", "shop", "upgrade"] and matched none of them. map_system answered a query
+  // for BP_ShopUpgrade, by its own exact name, with nothing - and the same for HealthBar against
+  // WBP_HealthBar and DamageUpgrade against BP_DamageUpgrade.
+  //
+  // Single-word queries worked, which is why it survived: it looked fine until a two-word one was
+  // tried. Found by trial:diagnose, whose planted BP_DiagnoseTrial could not be found by querying
+  // "DiagnoseTrial" - and I nearly filed that as the trial expecting the wrong thing.
+  for (const [name, concept] of [
+    ["BP_ShopUpgrade", "ShopUpgrade"],
+    ["WBP_HealthBar", "HealthBar"],
+    ["BP_DamageUpgrade", "DamageUpgrade"],
+    ["BP_DiagnoseTrial", "DiagnoseTrial"],
+  ]) {
+    assert.equal(matchesAsWord(name, concept), true, `${concept} should match ${name}`);
+  }
+});
+
+test("the strictness that made this rule exist still holds", async () => {
+  // The whole reason matchesAsWord is not a substring test: plan_feature said "bar already exists in
+  // this project: BP_DummyTurret, BP_MomBase, BP_Turret and 9 more", because BP_DummyTurret has a
+  // variable called TurretBarrelLoc. That claim goes into raiseWithUser, the field whose job is to
+  // stop a model and make it ask, so a false one buys a pointless question.
+  assert.equal(matchesAsWord("BP_DummyTurret", "bar"), false);
+  assert.equal(matchesAsWord("TurretBarrelLoc", "bar"), false);
+  // And a run of words has to be consecutive and in order, or "more than one word" would become a
+  // bag of words and match anything sharing a token.
+  assert.equal(matchesAsWord("BP_ShopUpgrade", "UpgradeShop"), false);
+});
+
+test("a derived form still counts, on the last word only", async () => {
+  // GetVacuumable IS the vacuum system and BPI_Damageable is how half of Unreal names an interface,
+  // so the suffix rule has to survive. It applies to the final word: otherwise "shopping upgrade"
+  // would reach ShopUpgrade through a suffix on a word that is not the one being matched.
+  assert.equal(matchesAsWord("GetVacuumable", "vacuum"), true);
+  assert.equal(matchesAsWord("BPI_Damageable", "damage"), true);
+  assert.equal(matchesAsWord("BP_ShopUpgrade", "shopping upgrade"), false);
+});
+
+test("an empty map explains itself without being asked for detail", async () => {
+  // mapSystem writes the sentence that turns a zero into an answer - "Nothing in the project has X
+  // as a word; 3 name(s) contain it inside a longer one" - and the compact reply dropped it,
+  // answering with assetCount: 0 and "Pass detail:true for exact asset paths". That is advice a
+  // caller has no reason to take: they have no assets, so a flag promising asset paths reads as
+  // irrelevant. The explanation was reachable only by asking for more of the thing that was empty.
+  //
+  // Asserted on mapSystem's own output: the notes must exist for an empty map, because the compact
+  // reply can only pass on what it is given.
+  const bridge = {
+    async send(cmd) {
+      if (cmd === "search_project") return { hits: [{ path: "/Game/BP_TurretBarrelLoc.BP_TurretBarrelLoc", kind: "blueprint", name: "BP_TurretBarrelLoc" }], truncated: false };
+      return {};
+    },
+  };
+  const map = await mapSystem(bridge, "bar");
+  assert.equal(map.assets.length, 0);
+  assert.ok(map.notes.length > 0, "an empty map must carry its explanation");
+  assert.match(map.notes[0], /inside a longer one/);
+});

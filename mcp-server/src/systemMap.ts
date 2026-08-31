@@ -162,10 +162,9 @@ const DERIVED_SUFFIXES = [
   "s", "es", "ed", "d", "ing", "er", "or", "able", "ible", "ion", "tion", "ment", "ness", "ful", "less", "y",
 ];
 
-export function matchesAsWord(identifier: string, concept: string): boolean {
-  const want = concept.toLowerCase();
-  if (want.length === 0) return false;
-  const words = identifier
+/** The same splitting for both sides, so a concept is compared the way a name is read. */
+function wordsOf(text: string): string[] {
+  return text
     // Split camelCase and PascalCase, including runs of capitals like WBP_ or HUDBar.
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
@@ -176,9 +175,47 @@ export function matchesAsWord(identifier: string, concept: string): boolean {
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)
     .map((w) => w.toLowerCase());
-  return words.some(
-    (w) => w === want || (w.startsWith(want) && DERIVED_SUFFIXES.includes(w.slice(want.length)))
-  );
+}
+
+/** One word IS the concept, or the concept plus a suffix English uses to build a word from another. */
+function wordIs(word: string, want: string): boolean {
+  return word === want || (word.startsWith(want) && DERIVED_SUFFIXES.includes(word.slice(want.length)));
+}
+
+export function matchesAsWord(identifier: string, concept: string): boolean {
+  const wanted = wordsOf(concept);
+  if (wanted.length === 0) return false;
+  const words = wordsOf(identifier);
+
+  // A concept can be more than one word, and the first version could not match one.
+  //
+  // It compared a whole lowercased concept against single tokens, so "ShopUpgrade" was tested against
+  // ["bp", "shop", "upgrade"] and matched none of them - map_system answered a query for
+  // BP_ShopUpgrade, by its own exact name, with nothing. Same for "HealthBar" against WBP_HealthBar
+  // and "DamageUpgrade" against BP_DamageUpgrade. Single-word queries worked, so it looked fine
+  // until a two-word one was tried.
+  //
+  // Found by trial:diagnose, whose planted BP_DiagnoseTrial could not be found by querying
+  // "DiagnoseTrial". I nearly filed that as the trial expecting the wrong thing.
+  //
+  // A run of consecutive words keeps the rule that made this strict in the first place: "bar" still
+  // does not match TurretBarrelLoc, because Turret/Barrel/Loc contains no word "bar" - and now
+  // "TurretBarrel" matches it, which is right, because those ARE two of its words in order.
+  for (let start = 0; start + wanted.length <= words.length; start += 1) {
+    let all = true;
+    for (let i = 0; i < wanted.length; i += 1) {
+      // The suffix rule applies only to the LAST word: GetVacuumable is the vacuum system, but
+      // "shopping upgrade" should not match ShopUpgrade through a suffix on the first word.
+      const isLast = i === wanted.length - 1;
+      const word = words[start + i];
+      if (isLast ? !wordIs(word, wanted[i]) : word !== wanted[i]) {
+        all = false;
+        break;
+      }
+    }
+    if (all) return true;
+  }
+  return false;
 }
 
 /** Only project content is interesting; engine and plugin assets are noise in a system map. */

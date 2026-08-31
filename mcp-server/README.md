@@ -5053,6 +5053,46 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### `map_system` could not find a system by its own name
+
+Running the other trials after weeks of compaction changes, `trial:diagnose` failed: it plants
+`BP_DiagnoseTrial`, asks `unreal_map_system` for `"DiagnoseTrial"`, and got nothing back.
+
+The first read was that the trial expected the wrong thing — `matchesAsWord` deliberately rejects a
+substring, because `plan_feature` once claimed *"bar already exists in this project"* on the strength
+of a variable called `TurretBarrelLoc`. Checking it against real assets said otherwise:
+
+```text
+matchesAsWord("BP_ShopUpgrade",   "ShopUpgrade")     false
+matchesAsWord("WBP_HealthBar",    "HealthBar")       false
+matchesAsWord("BP_DamageUpgrade", "DamageUpgrade")   false
+matchesAsWord("BP_ShopUpgrade",   "upgrade")         true
+```
+
+**A multi-word concept could never match anything**, including the exact PascalCase name of the asset
+it names. The comparison lowercased the whole concept and tested it against single tokens, so
+`"ShopUpgrade"` was checked against `["bp", "shop", "upgrade"]` and matched none of them. Single-word
+queries worked, which is why it survived this long — it looks fine until you try two words.
+
+A concept is now split the same way a name is, and matched as a **run of consecutive words**. That
+keeps the strictness that made the rule exist — `"bar"` still does not match `TurretBarrelLoc`,
+because Turret/Barrel/Loc contains no word "bar" — while `"TurretBarrel"` now does, which is right.
+The derived-form rule (`GetVacuumable` is the vacuum system) applies to the last word only, so
+`"shopping upgrade"` does not reach `ShopUpgrade` through a suffix on a word that is not the one
+being matched.
+
+### The explanation was behind the flag for more detail
+
+The same failure exposed a second thing. `mapSystem` writes an excellent sentence for an empty
+result — *"Nothing in the project has X as a word. 3 name(s) contain it inside a longer one, the way
+`bar` sits inside `TurretBarrelLoc`"* — and the compact reply **dropped it**, answering with
+`assetCount: 0` and *"Pass detail:true for exact asset paths and the reference graph."*
+
+That is advice a caller has no reason to take. They have no assets; a flag promising asset paths
+reads as irrelevant. The one sentence that turns a confusing zero into an answer was reachable only
+by asking for **more of the thing that was empty**. An empty map now carries its notes, and a
+non-empty one pays nothing for it.
+
 ### The prose inside the server was the last unguarded text
 
 The Epic check first, since it is a standing item: nothing new. Still the 5.8 experimental plugin,

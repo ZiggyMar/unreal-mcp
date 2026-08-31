@@ -5452,14 +5452,30 @@ register(
       // more accurate, it is the same facts with the field names repeated once per asset, and a
       // caller that needs exact paths can ask for it.
       if (detail) return jsonResult(result);
+
+      // An empty map is the one case where the notes ARE the answer.
+      //
+      // mapSystem explains a zero properly: "Nothing in the project has X as a word. 3 name(s)
+      // contain it inside a longer one - the way bar sits inside TurretBarrelLoc - and none of those
+      // is this system." That sentence is the difference between "rename your search" and "this
+      // system does not exist", and the compact reply dropped it, answering with `assetCount: 0` and
+      // "Pass detail:true for exact asset paths".
+      //
+      // Which is advice a caller has no reason to take: they have no assets, so a flag promising
+      // asset paths sounds irrelevant. The explanation was reachable only by asking for more of the
+      // thing that was empty. Found by trial:diagnose failing on it.
+      const empty = result.assets.length === 0;
       return jsonResult({
         query: result.query,
         assetCount: result.assets.length,
+        ...(empty && result.notes?.length ? { notes: result.notes } : {}),
         text: result.text,
         readingOrder: result.readingOrder,
         highRisk: result.highRisk,
         truncated: result.truncated,
-        note: "Pass detail:true for exact asset paths and the reference graph.",
+        note: empty
+          ? "Pass detail:true only if you want the reference graph; the notes above are the whole answer."
+          : "Pass detail:true for exact asset paths and the reference graph.",
       });
     } catch (err) {
       return errorResult(err);
