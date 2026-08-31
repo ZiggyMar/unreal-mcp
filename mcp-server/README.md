@@ -1924,6 +1924,43 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The change-request leg, and a compaction that answered the wrong question
+
+Third leg, same method: *"make the countdown 5 seconds instead of 10"*. `search_project` found
+`CountdownTime` in three Blueprints with useful context - `"int variable in GS_Gameplay"` - and the
+next step is to read what it is now. That returned:
+
+```json
+{"name": "CountdownTime", "type": "int32"}
+```
+
+**No value.** The value is `0`, and zero defaults are omitted - a compaction added a few commits ago
+that saves 1,060 characters across 167 properties.
+
+*"Absent means the type's zero"* is a fine contract in bulk, where the omission is most of the
+saving. It is the wrong answer to `match: "CountdownTime"`. Somebody asking about one property **by
+name** is usually about to change it, and needs to see what it is now rather than infer it from a
+convention stated in the tool description. A change request that begins by reading the current value
+and is told only its type has been answered with nothing it asked for.
+
+So the rule is now about *when* the compaction applies, not whether: **dropped in bulk, kept for a
+targeted question.** Both `read_class_defaults` and `list_variables` do it, since both have a filter
+and both had the same hole.
+
+```text
+match: "CountdownTime"   {"name":"CountdownTime","type":"int32","value":"0"}
+no filter                76 properties, 2,254 tokens - unchanged
+```
+
+The targeted path puts back exactly one field. Falling back to the raw row would have reintroduced
+`subType`, `isArray` and the false flags, which would make the same tool return a different shape
+depending on whether a filter was passed - and a test pins that, because it is the obvious way to
+write this and it is wrong.
+
+Worth naming what found it. This is a defect introduced by a token optimisation, invisible to every
+measurement - the reply got *smaller*, which is what the measurement rewards - and visible in one
+call to anyone actually trying to change a value.
+
 ### "enemie" is not a word, and it was reading the wrong half of the project
 
 Same session, same method, next request: *"make enemies drop loot when they die"*. The concepts

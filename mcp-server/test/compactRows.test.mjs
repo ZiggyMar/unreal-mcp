@@ -374,3 +374,42 @@ test("dropping a field means removing it, not declining to re-add it", () => {
   assert.equal("referencedBy" in right, false, "destructuring it out is what actually removes it");
   assert.equal(right.path, "/Game/X", "and everything else survives");
 });
+
+test("a zero default is dropped in bulk and kept when one property was asked for", () => {
+  // Found by running a change request end to end rather than by measuring a reply. "Make the
+  // countdown 5 seconds instead of 10" starts by reading the current value, and
+  // read_class_defaults with match:"CountdownTime" answered:
+  //
+  //     {"name":"CountdownTime","type":"int32"}
+  //
+  // No value, because the value was 0 and zero defaults are omitted. "Absent means the type's zero"
+  // is a fine contract across 167 properties, where the omission is most of the saving. It is the
+  // wrong answer to a question about ONE property by name: whoever asked is usually about to change
+  // it, and needs to see what it is now rather than infer it from a convention.
+  //
+  // The compaction itself is unchanged - this is about WHEN it applies. Both call sites use the same
+  // rule, and this pins the two halves of it.
+  const bulk = compactVariable(variable({ name: "CountdownTime", type: "int", defaultValue: "0" }));
+  assert.equal("defaultValue" in bulk, false, "in bulk, absent still means the type's zero");
+
+  // What the targeted path does: compact everything, then put the default back.
+  const raw = { name: "CountdownTime", type: "int", defaultValue: "0" };
+  const row = compactVariable(variable(raw));
+  const targeted = "defaultValue" in row ? row : { ...row, defaultValue: raw.defaultValue };
+  assert.equal(targeted.defaultValue, "0", "a targeted read says what the value actually is");
+  assert.equal(targeted.type, "int", "and keeps every other compaction");
+});
+
+test("restoring the default does not undo the type descriptor or the flags", () => {
+  // The targeted path must put back ONE thing. If it fell back to the raw row it would reintroduce
+  // subType, isArray and the false flags - which is a different reply shape for the same tool
+  // depending on whether a filter was passed.
+  const raw = { name: "Meshes", type: "Object", subType: "SkeletalMesh", isArray: true, defaultValue: "None", instanceEditable: false };
+  const row = compactVariable(raw);
+  const targeted = "defaultValue" in row ? row : { ...row, defaultValue: raw.defaultValue };
+  assert.equal(targeted.type, "object:SkeletalMesh[]");
+  assert.equal("subType" in targeted, false);
+  assert.equal("isArray" in targeted, false);
+  assert.equal("instanceEditable" in targeted, false);
+  assert.equal(targeted.defaultValue, "None");
+});

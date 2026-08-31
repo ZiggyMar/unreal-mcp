@@ -2213,7 +2213,19 @@ register(
         filtered = filtered.filter((v) => v.replicated === true);
       }
 
-      const compacted = filtered.map(compactVariable);
+      // Same rule as read_class_defaults: a zero default is dropped in bulk and kept for a targeted
+      // question. `match: "Health"` is asked by somebody about to change Health, and answering
+      // "it is a float" without saying what it currently is answers a question nobody asked.
+      const targeted = needle.length > 0 || replicatedOnly === true;
+      const compacted = filtered.map((v) => {
+        const row = compactVariable(v);
+        if (!targeted) return row;
+        // Put the raw default back when compaction removed it. Everything else compactVariable does
+        // - the type descriptor, the false flags - stays, because none of that is the answer.
+        return "defaultValue" in row || v.defaultValue === undefined
+          ? row
+          : { ...row, defaultValue: v.defaultValue };
+      });
 
       if (filtered.length === all.length) {
         // Nothing was filtered, so this is the whole list - the most expensive form of this call, and
@@ -2475,8 +2487,21 @@ register(
       // Same treatment the variable list gets, for the same reasons: "Default" is what UE calls a
       // property nobody filed anywhere, and a value that is the type's zero is what the type already
       // said. Measured on BP_Player: 74 of 167 categories were "Default" and 95 of the values zero.
+      // Zero values are dropped in bulk and KEPT for a targeted question.
+      //
+      // "Absent means the type's zero" is a fine contract across 167 properties, where the omission
+      // is most of the saving. It is the wrong answer to `match: "CountdownTime"` - somebody asking
+      // about one property by name is usually about to change it, and needs to see what it is now,
+      // not infer it from a convention. A change request that starts by reading the current value
+      // and gets `{"name":"CountdownTime","type":"int32"}` has been told nothing it asked for.
+      //
+      // Found by running a change request end to end rather than by measuring the reply.
+      const targeted = (match ?? "").trim().length > 0;
       const properties = Array.isArray(result.properties)
-        ? result.properties.map((row) => omitDefault(omitZeroDefault(row, "value"), "category", "Default"))
+        ? result.properties.map((row) => {
+            const withoutCategory = omitDefault(row, "category", "Default");
+            return targeted ? withoutCategory : omitZeroDefault(withoutCategory, "value");
+          })
         : undefined;
       return jsonResult({
         ...result,
