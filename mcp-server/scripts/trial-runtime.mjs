@@ -71,6 +71,8 @@ let calls = 0;
 const stalls = [];
 /** Things that did not work but are not this trial's claim. Reported, never silent, never fatal. */
 const warnings = [];
+/** Bridge commands this server sends that the installed plugin does not have. */
+const unavailable = [];
 
 async function step(label, name, args, check) {
   calls++;
@@ -82,6 +84,24 @@ async function step(label, name, args, check) {
   } catch {
     /* not every reply is JSON */
   }
+  // A command the plugin has never heard of is not a failure of what this trial tests.
+  //
+  // Seven bridge commands currently exist in this server and not in the installed plugin binary,
+  // watch_runtime among them, so this trial reported four stalls that were all "the plugin is older
+  // than the server". A trial that fails for an environmental reason is indistinguishable from one
+  // that found a bug, and after a few runs you learn to ignore it - at which point it has stopped
+  // protecting anything.
+  //
+  // The `warnings` channel already existed for exactly this: things that did not work and are not
+  // this trial's claim.
+  const missing = /unknown_cmd:\s*([a-z0-9_]+)/i.exec(text);
+  if (missing) {
+    if (!unavailable.includes(missing[1])) unavailable.push(missing[1]);
+    warnings.push(`${label}: the plugin has never heard of "${missing[1]}", so this step could not run`);
+    console.log(`  ${label.padEnd(42)} ${String(Math.round(text.length / 4)).padStart(5)} tok   <-- cannot run yet`);
+    return { text, parsed, unavailable: true };
+  }
+
   const problem = r.error ? `JSON-RPC error: ${JSON.stringify(r.error).slice(0, 160)}` : check ? check(text, parsed) : null;
   if (problem) stalls.push({ label, problem, reply: text.slice(0, 300).split(NL).join(" ") });
   console.log(`  ${label.padEnd(42)} ${String(Math.round(text.length / 4)).padStart(5)} tok${problem ? "   <-- STALL" : ""}`);
@@ -111,16 +131,35 @@ async function playAndWatch(phase) {
     (t, j) => (j && j.requested ? null : "PIE was not requested"));
 
   // PIE starts on a later tick, and starting two worlds is not instant.
+  //
+  // `worlds` ABSENT and `worlds` EMPTY are different answers, and this read them as the same.
+  //
+  // A stale plugin shows up in two ways. A missing COMMAND announces itself - unknown_cmd, handled
+  // above. A missing FIELD says nothing at all: pie_status here returns {"running": true} and the
+  // C++ in this repo sets a `worlds` array beside it, so the installed binary predates that field.
+  // Reading it as "0 worlds came up" turned a plugin that cannot answer into a game that did not
+  // start, and produced four stalls that looked like defects in the thing being tested.
   let worlds = 0;
+  let worldsReported = false;
   for (let attempt = 0; attempt < 20 && worlds < 2; attempt++) {
     await letItRun(1000);
     const r = await server.request("tools/call", { name: "unreal_pie_status", arguments: {} });
     const text = ((r.result && r.result.content) || []).map((c) => c.text || "").join("");
     try {
-      worlds = (JSON.parse(text).worlds || []).length;
+      const reply = JSON.parse(text);
+      worldsReported = worldsReported || Array.isArray(reply.worlds);
+      worlds = (reply.worlds || []).length;
     } catch {
       worlds = 0;
     }
+  }
+  if (!worldsReported) {
+    if (!unavailable.includes("pie_status.worlds")) unavailable.push("pie_status.worlds");
+    warnings.push(
+      `${phase}: pie_status did not report a \`worlds\` array at all, so how many worlds came up is unknown - ` +
+        `the plugin binary predates that field`
+    );
+    return { unavailable: true };
   }
   console.log(`  ${`${phase}: worlds up`.padEnd(42)} ${String(worlds).padStart(5)}`);
   if (worlds < 2) {
@@ -280,14 +319,19 @@ const brokenClient = roleRow(broken, "Client");
 if (brokenAuth) console.log(`      Authority  ${brokenAuth.first} -> ${brokenAuth.last}   changed=${brokenAuth.changed}`);
 if (brokenClient) console.log(`      Client     ${brokenClient.first} -> ${brokenClient.last}   changed=${brokenClient.changed}`);
 
-if (!brokenAuth || !brokenAuth.changed) {
+// Downstream of a phase that could not run at all, these read a sample that was never taken. Every
+// one of them would fail, and none of the failures would be about what this trial tests - which is
+// how a stale plugin produced four "defects" in a feature nobody had broken.
+const observable = !broken?.unavailable;
+
+if (observable && (!brokenAuth || !brokenAuth.changed)) {
   stalls.push({
     label: "the server counts",
     problem: "the Authority world's Ticks never changed, so the actor is not doing its job and nothing below means anything",
     reply: JSON.stringify(brokenAuth || null).slice(0, 200),
   });
 }
-if (brokenClient && brokenClient.changed) {
+if (observable && brokenClient && brokenClient.changed) {
   stalls.push({
     label: "the client does NOT receive it",
     problem: "the Client world's Ticks changed even though the variable is not replicated - the trial is not demonstrating what it claims",
@@ -319,9 +363,11 @@ const fixedClient = roleRow(fixed, "Client");
 if (fixedAuth) console.log(`      Authority  ${fixedAuth.first} -> ${fixedAuth.last}   changed=${fixedAuth.changed}`);
 if (fixedClient) console.log(`      Client     ${fixedClient.first} -> ${fixedClient.last}   changed=${fixedClient.changed}`);
 
-if (!fixedClient) {
+const observableAfterFix = !fixed?.unavailable;
+
+if (observableAfterFix && !fixedClient) {
   stalls.push({ label: "the client is sampled at all", problem: "no Client row came back after the fix", reply: "" });
-} else if (!fixedClient.changed) {
+} else if (observableAfterFix && !fixedClient.changed) {
   // A warning, not a failure, and the distinction is deliberate.
   //
   // Everything this trial exists to prove has already passed by this line: two worlds ran, both were
@@ -357,6 +403,21 @@ await step("take the actor back out of the level", "unreal_delete_actor", { acto
 await step("delete the trial asset", "unreal_delete_asset", { path: PATH, force: true });
 
 console.log(NL + `${calls} calls`);
+
+// Said before the verdict, because it changes how the verdict should be read.
+if (unavailable.length > 0) {
+  console.log(
+    NL +
+      `CANNOT FULLY RUN: the installed plugin does not have ${unavailable.join(", ")}. This server ` +
+      `sends ${unavailable.length === 1 ? "that command" : "those commands"} and the binary in the editor ` +
+      `predates ${unavailable.length === 1 ? "it" : "them"}, so the steps that needed ${unavailable.length === 1 ? "it" : "them"} ` +
+      `could not run - which is not the same as them failing.` +
+      NL +
+      `  Close the editor, run \`npm run build:engines\`, reopen, and run this again to test what it ` +
+      `actually claims. unreal_doctor lists everything else affected.`
+  );
+}
+
 if (stalls.length > 0) {
   console.error(NL + `runtime trial FAILED (${stalls.length}):`);
   for (const s of stalls) {
@@ -367,7 +428,15 @@ if (stalls.length > 0) {
 }
 for (const w of warnings) console.log(NL + "note: " + w);
 console.log(
-  NL + "runtime trial ok: two worlds ran, both were sampled, and the server's counter moved while " +
-    "the client's did not - the replication bug, observed on a running game."
+  NL +
+    (unavailable.length > 0
+      ? "runtime trial: nothing failed, but it could not test its claim - see CANNOT FULLY RUN above. " +
+        "Exiting non-zero on purpose: a green tick here would be a pass nobody earned, and this trial " +
+        "exists precisely because reasoning about replication is not the same as watching it."
+      : "runtime trial ok: two worlds ran, both were sampled, and the server's counter moved while " +
+        "the client's did not - the replication bug, observed on a running game.")
 );
-process.exit(0);
+// Non-zero when the claim could not be tested. It is not a failure of the tools and the message says
+// so, but it is not a pass either, and the two must not share an exit code - a trial that returns 0
+// for "I could not check" is how an unverified thing gets reported as verified.
+process.exit(unavailable.length > 0 ? 2 : 0);

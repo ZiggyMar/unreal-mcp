@@ -5053,6 +5053,39 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### A stale plugin looks like four broken features
+
+Running the remaining trials: `feature` (33 calls, ~2,760 tokens), `chain` and `parent-call` all pass.
+`runtime` reported **four failures**, and not one of them was a defect in what it tests.
+
+Every one traced to the installed plugin predating this server — and it manifests in **two different
+ways, only one of which announces itself**:
+
+- A missing **command** says so: `unknown_cmd: watch_runtime`, with the explanation added a few
+  sections ago. Easy to classify.
+- A missing **field** says nothing at all. `pie_status` returns `{"running": true}`, and the C++ in
+  this repo sets a `worlds` array beside it — *"which worlds are up, not just whether any is"*. The
+  trial read the absent array as `0 worlds came up`, turning *a plugin that cannot answer* into *a
+  game that did not start*, and every check downstream failed on a sample that was never taken.
+
+`worlds` absent and `worlds` empty are different answers, and this is the same absent-versus-empty
+distinction the rest of the codebase is careful about — missed in the one place whose job is to catch
+things.
+
+The trial now separates **cannot run** from **failed**, skips checks that depend on a phase that
+could not run, and ends with:
+
+```text
+CANNOT FULLY RUN: the installed plugin does not have pie_status.worlds, set_variable_replication.
+runtime trial: nothing failed, but it could not test its claim. Exiting non-zero on purpose: a
+green tick here would be a pass nobody earned.
+```
+
+**Exit code 2, deliberately.** Not a failure of the tools, and not a pass — and the two must not share
+an exit code, because a trial that returns 0 for *"I could not check"* is how an unverified thing gets
+reported as verified. That is the entire reason this trial exists: reasoning about replication is not
+the same as watching it.
+
 ### `map_system` could not find a system by its own name
 
 Running the other trials after weeks of compaction changes, `trial:diagnose` failed: it plants
