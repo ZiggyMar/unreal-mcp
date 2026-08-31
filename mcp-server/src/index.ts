@@ -163,6 +163,50 @@ const PROFILE = (process.env.UNREAL_MCP_PROFILE ?? "full").trim().toLowerCase();
  * write "Target" and lose a call to it. Everything long-form stays in the prompts and is pointed at
  * rather than inlined.
  */
+/**
+ * The exact strings this server requires, which knowing Unreal well does not supply.
+ *
+ * Standing text for every profile that can author a graph on its first call, and NOT for `search`,
+ * which registers four tools - ping, doctor, list_tools, enable_tools - none of which can place a
+ * node. On `search` this was 284 tokens of pin names resent on every single message, describing
+ * calls the model was not yet able to make. Thirty messages of orientation paid 8,500 tokens for
+ * knowledge it could not use once.
+ *
+ * So `search` gets it from unreal_enable_tools instead, the moment authoring tools switch on. That
+ * is cheaper - once rather than every turn - and lands better: it arrives in a reply the model just
+ * asked for, at the point of use, rather than in a preamble read before the job was understood.
+ */
+const GROUND_TRUTH = [
+  "GROUND TRUTH YOU CANNOT DERIVE",
+  "Exact strings this server requires. Getting these wrong is the most common failed call, and",
+  "knowing Unreal well does not help - they are not guessable:",
+  "- The target pin is `self`, even though the editor labels it \"Target\".",
+  "- Exec pins are not uniform. Ordinary nodes: `execute` in, `then` out. Branch: `then` and",
+  "  `else`. Sequence: `then_0`, `then_1`. Loop macros (ForEachLoop, WhileLoop): `Exec`, capital E.",
+  "- Struct pin defaults are comma triples: \"0, -90, 0\", never \"(Pitch=0,Yaw=-90)\". Rotator order",
+  "  is Pitch, Yaw, Roll.",
+  "- Enum pin defaults take the entry name: \"SnapToTarget\".",
+  "- Static library functions need their className: PrintString is on KismetSystemLibrary.",
+  "- A variable must exist before a Get or Set node can reference it.",
+  "- Branch, Sequence and Cast are `nodeType` values, not functions.",
+  "- Spawn Actor and Create Widget are NOT buildable here, and nothing else will tell you:",
+  "  they are their own K2Node classes, not functions the catalogue can find. Say so rather",
+  "  than emitting a graph that silently lacks the step.",
+];
+
+/** Tools whose arrival means the caller is about to write a graph, and needs the strings above. */
+const AUTHORING_TOOLS = [
+  "unreal_build_graph",
+  "unreal_add_node",
+  "unreal_scaffold_blueprint",
+  "unreal_scaffold_widget",
+  "unreal_add_event_handler",
+  "unreal_connect_pins",
+];
+
+/** Sent once per session, with the first enable that switches on something able to author. */
+let groundTruthDelivered = false;
+
 function buildInstructions(profile: string): string {
   const lines: string[] = [];
 
@@ -321,23 +365,9 @@ function buildInstructions(profile: string): string {
     "   the answer - an earlier asset that stopped compiling is the usual way work is reported",
     "   finished when it is not.",
     "",
-    "GROUND TRUTH YOU CANNOT DERIVE",
-    "Exact strings this server requires. Getting these wrong is the most common failed call, and",
-    "knowing Unreal well does not help - they are not guessable:",
-    "- The target pin is `self`, even though the editor labels it \"Target\".",
-    "- Exec pins are not uniform. Ordinary nodes: `execute` in, `then` out. Branch: `then` and",
-    "  `else`. Sequence: `then_0`, `then_1`. Loop macros (ForEachLoop, WhileLoop): `Exec`, capital E.",
-    "- Struct pin defaults are comma triples: \"0, -90, 0\", never \"(Pitch=0,Yaw=-90)\". Rotator order",
-    "  is Pitch, Yaw, Roll.",
-    "- Enum pin defaults take the entry name: \"SnapToTarget\".",
-    "- Static library functions need their className: PrintString is on KismetSystemLibrary.",
-    "- A variable must exist before a Get or Set node can reference it.",
-    "- Branch, Sequence and Cast are `nodeType` values, not functions.",
-    "- Spawn Actor and Create Widget are NOT buildable here, and nothing else will tell you:",
-    "  they are their own K2Node classes, not functions the catalogue can find. Say so rather",
-    "  than emitting a graph that silently lacks the step.",
-    "  Searching the function catalogue for them will never find them.",
-    "",
+    // Carried by `search` in the enable_tools reply instead, at the moment it becomes usable.
+    // See GROUND_TRUTH above.
+    ...(profile === "search" ? [] : [...GROUND_TRUTH, ""]),
     "WHEN YOU NEED MORE",
     "The unreal_handbook prompt is the full engine guide; unreal_recipes has verified end-to-end",
     "builds of the systems people usually ask for; unreal_workflow is the long form of the order",
@@ -4909,6 +4939,13 @@ register(
             unknownTools: unknown,
             unknownNote: "No tool by that name is registered. Call unreal_list_tools to see the exact names.",
           }
+        : {}),
+      // The exact strings, delivered the moment they become usable rather than on every turn
+      // before then. See GROUND_TRUTH: on `search` this text was standing context describing calls
+      // the caller could not yet make. It is sent once, and only when something able to author a
+      // graph has just switched on - enabling the C++ or data tools alone does not need pin names.
+      ...(PROFILE === "search" && !groundTruthDelivered && enabled.some((name) => AUTHORING_TOOLS.includes(name))
+        ? ((groundTruthDelivered = true), { groundTruth: GROUND_TRUTH.join("\n") })
         : {}),
       note:
         enabled.length > 0

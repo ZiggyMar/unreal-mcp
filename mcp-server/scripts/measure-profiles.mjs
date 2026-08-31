@@ -187,13 +187,25 @@ async function measure(profile) {
     // one step 8 demanded before reporting anything done (unreal_verify_feature) were all absent -
     // aimed at the weakest models, which are the reason that profile exists and the least able to
     // recover from a tool that is not there.
-    await server
+    const enableReply = await server
       .request("tools/call", {
         name: "unreal_enable_tools",
         arguments: { groups: ["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"] },
       })
       .catch(() => {});
     const afterEnabling = await listTools(server);
+
+    // The exact strings have to reach the caller somehow.
+    //
+    // `search` deliberately drops GROUND TRUTH from its standing text - 284 tokens a turn about
+    // calls it cannot yet make - and gets it from the enable_tools reply instead, once, when an
+    // authoring tool switches on. That is a saving only while the reply still carries it. Delete
+    // the delivery and nothing else here would notice: the profile would simply get 284 tokens
+    // cheaper and quietly stop teaching the pin names, which is the most expensive kind of win.
+    const groundTruthReachable =
+      (server.instructions ?? "").includes("GROUND TRUTH") ||
+      ((enableReply?.result ?? enableReply)?.content?.[0]?.text ?? "").includes("The target pin is");
+
 
     // Prompts count too. unreal_handbook, unreal_recipes and unreal_workflow are named in the
     // standing text and are real - served over prompts/list, not tools/list. The first draft of this
@@ -221,6 +233,7 @@ async function measure(profile) {
       instructionTokens,
       standingTokens: tokens + instructionTokens,
       unreachable,
+      groundTruthReachable,
       perTool,
     };
   } finally {
@@ -275,6 +288,21 @@ async function main() {
     for (const tool of lazy.perTool.slice(0, 5)) {
       console.log(`  ${String(tool.chars).padStart(5)} chars  ${tool.name}`);
     }
+  }
+
+  const mute = results.filter((r) => !r.groundTruthReachable);
+  if (mute.length > 0) {
+    console.error(
+      NEWLINE +
+        `the exact strings reach nobody on ${mute.length} profile(s): ${mute.map((r) => r.profile).join(", ")}.` +
+        NEWLINE +
+        `  GROUND TRUTH is either standing text or comes back from unreal_enable_tools when an authoring` +
+        NEWLINE +
+        `  tool switches on. On a profile with neither, the pin names - the most common failed call in` +
+        NEWLINE +
+        `  this server - are taught nowhere, and the profile just looks cheaper.`
+    );
+    process.exit(1);
   }
 
   // A profile whose standing text names a tool it does not have. Reported before the budget, and

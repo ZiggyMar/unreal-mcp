@@ -29,7 +29,11 @@ test("the workflow guide is the long form of the order the instructions give", (
   // before the step whose entire job is to catch work reported finished when it is not.
   //
   // Also missing were list_blueprints, find_source and describe_class.
-  const howToWork = instructionBlock('"HOW TO WORK",\n    "1. Anything broken', '"GROUND TRUTH');
+  // Ends at WHEN YOU NEED MORE, not at GROUND TRUTH. The exact strings moved into a GROUND_TRUTH
+  // constant declared ABOVE buildInstructions - `search` gets them from the enable_tools reply now
+  // rather than from standing text - so the old end marker no longer appears after this block and
+  // indexOf returned -1. The span being measured is the same eight steps either way.
+  const howToWork = instructionBlock('"HOW TO WORK",\n    "1. Anything broken', '"WHEN YOU NEED MORE');
   const named = [...new Set([...howToWork.matchAll(/unreal_[a-z0-9_]+/g)].map((m) => m[0]))];
   assert.ok(named.length >= 10, `expected the instruction steps to name tools, found ${named.length}`);
 

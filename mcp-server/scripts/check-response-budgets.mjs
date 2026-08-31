@@ -70,10 +70,28 @@ const CASES = [
   {
     label: "enable_tools one tool",
     tool: "unreal_enable_tools",
-    args: { tools: ["unreal_build_graph"] },
-    mustContain: "unreal_build_graph",
+    // Deliberately a tool that does not author graphs.
+    //
+    // This used to enable unreal_build_graph and started failing at 334 tokens, which was the
+    // one-time GROUND TRUTH payload landing in a budget written for the repeated case. Two
+    // different things were sharing one ceiling: the reply you get on every enable, and the reply
+    // you get once when authoring switches on. They are budgeted separately now rather than by
+    // raising a number until the check went quiet.
+    args: { tools: ["unreal_compile_cpp"] },
+    mustContain: "unreal_compile_cpp",
     ceiling: 200,
     why: "enabling one tool must not cost what enabling thirty-two does - it used to",
+  },
+  {
+    label: "enable_tools first authoring enable",
+    tool: "unreal_enable_tools",
+    args: { tools: ["unreal_build_graph"] },
+    mustContain: "unreal_build_graph",
+    ceiling: 450,
+    why:
+      "once per session, this reply carries the exact pin-name strings that `search` no longer " +
+      "keeps in standing text. It is bigger than an ordinary enable ON PURPOSE and must stay a " +
+      "one-off: 284 tokens once, against 284 on every turn of the session",
   },
   {
     label: "guide index",

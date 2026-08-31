@@ -187,11 +187,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2292 | four tools; hand it a sentence or a preset name |
+| `search` | 2008 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4143 | ten tools, fixed, for a small local model |
-| `core` | 12785 | the authoring spine |
-| `lazy` | 12798 | `core` plus deferred groups |
-| `full` | 39288 | everything, for a model that can afford it |
+| `core` | 12768 | the authoring spine |
+| `lazy` | 12781 | `core` plus deferred groups |
+| `full` | 39271 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6085,6 +6085,53 @@ production hardening. Ours answers four of those already — 115 tools, a 2,292-
 with full schema recovery on demand, whole-graph authoring in one call, and `explain_graph` /
 `review_blueprint` / `verify_feature` for read-back. Undo was the one where we were genuinely behind,
 and in our own newest code rather than by design.
+
+### Teaching that arrives when it can be used
+
+On `search` — the profile the shipped config selects, and the one a frontier model actually runs —
+the instructions had grown larger than the tools: **1,157 tokens of standing text against 1,135 of
+schemas.** Standing text is resent on every message, so it is the most expensive kind of text there
+is.
+
+Most of it earns its place. One block did not, *there*. `GROUND TRUTH YOU CANNOT DERIVE` — the target
+pin is `self`, exec pins are `execute`/`then` but `Exec` on loop macros, struct defaults are comma
+triples — is the most valuable paragraph in the file, and `search` registers four tools:
+
+```text
+unreal_ping   unreal_doctor   unreal_list_tools   unreal_enable_tools
+```
+
+None of them can place a node. So 284 tokens of pin names were resent every turn describing calls the
+model was not yet able to make. Thirty messages of orientation paid roughly 8,500 tokens for
+knowledge it could not use once.
+
+It now arrives from `unreal_enable_tools`, once, at the moment an authoring tool switches on —
+and only then. Enabling the C++ tools alone does not need pin names and does not get them.
+
+```text
+search standing   2,292 -> 2,008     -12.4%, on every message
+enable cpp        no ground truth    it does not author graphs
+enable feature    delivered once     284 tokens, at the point of use
+enable ui after   not repeated
+```
+
+Nothing was cut. The teaching is *better* placed: it lands in a reply the model just asked for, at
+the moment it starts writing, instead of in a preamble read before the job was understood.
+
+**The guard matters more than the saving here**, because deleting the delivery would look like a
+further win: `search` would get 284 tokens cheaper and quietly stop teaching the strings whose
+absence is the most common failed call in this server. `check:profiles` now fails if the exact
+strings reach a profile through neither route.
+
+Writing that guard, I put it inside `if (lying.length > 0)` — a branch that is false whenever the
+project is healthy. It reported ok with the delivery deleted. A guard nested in a condition that
+never runs is the same "reports ok while watching nothing" failure this repo keeps finding, this time
+in the check written to prevent a silent loss. It is watched failing now, against the real deletion.
+
+The one-time payload also broke a reply budget, which was right to complain: `enable_tools one tool`
+is written for the repeated case at 200 tokens. Two different things were sharing one ceiling, so
+they are budgeted separately now — an ordinary enable is **57** tokens, the first authoring enable
+**334** — rather than raising a number until the check went quiet.
 
 ### The numbers a model reads are guarded too
 
