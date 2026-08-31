@@ -1924,6 +1924,40 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### Failing in one second instead of five minutes
+
+`npm run build:engines` is the one command a user has to run by hand to pick up new bridge commands -
+the C++ half arrives no other way. It had no idea whether an editor was open.
+
+A running editor holds `UnrealMCPBridge.dll`, so building with one open compiles every file
+successfully and then fails at the **link** step:
+
+```text
+LINK : fatal error LNK1104: cannot open file 'UnrealEditor-UnrealMCPBridge.dll'
+```
+
+Several minutes in, and it is a message about a file that says nothing about editors. The one obvious
+way to get this command wrong should cost a second, not a coffee:
+
+```text
+Refusing to build: the editor has "AntiVirusSquad" open (its bridge answered).
+
+A running editor holds UnrealMCPBridge.dll open, so this would compile for several minutes
+and then fail at the link step with LNK1104 - a message about a file that says nothing about
+editors. Close the editor and run this again.
+
+To compile without installing anything, and without closing anything, use --isolated.
+```
+
+It asks the **bridge** first rather than the process table, because the bridge answers with *which
+project* is open - "an editor is running" is a much weaker sentence than naming it. The process list
+is the fallback for an editor that has not loaded the plugin yet, which holds the DLL just the same,
+so a bridge that does not answer is a fallback path rather than proof of absence.
+
+`--isolated` builds into a temporary host project and installs nothing, so it is unaffected and skips
+the check. Both were run with an editor open to confirm: the default refuses in under a second, and
+`--isolated` built 5.6 clean in 86 seconds.
+
 ### Checking Epic's toolset list against the project, class by class
 
 Epic now ships an official [Claude Code skills plugin](https://github.com/EpicGames/unreal-engine-skills-for-claude-code-plugin)
