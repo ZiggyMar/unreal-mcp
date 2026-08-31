@@ -179,7 +179,25 @@ export async function auditDataTables(
       nullReferences.length > 0
         ? `${nullReferences.length} row(s) have an empty asset reference in a field that other rows fill in. ` +
           `Each one is a silent failure at runtime: the engine resolves it to null and whatever consumes it ` +
-          `does nothing, without an error. Fix with unreal_set_data_table_row, then unreal_save_asset.`
+          `does nothing, without an error. Set the right value with unreal_set_data_table_row, then ` +
+          `unreal_save_asset.
+
+` +
+          // The warning exists because the obvious next move is wrong.
+          //
+          // `exampleValue` is the value from a filled SIBLING row, carried so a caller can see the
+          // shape a correct value has. Copying it is a different thing entirely. On this project the
+          // example offered for the row "Weapon_MachineGun" is BP_BulletSize, taken from
+          // "Survival_MobileAgent" - paste that in and the machine gun grants a bullet-size upgrade.
+          // The table then passes every check, and the game is quietly wrong.
+          //
+          // "This asset was never built" is also a real answer. Two rows here name upgrades that do
+          // not exist as Blueprints anywhere in the project, and the honest fix is to build them or
+          // drop the rows - not to point them at something that happens to be the right type.
+          `exampleValue shows the SHAPE a correct value takes, from another row in the same table. It ` +
+          `is not the answer for this row. Choose the asset this row actually means; if none exists ` +
+          `yet, that is the finding - the row names something that was never built, and pointing it at ` +
+          `a same-typed asset makes the table pass every check while the game does the wrong thing.`
         : `No Data Table row has an empty reference in a field that other rows fill in.` +
           (undecidable.length > 0
             ? ` ${undecidable.length} field(s) could not be judged - see undecidable.`

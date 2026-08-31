@@ -1458,6 +1458,20 @@ That guard also had to be fixed: it captured `/"(unreal_[a-z0-9_]+)"/`, so a too
 anything with a capital in it *vanished from the set* instead of being reported - the guard failing
 in the way it existed to prevent.
 
+### The example value is a shape, not an answer
+
+Following that path to its end found the risk in it. `unreal_check_data_tables` reports each empty
+reference with an `exampleValue` taken from a filled sibling row, so a caller can see what a correct
+value looks like. The obvious next move is to copy it, and on this project that is wrong: the example
+offered for row `Weapon_MachineGun` is `BP_BulletSize`, taken from `Survival_MobileAgent`. Paste that
+in and the machine gun grants a bullet-size upgrade — the table then passes every check here and the
+game is quietly wrong, which is worse than the null it replaced because nothing will flag it again.
+
+The two rows flagged on this project (`Weapon_MachineGun` and `Vacuum_VirusController`) name upgrades
+that exist as no Blueprint anywhere in it. **"This was never built" is a real answer**, and the advice
+now says so rather than implying every null just needs a value typed into it. 95 tokens, and only on
+replies that have something to warn about.
+
 ### The quality gate: compiling is not the bar
 
 `unreal_review_blueprint` reports what a senior Unreal developer would flag in review, computed

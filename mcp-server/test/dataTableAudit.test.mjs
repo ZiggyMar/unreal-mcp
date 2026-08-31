@@ -189,3 +189,41 @@ test("the audit never asks for the shortened rows, because empty IS the default"
   }
   assert.equal(result.nullReferences.length, 1, "and the finding still comes out");
 });
+
+test("the advice warns against the obvious wrong fix, not just the missing value", async () => {
+  // exampleValue is carried so a caller can see the SHAPE a correct value takes, taken from a filled
+  // sibling row. Copying it is a different thing entirely, and it is the obvious next move.
+  //
+  // On the real project the example offered for row "Weapon_MachineGun" is BP_BulletSize, taken from
+  // "Survival_MobileAgent". Paste that in and the machine gun grants a bullet-size upgrade: the
+  // table then passes every check in this file and the game is quietly wrong - a worse outcome than
+  // the null it replaced, because nothing will ever flag it again.
+  //
+  // The two rows flagged on the real project name upgrades that exist as no Blueprint anywhere, so
+  // "this was never built" is a real answer and the advice has to leave room for it.
+  const result = await auditDataTables(
+    fakeBridge({
+      "/Game/DT_Upgrades.DT_Upgrades": [
+        { rowName: "Weapon_MachineGun", values: { UpgradeClass: "None" } },
+        { rowName: "Stat_BulletSize", values: { UpgradeClass: "/Game/BP_BulletSize.BP_BulletSize_C" } },
+      ],
+    })
+  );
+  assert.equal(result.nullReferences.length, 1, "the fixture has to produce a finding or this proves nothing");
+  assert.match(result.next, /not the answer for this row/, "the example is named as a shape, not an answer");
+  assert.match(result.next, /never built/, "and 'no such asset exists yet' is offered as a real finding");
+});
+
+test("a clean table pays nothing for that warning", async () => {
+  // Advice attached to a good result is a standing token cost for a situation that is not happening.
+  const result = await auditDataTables(
+    fakeBridge({
+      "/Game/DT_Fine.DT_Fine": [
+        { rowName: "A", values: { UpgradeClass: "/Game/BP_One.BP_One_C" } },
+        { rowName: "B", values: { UpgradeClass: "/Game/BP_Two.BP_Two_C" } },
+      ],
+    })
+  );
+  assert.equal(result.nullReferences.length, 0);
+  assert.ok(!/not the answer for this row/.test(result.next), "the clean reply does not carry the warning");
+});
