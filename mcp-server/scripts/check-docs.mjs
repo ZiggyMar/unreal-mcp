@@ -64,6 +64,32 @@ mentionedIn(serverReadme, "mcp-server/README.md");
 mentionedIn(complaints, "docs/COMPLAINTS_SOLVED.md");
 mentionedIn(workflow, "docs/AGENT_WORKFLOW.md");
 
+// --- 2b. the contents lists every top-level section --------------------------------------------
+//
+// The README is 5,700 lines and 154 sections, and for most of its life "## Tools exposed" ran from
+// line 60 to line 5,560 - 97% of the file - with Configuration, client setup and the workflow
+// stranded underneath it. Someone arriving could not find how to install the thing.
+//
+// A contents block fixes that and then rots: a new top-level section is added, nobody updates the
+// list, and the map stops matching the territory. Every other index in this repo learned that the
+// hard way, so this one is checked from the start.
+{
+  const topLevel = [...serverReadme.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((h) => h !== "Contents");
+  const contents = new RegExp("## Contents([\\s\\S]*?)\\n## ").exec(serverReadme);
+  if (!contents) {
+    problems.push("README.md has no Contents section - 154 sections with no way in is not documentation");
+  } else {
+    const listed = contents[1];
+    const missing = topLevel.filter((h) => !listed.includes(h));
+    if (missing.length > 0) {
+      problems.push(
+        `Contents does not list ${missing.length} top-level section(s): ${missing.join(", ")}. ` +
+          `A contents block that has fallen behind is worse than none, because it is trusted.`
+      );
+    }
+  }
+}
+
 // --- 3. required sections still exist ----------------------------------------------------------
 // Listed explicitly because deletion is the failure that actually happened, and a missing section
 // leaves no trace for any other check to notice.

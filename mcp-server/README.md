@@ -12,6 +12,27 @@ bridge's tiny line-delimited JSON protocol over a loopback TCP socket. The Unrea
 `unreal_ping` to return useful data; `unreal_ping` itself will simply report the connection
 error if the editor/bridge isn't up.
 
+## Contents
+
+Everything up to *Tools exposed* is what you need to run this. Everything after it is reference and
+the reasoning behind the design — 140-odd sections of it, because every non-obvious decision here was
+written down next to the measurement that caused it.
+
+**Getting it running**
+[Prerequisites](#prerequisites) · [Setup](#setup) · [Configuration](#configuration) ·
+[Pointing an MCP client at this server](#pointing-an-mcp-client-at-this-server)
+
+**Using it well**
+[Recommended agent workflow](#recommended-agent-workflow) · [What this costs today](#what-this-costs-today) ·
+[Notes / limitations](#notes--limitations)
+
+
+
+**Reference and rationale**
+[Tools exposed](#tools-exposed) — the full tool table, then the design notes. Start with
+*Tool profiles: paying only for what you use* if you care about context cost, *Security* if you are
+deciding whether to run it, and the profile table above if you just want the numbers.
+
 ## Prerequisites
 
 - Node.js >= 18
@@ -34,6 +55,126 @@ real MCP client normally launches this itself over stdio):
 ```bash
 npm start
 ```
+
+## Configuration
+
+Environment variables (all optional):
+
+- `UNREAL_MCP_BRIDGE_HOST`: default `127.0.0.1`
+- `UNREAL_MCP_BRIDGE_PORT`: default `8765`
+- `UNREAL_MCP_LOCAL_LLM_URL`: unset by default (enrichment disabled). An OpenAI-compatible
+  base URL, e.g. `http://localhost:11434/v1` for Ollama.
+- `UNREAL_MCP_LOCAL_LLM_MODEL`: default `llama3.2`. Only used if the above is set.
+- `UNREAL_MCP_LOCAL_LLM_TIMEOUT_MS`: default `4000`. Per-request timeout for enrichment calls.
+- `UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL`: default `8`. Caps how many hits get a live
+  enrichment call per `unreal_search_project` invocation (the rest are returned without a
+  `summary`, not dropped).
+- `UNREAL_MCP_PROFILE`: default `full` in process, `search` in what `--print-config` writes. See
+  [Tool profiles](#tool-profiles-paying-only-for-what-you-use).
+- `UNREAL_MCP_MODE`: default `standard`. See [Cost modes](#cost-modes-how-much-to-spend-per-build).
+- `UNREAL_MCP_INSTRUCTIONS`: set to `off` to send no server instructions.
+
+### Server instructions: saying it once instead of teaching by failure
+
+MCP lets a server hand the client a block of text before the conversation starts, and this one was
+leaving that field empty. Everything the model needed therefore had to arrive some other way: a
+prompt it had to decide to pull, or a failed call teaching it the hard way. Both are worse than
+saying it once for a few hundred tokens.
+
+What goes in is decided by one rule: it is there only if the model **cannot derive it**. That means
+the call order, because a tool description teaches a tool and never a sequence; and the exact
+strings, because a model that knows Unreal well still cannot know the target pin is spelled `self` —
+it will confidently write `Target` and lose a call to it. Everything long-form stays in the
+`unreal_handbook` and `unreal_recipes` prompts and is pointed at rather than inlined.
+
+The text is profile-aware. On `search` it opens by explaining that the short tool list is deliberate
+and that one `unreal_enable_tools({groups:["core"]})` call brings back the whole authoring path with
+real schemas — without which a model could reasonably conclude the server is broken or crippled.
+
+It measures about 770 tokens. Combined with `search` that is roughly 2.0k of standing cost against
+the 25.5k a `full` session pays, and the model arrives already knowing how to work rather than
+spending its first calls finding out. `UNREAL_MCP_INSTRUCTIONS=off` suppresses it, which is the
+right call on `minimal`, where context is the scarce resource the profile exists to protect.
+
+## Pointing an MCP client at this server
+
+**Do not hand-write this.** Run `--print-config` and paste what it prints:
+
+```bash
+node dist/index.js --print-config                      # Claude Desktop
+node dist/index.js --print-config --client cursor      # Cursor
+node dist/index.js --print-config --client claude-code # Claude Code
+```
+
+It resolves the absolute path to `dist/index.js` on this machine, uses the interpreter that is
+actually running it rather than a bare `node` that may not be on the client's PATH, and sets the
+profile and mode. Every one of those is a way client setup silently fails with the same symptom —
+the server never starts and there is nothing to read.
+
+Run `npm run build` first, so `dist/index.js` exists.
+
+### Claude Code
+
+Register with `claude mcp add-json unreal '<the JSON it printed>'`, then verify with
+`claude mcp list` and check tool availability inside a session with `/mcp`.
+
+### Claude Desktop
+
+Paste the printed JSON into `claude_desktop_config.json` (Settings -> Developer -> Edit Config).
+If the file already has an `mcpServers` block, add the `unreal` entry inside it rather than
+replacing it. Then **fully quit** Claude Desktop and reopen it — closing the window is not enough.
+The `unreal_*` tools should then appear in the tool picker for any chat.
+
+## Recommended agent workflow
+
+The difference between a smooth run and a flailing one is almost never model quality, it is
+tool-call order. [../docs/AGENT_WORKFLOW.md](../docs/AGENT_WORKFLOW.md) encodes the order that
+works, the sharp edges that each cost a failed call to discover (exec pin naming, cast pin
+spacing, struct default formats, the two UMG traps), the multiplayer and performance judgment
+learned by building a real replicated feature through these tools, and the rule that compiling is
+not the same as done.
+
+**You do not have to wire it up yourself.** The server offers it as an MCP prompt named
+`unreal_workflow`, so any client can pull it in with no configuration:
+
+```
+prompts/get  ->  unreal_workflow
+```
+
+That matters more than it sounds: "paste this document into your system prompt" is a step someone
+with no coding experience will not take, and they are exactly the user this guide is for. It is
+served in every profile and costs nothing until requested. Pasting it into a system prompt block,
+a Claude Code Skill, or a CLAUDE.md section still works if you prefer.
+
+## Notes / limitations
+
+- One TCP request per tool call, on a fresh connection, with no pipelining and no
+  persistent session state. This is intentionally simple; revisit if latency becomes an
+  issue.
+- Node ids are the node's persistent `NodeGuid` (a 32-character hex string), which Unreal
+  serializes with the asset. They survive editor restarts, and removing one node does not
+  affect any other node's id, so there is no longer any need to re-read a graph after
+  `unreal_remove_node` before using ids from an earlier read. Legacy `"n<index>"` ids are
+  still accepted for one release for backward compatibility, but are never returned.
+- `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
+  directly on the target Blueprint, not variables inherited from a parent Blueprint.
+- Every write runs inside a named editor transaction (`MCP: Add Node`, ...), so a human
+  working alongside the agent can Ctrl+Z it. For multi-node work, prefer
+  `unreal_build_graph`: it places nodes, wires them, and sets pin defaults in one atomic
+  call rather than a chain of independent ops.
+- No auth/encryption on the bridge socket. It only binds to loopback, which is the
+  intended security boundary.
+- The project index (`unreal_search_project` / `unreal_get_project_overview`) only
+  covers Blueprints under `/Game`, and only the data already introspected elsewhere
+  (functions/variables/graphs/node-type counts). It is not a full-text search over
+  node contents or comments.
+- Local-model enrichment's cache is in-memory and per-process only (cleared when the MCP
+  server restarts), not yet persisted to disk. See `docs/M3_STATUS.md` for what a
+  follow-up on-disk cache would look like.
+- See `../docs/M1_STATUS.md` / `M2_STATUS.md` / `M3_STATUS.md` for exactly what has and
+  hasn't been verified against a live editor session at each milestone.
+
+
 
 ## What this costs today
 
@@ -4911,6 +5052,36 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### 97% of the README was one section
+
+"Keep things well organised" is part of the brief, and this file had quietly stopped being. Its
+top-level structure:
+
+```text
+## Prerequisites            line 15
+## Setup                    line 22
+## Tools exposed            line 60   <- to line 5,560
+## Configuration            line 5,560
+## Pointing an MCP client   line 5,600
+## Recommended agent workflow
+## Notes / limitations
+```
+
+**One section held 97% of the document**, and everything a person needs to actually run the thing —
+configuration, pointing a client at it, the workflow, the limitations — sat underneath 5,500 lines of
+reference and rationale. There was no contents block, so the only way to find "how do I install this"
+was to scroll past 146 subsections.
+
+The practical sections now come first, and there is a *Contents* at the top grouped by what you came
+for: getting it running, using it well, reference and rationale. Nothing was deleted — the rationale
+is the record of why each decision was made, and it stays.
+
+`check:docs` verifies the contents lists every top-level section, because an index that has fallen
+behind is worse than none: it is trusted. Verified by removing an entry and watching it fail. That is
+the third index in this repo to get that treatment, after the symptom lists and the guide documents,
+and the lesson is the same each time — **any list written by hand about something that grows needs a
+check, or it silently becomes fiction.**
+
 ### The README had the same disease, one section apart
 
 Having found the instructions quoting numbers that had drifted, the obvious next question was whether
@@ -5556,122 +5727,4 @@ This check exists because the gap it catches really happened: the bridge shipped
 the server exposed 23, so levels, actors, components, class defaults, input mappings, and PIE were
 implemented, live-verified, documented, and **unreachable by any AI client**. Nothing failed
 loudly, because nothing was checking.
-
-## Configuration
-
-Environment variables (all optional):
-
-- `UNREAL_MCP_BRIDGE_HOST`: default `127.0.0.1`
-- `UNREAL_MCP_BRIDGE_PORT`: default `8765`
-- `UNREAL_MCP_LOCAL_LLM_URL`: unset by default (enrichment disabled). An OpenAI-compatible
-  base URL, e.g. `http://localhost:11434/v1` for Ollama.
-- `UNREAL_MCP_LOCAL_LLM_MODEL`: default `llama3.2`. Only used if the above is set.
-- `UNREAL_MCP_LOCAL_LLM_TIMEOUT_MS`: default `4000`. Per-request timeout for enrichment calls.
-- `UNREAL_MCP_LOCAL_LLM_MAX_PER_CALL`: default `8`. Caps how many hits get a live
-  enrichment call per `unreal_search_project` invocation (the rest are returned without a
-  `summary`, not dropped).
-- `UNREAL_MCP_PROFILE`: default `full` in process, `search` in what `--print-config` writes. See
-  [Tool profiles](#tool-profiles-paying-only-for-what-you-use).
-- `UNREAL_MCP_MODE`: default `standard`. See [Cost modes](#cost-modes-how-much-to-spend-per-build).
-- `UNREAL_MCP_INSTRUCTIONS`: set to `off` to send no server instructions.
-
-### Server instructions: saying it once instead of teaching by failure
-
-MCP lets a server hand the client a block of text before the conversation starts, and this one was
-leaving that field empty. Everything the model needed therefore had to arrive some other way: a
-prompt it had to decide to pull, or a failed call teaching it the hard way. Both are worse than
-saying it once for a few hundred tokens.
-
-What goes in is decided by one rule: it is there only if the model **cannot derive it**. That means
-the call order, because a tool description teaches a tool and never a sequence; and the exact
-strings, because a model that knows Unreal well still cannot know the target pin is spelled `self` —
-it will confidently write `Target` and lose a call to it. Everything long-form stays in the
-`unreal_handbook` and `unreal_recipes` prompts and is pointed at rather than inlined.
-
-The text is profile-aware. On `search` it opens by explaining that the short tool list is deliberate
-and that one `unreal_enable_tools({groups:["core"]})` call brings back the whole authoring path with
-real schemas — without which a model could reasonably conclude the server is broken or crippled.
-
-It measures about 770 tokens. Combined with `search` that is roughly 2.0k of standing cost against
-the 25.5k a `full` session pays, and the model arrives already knowing how to work rather than
-spending its first calls finding out. `UNREAL_MCP_INSTRUCTIONS=off` suppresses it, which is the
-right call on `minimal`, where context is the scarce resource the profile exists to protect.
-
-## Pointing an MCP client at this server
-
-**Do not hand-write this.** Run `--print-config` and paste what it prints:
-
-```bash
-node dist/index.js --print-config                      # Claude Desktop
-node dist/index.js --print-config --client cursor      # Cursor
-node dist/index.js --print-config --client claude-code # Claude Code
-```
-
-It resolves the absolute path to `dist/index.js` on this machine, uses the interpreter that is
-actually running it rather than a bare `node` that may not be on the client's PATH, and sets the
-profile and mode. Every one of those is a way client setup silently fails with the same symptom —
-the server never starts and there is nothing to read.
-
-Run `npm run build` first, so `dist/index.js` exists.
-
-### Claude Code
-
-Register with `claude mcp add-json unreal '<the JSON it printed>'`, then verify with
-`claude mcp list` and check tool availability inside a session with `/mcp`.
-
-### Claude Desktop
-
-Paste the printed JSON into `claude_desktop_config.json` (Settings -> Developer -> Edit Config).
-If the file already has an `mcpServers` block, add the `unreal` entry inside it rather than
-replacing it. Then **fully quit** Claude Desktop and reopen it — closing the window is not enough.
-The `unreal_*` tools should then appear in the tool picker for any chat.
-
-## Recommended agent workflow
-
-The difference between a smooth run and a flailing one is almost never model quality, it is
-tool-call order. [../docs/AGENT_WORKFLOW.md](../docs/AGENT_WORKFLOW.md) encodes the order that
-works, the sharp edges that each cost a failed call to discover (exec pin naming, cast pin
-spacing, struct default formats, the two UMG traps), the multiplayer and performance judgment
-learned by building a real replicated feature through these tools, and the rule that compiling is
-not the same as done.
-
-**You do not have to wire it up yourself.** The server offers it as an MCP prompt named
-`unreal_workflow`, so any client can pull it in with no configuration:
-
-```
-prompts/get  ->  unreal_workflow
-```
-
-That matters more than it sounds: "paste this document into your system prompt" is a step someone
-with no coding experience will not take, and they are exactly the user this guide is for. It is
-served in every profile and costs nothing until requested. Pasting it into a system prompt block,
-a Claude Code Skill, or a CLAUDE.md section still works if you prefer.
-
-## Notes / limitations
-
-- One TCP request per tool call, on a fresh connection, with no pipelining and no
-  persistent session state. This is intentionally simple; revisit if latency becomes an
-  issue.
-- Node ids are the node's persistent `NodeGuid` (a 32-character hex string), which Unreal
-  serializes with the asset. They survive editor restarts, and removing one node does not
-  affect any other node's id, so there is no longer any need to re-read a graph after
-  `unreal_remove_node` before using ids from an earlier read. Legacy `"n<index>"` ids are
-  still accepted for one release for backward compatibility, but are never returned.
-- `unreal_add_node`'s `VariableGet`/`VariableSet` only work for variables defined
-  directly on the target Blueprint, not variables inherited from a parent Blueprint.
-- Every write runs inside a named editor transaction (`MCP: Add Node`, ...), so a human
-  working alongside the agent can Ctrl+Z it. For multi-node work, prefer
-  `unreal_build_graph`: it places nodes, wires them, and sets pin defaults in one atomic
-  call rather than a chain of independent ops.
-- No auth/encryption on the bridge socket. It only binds to loopback, which is the
-  intended security boundary.
-- The project index (`unreal_search_project` / `unreal_get_project_overview`) only
-  covers Blueprints under `/Game`, and only the data already introspected elsewhere
-  (functions/variables/graphs/node-type counts). It is not a full-text search over
-  node contents or comments.
-- Local-model enrichment's cache is in-memory and per-process only (cleared when the MCP
-  server restarts), not yet persisted to disk. See `docs/M3_STATUS.md` for what a
-  follow-up on-disk cache would look like.
-- See `../docs/M1_STATUS.md` / `M2_STATUS.md` / `M3_STATUS.md` for exactly what has and
-  hasn't been verified against a live editor session at each milestone.
 
