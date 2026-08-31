@@ -3901,6 +3901,22 @@ strict, the accepted list is captured from the schema at registration so it cann
 `npm run check:protocol` both asserts the refusal names real parameters and asserts a zero-parameter
 tool still accepts an empty object - which is exactly what a change like this breaks quietly.
 
+The other half of that question got a much worse answer for a long time. `.strict()` covers unknown
+keys only, so *misspelling* a name produced the message above while *omitting* a required one
+produced zod's bare `Required at query`. `unreal_find_orphans` called with no arguments answered
+`Required at of / Required at pairedWith` and nothing else - two names, no types, no list, no
+example. The caller was told least at the moment they knew least.
+
+```text
+unreal_find_orphans requires "of". It accepts: of, pairedWith, maxDistance.
+Nothing ran - call again with "of" set.
+```
+
+Both messages are now built from the same list, so they cannot drift apart. The annotation clones
+each field rather than marking the schema instance, because attaching it in place would name
+whichever tool registered first if two ever shared one - a wrong answer that reads exactly like a
+right one. `check:protocol` asserts both halves.
+
 ### A filtered graph read now brings back what its matches are wired to
 
 `match` narrowed a graph read correctly and then handed back something that could not be used. Match

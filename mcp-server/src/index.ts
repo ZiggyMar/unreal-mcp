@@ -664,10 +664,46 @@ function withRepeatNotice(result: unknown, notice: string | null): unknown {
  */
 function strictSchema(toolName: string, shape: Record<string, unknown>): z.ZodTypeAny {
   const accepted = Object.keys(shape);
-  return z.object(shape as z.ZodRawShape).strict(
+  const named = accepted.length === 0 ? "" : ` It accepts: ${accepted.join(", ")}.`;
+
+  // The same help for a parameter left out as for one spelled wrong.
+  //
+  // `.strict()` below only covers unknown keys, so misspelling a name produced "not a parameter of
+  // unreal_map_system. It accepts: query, maxAssets, depth, detail" while OMITTING a required one
+  // produced zod's bare "Required at of" - the caller told least at the moment they know least.
+  // unreal_find_orphans called with no arguments answered "Required at of / Required at pairedWith"
+  // and nothing else: two names, no types, no list, no example.
+  //
+  // Two error paths describing the same problem differently is the defect this project keeps
+  // finding, and it is the same repair every time: make the two agree.
+  //
+  // The field is cloned rather than annotated in place. Attaching the message to the schema instance
+  // would name whichever tool registered first if two tools ever share one, and that is a wrong
+  // answer that reads exactly like a right one.
+  const shapeWithRequiredHints = Object.fromEntries(
+    Object.entries(shape).map(([key, field]) => {
+      const zodField = field as z.ZodTypeAny & { _def: Record<string, unknown> };
+      const message =
+        `${toolName} requires "${key}".${named} ` +
+        `Nothing ran - call again with "${key}" set.`;
+      const Ctor = zodField.constructor as new (def: unknown) => z.ZodTypeAny;
+      return [
+        key,
+        new Ctor({
+          ...zodField._def,
+          errorMap: (issue: z.ZodIssueOptionalMessage, ctx: { defaultError: string }) =>
+            issue.code === "invalid_type" && issue.received === "undefined"
+              ? { message }
+              : { message: ctx.defaultError },
+        }),
+      ];
+    })
+  );
+
+  return z.object(shapeWithRequiredHints as z.ZodRawShape).strict(
     accepted.length === 0
       ? `${toolName} takes no parameters.`
-      : `not a parameter of ${toolName}. It accepts: ${accepted.join(", ")}. ` +
+      : `not a parameter of ${toolName}.${named} ` +
           `Nothing was filtered or changed by the unrecognised one - call again with the right name.`
   );
 }

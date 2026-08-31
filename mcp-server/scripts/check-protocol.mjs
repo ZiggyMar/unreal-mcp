@@ -252,6 +252,33 @@ async function main() {
     note("an unrecognised parameter was refused without naming the parameters that do exist, which leaves the caller guessing again");
   }
 
+  // --- a parameter that was left out ------------------------------------------------------------
+  //
+  // The other half of the same question, and for a long time it got a much worse answer. `.strict()`
+  // covers unknown keys only, so misspelling a name produced "not a parameter of unreal_map_system.
+  // It accepts: query, maxAssets, depth, detail" while OMITTING a required one produced zod's bare
+  // "Required at query". unreal_find_orphans with no arguments answered "Required at of / Required
+  // at pairedWith" and nothing else: two names, no types, no list, no example - the caller told
+  // least at the moment they know least.
+  //
+  // Two error paths describing the same problem differently is this project's commonest defect, and
+  // the repair is always the same: make the two agree. Both messages are now built from one list.
+  const missingParam = await server.request("tools/call", {
+    name: "unreal_find_orphans",
+    arguments: {},
+  });
+  const missingText = missingParam.result?.content?.[0]?.text ?? missingParam.error?.message ?? "";
+  if (!/requires "of"/.test(missingText)) {
+    note("a required parameter left out was not named back to the caller");
+  } else if (!/It accepts: /.test(missingText)) {
+    note(
+      "a missing required parameter was reported without listing what the tool accepts, " +
+        "while a MISSPELLED one gets that list - the same problem answered two different ways"
+    );
+  } else if (!/Nothing ran/.test(missingText)) {
+    note("a missing required parameter was reported without saying whether anything ran");
+  }
+
   // A tool that takes no parameters at all must still accept an empty object. Making schemas strict
   // is exactly the kind of change that breaks this without anyone noticing.
   const noArgs = await server.request("tools/call", { name: "unreal_pie_status", arguments: {} });
