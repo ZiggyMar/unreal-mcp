@@ -2094,7 +2094,30 @@ register(
   },
   async ({ className, pathPrefix, maxResults }) => {
     try {
-      const result = await bridge.send("list_assets", { className, pathPrefix, maxResults });
+      const result = await bridge.send<{ count?: number; truncated?: boolean; assets?: unknown[] }>(
+        "list_assets",
+        { className, pathPrefix, maxResults }
+      );
+
+      // A truncated list that does not say how to see the rest.
+      //
+      // list_blueprints and list_actors both answer a cap with `truncated: true`, the real total,
+      // and a `next` sentence naming the parameters that narrow the search. list_assets answered
+      // `{count: 3, truncated: true}` - no total, so the caller cannot tell whether four assets were
+      // hidden or four thousand, and no route forward. Three tools describing the same situation,
+      // one of them differently, which is this project's most-repeated defect.
+      //
+      // The bridge does not return a grand total for this query, so this does not invent one. It
+      // says what is known and what to do, which is the part that was missing.
+      if (result.truncated) {
+        return jsonResult({
+          ...result,
+          next:
+            `More assets match than were returned${maxResults ? ` (maxResults was ${maxResults})` : ""}. ` +
+            `Narrow with \`className\` or \`pathPrefix\`, or raise \`maxResults\`. ` +
+            `unreal_search_project finds an asset by what it contains rather than by where it is.`,
+        });
+      }
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

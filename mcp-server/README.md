@@ -4079,6 +4079,27 @@ schemas**, so argument validation, enum constraints, and parameter documentation
 model pays one extra call at the start of a session and stops paying 24k tokens on every turn after
 it. Epic's own MCP plugin reached the same conclusion in 5.8 with its Tool Search mode.
 
+Rechecked against Epic's 5.8 documentation, their Tool Search mode returns three meta-tools from
+`tools/list` - `list_toolsets`, `describe_toolset`, `call_tool` - and routes every invocation
+through the third. Ours answers the same problem with the `search` profile: **four tools, 2,257
+tokens**, and the tools a caller enables become *real MCP tools with real schemas*, so the protocol
+layer validates arguments and can say "not a parameter of unreal_map_system. It accepts: query,
+maxAssets, depth, detail". Behind `call_tool` there is nothing for the protocol to check against, so
+a wrong parameter name is the callee's problem to notice - which is precisely the failure that cost
+53x on `list_blueprints` here before schemas were made strict. Their design avoids a `tools/list`
+refresh; ours keeps validation. Both are defensible, and the difference is worth stating plainly
+rather than claiming a win.
+
+Two more things from that documentation are worth recording. Epic exposes `PaginationPageSize` as a
+server setting; this project compacts replies instead, and only `list_data_table_rows` truly pages
+(`limit` + `offset`). Checking that claim is what turned up `list_assets` answering a cap with
+`{count: 3, truncated: true}` - no total, no route forward - while `list_blueprints` and
+`list_actors` both give the real total and a `next` naming the parameters that narrow the search.
+Three tools describing one situation, one of them differently. `check:protocol` now asserts that any
+list reporting `truncated` also says how to see the rest, because a caller who cannot continue
+either raises `maxResults` blindly and pays for everything, or reasons from a partial list believing
+it is the whole project - and the second looks like success.
+
 The trade is indirection, and that is exactly why the smaller profiles are unchanged: a weak model
 handles indirection badly, and `minimal` beats everything else for it. A frontier model handles it
 without noticing.

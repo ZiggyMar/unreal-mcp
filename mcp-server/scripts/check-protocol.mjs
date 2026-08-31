@@ -286,6 +286,39 @@ async function main() {
     note(`a zero-parameter tool rejected an empty argument object: ${String(noArgs.error.message).slice(0, 80)}`);
   }
 
+  // --- a truncated list must say how to see the rest ---------------------------------------------
+  //
+  // list_blueprints and list_actors answer a cap with `truncated: true`, the real total, and a
+  // `next` sentence naming the parameters that narrow the search. list_assets answered
+  // `{count: 3, truncated: true}` - no total, so the caller could not tell whether four assets were
+  // hidden or four thousand, and no route forward. Three tools describing one situation, one of them
+  // differently, which is the defect this project keeps finding.
+  //
+  // A caller who cannot continue a truncated list does one of two things, and both are expensive:
+  // raises maxResults blindly and pays for everything, or treats the partial list as the whole
+  // project and reasons from it. The second is worse and looks like success.
+  for (const [tool, args] of [
+    ["unreal_list_blueprints", { maxResults: 2 }],
+    ["unreal_list_actors", { maxResults: 2 }],
+    ["unreal_list_assets", { className: "DataTable", maxResults: 2 }],
+  ]) {
+    const capped = await server.request("tools/call", { name: tool, arguments: args });
+    const text = capped.result?.content?.[0]?.text ?? "";
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      continue; // an error reply is a different check's problem
+    }
+    if (body.truncated !== true) continue; // the project is smaller than the cap; nothing to assert
+    if (typeof body.next !== "string" || body.next.length === 0) {
+      note(
+        `${tool} truncated its list without saying how to see the rest - the caller either raises ` +
+          `maxResults blindly and pays for everything, or reasons from a partial list believing it is whole`
+      );
+    }
+  }
+
   // --- several calls in flight at once -----------------------------------------------------------
   //
   // Real clients pipeline. Nothing in this project had ever sent a second request before the first
