@@ -16,7 +16,7 @@
     "check:journal": "node scripts/check-journal.mjs",
     "check:symptoms": "node scripts/check-symptoms.mjs",
     "check:guides": "node scripts/check-guides.mjs",
-    "test": "npm run typecheck && npm run check:parity && npm run check:docs && npm run check:claims && npm run check:profiles && npm run check:replies && npm run check:protocol && npm run test:unit",
+    "test": "npm run typecheck && npm run check:parity && npm run check:docs && npm run check:claims && npm run check:nodetypes && npm run check:profiles && npm run check:replies && npm run check:protocol && npm run test:unit",
     "test:unit": "node --test",
     "verify:live": "node scripts/live-verify.mjs",
     "fuzz:crash": "node scripts/fuzz-nodes.mjs",
@@ -42,7 +42,8 @@
     "trial:chain": "node scripts/trial-chain.mjs",
     "trial:workflows": "node scripts/trial-workflows.mjs",
     "trial:lifecycle": "node scripts/trial-lifecycle.mjs",
-    "check:claims": "node scripts/check-claims.mjs"
+    "check:claims": "node scripts/check-claims.mjs",
+    "check:nodetypes": "node scripts/check-node-types.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

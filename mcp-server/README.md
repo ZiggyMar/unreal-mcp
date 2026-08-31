@@ -189,9 +189,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2292 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4008 | ten tools, fixed, for a small local model |
-| `core` | 12616 | the authoring spine |
-| `lazy` | 12629 | `core` plus deferred groups |
-| `full` | 38737 | everything, for a model that can afford it |
+| `core` | 12651 | the authoring spine |
+| `lazy` | 12664 | `core` plus deferred groups |
+| `full` | 39153 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -5966,6 +5966,48 @@ It compiles against 5.6, 5.8 and the game target. Like the other seven commands 
 plugin binary was last built, it is verified by `npm run trial:lifecycle`, which asserts the created
 asset is *of the class asked for*, that both refusals refuse, and that a refused creation left
 nothing behind.
+
+### Input, and a surface inside a command that nobody was guarding
+
+`create_asset` let a feature make an `InputAction`. It still could not make one *do* anything: the
+node that reacts to an InputAction in a graph — `UK2Node_EnhancedInputAction` — could not be placed.
+So "add a dash on Left Shift" got one step further and stopped again.
+
+Worse, checking how far it got turned up something else. `unreal_add_node` takes a `nodeType`, and
+that string is the widest surface in the project — fourteen kinds of graph node behind one
+parameter. Three of them were implemented in C++, accepted by the bridge, and in **no tool's enum**:
+
+```text
+InputKey     InputAxis     Self
+```
+
+The engine could build them, the bridge could build them, and no model could ask. This is the second
+time the same thing happened in the same command — `netMode` and `reliable` were implemented and
+unreachable too, which meant a Server RPC, the thing all multiplayer logic is built from, could not
+be authored at all. That one was found by reading the C++ for an unrelated reason. This one was found
+by reading an error message from an out-of-date plugin binary, which happened to *list* what it
+accepted. Neither is a way to find things.
+
+`check:parity` guards the command surface — 93 bridge commands, 115 tools, all matched — and says
+nothing about the surface *inside* a command. `check:nodetypes` now does, failing in four directions:
+
+- a nodeType the bridge implements that no enum offers
+- a nodeType offered that the bridge does not implement (`unknown_node_type`, after the model has
+  already decided what to build)
+- the two enums disagreeing — `add_node` and `build_graph` each declare their own, and a model told
+  one thing by one and something else by the other trusts whichever it read last
+- a type in the enum with no line describing it: callable, but not findable
+
+All four were watched failing on their own before being trusted. The first version of the fourth
+reported `VariableGet` missing because it is written as `"VariableGet" / "VariableSet":` — the guard
+failing on the *shape* of the prose rather than its absence, which is the same "matched a mention
+rather than a use" mistake every other guard here has had to unlearn.
+
+**The trap worth naming.** `InputKey` and `InputAxis` are the pre-Enhanced-Input events. On a project
+that uses Enhanced Input they compile perfectly and then never fire — no error, no warning, the key
+just does nothing. The description now says so, and says how to tell the two kinds of project apart
+(`list_assets className=InputMappingContext`), because this is the failure mode that costs the most
+time: everything looks right.
 
 ### The numbers a model reads are guarded too
 

@@ -1386,6 +1386,17 @@ register(
       "nodeType determines which other params are required:\n" +
       '  - "Event": eventName = a function on the Blueprint\'s parent class to override (e.g. "ReceiveBeginPlay", "ReceiveTick").\n' +
       '  - "CustomEvent": eventName = name for the new custom event (auto-uniquified if it collides).\n' +
+      '  - "EnhancedInputAction": inputAction = an InputAction asset ("IA_Jump" or a full path). How a UE5 project ' +
+      "reacts to input, and what you want unless the project predates Enhanced Input. Its exec pins are the trigger " +
+      'events: "Triggered" (the one you almost always want), "Started", "Ongoing", "Canceled", "Completed"; it ' +
+      'also outputs "ActionValue", "ElapsedSeconds" and "TriggeredSeconds". Make the asset with ' +
+      "unreal_create_asset assetClass=InputAction and bind it to a key with unreal_map_input_key.\n" +
+      '  - "InputKey" (key) / "InputAxis" (axisName): the LEGACY input events, from before Enhanced Input. Use ' +
+      "them only on a project with no InputMappingContext assets - check with unreal_list_assets " +
+      "className=InputMappingContext. On a project that uses Enhanced Input these compile perfectly and then never " +
+      "fire, which is the worst way to be wrong: nothing reports an error and the key simply does nothing.\n" +
+      '  - "Self": a reference to the owning instance, for passing "this" into a call or comparing against it. ' +
+      "No other params.\n" +
       '  - "CallFunction": functionName required; className optional (short name or full path); defaults to searching ' +
       "the Blueprint's own generated class, then its parent class. If the name is close but wrong, the error includes " +
       "a didYouMean list of near-misses.\n" +
@@ -1410,8 +1421,17 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
-      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
+      nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "Self"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
+      inputAction: z
+        .string()
+        .optional()
+        .describe('Required for nodeType EnhancedInputAction: the InputAction asset, e.g. "IA_Jump" or "/Game/Input/IA_Jump".'),
+      key: z.string().optional().describe('Required for nodeType InputKey, e.g. "F", "SpaceBar", "LeftMouseButton".'),
+      axisName: z
+        .string()
+        .optional()
+        .describe('Required for nodeType InputAxis: an axis mapping name, added first with unreal_add_input_mapping.'),
       // These three were implemented in the bridge and reachable from no tool, so a Server RPC -
       // the thing every piece of multiplayer logic is built from - could not be authored at all.
       netMode: z
@@ -1448,13 +1468,16 @@ register(
       comment: z.string().optional().describe("Optional node comment explaining why this node exists."),
     },
   },
-  async ({ path, graphName, nodeType, eventName, netMode, reliable, inputs, functionName, className, variableName, ownerClass, targetClass, pure, macroName, x, y, comment }) => {
+  async ({ path, graphName, nodeType, eventName, inputAction, key, axisName, netMode, reliable, inputs, functionName, className, variableName, ownerClass, targetClass, pure, macroName, x, y, comment }) => {
     try {
       const result = await bridge.send<AddNodeResult>("add_node", {
         path,
         graphName,
         nodeType,
         eventName,
+        inputAction,
+        key,
+        axisName,
         netMode,
         reliable,
         inputs,
@@ -1912,8 +1935,11 @@ register(
         .array(
           z.object({
             ref: z.string().describe("Your short handle for this node, unique in the batch, no dots."),
-            nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
+            nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "Self"]),
             eventName: z.string().optional(),
+            inputAction: z.string().optional(),
+            key: z.string().optional(),
+            axisName: z.string().optional(),
             functionName: z.string().optional(),
             className: z.string().optional(),
             variableName: z.string().optional(),

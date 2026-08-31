@@ -46,6 +46,8 @@
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_InputKey.h"
+#include "K2Node_EnhancedInputAction.h"
+#include "InputAction.h"
 #include "K2Node_InputAxisEvent.h"
 #include "K2Node_Self.h"
 #include "EdGraphNode_Comment.h"
@@ -2124,6 +2126,60 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		UK2Node_InputKey* InputNode = NewObject<UK2Node_InputKey>(Graph);
 		InputNode->InputKey = Key;
 		NewNode = InputNode;
+	}
+	// The Enhanced Input event node - the one a UE5 project actually uses.
+	//
+	// This bridge could read an InputMappingContext and bind a key to an InputAction, and had no way
+	// to place the node that REACTS to one. So a graph could be told about an action it could not
+	// respond to, and the only input events on offer were InputKey and InputAxis, which are the
+	// legacy path. That is the worst shape of gap: a model reaching for InputKey on an Enhanced
+	// Input project gets a Blueprint that compiles and a key that silently never fires.
+	else if (NodeType == TEXT("EnhancedInputAction"))
+	{
+		FString ActionName;
+		if (!Params->TryGetStringField(TEXT("inputAction"), ActionName) || ActionName.IsEmpty())
+		{
+			return MakeErrorResponse(
+				TEXT("missing_param: inputAction is required for nodeType=EnhancedInputAction, e.g. \"IA_Jump\" or ")
+				TEXT("\"/Game/Input/IA_Jump\". Make one with create_asset assetClass=InputAction if it does not exist."));
+		}
+
+		// Short name or full path, the same as every other path parameter in this bridge.
+		UInputAction* Action = nullptr;
+		if (ActionName.StartsWith(TEXT("/")))
+		{
+			FString Path = ActionName;
+			if (!Path.Contains(TEXT(".")))
+			{
+				Path = FString::Printf(TEXT("%s.%s"), *ActionName, *FPackageName::GetShortName(ActionName));
+			}
+			Action = LoadObject<UInputAction>(nullptr, *Path);
+		}
+		else
+		{
+			FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+			TArray<FAssetData> Actions;
+			Registry.Get().GetAssetsByClass(UInputAction::StaticClass()->GetClassPathName(), Actions);
+			for (const FAssetData& Candidate : Actions)
+			{
+				if (Candidate.AssetName.ToString().Equals(ActionName, ESearchCase::IgnoreCase))
+				{
+					Action = Cast<UInputAction>(Candidate.GetAsset());
+					break;
+				}
+			}
+		}
+		if (!Action)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("input_action_not_found: %s. List them with list_assets className=InputAction, or create one ")
+				TEXT("with create_asset assetClass=InputAction. Nothing has been added to the graph."),
+				*ActionName));
+		}
+
+		UK2Node_EnhancedInputAction* ActionNode = NewObject<UK2Node_EnhancedInputAction>(Graph);
+		ActionNode->InputAction = Action;
+		NewNode = ActionNode;
 	}
 	else if (NodeType == TEXT("Self"))
 	{

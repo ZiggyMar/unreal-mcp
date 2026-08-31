@@ -50,6 +50,11 @@ public class UnrealMCPBridge : ModuleRules
 			// machinery - and the legacy project-settings path this bridge already had returns
 			// nothing at all on a project that uses it, which is most of them.
 			"EnhancedInput",
+			// The K2 node that makes an InputAction actually do something in a graph. Reading and
+			// binding Enhanced Input worked without this; PLACING the event node did not, so a graph
+			// could be told about an action it had no way to react to. UncookedOnly rather than
+			// Runtime, which is fine here because this module is Editor type and never cooks.
+			"InputBlueprintNodes",
 			// Level Sequences. MovieScene is the data model and LevelSequence is the asset; both are
 			// runtime modules, so reading a cutscene costs no editor machinery. Added after checking
 			// Epic's own toolset list against this project asset class by asset class: Control Rig
