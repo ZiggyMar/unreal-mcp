@@ -1476,6 +1476,38 @@ already exists, because "make the" reads as a request to create something. Chang
 checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
 cost more" is a change, and only the second half of that sentence says so.
 
+### Three tools reading properties, two of them agreeing
+
+A coverage pass against the question "does this support everything a normal human would have for this
+engine", answered by enumerating what the project actually contains rather than by guessing. Of the
+asset classes present — 327 AnimSequences, 297 SoundWaves, 152 Widget Blueprints, 41 Data Assets, 35
+Input Actions, 27 Montages, 21 Data Tables, 16 Physics Assets, 15 Niagara systems, 9 Level Sequences,
+6 Anim Blueprints, 2 Behaviour Trees — every one has either a dedicated read tool or is served by
+`unreal_read_asset_properties`, which handles any asset that is a bag of settings. No gap.
+
+What the pass did find is that `read_asset_properties` returned its properties **verbatim**, while
+`read_class_defaults` and `list_variables` — reading the same kind of thing — drop a category of
+`"Default"`, a value that is the type's zero, and float padding. Across this project's 41 Data
+Assets, **269 of 413 properties carried a zero value**.
+
+The saving is modest and worth stating accurately: **955 tokens, 6%**. A first estimate said 5,669,
+arrived at by counting whole entries as savable when dropping `"value":"None"` removes sixteen
+characters and leaves the name, type and category standing. Wrong arithmetic, corrected here rather
+than repeated.
+
+The consistency is the real point. Three tools describing one convention two different ways is this
+repo's most repeated defect, and a caller who learns "absent means zero" from one of them reasonably
+expects it from the others. All three now say it **in the same words** — which required fixing
+`list_variables`, whose sentence differed both in shape and in using a curly apostrophe where the
+others use a straight one.
+
+`check:protocol` asserts it on the **rendered** description rather than the source, because the
+sentence is assembled from concatenated string literals and wraps across lines: a source-text check
+would match or miss depending on where the author happened to break the line. `read_asset_properties`
+also joins `measure:reads` at 1,706 tokens — the same pattern this repo keeps rediscovering, where
+every read measured from the start was measured from the start, and the ones that arrived later
+arrived unwatched.
+
 ### 1,338 tokens per request for a label nobody reads
 
 The previous pass left `full` at 37,400 of its 37,500 ceiling, so the next question was where the

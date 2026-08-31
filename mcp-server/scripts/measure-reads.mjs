@@ -165,6 +165,26 @@ console.log(`measuring reads against ${biggest.path}`);
 console.log(`worst graph found: ${biggest.graphName}, ${biggest.nodes} nodes`);
 console.log("");
 
+// The largest Data Asset in the project, picked the same way the Data Table is: measuring the
+// generic reader against a trivial asset would report a number nobody pays.
+let BIGGEST_DATA_ASSET = null;
+try {
+  const [assets] = await session([{ tool: "unreal_list_assets", args: { className: "DataAsset", maxResults: 60 } }]);
+  const paths = (JSON.parse(assets.text).assets ?? [])
+    .map((a) => (typeof a === "string" ? a : a.path))
+    .filter(Boolean);
+  const sized = await session(paths.map((p) => ({ tool: "unreal_read_asset_properties", args: { path: p } })));
+  let best = -1;
+  sized.forEach((r, i) => {
+    if (r.text.length > best) {
+      best = r.text.length;
+      BIGGEST_DATA_ASSET = paths[i];
+    }
+  });
+} catch (err) {
+  console.error(`could not pick a Data Asset to measure: ${err.message}`);
+}
+
 const CASES = [
   { label: "get_project_overview", tool: "unreal_get_project_overview", args: {}, mustContain: "{" },
   { label: "list_blueprints", tool: "unreal_list_blueprints", args: {}, mustContain: "blueprints" },
@@ -217,6 +237,13 @@ const CASES = [
   // ones. Every single-bridge-call read was in this list from the start; every tool that loops over
   // graphs or rows arrived late, after a real question made its cost visible. A composite read is
   // exactly where cost hides, because no one call inside it looks expensive.
+  // The generic property reader - Data Assets, Curves, Sound Classes, anything that is a bag of
+  // settings - and the only read here that is not about a Blueprint or a table. Unwatched until now,
+  // which is the pattern this file keeps rediscovering: every single-bridge-call read was measured
+  // from the start, and the ones that arrived later arrived unmeasured.
+  ...(BIGGEST_DATA_ASSET
+    ? [{ label: "read_asset_properties", tool: "unreal_read_asset_properties", args: { path: BIGGEST_DATA_ASSET }, mustContain: "properties" }]
+    : []),
   {
     label: "review_blueprint",
     tool: "unreal_review_blueprint",

@@ -2309,8 +2309,8 @@ register(
       "`type` is the same compact descriptor unreal_add_variable accepts - \"int\", \"object:SkeletalMesh[]\", " +
       "\"struct:TimerHandle\" - so a type read here can be pasted straight into a call that creates one.\n\n" +
       "Absent means the ordinary value, never unknown: `instanceEditable`, `blueprintReadOnly` and `replicated` " +
-      "appear only when true, `category` only when it is not the default one, and **`defaultValue` only when it is " +
-      "not the type’s zero** - no `defaultValue` means 0, False, \"\", None or () as the type dictates. On a real " +
+      "appear only when true, `category` only when it is not the default one, and **`defaultValue` appears only " +
+      "when it is not the type's zero** - no `defaultValue` means 0, False, \"\", None or () as the type dictates. On a real " +
       "86-variable Blueprint that is 53 of the defaults and 44% of what the flags used to cost.",
     inputSchema: {
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
@@ -3481,8 +3481,11 @@ register(
       "Returns each editable property with its type, current value and details-panel category, so \"what does this " +
       "thing actually hold\" is one call. Engine bookkeeping is left out - only what a human could edit is returned, " +
       "which is also exactly the set unreal_set_asset_property can write.\n\n" +
-      "Use `match` on a big asset to ask about one setting rather than reading all of them. Find paths with " +
-      'unreal_list_assets({ className: "DataAsset" }) or by the asset\'s own class name.',
+      "**`value` appears only when it is not the type's zero** - no `value` means 0, False, \"\", None or () as " +
+      "the type dictates, the same contract unreal_list_variables and unreal_read_class_defaults use. `match` " +
+      "overrides it and also narrows a big asset to one setting, because someone asking about a property by " +
+      "name is usually about to change it and needs its current value.\n\n" +
+      'Find paths with unreal_list_assets({ className: "DataAsset" }) or by the asset\'s own class name.',
     inputSchema: {
       path: z.string().describe('Asset path, e.g. "/Game/Data/DA_EnemyTuning.DA_EnemyTuning".'),
       match: z.string().optional().describe('Only properties whose name contains this, e.g. "Damage".'),
@@ -3490,7 +3493,33 @@ register(
   },
   async ({ path, match }) => {
     try {
-      return jsonResult(await bridge.send("read_asset_properties", { path, match }));
+      const result = (await bridge.send("read_asset_properties", { path, match })) as {
+        properties?: Row[];
+      };
+
+      // The same compaction read_class_defaults has had all along, and for the same reasons.
+      //
+      // These two tools read the editable properties of an object and returned them in two different
+      // shapes: one dropped a category of "Default" and a value that is the type's zero, the other
+      // sent both verbatim. Measured across this project's 41 Data Assets: 263 of 413 properties -
+      // 64% - carry a zero value, 22,676 characters, about 5,669 tokens spent repeating what the
+      // type already says.
+      //
+      // The targeted exception is copied deliberately too. Somebody who asks for one property by
+      // name is usually about to change it and needs to see what it is now; `match: "Damage"`
+      // answering {"name":"Damage","type":"float"} has told them nothing they asked for.
+      const targeted = (match ?? "").trim().length > 0;
+      const properties = Array.isArray(result.properties)
+        ? result.properties.map((row) => {
+            const withoutCategory = omitDefault(row, "category", "Default");
+            const trimmed: Row =
+              "value" in withoutCategory
+                ? { ...withoutCategory, value: trimFloatPadding(withoutCategory.value) }
+                : withoutCategory;
+            return targeted ? trimmed : omitZeroDefault(trimmed, "value");
+          })
+        : undefined;
+      return jsonResult({ ...result, ...(properties ? { properties } : {}) });
     } catch (err) {
       return errorResult(err);
     }

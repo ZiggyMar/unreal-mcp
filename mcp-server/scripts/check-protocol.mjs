@@ -319,6 +319,29 @@ async function main() {
     }
   }
 
+  // --- one convention, described the same way by every tool that applies it ----------------------
+  //
+  // list_variables, read_class_defaults and read_asset_properties all drop a value that is the
+  // type's zero. That is only safe if the caller is told, and for a long time only two of the three
+  // told them - read_asset_properties returned everything verbatim, so a caller who learned "absent
+  // means zero" from one tool met a different shape in another.
+  //
+  // Checked on the RENDERED description rather than the source: the sentence is assembled from
+  // concatenated string literals and wraps across lines, so a source-text check matches or misses
+  // depending on where the author happened to break the line.
+  const zeroContract = ["unreal_list_variables", "unreal_read_class_defaults", "unreal_read_asset_properties"];
+  for (const name of zeroContract) {
+    const tool = tools.find((t) => t.name === name);
+    if (!tool) continue;
+    if (!/appears only when it is not the type's zero/.test(tool.description ?? "")) {
+      note(
+        `${name} drops a value that is the type's zero without saying so in the same words as the ` +
+          `other tools that do it - a caller who learned the convention elsewhere cannot tell whether ` +
+          `an absent value here means zero or means unknown`
+      );
+    }
+  }
+
   // --- no tool schema carries a dialect declaration ----------------------------------------------
   //
   // "$schema":"http://json-schema.org/draft-07/schema#" is 50 characters emitted once per tool by
