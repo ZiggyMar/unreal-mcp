@@ -2471,8 +2471,10 @@ register(
   {
     title: "Check whether PIE is running",
     description:
-      "Reports whether a PIE session is currently active. Poll this after unreal_start_pie, which takes effect on " +
-      "the next editor tick, before concluding anything about runtime behavior.",
+      "Reports whether a PIE session is active, and which worlds are up - Authority, Client0, Standalone. " +
+      "start_pie defaults to two players on a listen server, and that pairing is the only way to see a value the " +
+      "server has and a client never receives. Poll this after unreal_start_pie, which takes effect on the next " +
+      "editor tick, before concluding anything about runtime behaviour.",
     inputSchema: {},
   },
   async () => {

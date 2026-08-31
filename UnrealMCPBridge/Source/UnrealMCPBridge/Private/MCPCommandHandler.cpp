@@ -3043,7 +3043,16 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleWatchRuntime(const TSharedPtr<
 				MCPSampleWatches();
 				// Returning false unregisters. Stopping at the cap rather than running forever means
 				// a caller who forgets to stop costs nothing after the window they asked for.
-				return GMCPWatch.Ticks < GMCPWatch.MaxSamples && !GMCPWatch.bPieEnded;
+				const bool bKeepGoing = GMCPWatch.Ticks < GMCPWatch.MaxSamples && !GMCPWatch.bPieEnded;
+				if (!bKeepGoing)
+				{
+					// Clear the handle on the way out. It is what `stillWatching` is read from, and
+					// leaving it set would report sampling as live for the rest of the session after
+					// it had stopped on its own - a reply that is untrue about its own state, which
+					// is worse than one that is merely incomplete.
+					GMCPWatch.Ticker.Reset();
+				}
+				return bKeepGoing;
 			}),
 			static_cast<float>(IntervalSeconds));
 
@@ -4736,8 +4745,53 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleStopPie(const TSharedPtr<FJson
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandlePieStatus(const TSharedPtr<FJsonObject>& Params)
 {
+	const bool bRunning = GEditor && GEditor->PlayWorld != nullptr;
+
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("running"), GEditor && GEditor->PlayWorld != nullptr);
+	Result->SetBoolField(TEXT("running"), bRunning);
+
+	// Which worlds are up, not just whether any is.
+	//
+	// start_pie defaults to two players on a listen server in one process, so the ordinary case is
+	// an Authority world AND a Client world - and that pairing is the only way to see the bug class
+	// this project prices highest, where the server has a value and nobody else ever receives it.
+	// Reporting a bare "running: true" hid the thing that makes the session worth having.
+	if (bRunning && GEditor)
+	{
+		TArray<TSharedPtr<FJsonValue>> Worlds;
+		int32 ClientIndex = 0;
+		for (const FWorldContext& Context : GEditor->GetWorldContexts())
+		{
+			if (Context.WorldType != EWorldType::PIE || !Context.World())
+			{
+				continue;
+			}
+			UWorld* World = Context.World();
+			const FString Role = MCPWorldRoleName(World, ClientIndex);
+			if (World->GetNetMode() == NM_Client)
+			{
+				++ClientIndex;
+			}
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("role"), Role);
+			Entry->SetStringField(TEXT("map"), World->GetMapName());
+			Worlds.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("worlds"), Worlds);
+		if (Worlds.Num() > 1)
+		{
+			Result->SetStringField(TEXT("next"),
+				TEXT("More than one world is running, which is what makes a replication bug observable: "
+					 "watch_runtime samples all of them and labels each value by role, so a value that moves on "
+					 "Authority and holds still on a Client is the bug, seen rather than argued."));
+		}
+		else
+		{
+			Result->SetStringField(TEXT("next"),
+				TEXT("One world only, so nothing here can show a client-versus-server difference. stop_pie and "
+					 "start_pie with numPlayers 2 to get an Authority and a Client."));
+		}
+	}
 	return MakeOkResponse(Result);
 }
 
