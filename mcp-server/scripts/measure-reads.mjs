@@ -252,6 +252,28 @@ const CASES = [
   },
 ];
 
+// The numbers this server QUOTES have to match the numbers it measures.
+//
+// The standing instructions - the text every model reads before its first call - carried
+// "the difference is 4,685 tokens against 292, not a trim". Every figure in that sentence, and three
+// more like it in the tool descriptions, had gone stale: the real numbers were 3,237 and 218, about
+// 30% out. They drifted DOWNWARD, because compact JSON, float trimming and deduplicated fix text all
+// made the reads cheaper, and because `fields` on a Data Table did not exist when the sentence was
+// written.
+//
+// Wrong in the harmless direction is still wrong, and this repo's whole argument rests on its
+// measurements being real. A stale number in the one text nobody can skip undermines every other
+// number beside it.
+//
+// So the quotes are checked against this run. The tolerance is wide - these are illustrations, not
+// contracts, and a project's own content moves them - but 30% drift fails.
+const QUOTED = [
+  { label: "read_class_defaults", quoted: 3237, where: "the HOW TO WORK instructions and the read_class_defaults hint" },
+  { label: "list_variables", quoted: 1732, where: "the list_variables hint and compactRows.ts" },
+  { label: "list_data_table_rows", quoted: 5472, where: "the list_data_table_rows hint" },
+];
+const TOLERANCE = 0.15;
+
 const results = (await session(CASES)).map((r) => ({ ...r, tokens: tokensOf(r.text) }));
 
 // A reply that is an error is not a cheap reply, it is a broken measurement. This check exists
@@ -291,4 +313,30 @@ if (absurd.length > 0) {
 }
 
 console.log("");
+// Compared after the table, so the measured numbers are on screen next to any complaint.
+const drifted = [];
+for (const q of QUOTED) {
+  const measured = results.find((r) => r.label === q.label);
+  if (!measured) {
+    drifted.push(`${q.label} is quoted in ${q.where} but is not measured here any more`);
+    continue;
+  }
+  const off = Math.abs(measured.tokens - q.quoted) / Math.max(q.quoted, 1);
+  if (off > TOLERANCE) {
+    drifted.push(
+      `${q.label} is quoted as ~${q.quoted} tokens in ${q.where}, and measures ${measured.tokens} ` +
+        `(${Math.round(off * 100)}% out). Update the quote, or explain why the project moved.`
+    );
+  }
+}
+if (drifted.length > 0) {
+  console.error("");
+  console.error("quoted numbers have drifted from what this run measured:");
+  for (const line of drifted) console.error(`  - ${line}`);
+  console.error("");
+  console.error("These appear in the standing instructions and tool descriptions, which is the one text");
+  console.error("a model cannot skip. A number that is wrong there undermines every number beside it.");
+  process.exitCode = 1;
+}
+
 console.log(`reads ok: ${results.length} measured, none above ${ABSURD} tokens`);

@@ -4889,6 +4889,35 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### Every number in the instructions was wrong
+
+Reading the standing instructions end to end — the text a `full` session holds before every call —
+turned up something worse than an omission. They make a specific, checkable claim:
+
+> Every large read takes a filter (match, fields, replicatedOnly, direction, limit). Use it:
+> **the difference is 4,685 tokens against 292**, not a trim.
+
+Re-measured against the real project, every figure quoted anywhere in the server had drifted:
+
+| quoted | actual |
+|---|---|
+| `read_class_defaults` 4,685 → 292 | **3,237 → 218** |
+| `list_variables` 2,397 / 599 / 172 | **1,732 / 508 / 126** |
+| `list_data_table_rows` 6,985 → 945 | **5,472 → 182** |
+
+They drifted **downward** — compact JSON, float trimming and deduplicated fix text all made the reads
+cheaper, and `fields` on a Data Table did not exist when the sentence was written. Wrong in the
+harmless direction is still wrong: this project's whole argument rests on its measurements being real,
+and a stale number in the one text nobody can skip undermines every number beside it.
+
+`measure:reads` now **checks the quotes against what it measures**, with a 15% tolerance, because
+these are illustrations rather than contracts and a project's own content moves them. 30% drift fails
+the run. Verified by putting a wrong number in and watching it report *"quoted as ~9999 tokens … and
+measures 3237 (68% out)"*.
+
+That is the guard this repo did not have and most needed: it has been generating measured claims for
+weeks, and nothing checked that any of them were still true.
+
 ### Neither did the one text every model reads
 
 The guide has to be *fetched*. The server instructions do not — they are the standing context every

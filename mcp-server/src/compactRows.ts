@@ -29,8 +29,8 @@
  * The three most expensive reads all have a filter that answers a targeted question for a fraction
  * of the cost, and none of their replies mentioned it. Measured on a real Blueprint:
  *
- *   list_variables       2,397 whole     599 replicatedOnly     172 with a match
- *   read_class_defaults  4,685 whole                            292 with a match
+ *   list_variables       1,732 whole     508 replicatedOnly     126 with a match
+ *   read_class_defaults  3,237 whole                            218 with a match
  *   list_blueprints      2,669 whole   1,932 fields:["path"]
  *
  * One constant rather than three literals, because it is one idea: below this the advice costs more

@@ -251,12 +251,18 @@ function buildInstructions(profile: string): string {
     "   unreal_list_blueprints to find what already exists. Assume the project is to be extended,",
     "   not rebuilt: match what is there.",
     // Twenty-five tokens a request against a saving measured in thousands on the first read that
-    // would otherwise go unfiltered. read_class_defaults on a real class is 4,685 tokens whole and
-    // 292 with `match`; list_variables is 2,397 and 599; list_data_table_rows is 6,985 and 945.
+    // would otherwise go unfiltered. Re-measured against the real project, because every one of these
+    // numbers had gone stale: read_class_defaults is 3,237 tokens whole and 218 with `match`;
+    // list_variables is 1,732 and 126; list_data_table_rows is 5,472 and 182 with `fields`.
+    //
+    // They drifted downward, which is the harmless direction and still wrong. The compaction work -
+    // compact JSON, float trimming, deduplicated fix text - moved every read, and a `fields` filter
+    // on a Data Table did not exist when this was written. measure:reads now checks these against
+    // what it measures, so the next drift fails the run instead of quietly overstating the whole.
     // Every reply now says so after the fact, which is free but one read too late - this is the only
     // line in the standing text that pays for itself several times over on a single call.
     "   Every large read takes a filter (match, fields, replicatedOnly, direction, limit). Use it:",
-    "   the difference is 4,685 tokens against 292, not a trim.",
+    "   the difference is 3,237 tokens against 218, not a trim.",
     "   Not everything is a Blueprint. If a parentClass is not itself a Blueprint it is native C++,",
     "   and unreal_find_source locates the file and line that declares it - then read and edit it",
     "   with your own file tools. Call unreal_find_source with no symbol to see whether the project",
@@ -2482,7 +2488,7 @@ register(
       if (filtered.length === all.length) {
         // Nothing was filtered, so this is the whole list - the most expensive form of this call, and
         // the reply said nothing about the two cheaper ones. Measured on BP_Player's 86 variables:
-        // 2,397 tokens whole, 599 with replicatedOnly, 172 with a match. A model asking "what can a
+        // 1,732 tokens whole, 508 with replicatedOnly, 126 with a match. A model asking "what can a
         // client see" was paying four times over for an answer it then had to find by reading.
         //
         // Only on a list long enough for the advice to be worth anything, so a small Blueprint pays
@@ -2774,8 +2780,8 @@ register(
         // through leaves the uncompacted original in place.
         ...(properties ? { properties } : {}),
         // The largest saving in the whole surface, and the reply never mentioned it. Measured on
-        // BP_Player: the full read is 4,685 tokens and `match` answers a specific question for 292 -
-        // 94% less. A model asking "does this replicate movement" was paying for 167 properties.
+        // BP_Player: the full read is 3,237 tokens and `match` answers a specific question for 218 -
+        // 93% less. A model asking "does this replicate movement" was paying for 167 properties.
         //
         // Only when the reply is actually large and no filter was given, so a targeted call and a
         // small class pay nothing. Same shape as the hint on list_blueprints.
@@ -4339,7 +4345,7 @@ register(
       }
 
       // The largest read in the whole surface, and the one where row COUNT says nothing about cost.
-      // DT_UniversalActions is nine rows and 6,985 tokens, because a single untouched FSlateBrush
+      // DT_UniversalActions is nine rows and 5,472 tokens, because a single untouched FSlateBrush
       // column exports as 900 characters. Every other hint here is keyed on how many rows came back;
       // this one has to be keyed on how big the reply actually is, or it stays silent on exactly the
       // table that needed it.
