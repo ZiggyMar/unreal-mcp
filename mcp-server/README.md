@@ -1424,6 +1424,21 @@ Each finding carries the concrete fix and the node ids to apply it to. The repor
 0-100 score and a single `nextAction` naming the one thing most worth doing next, because a caller
 handed ten equal priorities picks none of them.
 
+`nextAction` orders by severity and then by what the finding actually costs you, from the same
+table `unreal_audit_project` ranks with. It used to order by severity alone, which left the order
+within "warning" to however the graphs happened to be read: on `BP_Player` that put a cost-40
+unhandled cast ahead of four cost-55 findings about work running every frame, in the one field
+whose entire job is to say what to do next. Two tools that each work, telling you to fix different
+things first, is worse than either ranking being imperfect - so they now share one cost table
+rather than each owning a copy.
+
+Graphs with findings are reported in full; graphs without them are listed by name under
+`cleanGraphs`. `BP_Player` has 60 graphs and 13 with anything to say, and the other 47 each carried
+a score, a summary of three zeroes and an empty findings array - 30% of the reply, spent reporting
+that nothing is wrong. They are named rather than dropped, because "checked and clean" and "never
+looked at" are different answers and a caller that cannot tell them apart re-reads what was already
+cleared. The read went from **7,562 to 5,398 tokens** and is now watched by `measure:reads`.
+
 **`unreal_build_graph` attaches this review to its own result, unasked.** That is the point: the
 model most in need of the feedback is exactly the model that would never think to ask for it. A
 weak model does not usually fail from lack of capability, it fails because nothing ever objects to

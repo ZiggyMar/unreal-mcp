@@ -34,101 +34,14 @@ import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { findUncalledParentEvents } from "./parentCalls.js";
 import { findSequenceProblems, type SequenceReadReply } from "./sequenceAudit.js";
+import { FINDING_COST } from "./findingCost.js";
 import { execTargets, type FlowNode } from "./execFlow.js";
 import { findDeadGraphs, type LivenessGraph } from "./systemLiveness.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
 import { findNiagaraFaults } from "./niagaraAudit.js";
 import { explainGraph } from "./explainGraph.js";
 
-/** What each finding is likely to cost, and why it sits where it does. */
-export const FINDING_COST: Record<string, number> = {
-  "cast-to-server-only-class": 100,
-  "server-writes-unreplicated": 100,
-  // A handle, not state. Deliberately far cheaper than the check above, because the commonest case
-  // is not a bug at all: an object reference to an Actor that replicates itself. Costing it at 100
-  // put correct code at the top of the audit, where a model acts on it first.
-  "server-writes-unreplicated-handle": 15,
-  // A state nothing leaves freezes the character in one pose for the rest of the round, and the
-  // machine looks finished in the editor because the state IS wired - just not outward.
-  "anim-state-no-exit": 80,
-  // A system that can render nothing, spawned by a Blueprint that looks correct.
-  // A name typed as text that names nothing. The Blueprint compiles and the call does nothing.
-  "row-name-not-in-table": 85,
-  "timer-target-missing": 85,
-  // A call whose only job is to use an asset, running with that asset pin empty. Priced just under
-  // the two above because those are always a defect and this one has a rare honest form: an author
-  // who has wired the node and has not yet picked the asset. Everything else about it is the same
-  // shape - it compiles, it runs, it reports success, and it does nothing.
-  "asset-pin-empty": 80,
-  "niagara-system-empty": 60,
-  "niagara-all-emitters-disabled": 60,
-  // Draws exactly like a working transition and behaves like a wall.
-  "anim-transition-never-fires": 70,
-  // Costs the most that any of these can cost: the game builds, hosts, searches, reports no error,
-  // and the lobby list is empty. It cannot be reproduced on one machine.
-  "session-lan-mismatch": 100,
-  // Same tier as the casts that only fail on clients, and for the same reason: on a listen server
-  // the host IS the server, so it works on the machine the developer is looking at.
-  "server-event-touches-widget": 95,
-  // The parent's work simply does not happen, on every machine, and nothing warns. The child's own
-  // logic still works, which is what makes it survive.
-  "parent-event-not-called": 95,
-  // Was 90. Not because the check is wrong - an unhandled cast really does stop the chain silently -
-  // but because 90 is the band reserved for "this WILL fail", and this check has no evidence of that.
-  //
-  // To be accurate about what was actually wrong: groups are ordered by cost alone, so 90 placed this
-  // fifth overall rather than burying anything. What it did was put an idiom that appears 111 times
-  // in a shipping game (measured, on 150 Blueprints, after the filtering ones are excluded)
-  // immediately below "this cast fails on every client, every time" and "the parent's setup never
-  // runs". A reader working down by severity met sixty-three graphs of mostly-fine casts fifth.
-  //
-  // The comparison that settles the number: cast-to-server-only-class is the SAME defect shape WITH
-  // decisive evidence that it will fail, and it is 100. Without that evidence this is "might stop
-  // silently, if it ever fails" - weaker than branch-dead-path (60), which never runs at all, and
-  // about the strength of empty-event (40). So 40, beside it.
-  "unhandled-cast-failure": 40,
-  "level-sweep-every-frame": 85,
-  "spawn-every-frame": 85,
-  "state-outlives-owner": 80,
-  "session-host-paths-disagree": 65,
-  "session-host-without-search": 45,
-  "cast-every-frame": 70,
-  "repnotify-does-nothing": 60,
-  "branch-dead-path": 60,
-  "tick-heavy": 55,
-  "level-sweep-maybe-repeating": 50,
-  // Several Get All Actors Of Class in one graph: each walks the whole level, and if they are
-  // looking for the same thing it is one sweep repeated. Priced beside graph-too-large because it is
-  // the mildest of the three sweep checks and is reported at "info".
-  //
-  // It had NO entry until a mutation test found it, which meant `FINDING_COST[check] ?? 1` gave it 1
-  // and it sank under every cosmetic finding in the audit. Not a decision anyone made - a name that
-  // was never added here, scoring the fallback in silence.
-  "level-sweep-repeated": 20,
-  "replicated-set-without-server-event": 50,
-  // A muted track has keys and does not evaluate. Muting is how you audition a change and it is the
-  // state most often left behind afterwards, so this is a real defect rather than a tidy-up - but it
-  // is also a legitimate working state, which is why it sits with empty-event rather than above it.
-  "sequence-track-muted": 40,
-  // In the outliner with an empty timeline. Never evaluates, and a camera cut track in this state is
-  // the usual reason a cutscene plays from the wrong angle.
-  "sequence-track-no-sections": 35,
-  // The actor is bound and nothing animates it. Usually what is left after the tracks were deleted,
-  // harmless to run and misleading to read - which is where debug-print-left-in sits.
-  "sequence-binding-no-tracks": 25,
-  // Between empty-event and repnotify-does-nothing, and the gap is the point. An empty RepNotify is
-  // definitely wrong - choosing RepNotify and writing nothing has no reading in which it is intended.
-  // An empty function might be a stub somebody means to fill this afternoon, and it only becomes a
-  // defect when something calls it, which this check cannot see.
-  "empty-function": 50,
-  "empty-event": 40,
-  "dead-node": 30,
-  "debug-print-left-in": 25,
-  "graph-too-large": 20,
-  "long-exec-chain": 15,
-  "placeholder-name": 10,
-  "unlabelled-sections": 5,
-};
+
 
 const WHY_IT_COSTS: Record<string, string> = {
   "cast-to-server-only-class":

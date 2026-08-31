@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
-import { auditProject, FINDING_COST,
+import { FINDING_COST } from "../dist/findingCost.js";
+import { auditProject,
 } from "../dist/audit.js";
 
 /**

@@ -1,3 +1,4 @@
+import { FINDING_COST } from "./findingCost.js";
 import { reviewGraph, type QualityReport } from "./quality.js";
 import { reviewStatePlacement, type StateFinding } from "./statePlacement.js";
 import { reviewMultiplayer, type MpFinding } from "./multiplayer.js";
@@ -9,7 +10,15 @@ export interface BlueprintReview {
   /** Lowest score across the reviewed graphs: a Blueprint is only as good as its worst graph. */
   score: number;
   summary: { errors: number; warnings: number; infos: number };
+  /** Only the graphs that have something to say. See where this is built for why. */
   graphs: QualityReport[];
+  /**
+   * The graphs that were read and found clean, by name.
+   *
+   * Deliberately not omitted. "Checked and clean" and "never looked at" are different answers, and a
+   * caller that cannot tell them apart will re-read graphs this tool already cleared.
+   */
+  cleanGraphs?: string[];
   /**
    * The variables, handed back so a caller does not read them a second time. The whole-project
    * audit needs them for the checks that depend on how a variable replicates, and list_variables is
@@ -153,8 +162,15 @@ export async function reviewBlueprint(
       }))
     )
     .sort((a, b) => {
+      // Severity first, then what it actually costs you. Severity alone left the order within
+      // "warning" to however the graphs happened to be read, which on BP_Player put a cost-40
+      // unhandled cast ahead of four cost-55 tick findings - in the one field whose whole job is to
+      // say what to do next. The audit has ranked by cost for a long time; this now uses the same
+      // table, so the two tools cannot disagree about which finding matters most.
       const rank = { error: 0, warning: 1, info: 2 } as const;
-      return rank[a.finding.severity] - rank[b.finding.severity];
+      const bySeverity = rank[a.finding.severity] - rank[b.finding.severity];
+      if (bySeverity !== 0) return bySeverity;
+      return (FINDING_COST[b.finding.check] ?? 1) - (FINDING_COST[a.finding.check] ?? 1);
     })[0];
 
   const nextAction = worst
@@ -165,7 +181,19 @@ export async function reviewBlueprint(
     path,
     score,
     summary,
-    graphs: reports,
+    // Graphs with findings in full; graphs without them by name only.
+    //
+    // BP_Player has 60 graphs and 13 of them have anything to say. The other 47 each carried a
+    // score, a summary of three zeroes and an empty findings array - 5,574 characters, 30% of the
+    // reply, to report that nothing is wrong.
+    //
+    // They are NOT dropped. "Checked and clean" and "not checked" are different answers, and this
+    // project has spent a lot of effort separating them everywhere else. The names keep the fact at
+    // a quarter of the cost, and a caller can still see exactly what was looked at.
+    graphs: reports.filter((r) => r.findings.length > 0),
+    ...(reports.some((r) => r.findings.length === 0)
+      ? { cleanGraphs: reports.filter((r) => r.findings.length === 0).map((r) => r.graphName) }
+      : {}),
     // Only when the caller already asked for the raw nodes: an ordinary review has no use for the
     // variable list and should not pay to carry it.
     variables: options.includeGraphNodes ? variables : undefined,

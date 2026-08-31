@@ -208,6 +208,21 @@ const CASES = [
     args: { path: biggest.path },
     mustContain: "referencedBy",
   },
+  // The fourth time an unwatched read has turned out to be the most expensive thing on the surface,
+  // after find_references, find_source and list_data_table_rows. 7,562 tokens on BP_Player - more
+  // than the Data Table read - because it reported all 60 graphs when 13 had anything to say, and it
+  // is the tool a model reaches for first when asked "what is wrong with this Blueprint".
+  //
+  // The pattern is now unmistakable and worth naming: the reads nobody measures are the composite
+  // ones. Every single-bridge-call read was in this list from the start; every tool that loops over
+  // graphs or rows arrived late, after a real question made its cost visible. A composite read is
+  // exactly where cost hides, because no one call inside it looks expensive.
+  {
+    label: "review_blueprint",
+    tool: "unreal_review_blueprint",
+    args: { path: biggest.path },
+    mustContain: "score",
+  },
 ];
 
 const results = (await session(CASES)).map((r) => ({ ...r, tokens: tokensOf(r.text) }));
