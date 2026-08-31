@@ -31,7 +31,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, omitZeroDefault, omitDefault, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, omitZeroDefault, omitDefault, pickFields, asCountMap, compactAssetRef, ADVISE_WHEN_ROWS_AT_LEAST } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -873,9 +873,8 @@ register(
        * enough for the advice to be worth anything, which is exactly when a model is looking at the
        * cost it just paid.
        */
-      const LARGE_ENOUGH_TO_ADVISE = 40;
       const withCheaperForm = (payload: Record<string, unknown>, rowCount: number) =>
-        rowCount >= LARGE_ENOUGH_TO_ADVISE && (!fields || fields.length === 0)
+        rowCount >= ADVISE_WHEN_ROWS_AT_LEAST && (!fields || fields.length === 0)
           ? {
               ...payload,
               cheaper:
@@ -2171,7 +2170,25 @@ register(
       const compacted = filtered.map(compactVariable);
 
       if (filtered.length === all.length) {
-        return jsonResult({ ...result, variables: compacted });
+        // Nothing was filtered, so this is the whole list - the most expensive form of this call, and
+        // the reply said nothing about the two cheaper ones. Measured on BP_Player's 86 variables:
+        // 2,397 tokens whole, 599 with replicatedOnly, 172 with a match. A model asking "what can a
+        // client see" was paying four times over for an answer it then had to find by reading.
+        //
+        // Only on a list long enough for the advice to be worth anything, so a small Blueprint pays
+        // nothing. Same shape as the hints on list_blueprints and read_class_defaults.
+        return jsonResult({
+          ...result,
+          variables: compacted,
+          ...(compacted.length >= ADVISE_WHEN_ROWS_AT_LEAST
+            ? {
+                cheaper:
+                  `${compacted.length} variables. \`match\` narrows by name, type or category ` +
+                  `("Health", "object:", "Combat"), and \`replicatedOnly\` answers "what can a client ` +
+                  `see" directly - either is a fraction of this.`,
+              }
+            : {}),
+        });
       }
       return jsonResult({
         ...result,
@@ -2412,10 +2429,24 @@ register(
       // Same treatment the variable list gets, for the same reasons: "Default" is what UE calls a
       // property nobody filed anywhere, and a value that is the type's zero is what the type already
       // said. Measured on BP_Player: 74 of 167 categories were "Default" and 95 of the values zero.
+      const properties = Array.isArray(result.properties)
+        ? result.properties.map((row) => omitDefault(omitZeroDefault(row, "value"), "category", "Default"))
+        : undefined;
       return jsonResult({
         ...result,
-        ...(Array.isArray(result.properties)
-          ? { properties: result.properties.map((row) => omitDefault(omitZeroDefault(row, "value"), "category", "Default")) }
+        ...(properties ? { properties } : {}),
+        // The largest saving in the whole surface, and the reply never mentioned it. Measured on
+        // BP_Player: the full read is 4,685 tokens and `match` answers a specific question for 292 -
+        // 94% less. A model asking "does this replicate movement" was paying for 167 properties.
+        //
+        // Only when the reply is actually large and no filter was given, so a targeted call and a
+        // small class pay nothing. Same shape as the hint on list_blueprints.
+        ...(properties && properties.length >= ADVISE_WHEN_ROWS_AT_LEAST && !(match ?? "").trim()
+          ? {
+              cheaper:
+                `Asking about one setting? \`match\` filters by name - "${properties[0]?.name ?? "Speed"}" or ` +
+                `"Replicat" - and answers in a fraction of this. This reply is ${properties.length} properties.`,
+            }
           : {}),
       });
     } catch (err) {

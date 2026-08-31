@@ -23,6 +23,21 @@
  * replication checks in review are driven by exactly the flags this drops.
  */
 
+/**
+ * How many rows a reply needs before it is worth telling the caller how to ask for less.
+ *
+ * The three most expensive reads all have a filter that answers a targeted question for a fraction
+ * of the cost, and none of their replies mentioned it. Measured on a real Blueprint:
+ *
+ *   list_variables       2,397 whole     599 replicatedOnly     172 with a match
+ *   read_class_defaults  4,685 whole                            292 with a match
+ *   list_blueprints      2,669 whole   1,932 fields:["path"]
+ *
+ * One constant rather than three literals, because it is one idea: below this the advice costs more
+ * than it can save, and a two-variable Blueprint should pay nothing for a sentence about filtering.
+ */
+export const ADVISE_WHEN_ROWS_AT_LEAST = 30;
+
 export type Row = Record<string, unknown>;
 
 /**

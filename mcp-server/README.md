@@ -1924,6 +1924,44 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### Three of the biggest reads had a cheap form nothing mentioned
+
+Having found this on `list_blueprints`, the obvious question was how many other expensive reads have
+a filter their reply never names. Measured on a real Blueprint:
+
+```text
+list_variables       2,397 whole     599 replicatedOnly     172 with a match
+read_class_defaults  4,685 whole                            292 with a match
+list_blueprints      2,669 whole   1,932 fields:["path"]
+```
+
+**`read_class_defaults` is the sharp one.** A model asking *"does this replicate movement"* was paying
+**4,685 tokens** for 167 properties when `match` answers it for **292** - 94% less - and nothing in
+the reply said so. `list_variables` is the same story: *"what can a client see"* costs 599 with
+`replicatedOnly` against 2,397 for the whole list, and a model that did not know had to read all 86
+variables to find the 15 replicated ones.
+
+All three now say it, and only when it is worth saying. The threshold is one shared constant rather
+than three literals, because it is one idea - below thirty rows the sentence costs more than it can
+save, and a two-variable Blueprint should pay nothing for advice about filtering.
+
+```text
+list_variables  {path}                  2,449 tok   hint: yes
+list_variables  {path, replicatedOnly}    599 tok   hint: no
+read_class_defaults {path}              4,728 tok   hint: yes
+read_class_defaults {path, match}         290 tok   hint: no
+```
+
+The description was the wrong place for all three, for the reason worked out on `list_blueprints`:
+~25 tokens on **every request** against a saving on **some calls** is break-even inside a normal
+session. The reply is free - it appears exactly when a model is looking at the cost it just paid.
+
+One note on the test. The first version asserted that each hint site matched `.length >= <number>` in
+the source, which is checking spelling rather than behaviour - one site expressed the same rule
+differently and the test failed for a reason unrelated to the property it cares about. Unifying the
+threshold into `ADVISE_WHEN_ROWS_AT_LEAST` made the rule real enough to check, which is a better
+outcome than a cleverer regex.
+
 ### The largest read is at its floor, and the cheap form was never advertised
 
 `list_blueprints` is the most expensive read left - 3,293 tokens - so it got measured properly. Of a

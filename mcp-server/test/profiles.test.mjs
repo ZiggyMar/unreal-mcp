@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(here, "..", "..");
 const serverPath = join(here, "..", "dist", "index.js");
 
 const NEWLINE = String.fromCharCode(10);
@@ -432,4 +434,36 @@ test("every group the census reports is one enable_tools will accept and describ
   // And the price is real, not the "~?" that a missing measurement produces.
   const unpriced = Object.entries(census.groups).filter(([, line]) => line.includes("~? tok"));
   assert.deepEqual(unpriced.map(([g]) => g), [], "a group with no measured cost is one nobody can choose sensibly");
+});
+
+test("an expensive read tells you how to ask for less, and a cheap one does not", async () => {
+  // The three biggest reads all had a filter that answers a targeted question for a fraction of the
+  // cost, and none of their replies mentioned it. Measured on a real Blueprint:
+  //
+  //   list_variables      2,397 whole   599 replicatedOnly   172 with a match
+  //   read_class_defaults 4,685 whole                        292 with a match
+  //   list_blueprints     2,669 whole                      1,932 fields:["path"]
+  //
+  // A model asking "what can a client see" was paying four times over for an answer it then had to
+  // find by reading. The hint lives in the reply rather than the description because the arithmetic
+  // for the description does not work: ~25 tokens on every request against a saving on some calls.
+  //
+  // This test does not need an editor. It checks the SHAPE of the rule - that the hint is keyed on
+  // size and on no filter having been given - against the handler's own source.
+  const source = readFileSync(join(REPO_ROOT, "mcp-server/src/index.ts"), "utf8").replace(/\r\n/g, "\n");
+  const hints = [...source.matchAll(/cheaper:\s*\n?\s*`/g)];
+  assert.ok(hints.length >= 3, `expected the three expensive reads to advise, found ${hints.length}`);
+
+  // Each hint must be gated on the reply actually being large, or it fires on a two-variable
+  // Blueprint where the advice costs more than it can save. One shared constant rather than three
+  // literals, so the rule is in one place and this can check it is the rule being used.
+  //
+  // The first version of this assertion matched the source for `.length >= <number>`, which is
+  // testing syntax rather than behaviour: one of the three sites spelled the same rule differently
+  // and the test failed for a reason that had nothing to do with the property it cares about.
+  const gated = [...source.matchAll(/ADVISE_WHEN_ROWS_AT_LEAST/g)];
+  assert.ok(
+    gated.length >= hints.length,
+    `each of the ${hints.length} hints must be gated on ADVISE_WHEN_ROWS_AT_LEAST; found ${gated.length} uses`
+  );
 });
