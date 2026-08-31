@@ -295,3 +295,71 @@ test("a map with no functions in it does not carry the warning", async () => {
   );
   assert.doesNotMatch(map.text, /unreal_trace_function_calls/);
 });
+
+test("a texture pulled in as a dependency is not part of the system", async () => {
+  // Found by asking the map a real question on a real project. "the countdown never shows up"
+  // returned, THIRD AND FOURTH in the recommended reading order, two assets called "14" and "5" -
+  // genuine assets at /Game/ThirdParty/XP/14 and /5, both Texture2D, in the map only because
+  // GM_Gameplay happens to reference them. A model following that order opens a texture before it
+  // opens BP_Player.
+  //
+  // A system map answers "what makes this work and what would I break". A texture has no behaviour,
+  // so reading one cannot answer either question - and the reading order is capped, so every slot it
+  // takes displaces something that could.
+  //
+  // The first version of this test passed while testing nothing: it tried to inject a fixture the
+  // fake bridge does not read, so the texture was never in the map to be dropped. Overriding the
+  // command is the mechanism that actually works.
+  const map = await mapSystem(
+    fakeBridge({
+      find_references: (params) => {
+        const isPlayer = params.path.includes("BP_Player");
+        return {
+          path: params.path,
+          referencedBy: [],
+          referencedByCount: 0,
+          dependsOn: isPlayer
+            ? [
+                { package: "/Game/BP/BPI_Damageable", assetClass: "Blueprint" },
+                { package: "/Game/Art/HealthIcon", assetClass: "Texture2D" },
+                { package: "/Game/Audio/HealthLow", assetClass: "SoundCue" },
+              ]
+            : [],
+          dependsOnCount: isPlayer ? 3 : 0,
+        };
+      },
+    }),
+    "health"
+  );
+  const names = (map.assets ?? []).map((a) => a.name);
+  assert.ok(names.includes("BP_Player"), "the fixture must actually reach BP_Player, or this tests nothing");
+  assert.ok(names.includes("BPI_Damageable"), "a Blueprint dependency is still part of the system");
+  assert.ok(!names.includes("HealthIcon"), "a Texture2D dependency is not");
+  assert.ok(!names.includes("HealthLow"), "nor is a SoundCue");
+});
+
+test("a texture that MATCHES the query is kept, because that is a real question", async () => {
+  // The limit on the rule. "the explosion sound" and "the health bar material" are things people
+  // actually ask about, so an asset that matched on its own account stays whatever its class - only
+  // ones dragged in as a dependency are dropped.
+  const map = await mapSystem(
+    fakeBridge({
+      search_project: () => ({
+        query: "health",
+        hits: [{ kind: "asset", path: "/Game/Art/HealthIcon.HealthIcon", name: "HealthIcon", context: "" }],
+        hitCount: 1,
+        truncated: false,
+      }),
+      find_references: (params) => ({
+        path: params.path,
+        referencedBy: [],
+        referencedByCount: 0,
+        dependsOn: [],
+        dependsOnCount: 0,
+      }),
+    }),
+    "health"
+  );
+  const icon = (map.assets ?? []).find((a) => a.name === "HealthIcon");
+  assert.ok(icon, "an asset that matched the query by name is part of the answer");
+});

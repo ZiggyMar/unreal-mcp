@@ -136,6 +136,25 @@ function isProjectAsset(path: string): boolean {
   return path.startsWith("/Game");
 }
 
+/**
+ * Asset classes that have no behaviour, and so cannot explain how a system works.
+ *
+ * A system map is read to answer "what makes this work and what would I break". A texture, a sound,
+ * a mesh or a font can be a dependency of something in the system and reading one tells you nothing
+ * about it.
+ *
+ * Found by asking the map a real question. "the countdown never shows up" returned, third and fourth
+ * in the recommended reading order, two assets called **14** and **5** - real assets, at
+ * /Game/ThirdParty/XP/14 and /5, pulled in because GM_Gameplay happens to reference them. Both are
+ * Texture2D. A model following that reading order opens a texture before it opens BP_Player.
+ *
+ * Only applied to assets pulled in AS A DEPENDENCY. A material or a sound that matches the query by
+ * name is a legitimate answer - "the explosion sound" is a real question - so anything that matched
+ * on its own account is kept whatever its class.
+ */
+const BEHAVIOURLESS_CLASSES =
+  /^(Texture2D|Texture|TextureCube|StaticMesh|SkeletalMesh|Material|MaterialInstanceConstant|MaterialFunction|SoundWave|SoundCue|SoundClass|Font|FontFace|CurveTable|CurveFloat|CurveVector|CurveLinearColor|AnimSequence|AnimMontage|PhysicsAsset|Skeleton|SubsurfaceProfile|ParticleSystem|NiagaraEmitter|SlateBrushAsset)$/i;
+
 export async function mapSystem(
   bridge: BridgeLike,
   query: string,
@@ -238,6 +257,9 @@ export async function mapSystem(
       }
       for (const entry of refs.dependsOn ?? []) {
         if (!isProjectAsset(entry.package)) continue;
+        // A dependency with no behaviour cannot explain the system, and it displaces something that
+        // can - the reading order is finite and capped.
+        if (BEHAVIOURLESS_CLASSES.test(String(entry.assetClass ?? ""))) continue;
         const added = addNode(entry.package, `used by ${nameOf(path)}`, level);
         addEdge(path, entry.package);
         if (added && added.distance === level) next.push(added.path);

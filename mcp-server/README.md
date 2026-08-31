@@ -1924,6 +1924,44 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### Asking the tool a real question, and reading the answer properly
+
+`unreal_map_system` is where a plain-text bug report lands. So it got asked one, against the real
+project - *"the countdown never shows up"* - and the answer was read rather than skimmed:
+
+```text
+- GS_Gameplay: 3 matching function(s): ShowCountdown, UpdateCountdown, HideCountdown
+- WBP_HUD: 3 matching function(s): ShowCountdown, UpdateCountdown, HideCountdown
+- 14: used by GM_Gameplay
+- 5: used by GM_Gameplay
+Read in this order: GM_Gameplay -> GS_Gameplay -> 14 -> 5 -> BP_BaseEnemy -> BP_Player -> ...
+```
+
+**Third and fourth in the recommended reading order are assets called "14" and "5".** They are real -
+`/Game/ThirdParty/XP/14` and `/5`, both `Texture2D`, in the map only because `GM_Gameplay` happens to
+reference them. A model following that order opens a texture before it opens `BP_Player`.
+
+A system map answers *"what makes this work, and what would I break"*. A texture, sound, mesh or font
+has no behaviour, so reading one cannot answer either question - and the reading order is capped, so
+every slot it takes displaces something that could.
+
+Dropped, but only when pulled in **as a dependency**. An asset that matched the query on its own
+account stays whatever its class, because *"the explosion sound"* and *"the health bar material"* are
+real questions.
+
+```text
+before: GM_Gameplay -> GS_Gameplay -> 14 -> 5 -> BP_BaseEnemy -> BP_Player -> ...
+after:  GM_Gameplay -> GS_Gameplay -> BP_BaseEnemy -> BP_Player -> BP_WaveSystem -> ...
+```
+
+The reply got slightly *larger* - 664 to 701 tokens - because the freed slots filled with Blueprints.
+Same budget, all of it useful.
+
+**The first test for this passed while testing nothing.** It tried to inject a fixture through a
+parameter the fake bridge does not read, so the texture was never in the map to be dropped - the
+exact vacuous-test shape this project went hunting for with mutation testing earlier. Rewritten
+against the injection point that works, and then mutated: removing the rule fails it.
+
 ### The one line in the standing text that pays for itself on a single call
 
 Every expensive read now says how to ask for less - but it says it *after* the reply has been paid
