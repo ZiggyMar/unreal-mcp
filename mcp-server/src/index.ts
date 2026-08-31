@@ -860,17 +860,48 @@ register(
         unknownFields = picked.unknown;
         return picked.rows;
       };
+      /**
+       * Mention the cheaper form, but only after an expensive reply has already been paid for.
+       *
+       * `fields: ["path"]` returns the same rows without `parentClass` and cuts a 100-row reply from
+       * 2,562 tokens to 1,858 - 27%, measured on a real project. It has existed all along and the
+       * description never mentioned it, so nothing told a model the lever was there.
+       *
+       * Putting it in the description was considered and the arithmetic says no: ~25 tokens on every
+       * request against ~700 saved per call means break-even at about fifty requests, which is inside
+       * the range of a normal session. Here it is free - it appears only when the reply was big
+       * enough for the advice to be worth anything, which is exactly when a model is looking at the
+       * cost it just paid.
+       */
+      const LARGE_ENOUGH_TO_ADVISE = 40;
+      const withCheaperForm = (payload: Record<string, unknown>, rowCount: number) =>
+        rowCount >= LARGE_ENOUGH_TO_ADVISE && (!fields || fields.length === 0)
+          ? {
+              ...payload,
+              cheaper:
+                `Only need the paths? \`fields: ["path"]\` returns the same rows without parentClass, ` +
+                `about 27% smaller on a list this size.`,
+            }
+          : payload;
+
       const withFieldNote = (payload: Record<string, unknown>) =>
         unknownFields.length > 0
           ? { ...payload, unknownFields, note: `No row has ${unknownFields.join(", ")}; those were ignored.` }
           : payload;
 
       if (filtered.length <= limit) {
+        // The same hint on this path, and it matters more here: this is the branch a caller reaches
+        // by raising maxResults, so the reply is the biggest one the tool ever sends and nothing was
+        // truncated to warn them.
+        const rows = needle ? filtered : all;
         return jsonResult(
-          withFieldNote(
-            needle
-              ? { ...result, blueprints: compact(filtered), totalBlueprints: all.length }
-              : { ...result, blueprints: compact(all) }
+          withCheaperForm(
+            withFieldNote(
+              needle
+                ? { ...result, blueprints: compact(filtered), totalBlueprints: all.length }
+                : { ...result, blueprints: compact(all) }
+            ),
+            rows.length
           )
         );
       }
@@ -878,7 +909,7 @@ register(
       // rarely the question; finding something in it usually is, and search_project answers that
       // for a sixth of the cost.
       return jsonResult(
-        withFieldNote({
+        withCheaperForm(withFieldNote({
         ...result,
         blueprints: compact(filtered.slice(0, limit)),
         totalBlueprints: all.length,
@@ -889,7 +920,7 @@ register(
           `${all.length} Blueprints in this project; ${limit} listed. Narrow with \`match\` (name, path ` +
           `or parent class) or \`pathPrefix\`, use unreal_search_project to find one by what it contains, ` +
           `or raise \`maxResults\`.`,
-        })
+        }), limit)
       );
     } catch (err) {
       return errorResult(err);

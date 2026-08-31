@@ -1924,6 +1924,52 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The largest read is at its floor, and the cheap form was never advertised
+
+`list_blueprints` is the most expensive read left - 3,293 tokens - so it got measured properly. Of a
+full 345-row reply, **21% is two key names repeated 345 times**. Two shapes beat it:
+
+```text
+current array of {path, parentClass}   8,494 tok
+map  path -> parentClass               6,511 tok   (-23%)
+grouped by parentClass                 5,650 tok   (-33%)
+```
+
+**Neither was taken, and the reasons are worth recording** so the next session does not redo this
+analysis. `fields: ["path"]` operates on rows, so a map breaks a documented parameter. `measure:reads`
+navigates `blueprints[].path` to find the biggest Blueprint in the project - and that is precisely
+the "navigation contract" that got the same change reverted for `list_blueprint_graphs` earlier. The
+grouped form additionally duplicates the parent-class census `get_project_overview` already gives.
+
+So this read is at its floor, given that a path has to arrive whole and rows have to stay rows.
+
+Except the saving already existed, per call, and nothing said so:
+
+```text
+100 rows, default          2,669 tok
+100 rows, fields:["path"]  1,932 tok   (-28%)
+```
+
+`fields` has been there all along with a good parameter description, and the tool's own description -
+the part a model reads when deciding how to call it - never mentioned the lever.
+
+Putting it in the description was considered and the arithmetic says no: about 25 tokens on **every
+request** against ~700 saved **per call** is break-even near fifty requests, which is inside a normal
+session. The same sum that removed the group bullets from `enable_tools`, and it lands differently
+here only because the numbers differ.
+
+So the reply says it, and only when the reply was big enough for the advice to be worth anything -
+the same "pay only when it applies" shape as `checksSkipped` and `toolsNotEnabled`:
+
+```json
+{"cheaper": "Only need the paths? `fields: [\"path\"]` returns the same rows without parentClass,
+             about 27% smaller on a list this size."}
+```
+
+Absent under 40 rows, absent when `fields` was already given. Both return paths carry it - the
+untruncated branch matters more, because that is the one a caller reaches by raising `maxResults`,
+where the reply is the biggest the tool ever sends and nothing was truncated to warn them.
+
 ### The recipes taught an input system the reader's project does not use
 
 `unreal_recipes` is described to every model as *"verified end-to-end builds of the systems people
