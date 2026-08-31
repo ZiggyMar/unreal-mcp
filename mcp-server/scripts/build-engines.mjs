@@ -23,8 +23,7 @@
 //
 // Usage: node scripts/build-engines.mjs [--only 5.6] [--isolated]
 
-import { readFileSync, existsSync } from "node:fs";
-import { cpSync, rmSync } from "node:fs";
+import { readFileSync, existsSync, cpSync, rmSync, readdirSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -91,6 +90,73 @@ if (chosen.length === 0) {
   process.exit(2);
 }
 
+/**
+ * Make the target an exact copy of the source, touching only what actually differs.
+ *
+ * Two bugs live here, and the obvious one-liners each fix one and cause the other.
+ *
+ * `cpSync(src, dst, {recursive, force})` alone copies what exists and REMOVES NOTHING, so a file
+ * that used to be in the source and is not any more stays in the target forever. Reviewing a pull
+ * request is where that bites: install the branch, install main again, and the project holds main's
+ * headers plus the branch's extra .cpp referencing symbols main does not have. It does not even fail
+ * honestly - UBT's makefile cache saw no reason to rebuild and reported "ok" in four seconds over a
+ * source tree that cannot compile.
+ *
+ * Deleting the tree first fixes that and costs a full recompile EVERY time, because cpSync rewrites
+ * every file and UBT rebuilds on timestamp. On this plugin that is one ~9,000-line translation unit
+ * and about twenty-five minutes, paid whether or not a single byte changed. Measured across one
+ * session of PR review it came to over an hour of waiting for identical output.
+ *
+ * So: compare contents, copy only what differs, and delete only what the source no longer has.
+ * Unchanged files keep their timestamps, so UBT correctly does nothing, and an install after a
+ * no-op sync finishes in seconds instead of half an hour.
+ */
+function syncTree(sourceDir, targetDir) {
+  let copied = 0;
+  let removed = 0;
+
+  const walk = (dir, base = "") => {
+    const out = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const rel = base ? `${base}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) out.push(...walk(join(dir, entry.name), rel));
+      else out.push(rel);
+    }
+    return out;
+  };
+
+  const wanted = existsSync(sourceDir) ? walk(sourceDir) : [];
+  const present = existsSync(targetDir) ? walk(targetDir) : [];
+
+  for (const rel of wanted) {
+    const from = join(sourceDir, rel);
+    const to = join(targetDir, rel);
+    // Byte comparison rather than mtime or size. Size alone misses an edit that happens to preserve
+    // it, and mtime is exactly the thing being protected here.
+    let same = false;
+    if (existsSync(to)) {
+      try {
+        same = readFileSync(from).equals(readFileSync(to));
+      } catch {
+        same = false;
+      }
+    }
+    if (same) continue;
+    mkdirSync(dirname(to), { recursive: true });
+    cpSync(from, to, { force: true });
+    copied += 1;
+  }
+
+  const wantedSet = new Set(wanted);
+  for (const rel of present) {
+    if (wantedSet.has(rel)) continue;
+    rmSync(join(targetDir, rel), { force: true });
+    removed += 1;
+  }
+
+  return { copied, removed };
+}
+
 const results = [];
 for (const target of chosen) {
   if (!isolated) {
@@ -99,20 +165,10 @@ for (const target of chosen) {
 
     process.stdout.write(`${target.name}: syncing source... `);
     try {
-      // Replace, do not merge.
-      //
-      // cpSync copies what exists and removes nothing, so a file that used to be in the source and
-      // is not any more stayed behind in the target project forever. Reviewing a pull request is
-      // where that bites: install the branch, install main again, and the project is left holding
-      // main's headers plus the branch's extra .cpp, which references symbols main does not have.
-      // It does not even fail honestly - UBT's makefile cache saw no reason to rebuild and reported
-      // "ok" in four seconds over a source tree that cannot compile.
-      //
-      // rmSync first makes the target a copy of the source rather than a union with every source
-      // tree that was ever installed here. The cost is a full recompile whenever the sync runs,
-      // which is what was supposed to happen anyway.
-      rmSync(pluginDir, { recursive: true, force: true });
-      cpSync(PLUGIN_SOURCE, pluginDir, { recursive: true, force: true });
+      const { copied, removed } = syncTree(PLUGIN_SOURCE, pluginDir);
+      if (copied + removed > 0) {
+        process.stdout.write(`${copied} changed, ${removed} removed... `);
+      }
     } catch (err) {
       console.log("FAILED");
       results.push({ target, ok: false, why: `sync failed: ${err instanceof Error ? err.message : err}` });
