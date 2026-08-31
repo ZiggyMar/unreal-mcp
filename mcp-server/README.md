@@ -1404,6 +1404,60 @@ collapsed everything through an error-or-warning ternary, so a performance warni
 `warning` and an info arrived the same way — both contradicting the four-value type the server
 declares.
 
+### Describing the bug in plain language now lands somewhere
+
+The premise of this project is that you say what is wrong in your own words and the model finds it.
+The entry point for that is the `search` profile, whose discovery tool is
+`unreal_list_tools({match})` - and `match` is a substring search over tool **names and summaries**.
+Measured against the words a person actually uses:
+
+```text
+match: "upgrade"      0 tools        match: "empty"       2 tools
+match: "shop"         0 tools        match: "data table"  2 tools
+match: "missing"      0 tools        match: "broken"      2 tools
+match: "not showing"  0 tools
+match: "bug"          0 tools
+```
+
+Only the words a tool *author* would use find anything. And "upgrades aren't showing up in the shop"
+is a **real bug in this project** - `DT_Upgrades` has two rows, `Weapon_MachineGun` and
+`Vacuum_VirusController`, whose `UpgradeClass` is null, so those upgrades cannot appear - which
+`unreal_check_data_tables` reports in one call. Every word of that sentence returned nothing.
+
+Worse, the reply to a search that found nothing was:
+
+```json
+{ "matched": 0, "tools": [], "next": "Every matching tool is already enabled; call it directly." }
+```
+
+The identical sentence used when every match *is* enabled. A model reading that proceeds as though
+it is equipped, having been handed no tools at all.
+
+There is now a second index over the same catalogue, keyed on failure vocabulary rather than tool
+vocabulary, consulted only when the literal match finds nothing. The whole path, verified against
+the editor: **3 calls, 2,715 tokens** from that sentence to `check_data_tables` naming the two null
+rows.
+
+It is a keyword table, and it says so in its own reply - `matchedSymptomWords` names the words it
+actually matched, because a caller who believes it was understood will trust a wrong suggestion,
+while one who knows it matched "crash" can judge for itself. Three things it got wrong first, all
+caught by testing it rather than reading it:
+
+- **Contractions.** The first list had `not showing` and `doesn't show` and missed *"aren't
+  showing"* - the exact sentence it was written for. People negate with contractions.
+- **Nouns outranking failures.** "Enemies don't take damage" matched `enemy` first and led with
+  `read_behavior_tree`, when the useful answer is `trace_variable`. Entries are now ordered so a
+  description of the failure beats a noun naming the subject.
+- **A reason disagreeing with its own recommendation.** The save entry led with `search_project`
+  while its own explanation named `trace_variable` as the answer - found by a test asking whether
+  any entry leads with a tool that is true of every symptom.
+
+`npm run check:symptoms` asserts every tool the index recommends is actually registered, since it is
+the only place here where a recommendation is curated by hand rather than derived from the registry.
+That guard also had to be fixed: it captured `/"(unreal_[a-z0-9_]+)"/`, so a tool renamed to
+anything with a capital in it *vanished from the set* instead of being reported - the guard failing
+in the way it existed to prevent.
+
 ### The quality gate: compiling is not the bar
 
 `unreal_review_blueprint` reports what a senior Unreal developer would flag in review, computed

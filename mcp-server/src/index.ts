@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { matchSymptoms } from "./symptoms.js";
 import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
@@ -4090,6 +4091,59 @@ register(
       .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
 
     const off = [...new Set(rows.filter((r) => !r.on).map((r) => r.group))].sort();
+
+    // Nothing matched is not the same as everything matched being ready.
+    //
+    // The old reply to a search that found nothing was
+    // `{matched: 0, tools: [], next: "Every matching tool is already enabled; call it directly."}` -
+    // the identical sentence used when every match IS enabled. A model reading that proceeds as
+    // though it is equipped, having been handed no tools at all.
+    //
+    // And zero is the normal outcome for the sentence this project is built around. `match` searches
+    // tool names and summaries, so "upgrade", "shop", "missing", "not showing" and "bug" all return
+    // nothing, while "upgrades aren't showing up in the shop" is a real bug here that
+    // check_data_tables reports in one call. So a failed search falls back to a second index keyed
+    // on failure vocabulary rather than tool vocabulary.
+    if (rows.length === 0) {
+      const symptom = matchSymptoms(needle);
+      const known = (symptom?.tools ?? []).filter((name) => toolCatalog.has(name));
+      const groupsFor = [...new Set(known.map((name) => toolCatalog.get(name)!.group))].sort();
+      return jsonResult({
+        matched: 0,
+        of: toolCatalog.size,
+        searched: needle,
+        ...(known.length > 0
+          ? {
+              // Named for what it is. A caller that thinks it was understood will trust a wrong
+              // suggestion; one that knows it matched the words below can judge for itself.
+              matchedSymptomWords: symptom!.matched,
+              suggested: known.map((name) => ({
+                name,
+                group: toolCatalog.get(name)!.group,
+                on: toolHandles.get(name)?.enabled ?? false,
+                summary: toolCatalog.get(name)!.summary,
+              })),
+              why: symptom!.because,
+              next:
+                `No tool name or summary contains "${needle}", but it reads like a description of a symptom, ` +
+                `so these are the tools that find that class of problem. This is a keyword match on the ` +
+                `words listed in matchedSymptomWords, not an understanding of the sentence - check the ` +
+                `suggestions against what you are actually seeing.` +
+                (groupsFor.length > 0
+                  ? ` unreal_enable_tools({ groups: ${JSON.stringify(groupsFor)} }) turns them on.`
+                  : ""),
+            }
+          : {
+              next:
+                `No tool name or summary contains "${needle}", and it does not match any known symptom ` +
+                `wording either. \`match\` searches what tools are CALLED, so plain-language words rarely ` +
+                `land - call unreal_list_tools with no arguments for the group census, or start with ` +
+                `unreal_audit_project (finds problems project-wide), unreal_project_health (what does not ` +
+                `compile) or unreal_search_project (finds an asset by what it contains).`,
+            }),
+      });
+    }
+
     return jsonResult({
       matched: rows.length,
       of: toolCatalog.size,
