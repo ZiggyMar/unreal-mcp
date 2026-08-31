@@ -60,6 +60,14 @@ const isRealWork = (steps: string[]) => steps.some((step) => !INERT.test(step.tr
 export interface OverrideCheckInput {
   blueprint: string;
   parentBlueprint: string;
+  /**
+   * The graph these chains came from, so the fix can name it.
+   *
+   * Passed rather than assumed. The audit already stamps "EventGraph" on the finding it builds from
+   * this, and a fix text that guessed a different name than the finding reports would be two answers
+   * to one question - the class of disagreement this project keeps finding and removing.
+   */
+  graph: string;
   /** The child's chains, and every node title in the child's event graph. */
   childChains: ParentCallChain[];
   childNodeTitles: string[];
@@ -162,9 +170,10 @@ export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallF
       // answer and the fix says so plainly. Same finding, same cost, opposite instruction.
       fix:
         depended.length > 0 || parentSetsNothing
-          ? `unreal_add_node with nodeType "CallParent" and functionName "${bare}" on ${input.blueprint}, ` +
-            `then wire it as the first thing ${name} runs. (This is the "Add call to parent function" ` +
-            `right-click, done through the bridge.) ` +
+          ? `unreal_call_parent_function on ${input.blueprint}, graphName "${input.graph}", functionName ` +
+            `"${bare}". One call: it adds the node and wires it FIRST, keeping whatever ${name} already ran. ` +
+            `(Doing it by hand is add_node plus connect_pins, and an exec output holds one link - so ` +
+            `connecting the parent call displaces the existing chain instead of preceding it.) ` +
             (depended.length > 0
               ? `${input.blueprint} reads ${depended.join(", ")}, so this is a real defect rather than a style choice.`
               : `The parent does ${what} and sets nothing, so there is no state to duplicate by calling it.`)
@@ -172,9 +181,8 @@ export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallF
             `${input.parentBlueprint}'s ${name} sets, and an override that skips a parent on purpose ` +
             `looks exactly like this. The parent does: ${what}. unreal_trace_variable on what that ` +
             `chain sets settles it in one call - written there and read nowhere means adding the call ` +
-            `revives a replaced system rather than fixing a bug. If it IS wanted, it is the ` +
-            `"Add call to parent function" right-click: unreal_add_node with nodeType "CallParent" ` +
-            `and functionName "${bare}", wired first.`,
+            `revives a replaced system rather than fixing a bug. If it IS wanted, ` +
+            `unreal_call_parent_function does it in one call, wired first.`,
     });
   }
 

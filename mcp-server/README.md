@@ -169,6 +169,7 @@ without enrichment. This is designed to never be a hard dependency. See
 | `unreal_audit_project` | *(composite)* | Audit every Blueprint **and Data Table** and rank what to fix, by likely cost. The "my game has bugs, where do I look" tool. |
 | `unreal_project_health` | `project_health` | Where the whole project needs attention: oversized graphs, oversized Blueprints, cast-heavy Blueprints. Costs no asset reads. |
 | `unreal_guard_with_authority` | *(composite)* | Put a node behind a HasAuthority branch, keeping its chain. The fix for a client-side GameMode cast. |
+| `unreal_call_parent_function` | *(composite)* | Add `Parent: BeginPlay` and wire it FIRST, keeping the chain. The fix for `parent-event-not-called`. |
 | `unreal_cleanup_blueprint` | *(composed: review + `remove_node` + layout)* | Applies the review fixes that cannot change behaviour, and lists what it left for you with reasons. |
 | `unreal_doctor` | *(composed: `ping` + `get_project_overview` + `find_node` + `pie_status`)* | One-call diagnosis of the whole setup, with a remedy per failed check. Never throws: an unreachable editor is the answer, not an error. |
 | `unreal_session_changes` | *(server-side log; touches the editor not at all)* | Everything this session changed, grouped by asset, in plain language, with deletions and failures called out. |
@@ -1884,6 +1885,78 @@ obvious way to write it.
 
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
+
+### The second most expensive finding can be fixed now, not just reported
+
+The audit prices `parent-event-not-called` at 95, behind only the multiplayer checks, and it is one
+of the nastiest bugs in Blueprints: **adding an event to a child REPLACES the parent's rather than
+extending it.** Nothing warns. The Blueprint compiles clean. The parent's `BeginPlay` simply never
+happens and the symptom shows up somewhere else entirely.
+
+The finding already said what to do - `unreal_add_node` with `nodeType: "CallParent"`, "then wire it
+as the first thing this event runs". Two steps, and the second is where it goes wrong. **"First" is
+not "append."** An exec output holds exactly one link, so connecting the parent call to the event
+*displaces* whatever was already there:
+
+```text
+before:   Event BeginPlay ------------------> DoTheThing -> ...
+naive:    Event BeginPlay -> Parent: BeginPlay          DoTheThing -> ...   (orphaned)
+correct:  Event BeginPlay -> Parent: BeginPlay -> DoTheThing -> ...
+```
+
+The naive result runs *only* the parent call - a worse bug than the one being fixed, and it looks
+like a successful edit. `unreal_call_parent_function` is one call that knows the shape: it captures
+what the event currently runs, adds the node, and rewires both links, reporting what it moved. Same
+argument `guard_with_authority` makes for itself - a general "insert a node" tool has to be told how
+to wire, and getting that wrong rearranges somebody's graph quietly.
+
+It is safe to run twice (a graph that already calls the parent is reported as `alreadyPresent` and
+left alone), it compiles before and after so "did I break it" is a comparison rather than a guess,
+and it re-reads the graph afterwards to confirm the event actually reaches the new node.
+
+**Nothing in it needed a plugin change.** Read the graph, add a node, connect two pins, compile —
+every one of those has been in the bridge for a long time. The fix for the second most expensive
+finding was missing not because the engine could not do it, but because nobody had written down the
+wiring so a model would not have to get it right from prose.
+
+The finding now names the tool instead of describing the procedure, and the graph name is threaded
+through rather than written twice, so the fix instruction and the report can never disagree about
+which graph they mean.
+
+### And the fix tool had the same bug it was written to fix
+
+The trial for it - plant the defect, fix it, check the chain - failed on the first run, and what it
+caught is the best illustration of the bug there is.
+
+`unreal_call_parent_function` reported **"already calls the parent"** about a graph that read:
+
+```text
+Event BeginPlay -> Print String -> Print String        (Parent: BeginPlay, orphaned)
+```
+
+The node was there. Nothing ran it. The check asked whether a `K2Node_CallParentFunction` *existed*,
+which is presence mistaken for effect - the same class of error as a verdict saying "clean" when it
+could not look, and it made the tool report the bug as already fixed.
+
+How the graph got that way is the bug itself: **creating an override event makes the editor add the
+parent call for you**, and the next thing to touch the event's exec pin displaces it. The trial's own
+setup did exactly that, by accident, while building a fixture. That is how sharp the edge is.
+
+So the check is now "is the parent call reached from the event", and an orphaned node is a third
+outcome with its own handling - it gets **wired rather than duplicated**, because adding a second
+would leave the graph with a node nothing runs *and* a node that does. `dryRun` says "would wire the
+existing" rather than "would add" in that case, since a dry run whose wording describes a different
+edit than the real one is worse than no dry run at all.
+
+```text
+before : Event BeginPlay -> Print String -> Print String
+applied: Event BeginPlay now runs the Parent: BeginPlay first, then Print String.
+         The node was already in the graph with nothing running it.
+after  : Event BeginPlay -> Parent: BeginPlay -> Print String -> Print String
+rerun  : alreadyPresent, unchanged
+```
+
+`npm run trial:parent-call` is that run, against a live editor, on assets it creates and deletes.
 
 ### A file that compiled seven times and did not build
 

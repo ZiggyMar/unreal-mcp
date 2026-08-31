@@ -9,6 +9,7 @@ const chain = (entry, steps) => ({ entry, steps, nodeIds: steps.map((_, i) => `$
 const vacuumCase = (childTitles) => ({
   blueprint: "BP_Player",
   parentBlueprint: "BP_BaseCharacter",
+  graph: "EventGraph",
   childChains: [chain("Event BeginPlay", ["Sequence", "Switch Has Authority", "SetMoveSpeed"])],
   childNodeTitles: childTitles,
   parentChains: [chain("Event BeginPlay", ["Add Component by Class", "Set VacuumableComp"])],
@@ -42,6 +43,7 @@ test("a parent that does nothing worth keeping is not a reason to send anybody a
   const found = findUncalledParentEvents({
     blueprint: "BP_Child",
     parentBlueprint: "BP_Parent",
+    graph: "EventGraph",
     childChains: [chain("Event BeginPlay", ["Do The Thing"])],
     childNodeTitles: ["Event BeginPlay"],
     parentChains: [chain("Event BeginPlay", ["Print String"])],
@@ -53,6 +55,7 @@ test("a parent with no implementation of that event is not a finding", () => {
   const found = findUncalledParentEvents({
     blueprint: "BP_Child",
     parentBlueprint: "BP_Parent",
+    graph: "EventGraph",
     childChains: [chain("Event BeginPlay", ["Do The Thing"])],
     childNodeTitles: ["Event BeginPlay"],
     parentChains: [],
@@ -65,6 +68,7 @@ test("only the events where losing the parent's work is silent and expensive", (
   const found = findUncalledParentEvents({
     blueprint: "BP_Child",
     parentBlueprint: "BP_Parent",
+    graph: "EventGraph",
     childChains: [chain("Event AnyDamage", ["Set Health"])],
     childNodeTitles: ["Event AnyDamage"],
     parentChains: [chain("Event AnyDamage", ["Set Health", "Update HUD"])],
@@ -76,12 +80,16 @@ test("EndPlay counts too, because cleanup that never runs leaks quietly", () => 
   const found = findUncalledParentEvents({
     blueprint: "BP_Child",
     parentBlueprint: "BP_Parent",
+    graph: "EventGraph",
     childChains: [chain("Event EndPlay", ["Save Stats"])],
     childNodeTitles: ["Event EndPlay"],
     parentChains: [chain("Event EndPlay", ["Clear and Invalidate Timer by Handle"])],
   });
   assert.equal(found.length, 1);
-  assert.match(found[0].fix, /Add call to parent function/);
+  // Asserts the TOOL, not the prose. The fix used to describe the editor right-click and two bridge
+  // calls; it names unreal_call_parent_function now, which does the wiring correctly in one.
+  assert.match(found[0].fix, /unreal_call_parent_function/);
+  assert.match(found[0].fix, /EventGraph/, "and names the graph it was found in");
 });
 
 test("a child that reads what the parent sets is called a real bug, plainly", () => {
@@ -91,6 +99,8 @@ test("a child that reads what the parent sets is called a real bug, plainly", ()
   const [finding] = findUncalledParentEvents({
     blueprint: "BP_Player",
     parentBlueprint: "BP_BaseCharacter",
+    graph: "EventGraph",
+  graph: "EventGraph",
     childChains: [{ entry: "Event BeginPlay", steps: ["Sequence", "Switch Has Authority"], nodeIds: [] }],
     childNodeTitles: ["Event BeginPlay", "Get VacuumableComp", "Parent: Tick"],
     parentChains: [{ entry: "Event BeginPlay", steps: ["Add Component by Class", "Set VacuumableComp"], nodeIds: [] }],
@@ -107,6 +117,7 @@ test("a child that reads none of it is flagged as possibly deliberate", () => {
   const [finding] = findUncalledParentEvents({
     blueprint: "PC_Gameplay",
     parentBlueprint: "PC_Base",
+    graph: "EventGraph",
     childChains: [{ entry: "Event BeginPlay", steps: ["Delay", "SetupAudio"], nodeIds: [] }],
     childNodeTitles: ["Event BeginPlay", "Get SomethingElse"],
     parentChains: [{ entry: "Event BeginPlay", steps: ["Create Widget", "Set MyRootLayout"], nodeIds: [] }],
@@ -125,6 +136,7 @@ test("a parent that sets things nobody reads is not treated as a missing call", 
   const findings = findUncalledParentEvents({
     blueprint: "PC_Gameplay",
     parentBlueprint: "PC_Base",
+    graph: "EventGraph",
     childChains: [chain("Event BeginPlay", ["Delay", "Get ShopWidget"])],
     childNodeTitles: ["Event BeginPlay", "Delay", "Get ShopWidget"],
     parentChains: [chain("Event BeginPlay", ["Create Widget", "Set MyRootLayout", "Add to Viewport"])],
@@ -144,12 +156,15 @@ test("a parent that sets nothing is safe to inherit, and the fix says so", () =>
   const findings = findUncalledParentEvents({
     blueprint: "BP_Child",
     parentBlueprint: "BP_Parent",
+    graph: "EventGraph",
     childChains: [chain("Event EndPlay", ["Print String"])],
     childNodeTitles: ["Event EndPlay", "Print String"],
     parentChains: [chain("Event EndPlay", ["Clear and Invalidate Timer by Handle"])],
   });
   const finding = findings.find((f) => f.check === "parent-event-not-called");
   assert.ok(finding);
-  assert.match(finding.fix, /^unreal_add_node/, "with no state to duplicate, the action leads");
+  // The point of the assertion is the ORDER: with no state to duplicate, the fix leads with the
+  // action rather than with "check before adding it". The tool name changed; the intent did not.
+  assert.match(finding.fix, /^unreal_call_parent_function/, "with no state to duplicate, the action leads");
   assert.match(finding.observed, /sets no variables at all/);
 });

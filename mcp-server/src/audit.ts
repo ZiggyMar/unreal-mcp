@@ -532,6 +532,10 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     // An older bridge has no read_niagara_system; the rest of the audit is still worth returning.
   }
 
+  // These findings only ever come from the event graph - the map they are built from is the event
+  // graphs - so the name is a constant rather than a guess, and one constant rather than two.
+  const PARENT_CALL_GRAPH = "EventGraph";
+
   // A child against its parent. Both have to have been read, which is why this waits until here.
   for (const [name, child] of eventGraphs) {
     const parent = eventGraphs.get(child.parentClass);
@@ -539,6 +543,9 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     for (const finding of findUncalledParentEvents({
       blueprint: name,
       parentBlueprint: child.parentClass,
+      // The same literal the finding below is stamped with, threaded through rather than written
+      // twice, so the fix instruction and the report can never name different graphs.
+      graph: PARENT_CALL_GRAPH,
       childChains: child.chains,
       childNodeTitles: child.titles,
       parentChains: parent.chains,
@@ -546,7 +553,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       findings.push({
         blueprint: name,
         path: (blueprints.find((b) => b.name === name) ?? { path: pathPrefix }).path,
-        graph: "EventGraph",
+        graph: PARENT_CALL_GRAPH,
         check: finding.check,
         severity: finding.severity,
         message: finding.message,

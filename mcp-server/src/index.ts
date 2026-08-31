@@ -36,6 +36,7 @@ import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
 import { hotReloadCpp } from "./liveCoding.js";
 import { describeConsoleResult } from "./consoleCommand.js";
+import { callParentFirst } from "./parentCall.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -368,6 +369,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     // CORE_PROFILE_TOOLS. A caller that genuinely wants an empty Blueprint can enable it.
     "unreal_create_blueprint",
     "unreal_guard_with_authority",
+    "unreal_call_parent_function",
     "unreal_read_node_detail",
     "unreal_add_node",
     "unreal_connect_pins",
@@ -2617,6 +2619,39 @@ register(
   async ({ action, watch, intervalMs, maxSamples }) => {
     try {
       return jsonResult(await bridge.send("watch_runtime", { action, watch, intervalMs, maxSamples }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_call_parent_function",
+  {
+    title: "Call the parent's version of an overridden event, first",
+    description:
+      "Fixes the `parent-event-not-called` finding in one call - the second most expensive thing this project " +
+      "knows how to find. Adding an event to a child Blueprint REPLACES the parent's rather than extending it, and " +
+      "nothing warns: the parent's BeginPlay simply never happens, the Blueprint compiles clean, and the symptom " +
+      "turns up somewhere else entirely.\n\n" +
+      "Doing it by hand is add_node plus connect_pins, and the wiring is where it goes wrong. **\"First\" is not " +
+      "\"append\"**: an exec output holds exactly one link, so connecting the parent call to the event displaces " +
+      "whatever was already there - leaving a graph that runs ONLY the parent call, which is a worse bug than the " +
+      "one being fixed and looks like a successful edit. This preserves the chain and reports what it moved.\n\n" +
+      "Safe to run twice: a graph that already calls the parent is reported as `alreadyPresent` and left alone. " +
+      "Compiles before and after, so \"did I break it\" is a comparison rather than a guess.",
+    inputSchema: {
+      path: z.string().describe('Blueprint that overrides the event, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
+      graphName: z.string().describe('Graph the override lives in - usually "EventGraph".'),
+      functionName: z
+        .string()
+        .describe('The event as the editor labels it: "BeginPlay", "Tick", "EndPlay". The Receive- prefix is added for you.'),
+      dryRun: z.boolean().optional().describe("Report the exact edit, including what it would displace, without making it."),
+    },
+  },
+  async ({ path, graphName, functionName, dryRun }) => {
+    try {
+      return jsonResult(await callParentFirst(bridge, path, graphName, functionName, { dryRun }));
     } catch (err) {
       return errorResult(err);
     }

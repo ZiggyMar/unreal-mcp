@@ -51,7 +51,12 @@ const compositeTools = new Set(["read_runtime_errors", "auto_layout_graph", "rev
   // Two bridge commands rather than one because the engine's blocking form spins on the game thread
   // behind a modal dialog, which would hang this plugin's own ticker and every later command with it.
   // The waiting belongs on this side, where it costs the model nothing: still one tool call.
-  "hot_reload_cpp"]);
+  "hot_reload_cpp",
+  // call_parent_function reads the graph, adds a CallParent node and rewires two exec pins. Every
+  // one of those is a bridge command that has existed for a long time - which is the point: the fix
+  // for the second most expensive finding needed no plugin change at all, only somebody to write
+  // down the wiring so a model does not have to get it right from prose.
+  "call_parent_function"]);
 
 const covered = new Set();
 for (const tool of registeredTools) {
