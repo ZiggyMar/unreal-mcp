@@ -28,7 +28,11 @@ test("a server event setting an unreplicated variable is flagged", () => {
   assert.ok(finding, `expected the bug to be caught, got ${ids(findings).join(", ")}`);
   assert.equal(finding.variable, "bVacuumOn");
   assert.match(finding.message, /no client will ever see it/i);
-  assert.match(finding.fix, /Replicated|RepNotify/);
+  // The fix has to name the tool that performs it, not just the concept. A fix reading "mark it
+  // Replicated" leaves a model with nothing to call, so it hands the work back to the person who
+  // asked - which is the failure this project exists to prevent.
+  assert.match(finding.fix, /unreal_set_variable_replication/);
+  assert.match(finding.fix, /replicated|repnotify/i);
 });
 
 test("the same variable, replicated, is not flagged", () => {
@@ -392,3 +396,4 @@ test("a read is judged by where its value goes, not by the Get node itself", () 
   assert.match(finding.observed, /also on the server/i, "the consumer is inside the server chain");
   assert.doesNotMatch(finding.observed, /worth fixing/i);
 });
+

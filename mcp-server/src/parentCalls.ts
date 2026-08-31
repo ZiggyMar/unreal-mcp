@@ -128,10 +128,15 @@ export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallF
         `${input.blueprint} overrides ${name} but never calls Parent: ${bare}, so ${input.parentBlueprint}'s ` +
         `${name} never runs - including ${what}. Nothing warns about this, and the child's own logic works, ` +
         `so the Blueprint looks correct while everything the parent set up is missing.`,
+      // Names the tool call, not the right-click. A model reading "right-click the node and choose
+      // Add call to parent function" cannot do that, so it hands the work back to the person who
+      // asked - which is the exact failure this project exists to prevent. The editor idiom stays,
+      // because it is how a human recognises the node, but the tool that performs it comes first.
       fix:
-        `Add a Parent: ${bare} node in ${input.blueprint} and run it first in that chain - right-click the ` +
-        `${name} node and choose "Add call to parent function". If the parent's version is genuinely meant ` +
-        `to be replaced, that is fine, but check what it does first: ${what}.`,
+        `unreal_add_node with nodeType "CallParent" and functionName "${bare}" on ${input.blueprint}, ` +
+        `then wire it as the first thing ${name} runs. (This is the "Add call to parent function" ` +
+        `right-click, done through the bridge.) If the parent's version is genuinely meant to be ` +
+        `replaced that is fine, but check what it does first: ${what}.`,
     });
   }
 

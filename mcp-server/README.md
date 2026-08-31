@@ -61,6 +61,7 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_set_pin_default_value` | `set_pin_default_value` | Set a literal default on an unconnected input pin. |
 | `unreal_remove_node` | `remove_node` | Remove a node by id, breaking its links first. |
 | `unreal_add_variable` | `add_variable` | Add a member variable (compact type descriptor: `bool`, `int`, `float`, `vector`, `object:<Class>`, ...). |
+| `unreal_set_variable_replication` | `set_variable_replication` | Set an existing variable to `none` / `replicated` / `repnotify`, creating or reusing its `OnRep_` graph. |
 | `unreal_compile_blueprint` | `compile_blueprint` | Compile and return structured errors/warnings. **Run this after every batch of edits** (see below). |
 | `unreal_save_blueprint` | `save_blueprint` | Save the Blueprint's package to disk. |
 
@@ -1602,6 +1603,41 @@ receive all of it.
 
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
+
+### The audit's most expensive finding can now be fixed, not just reported
+
+`server-writes-unreplicated` is priced at 100, the top of the scale, because of how it fails: the
+server writes state that never reaches anybody else, so it works perfectly for whoever is hosting and
+is invisible to one person testing alone. It survives to a showcase.
+
+Its fix was "mark it Replicated" - and **nothing here could do that**. `unreal_add_variable` took
+`replicated` and `repNotify` at creation and there was no way to change an existing variable, so the
+audit found its own worst bug and handed the work back to a human. A tool that finds a bug and cannot
+fix it is half a tool.
+
+```text
+unreal_set_variable_replication({
+  path: "/Game/.../PC_Gameplay.PC_Gameplay",
+  variableName: "CostServer",
+  mode: "replicated",
+})
+```
+
+Three deliberate details, each of which is a way this could have been worse:
+
+- **`repnotify` creates `OnRep_<Name>` if it is missing and reuses it if it is not.** Going
+  repnotify to none and back is an ordinary thing to do while working, and it must not leave a trail
+  of duplicate graphs.
+- **A newly created `OnRep_` graph is announced as empty.** RepNotify only means clients are *told*
+  the value changed; with nothing in the graph it behaves exactly like plain `replicated`, which is a
+  quiet way to think a bug is fixed when it is not.
+- **Turning replication off never deletes the `OnRep_` graph.** It may hold real logic, and deleting
+  a graph to change a flag is not a trade anybody asked for. The reply says it is now unreachable.
+
+An inherited variable is refused by name rather than reported as missing - `"CostServer" is declared
+on PC_Base, not on PC_Gameplay, so its replication has to change there` - because "not found" about a
+variable you can plainly see in the editor is the kind of answer that costs a caller three more calls
+to disbelieve.
 
 ### A parameter that does not exist is refused, not ignored
 

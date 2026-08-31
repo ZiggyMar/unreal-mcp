@@ -994,6 +994,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleAddVariable(Params);
 	}
+	else if (Cmd == TEXT("set_variable_replication"))
+	{
+		Response = HandleSetVariableReplication(Params);
+	}
 	else if (Cmd == TEXT("compile_blueprint"))
 	{
 		Response = HandleCompileBlueprint(Params);
@@ -2720,6 +2724,178 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
 	// resets the first time somebody dies.
 	Result->SetStringField(TEXT("parentClass"),
 		Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : TEXT("None"));
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Change an existing variable's replication.
+ *
+ * add_variable could set this at creation and nothing could ever change it, so the audit's most
+ * expensive check - server-writes-unreplicated, priced at 100 because it reads as "it works for the
+ * host" and nobody can reproduce it alone - ended at "mark it Replicated" and handed the work back
+ * to a person. A tool that finds the bug and cannot fix it is half a tool.
+ *
+ * Only variables this Blueprint declares can be changed. One inherited from a parent Blueprint or
+ * from C++ lives somewhere else, and silently doing nothing would be the worst available answer, so
+ * both cases are named rather than reported as "not found".
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetVariableReplication(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path, VariableName, Mode;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("variableName"), VariableName) ||
+		!Params->TryGetStringField(TEXT("mode"), Mode))
+	{
+		return MakeErrorResponse(
+			TEXT("missing_param: path, variableName and mode are required. mode is \"none\", \"replicated\" or \"repnotify\"."));
+	}
+
+	const FString Wanted = Mode.ToLower();
+	if (Wanted != TEXT("none") && Wanted != TEXT("replicated") && Wanted != TEXT("repnotify"))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("bad_param: mode \"%s\" is not one of \"none\", \"replicated\", \"repnotify\"."), *Mode));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return MakeErrorResponse(LoadError);
+	}
+
+	const FName VarFName(*VariableName);
+	const int32 VarIndex = FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, VarFName);
+	if (VarIndex == INDEX_NONE)
+	{
+		// Say where it actually lives rather than "not found", because the commonest reason to land
+		// here is that the variable is real and is declared one class up.
+		UClass* ParentClass = Blueprint->ParentClass;
+		if (ParentClass && ParentClass->FindPropertyByName(VarFName))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("variable_is_inherited: \"%s\" is declared on %s, not on %s, so its replication has to change ")
+				TEXT("there. If %s is itself a Blueprint, call this again with its path."),
+				*VariableName, *ParentClass->GetName(), *Blueprint->GetName(), *ParentClass->GetName()));
+		}
+		TArray<FString> Names;
+		for (const FBPVariableDescription& Desc : Blueprint->NewVariables)
+		{
+			Names.Add(Desc.VarName.ToString());
+			if (Names.Num() >= 20)
+			{
+				break;
+			}
+		}
+		return MakeErrorResponse(FString::Printf(
+			TEXT("variable_not_found: %s declares no \"%s\". It has: %s"),
+			*Blueprint->GetName(), *VariableName,
+			Names.Num() > 0 ? *FString::Join(Names, TEXT(", ")) : TEXT("(no variables of its own)")));
+	}
+
+	FBPVariableDescription& Description = Blueprint->NewVariables[VarIndex];
+	const bool bWasReplicated = (Description.PropertyFlags & CPF_Net) != 0;
+	const bool bWasRepNotify = (Description.PropertyFlags & CPF_RepNotify) != 0;
+	const FString Before = bWasRepNotify ? TEXT("repnotify") : (bWasReplicated ? TEXT("replicated") : TEXT("none"));
+	if (Before == Wanted)
+	{
+		TSharedRef<FJsonObject> Same = MakeShared<FJsonObject>();
+		Same->SetStringField(TEXT("variable"), VariableName);
+		Same->SetStringField(TEXT("mode"), Wanted);
+		Same->SetBoolField(TEXT("changed"), false);
+		Same->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("Already %s. Nothing was written, so there is nothing to compile or save."), *Wanted));
+		return MakeOkResponse(Same);
+	}
+
+	const FScopedTransaction Transaction(
+		NSLOCTEXT("UnrealMCPBridge", "MCPSetVariableReplication", "MCP: Set Variable Replication"));
+	Blueprint->Modify();
+
+	FString RepFunction;
+	FString Note;
+	if (Wanted == TEXT("none"))
+	{
+		Description.PropertyFlags &= ~(CPF_Net | CPF_RepNotify);
+		if (bWasRepNotify)
+		{
+			// The OnRep_ graph is deliberately left alone. It may hold real logic, and deleting a
+			// graph in order to change a flag is not a trade anybody asked for.
+			Description.RepNotifyFunc = NAME_None;
+			Note = FString::Printf(
+				TEXT("The OnRep_%s function graph was left in place - it may hold logic, and it is simply never ")
+				TEXT("called now. Remove it yourself if it is dead."), *VariableName);
+		}
+	}
+	else
+	{
+		Description.PropertyFlags |= CPF_Net;
+		if (Wanted == TEXT("repnotify"))
+		{
+			const FName RepFuncName(*FString::Printf(TEXT("OnRep_%s"), *VariableName));
+			RepFunction = RepFuncName.ToString();
+			Description.PropertyFlags |= CPF_RepNotify;
+			Description.RepNotifyFunc = RepFuncName;
+
+			// Reuse an existing OnRep_ graph rather than adding a second one. Going repnotify ->
+			// none -> repnotify is an ordinary thing to do while working, and it must not leave a
+			// trail of duplicate graphs behind it.
+			bool bHasGraph = false;
+			TArray<UEdGraph*> AllGraphs;
+			Blueprint->GetAllGraphs(AllGraphs);
+			for (const UEdGraph* Graph : AllGraphs)
+			{
+				if (Graph && Graph->GetFName() == RepFuncName)
+				{
+					bHasGraph = true;
+					break;
+				}
+			}
+			if (bHasGraph)
+			{
+				Note = FString::Printf(TEXT("Reused the existing OnRep_%s graph."), *VariableName);
+			}
+			else
+			{
+				UEdGraph* RepGraph = FBlueprintEditorUtils::CreateNewGraph(
+					Blueprint, RepFuncName, UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+				FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, RepGraph, /*bIsUserCreated=*/true, nullptr);
+				Note = FString::Printf(
+					TEXT("Created the OnRep_%s function graph, and it is EMPTY. RepNotify only means clients are ")
+					TEXT("told the value changed - put what should happen on that change inside it, or this is no ")
+					TEXT("different from plain replicated."), *VariableName);
+			}
+		}
+		else if (bWasRepNotify)
+		{
+			Description.PropertyFlags &= ~CPF_RepNotify;
+			Description.RepNotifyFunc = NAME_None;
+			Note = FString::Printf(
+				TEXT("OnRep_%s is no longer called. The graph itself was left in place."), *VariableName);
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("variable"), VariableName);
+	Result->SetStringField(TEXT("was"), Before);
+	Result->SetStringField(TEXT("mode"), Wanted);
+	Result->SetBoolField(TEXT("changed"), true);
+	if (!RepFunction.IsEmpty())
+	{
+		Result->SetStringField(TEXT("repNotifyFunction"), RepFunction);
+	}
+	if (!Note.IsEmpty())
+	{
+		Result->SetStringField(TEXT("note"), Note);
+	}
+	// Replication is a property flag on the generated class, so it lands on compile like any other
+	// structural change. Saying so beats a caller wondering why a PIE session still behaves the old
+	// way and concluding the write did not happen.
+	Result->SetStringField(TEXT("next"),
+		TEXT("compile_blueprint, then save_blueprint. This is a property flag, so it does not take effect in a "
+			 "PIE session that was already running when it changed."));
 	return MakeOkResponse(Result);
 }
 

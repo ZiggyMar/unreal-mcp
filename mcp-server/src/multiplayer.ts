@@ -227,7 +227,7 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
         `The server will change its own copy and no client will ever see it.`,
       observed,
       fix:
-        `Mark "${variable}" as Replicated (or RepNotify if clients need to react to the change). ` +
+        `unreal_set_variable_replication on "${variable}" with mode "replicated" - or "repnotify" if clients need to react to the change rather than just read it. ` +
         `Until then this works for whoever is hosting and silently does nothing for everyone else.`,
     });
   }

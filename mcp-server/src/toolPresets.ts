@@ -67,6 +67,10 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // handle to an Actor that replicates itself is ordinary bookkeeping, and the only way to know
       // which it is, is to read whether that Actor replicates.
       "unreal_read_class_defaults",
+      // And the fix for it. server-writes-unreplicated is the most expensive finding this produces;
+      // a preset that can report it and not act on it hands the work straight back to the person who
+      // asked, which is the whole failure this project is against.
+      "unreal_set_variable_replication",
       // "The character is not animating" starts as a diagnosis, and a Blueprint only holds half the
       // answer: it sets the Speed variable, and the state machine decides what Speed means.
       "unreal_read_anim_blueprint",

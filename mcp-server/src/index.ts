@@ -324,6 +324,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_set_pin_default_value",
     "unreal_remove_node",
     "unreal_organize_graph",
+    "unreal_set_variable_replication",
   ],
   ui: ["unreal_scaffold_widget", "unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
   materials: [
@@ -1226,6 +1227,36 @@ register(
         return jsonResult({ ...result, warning: misplaced[0].message, fix: misplaced[0].fix });
       }
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_variable_replication",
+  {
+    title: "Change an existing variable's replication",
+    description:
+      "Sets a Blueprint variable to none, replicated, or repnotify. This is the fix for the audit's most " +
+      "expensive finding: a server writing state that never reaches clients reads as \"it works for the host\" and " +
+      "cannot be reproduced by one person. Choosing repnotify also creates the OnRep_<Name> graph if it does not " +
+      "already exist, reusing it if it does. Only variables the Blueprint declares itself can change; an inherited " +
+      "one is reported with the class that actually owns it.",
+    inputSchema: {
+      path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
+      variableName: z.string().describe("Variable to change. unreal_list_variables names the ones this Blueprint has."),
+      mode: z
+        .enum(["none", "replicated", "repnotify"])
+        .describe(
+          '"replicated" sends the value to clients. "repnotify" also calls OnRep_<Name> on them when it changes, ' +
+            'which is what you want when clients must react rather than just read. "none" turns it off.'
+        ),
+    },
+  },
+  async ({ path, variableName, mode }) => {
+    try {
+      return jsonResult(await bridge.send("set_variable_replication", { path, variableName, mode }));
     } catch (err) {
       return errorResult(err);
     }
