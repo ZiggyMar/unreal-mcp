@@ -1885,6 +1885,40 @@ obvious way to write it.
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
 
+### A file that compiled seven times and did not build
+
+Every C++ change this session was checked with a single-file compile - `unreal_compile_cpp`'s own
+default, seconds instead of minutes, and it works while the editor is open. Seven of them, all clean.
+
+Then `npm run check:engines`, which builds the whole plugin against every installed engine:
+
+```text
+5.6: building... ok (111s)
+5.8: building... FAILED (175s)
+    MCPConsole.cpp(196,4): error C2065: 'FStringOutputDevice': undeclared identifier
+```
+
+`FStringOutputDevice` lives in `Containers/UnrealString.h` on 5.6 and in `Misc/StringOutputDevice.h`
+on 5.8, and neither header exists on the other version - **there is no single include that satisfies
+both.** Targeting 5.6 and 5.8 from one codebase is a headline claim of this project, and it had been
+broken for several commits without a single compile failing.
+
+Fixed without a version guard: `Exec` takes any `FOutputDevice`, and this plugin already has one that
+collects lines under a lock and caps itself. One fewer type, and no `#if ENGINE_MINOR_VERSION`.
+
+The lesson went into `unreal_compile_cpp`'s description, because a model using it on its own project
+will draw exactly the same wrong conclusion:
+
+> **A clean single-file compile is not a clean build.** It proves this file's syntax against the
+> engine you are on; it does not prove the module links, and it does not prove a different engine
+> version accepts it — types move between versions, and unity builds hide a missing include until the
+> file is compiled alone. Treat it as fast feedback, not as the verdict.
+
+That is not hypothetical either: the same run earlier caught `MCPCommandHandler.cpp` using
+`FFileHelper` with no `Misc/FileHelper.h`, which unity builds had been hiding for months.
+
+All three targets - 5.6, 5.8, and the game - build clean now.
+
 ### 167 properties, and the Blueprint changed a handful
 
 `read_class_defaults` was the second-largest read and, like the first, unmeasured: **16,129

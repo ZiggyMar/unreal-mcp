@@ -4050,7 +4050,11 @@ register(
       "module DLL, so the link cannot replace it, and the bridge lives inside that editor so it cannot close it. " +
       "A failure with no diagnostics is almost always that.\n\n" +
       "Errors come back structured - file, line, code, message, project-relative, duplicates removed - because a " +
-      "UnrealBuildTool run emits megabytes and the answer is usually one line of it.",
+      "UnrealBuildTool run emits megabytes and the answer is usually one line of it.\n\n" +
+      "**A clean single-file compile is not a clean build.** It proves this file\u2019s syntax against the engine " +
+      "you are on; it does not prove the module links, and it does not prove a different engine version accepts it - " +
+      "types move between versions, and unity builds hide a missing include until the file is compiled alone. Treat " +
+      "it as fast feedback, not as the verdict.",
     inputSchema: {
       file: z
         .string()

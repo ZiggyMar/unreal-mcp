@@ -193,10 +193,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunConsoleCommand(const TShare
 		}
 		else
 		{
-			FStringOutputDevice Ar;
-			Ar.SetAutoEmitLineTerminator(true);
-			bRecognised = GEditor->Exec(World, *Command, Ar);
-			Output = Ar;
+			// Deliberately NOT FStringOutputDevice, which is where this file failed to build on 5.8:
+			// the class moved from Containers/UnrealString.h to Misc/StringOutputDevice.h, and that
+			// header does not exist on 5.6 - so there is no single include that satisfies both, only
+			// a version guard. Exec takes any FOutputDevice, and this plugin already has one that
+			// collects lines under a lock and caps itself, so it is used for the exec output too.
+			//
+			// Found by `npm run check:engines`, which builds the whole plugin against every installed
+			// engine. Single-file compiles against 5.6 had passed all along.
+			FMCPLogCapture Direct(NAME_None, 60);
+			bRecognised = GEditor->Exec(World, *Command, Direct);
+			int32 DirectSeen = 0;
+			Output = FString::Join(Direct.Take(DirectSeen), TEXT("\n"));
 		}
 
 		Lines = Capture.Take(TotalLines);
