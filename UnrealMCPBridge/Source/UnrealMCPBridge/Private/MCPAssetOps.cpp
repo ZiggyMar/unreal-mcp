@@ -13,6 +13,8 @@
 
 #include "MCPCommandHandler.h"
 
+#include "MCPResponse.h"
+
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "Editor.h"
@@ -40,9 +42,7 @@ namespace
 			Code = TEXT("error");
 			Rest = Detail;
 		}
-		Result->SetStringField(TEXT("error"), Code);
-		Result->SetStringField(TEXT("detail"), Rest.IsEmpty() ? Detail : Rest);
-		return Result;
+		return MCPResponse::Fail(Result, Code, Rest.IsEmpty() ? Detail : Rest);
 	}
 
 	/** The folder part of a package path: /Game/Dir/Name -> /Game/Dir. */
@@ -171,7 +171,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameAsset(const TSharedPtr<F
 	// is a bigger and riskier edit than the feature. The MCP tool calls save_asset after this
 	// returns, which is the composite pattern this project already uses everywhere, keeps the bridge
 	// command doing one thing, and makes the save visible in the reply rather than implied.
-	return Result;
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleDuplicateAsset(const TSharedPtr<FJsonObject>& Params)
@@ -224,5 +224,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDuplicateAsset(const TSharedPt
 	Result->SetStringField(TEXT("path"), Copy->GetPathName());
 	Result->SetStringField(TEXT("class"), Copy->GetClass()->GetName());
 	// Not saved here either; the MCP tool saves. See the note in HandleRenameAsset.
-	return Result;
+	return MCPResponse::Ok(Result);
 }

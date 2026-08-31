@@ -10,6 +10,8 @@
 
 #include "MCPCommandHandler.h"
 
+#include "MCPResponse.h"
+
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "Engine/Blueprint.h"
@@ -24,9 +26,7 @@ namespace
 	/** The error shape the sibling files use; see the note in MCPAssetOps.cpp for why. */
 	TSharedRef<FJsonObject> FailOp(const TSharedRef<FJsonObject>& Result, const FString& Code, const FString& Detail)
 	{
-		Result->SetStringField(TEXT("error"), Code);
-		Result->SetStringField(TEXT("detail"), Detail);
-		return Result;
+		return MCPResponse::Fail(Result, Code, Detail);
 	}
 
 	/** The SCS node for a component this Blueprint declares, by name. */
@@ -137,7 +137,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameComponent(const TSharedP
 
 	Result->SetStringField(TEXT("from"), Name);
 	Result->SetStringField(TEXT("to"), Node->GetVariableName().ToString());
-	return Result;
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveComponent(const TSharedPtr<FJsonObject>& Params)
@@ -180,7 +180,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveComponent(const TSharedP
 
 	Result->SetStringField(TEXT("removed"), Name);
 	Result->SetNumberField(TEXT("childrenPromoted"), ChildCount);
-	return Result;
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveFunction(const TSharedPtr<FJsonObject>& Params)
@@ -253,5 +253,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveFunction(const TSharedPt
 
 	Result->SetStringField(TEXT("removed"), FunctionName);
 	Result->SetNumberField(TEXT("callsLeftBroken"), Calls);
-	return Result;
+	return MCPResponse::Ok(Result);
 }

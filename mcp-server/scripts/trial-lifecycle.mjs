@@ -208,7 +208,13 @@ try {
 
     // A key with no hash must be refused rather than made. An unusable map that reports success is
     // worse than an error, and the engine is the one that knows which keys hash.
-    const badKey = await call("unreal_add_variable", { path: BP, variableName: "ByPosition", type: "map<vector,int>" });
+    //
+    // `text`, not `vector`. This first asserted that map<vector,int> would be refused and it was not -
+    // because UE5 gives FVector and FTransform a GetTypeHash, so the engine considers them perfectly
+    // good keys and so should this. The code was right and the test was wrong, which is worth writing
+    // down: asking the engine (HasGetTypeHash) beats a hard-coded list of what "should" hash, and the
+    // test had the hard-coded list. FText genuinely has none.
+    const badKey = await call("unreal_add_variable", { path: BP, variableName: "ByLabel", type: "map<text,int>" });
     check("a key with no hash is refused, with the reason", /bad_type|hash/i.test(badKey.body), badKey.body.slice(0, 90));
   }
 

@@ -16,6 +16,8 @@
 
 #include "MCPCommandHandler.h"
 
+#include "MCPResponse.h"
+
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "Engine/Blueprint.h"
@@ -29,9 +31,7 @@ namespace
 	/** The error shape the sibling files use; see the note in MCPAssetOps.cpp for why. */
 	TSharedRef<FJsonObject> FailVar(const TSharedRef<FJsonObject>& Result, const FString& Code, const FString& Detail)
 	{
-		Result->SetStringField(TEXT("error"), Code);
-		Result->SetStringField(TEXT("detail"), Detail);
-		return Result;
+		return MCPResponse::Fail(Result, Code, Detail);
 	}
 
 	/** Is this a variable the Blueprint itself declares, as opposed to one inherited from C++? */
@@ -133,7 +133,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameVariable(const TSharedPt
 	}
 	if (!ConfirmDeclared(Blueprint, OldName, Result))
 	{
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	FString NewName;
@@ -191,7 +191,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameVariable(const TSharedPt
 		GraphList.Add(MakeShared<FJsonValueString>(G));
 	}
 	Result->SetArrayField(TEXT("graphsTouched"), GraphList);
-	return Result;
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveVariable(const TSharedPtr<FJsonObject>& Params)
@@ -213,7 +213,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveVariable(const TSharedPt
 	}
 	if (!ConfirmDeclared(Blueprint, Name, Result))
 	{
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	TArray<FString> Graphs;
@@ -255,5 +255,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveVariable(const TSharedPt
 
 	Result->SetStringField(TEXT("removed"), Name);
 	Result->SetNumberField(TEXT("nodesRemoved"), Nodes);
-	return Result;
+	return MCPResponse::Ok(Result);
 }

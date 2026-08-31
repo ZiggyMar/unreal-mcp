@@ -26,6 +26,8 @@
 
 #include "MCPCommandHandler.h"
 
+#include "MCPResponse.h"
+
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "Factories/Factory.h"
@@ -39,9 +41,7 @@ namespace
 	/** The error shape the sibling ops files use; see the note in MCPAssetOps.cpp for why. */
 	TSharedRef<FJsonObject> FailCreate(const TSharedRef<FJsonObject>& Result, const FString& Code, const FString& Detail)
 	{
-		Result->SetStringField(TEXT("error"), Code);
-		Result->SetStringField(TEXT("detail"), Detail);
-		return Result;
+		return MCPResponse::Fail(Result, Code, Detail);
 	}
 
 	/**
@@ -109,6 +109,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateAsset(const TSharedPtr<F
 			TEXT("path and assetClass are both required, e.g. path \"/Game/Input/IA_Dash\", assetClass \"InputAction\"."));
 	}
 
+	// Object-path form is accepted too, because that is what arrives.
+	//
+	// Every path parameter in this bridge takes either "/Game/Dir/Name" or the object path
+	// "/Game/Dir/Name.Name", and the MCP server normalises to the latter before sending. Splitting on
+	// the last slash then handed CreateAsset an asset name of "Name.Name", which the engine refuses -
+	// so this command failed for EVERY class, with an error blaming the folder.
+	//
+	// It read as a per-class problem right up until InputAction, CurveFloat, BlackboardData and
+	// SoundCue all failed identically, and the message itself showed the doubled name.
+	if (Path.Contains(TEXT(".")))
+	{
+		FString Left, Right;
+		Path.Split(TEXT("."), &Left, &Right, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+		Path = Left;
+	}
+
 	FString PackageDir, AssetName;
 	if (!Path.Split(TEXT("/"), &PackageDir, &AssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd) ||
 		PackageDir.IsEmpty() || AssetName.IsEmpty())
@@ -170,5 +186,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateAsset(const TSharedPtr<F
 	// Not saved here, for the reason given in MCPAssetOps.cpp: the MCP tool calls save_asset after
 	// this returns, which keeps the bridge command doing one thing and the save visible in the reply.
 	Result->SetBoolField(TEXT("saved"), false);
-	return Result;
+	return MCPResponse::Ok(Result);
 }
