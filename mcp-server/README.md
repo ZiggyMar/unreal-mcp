@@ -1923,6 +1923,53 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The loudest check in the audit was mostly not a bug
+
+Ranking the real project's findings by cost times count asked an obvious question: what is the
+biggest single thing this audit is saying?
+
+```text
+5670  unhandled-cast-failure      63 graphs, cost 90
+1260  repnotify-does-nothing      21 graphs, cost 60
+ 900  cast-to-server-only-class    9 graphs, cost 100
+```
+
+**142 casts, four and a half times the next finding.** The check flagged every `DynamicCast` with an
+unwired Cast Failed pin - which is ordinary, correct Blueprint. Looking at what the casts actually
+were, in `BP_Player`'s event graph alone:
+
+```text
+Cast To BP_Player      object from: On Component Begin Overlap (HealProximityCollision)
+Cast To BP_Player      object from: For Each Loop
+Cast To BP_VirusData   object from: Break Hit Result   (after Line Trace For Objects)
+Cast To ABP_NewPlayer  exec from:   nothing at all
+```
+
+The first three are the cast *being* the filter - that is how you reject the actors that are not
+players, and wiring Cast Failed would be wiring "do nothing" to "do nothing". The fourth is a cast
+nothing runs, reported as a silent-failure risk when it can never fail because it never happens.
+
+Three discriminators, all from evidence already in the graph: reached from an overlap/hit/damage
+event; fed by a loop, a trace or a hit result; or not reached by execution at all. **142 casts ->
+111.**
+
+And then the honest part, because the remaining 111 are the real finding. They are not filters and
+they are not dead - they are just how Blueprints get written. An idiom that appears 111 times in a
+shipping game is not a defect at cost 90, which is the band for "this WILL fail". So it is **40**
+now, beside `empty-event`, with the argument recorded next to the number.
+
+**One correction worth recording**, because it was written into the code before it was checked. The
+first version of that argument said the check was "shouting over the findings that matter". It was
+not: `unreal_audit_project` orders groups by **cost alone**, not cost times count, so 90 placed
+unhandled casts fifth - behind the 100s and 95s - and buried nothing. The cost-times-count ranking
+was a metric invented to find the biggest block, not the tool's behaviour. What was actually wrong is
+narrower and still worth fixing: a reader working down by severity met sixty-three graphs of
+mostly-fine casts immediately after "this cast fails on every client, every time".
+
+Four tests cover it, and the last one matters most: a cast on a `BeginPlay` setup path, where failing
+means the initialisation silently never happens, is **still reported**. Narrowing a check must not
+turn it off.
+
 ### The same mistake, in three places, found by building one tool
 
 `unreal_call_parent_function` had the bug it was written to fix - it asked whether a

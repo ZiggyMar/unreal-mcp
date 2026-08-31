@@ -263,3 +263,91 @@ test("a real event wired to nothing is still reported", () => {
   ]);
   assert.equal(report.findings.filter((f) => f.check === "empty-event").length, 1);
 });
+
+test("a cast that filters is not reported as an unhandled failure", () => {
+  // Measured on a real project: this check fired on 142 casts, and the majority were the ordinary
+  // Blueprint idiom of casting to find out WHETHER something is that class. Wiring Cast Failed there
+  // would be wiring "do nothing" to "do nothing".
+  const overlapFilter = [
+    { id: "ev", type: "K2Node_ComponentBoundEvent", title: "On Component Begin Overlap (Trigger)", connectedPins: [
+      { pin: "then", direction: "out", linkedTo: [{ node: "cast", pin: "execute" }] },
+    ] },
+    { id: "cast", type: "K2Node_DynamicCast", title: "Cast To BP_Player", connectedPins: [
+      { pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] },
+      { pin: "then", direction: "out", linkedTo: [{ node: "do", pin: "execute" }] },
+    ] },
+    { id: "do", type: "K2Node_CallFunction", title: "Heal", connectedPins: [
+      { pin: "execute", direction: "in", linkedTo: [{ node: "cast", pin: "then" }] },
+    ] },
+  ];
+  const report = reviewGraph("EventGraph", overlapFilter);
+  assert.equal(
+    report.findings.find((f) => f.check === "unhandled-cast-failure"),
+    undefined,
+    "a cast reached from an overlap event IS the filter"
+  );
+});
+
+test("a cast fed by a loop or a trace result is filtering too", () => {
+  // The half the event walk misses. Seen in BP_Player: a cast fed by For Each Loop over actors, and
+  // one fed by Break Hit Result off a line trace. Neither is reached from an overlap event.
+  for (const sourceTitle of ["For Each Loop", "Break Hit Result", "Get All Actors Of Class"]) {
+    const nodes = [
+      { id: "ev", type: "K2Node_Event", title: "Event BeginPlay", connectedPins: [
+        { pin: "then", direction: "out", linkedTo: [{ node: "cast", pin: "execute" }] },
+      ] },
+      { id: "src", type: "K2Node_CallFunction", title: sourceTitle, connectedPins: [
+        { pin: "Array Element", direction: "out", linkedTo: [{ node: "cast", pin: "Object" }] },
+      ] },
+      { id: "cast", type: "K2Node_DynamicCast", title: "Cast To BP_Player", connectedPins: [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] },
+        { pin: "Object", direction: "in", linkedTo: [{ node: "src", pin: "Array Element" }] },
+        { pin: "then", direction: "out", linkedTo: [{ node: "ev", pin: "then" }] },
+      ] },
+    ];
+    const report = reviewGraph("EventGraph", nodes);
+    assert.equal(
+      report.findings.find((f) => f.check === "unhandled-cast-failure"),
+      undefined,
+      `${sourceTitle} feeds a filtering cast`
+    );
+  }
+});
+
+test("a cast nothing runs into cannot fail", () => {
+  // Found in BP_Player's GetAnimBP: a Cast node whose `execute` pin is linked to nothing at all,
+  // reported as a silent-failure risk when it is simply never reached.
+  const nodes = [
+    { id: "ev", type: "K2Node_Event", title: "Event BeginPlay", connectedPins: [] },
+    { id: "cast", type: "K2Node_DynamicCast", title: "Cast To BP_Player", connectedPins: [
+      { pin: "then", direction: "out", linkedTo: [{ node: "ev", pin: "execute" }] },
+    ] },
+  ];
+  const report = reviewGraph("EventGraph", nodes);
+  assert.equal(report.findings.find((f) => f.check === "unhandled-cast-failure"), undefined);
+});
+
+test("a cast on a setup path is still reported, which is the point", () => {
+  // The case the check was written for: fail here and the rest of the initialisation silently never
+  // happens. Narrowing the check must not turn it off.
+  const nodes = [
+    { id: "ev", type: "K2Node_Event", title: "Event BeginPlay", connectedPins: [
+      { pin: "then", direction: "out", linkedTo: [{ node: "cast", pin: "execute" }] },
+    ] },
+    { id: "gi", type: "K2Node_CallFunction", title: "Get Game Instance", connectedPins: [
+      { pin: "ReturnValue", direction: "out", linkedTo: [{ node: "cast", pin: "Object" }] },
+    ] },
+    { id: "cast", type: "K2Node_DynamicCast", title: "Cast To AVS_GameInstance", connectedPins: [
+      { pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] },
+      { pin: "Object", direction: "in", linkedTo: [{ node: "gi", pin: "ReturnValue" }] },
+      { pin: "then", direction: "out", linkedTo: [{ node: "setup", pin: "execute" }] },
+    ] },
+    { id: "setup", type: "K2Node_CallFunction", title: "Load Save Game", connectedPins: [
+      { pin: "execute", direction: "in", linkedTo: [{ node: "cast", pin: "then" }] },
+    ] },
+  ];
+  const report = reviewGraph("EventGraph", nodes);
+  const finding = report.findings.find((f) => f.check === "unhandled-cast-failure");
+  assert.ok(finding, "a setup cast with no failure path is the real finding");
+  assert.deepEqual(finding.nodeIds, ["cast"]);
+});

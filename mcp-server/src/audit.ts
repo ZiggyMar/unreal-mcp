@@ -72,7 +72,20 @@ export const FINDING_COST: Record<string, number> = {
   // The parent's work simply does not happen, on every machine, and nothing warns. The child's own
   // logic still works, which is what makes it survive.
   "parent-event-not-called": 95,
-  "unhandled-cast-failure": 90,
+  // Was 90. Not because the check is wrong - an unhandled cast really does stop the chain silently -
+  // but because 90 is the band reserved for "this WILL fail", and this check has no evidence of that.
+  //
+  // To be accurate about what was actually wrong: groups are ordered by cost alone, so 90 placed this
+  // fifth overall rather than burying anything. What it did was put an idiom that appears 111 times
+  // in a shipping game (measured, on 150 Blueprints, after the filtering ones are excluded)
+  // immediately below "this cast fails on every client, every time" and "the parent's setup never
+  // runs". A reader working down by severity met sixty-three graphs of mostly-fine casts fifth.
+  //
+  // The comparison that settles the number: cast-to-server-only-class is the SAME defect shape WITH
+  // decisive evidence that it will fail, and it is 100. Without that evidence this is "might stop
+  // silently, if it ever fails" - weaker than branch-dead-path (60), which never runs at all, and
+  // about the strength of empty-event (40). So 40, beside it.
+  "unhandled-cast-failure": 40,
   "level-sweep-every-frame": 85,
   "spawn-every-frame": 85,
   "state-outlives-owner": 80,

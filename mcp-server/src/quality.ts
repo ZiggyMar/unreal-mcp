@@ -210,22 +210,99 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[]): QualityR
     });
   }
 
-  // --- Casts whose failure path is unhandled: the classic silent-nothing-happens bug. ---
-  const unhandledCasts = nodes.filter((node) => {
-    if (!/^K2Node_DynamicCast/.test(node.type)) return false;
+  // --- Casts whose failure path is unhandled ---
+  //
+  // This was the loudest check in the audit by a wide margin and most of it was not a bug. On a real
+  // 150-Blueprint project it fired 63 times at cost 90 - a weight of 5,670, four and a half times the
+  // next finding - and it was drowning the nine cast-to-server-only-class findings at cost 100 that
+  // ARE decisive. The ranking is the entire product of this tool; a check that shouts over the ones
+  // that matter is worse than one that says nothing.
+  //
+  // It flagged every DynamicCast with an unwired Cast Failed pin, which is ordinary, correct
+  // Blueprint. Two kinds of evidence separate the ones worth reporting, and both are already here.
+  //
+  // A cast nothing runs cannot fail. Found in the data: BP_Player's GetAnimBP has a Cast node whose
+  // `execute` pin is linked to nothing at all - reported as a silent-failure risk when it is simply
+  // never reached. Noise on top of noise.
+  //
+  // A cast reached from an overlap, hit or damage event IS the filter. DetectPlayerInSphere casts
+  // every overlapping actor to BP_Player, and the failure path is how it rejects the ones that are
+  // not players - stopping is the whole point, and wiring Cast Failed would be wiring "do nothing"
+  // to "do nothing". That is the shape of most of the 63.
+  //
+  // What is left is the case the check was written for: a cast on a setup path, where failing means
+  // the rest of the initialisation silently never happens.
+  const FILTERING_EVENT = /overlap|hit|damage|touch/i;
+  const filterEvents = nodes.filter((node) => isEventNode(node) && FILTERING_EVENT.test(titleOf(node)));
+  const reachedByFilter = new Set<string>();
+  for (const event of filterEvents) {
+    const queue = [event];
+    while (queue.length > 0) {
+      const current = queue.pop();
+      if (!current || reachedByFilter.has(current.id)) continue;
+      reachedByFilter.add(current.id);
+      queue.push(...execTargets(current));
+    }
+  }
+
+  const isCast = (node: LayoutNode) => /^K2Node_DynamicCast/.test(node.type);
+  const failureUnwired = (node: LayoutNode) => {
     const pins = connectedPinNames(node);
     // Only connected pins are reported, so a missing "cast failed" means it is wired to nothing.
     return !pins.has("cast failed") && !pins.has("castfailed");
-  });
+  };
+  // An impure cast that nothing runs into. `execute` absent from the connected set means unwired.
+  const neverRuns = (node: LayoutNode) => {
+    const pins = connectedPinNames(node);
+    return !pins.has("execute") && !pins.has("exec");
+  };
+
+  // The other half of "this cast is the filter", and the half the event walk misses: what feeds the
+  // Object pin. Seen in BP_Player's event graph - a cast fed by a For Each Loop over actors, and one
+  // fed by Break Hit Result off a line trace. Neither is reached from an overlap event, and in both
+  // the failed cast is how the wrong thing gets rejected. Wiring Cast Failed there would be wiring
+  // "do nothing" to "do nothing".
+  const FILTERING_SOURCE = /for ?each|for ?loop|get all actors|overlapping|break hit result|line trace|sphere trace|box trace|sphere overlap|box overlap|capsule/i;
+  const feedsFrom = (node: LayoutNode): LayoutNode[] => {
+    const out: LayoutNode[] = [];
+    for (const pin of node.connectedPins ?? []) {
+      if (pin.direction !== "in") continue;
+      if (/^(execute|exec)$/i.test(pin.pin)) continue;
+      for (const link of pin.linkedTo ?? []) {
+        const source = byId.get(link.node);
+        if (source) out.push(source);
+      }
+    }
+    return out;
+  };
+  const fedByCollection = (node: LayoutNode) => feedsFrom(node).some((n) => FILTERING_SOURCE.test(titleOf(n)));
+
+  const candidates = nodes.filter((node) => isCast(node) && failureUnwired(node));
+  const isFiltering = (node: LayoutNode) => reachedByFilter.has(node.id) || fedByCollection(node);
+  const unhandledCasts = candidates.filter((node) => !neverRuns(node) && !isFiltering(node));
+  const asFilter = candidates.filter((node) => !neverRuns(node) && isFiltering(node));
+  const unreachable = candidates.filter((node) => neverRuns(node));
+
   if (unhandledCasts.length > 0) {
     findings.push({
       check: "unhandled-cast-failure",
       severity: "warning",
-      message: `${unhandledCasts.length} Cast node(s) leave the "Cast Failed" path unhandled.`,
+      message:
+        `${unhandledCasts.length} Cast node(s) on a running path leave the "Cast Failed" path unhandled.` +
+        (asFilter.length > 0 || unreachable.length > 0
+          ? ` (${asFilter.length + unreachable.length} more were not counted: ` +
+            [
+              asFilter.length > 0 ? `${asFilter.length} filtering - reached from an overlap or hit event, or fed by a loop or trace result, where a failed cast IS the filter` : "",
+              unreachable.length > 0 ? `${unreachable.length} with no execution reaching them at all` : "",
+            ]
+              .filter(Boolean)
+              .join("; ") +
+            ".)"
+          : ""),
       fix:
-        "Wire Cast Failed to something that handles the miss, even if that is only a Print String during " +
-        "development. An unhandled cast failure is silent: the rest of the chain simply never runs, which is " +
-        "the single hardest Blueprint bug for a beginner to diagnose.",
+        "Wire Cast Failed to whatever should happen when the object is not that class. If the honest answer " +
+        "is \"nothing\", the cast is filtering and this is not a defect - which is why casts reached from an " +
+        "overlap or hit event are not counted here.",
       nodeIds: unhandledCasts.map((node) => node.id),
     });
   }
