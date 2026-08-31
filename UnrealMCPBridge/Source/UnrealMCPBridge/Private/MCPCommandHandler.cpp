@@ -42,7 +42,6 @@
 #include "K2Node_IfThenElse.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_DynamicCast.h"
-#include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_MacroInstance.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
@@ -1911,9 +1910,6 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 
 	UEdGraphNode* NewNode = nullptr;
 
-	/** Set by the SpawnActor branch, applied once the shared code below has allocated pins. */
-	UClass* PendingSpawnClass = nullptr;
-
 	if (NodeType == TEXT("Event"))
 	{
 		FString EventName;
@@ -2277,50 +2273,24 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		CastNode->SetPurity(bPure);
 		NewNode = CastNode;
 	}
-	else if (NodeType == TEXT("SpawnActor"))
-	{
-		// Spawning an actor is one of the commonest things a Blueprint does, and until now nothing
-		// here could build one.
-		//
-		// Worse than missing: the server's own standing instructions told every model that "Spawn
-		// Actor" IS a nodeType, in four separate places, while the enum did not contain it and the
-		// bridge had no code for it. A model following the instructions asked for something that did
-		// not exist. Now it does.
-		//
-		// It cannot be a CallFunction, which is why it needs its own branch. The editor's node is a
-		// DEFERRED spawn - BeginDeferredActorSpawnFromClass, then expose-on-spawn pins, then
-		// FinishSpawningActor - and UK2Node_SpawnActorFromClass is what expands into that. Wiring the
-		// two library calls by hand would be three nodes and a struct pin for something the engine
-		// already does in one.
-		FString ActorClassName;
-		if (!Params->TryGetStringField(TEXT("targetClass"), ActorClassName))
-		{
-			return MakeErrorResponse(
-				TEXT("missing_param: targetClass is required for nodeType=SpawnActor - the class to spawn, either ")
-				TEXT("an engine class name or a Blueprint asset path."));
-		}
-		FString ClassError;
-		UClass* ActorClass = ResolveClassByName(ActorClassName, ClassError);
-		if (!ActorClass)
-		{
-			return MakeErrorResponse(ClassError);
-		}
-		if (!ActorClass->IsChildOf(AActor::StaticClass()))
-		{
-			// Said plainly rather than left to fail at compile: the Class pin accepts only actors, and
-			// a widget or object class here produces a node that never resolves.
-			return MakeErrorResponse(FString::Printf(
-				TEXT("not_an_actor: %s does not derive from Actor, so it cannot be spawned into a world. ")
-				TEXT("Use a Blueprint whose parent is Actor, Pawn, Character or similar."), *ActorClassName));
-		}
-
-		// Create it and nothing else. The shared code below already does CreateNewGuid,
-		// PostPlacedNewNode and AllocateDefaultPins for every node type, and doing them again here
-		// CRASHED THE EDITOR - AllocateDefaultPins twice on a K2Node builds a second set of pins over
-		// the first. The class is applied after that shared step, where the pins exist.
-		NewNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
-		PendingSpawnClass = ActorClass;
-	}
+	// NOT here: a "SpawnActor" node type. It was written, shipped, and reverted, and the reason is
+	// worth more than the feature.
+	//
+	// UK2Node_SpawnActorFromClass cannot be created the way every other node here is created.
+	// NewObject + AddNode + CreateNewGuid + PostPlacedNewNode + AllocateDefaultPins works for
+	// CallFunction, Branch, Cast and the rest, and it CRASHES THE EDITOR for this one - four times,
+	// on four different guesses. The callstack is unambiguous: the assert fires inside
+	// AllocateDefaultPins itself, two frames deep in BlueprintGraph, on a FindPinChecked
+	// (EdGraphNode.h:586) during the node's own pin construction. Not in the class pin being set
+	// afterwards, which was guess two, and not in duplicate allocation, which was guess one.
+	//
+	// The engine builds these through FEdGraphSchemaAction_K2NewNode::SpawnNodeFromTemplate rather
+	// than by hand, and that is almost certainly what this needs. It is a real piece of work, not a
+	// missing line, and it belongs in a change that can be tested on its own rather than smuggled in
+	// beside something else.
+	//
+	// Until then the instructions must not promise it. They did, in four places, for months, which is
+	// how this started.
 	else if (NodeType == TEXT("Macro"))
 	{
 		FString MacroName;
@@ -2388,24 +2358,6 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	NewNode->CreateNewGuid();
 	NewNode->PostPlacedNewNode();
 	NewNode->AllocateDefaultPins();
-
-	// A spawn node's Class pin, set now that its pins exist.
-	//
-	// It has to happen after AllocateDefaultPins and it matters that it happens at all: the exposed
-	// spawn pins the node grows are derived from the class, so a node whose class is set later has
-	// the right class and none of its properties. PinDefaultValueChanged is what makes it reallocate.
-	if (PendingSpawnClass)
-	{
-		if (UK2Node_SpawnActorFromClass* SpawnNode = Cast<UK2Node_SpawnActorFromClass>(NewNode))
-		{
-			if (UEdGraphPin* ClassPin = SpawnNode->GetClassPin())
-			{
-				ClassPin->DefaultObject = PendingSpawnClass;
-				ClassPin->DefaultValue = PendingSpawnClass->GetPathName();
-				SpawnNode->PinDefaultValueChanged(ClassPin);
-			}
-		}
-	}
 
 	// Optional comment, so a caller can annotate as it builds instead of needing a second
 	// call per node. AGENT_WORKFLOW.md tells agents to do exactly that.
