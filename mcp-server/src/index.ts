@@ -244,6 +244,41 @@ function buildInstructions(profile: string): string {
     return lines.join("\n");
   }
 
+  // What this profile costs, said once, to the profiles expensive enough to care.
+  //
+  // Measured rather than asserted, and the first version of this text was WRONG in the direction
+  // that flatters the argument. It compared `full` at 37.3k against `search` at 2.3k and said
+  // sixteen times - true only of a session that never switches anything on. A session that does the
+  // work enables a preset, and then the honest comparison is:
+  //
+  //   search + cpp       6.6k     search + feature   9.8k     search + diagnose  12.4k
+  //   full              38.3k
+  //
+  // Three to six times, not sixteen. Still the largest single lever here - standing context is
+  // resent with every message, so it dwarfs every reply compaction in this repo put together - but
+  // the number had to be the real one. An overstated saving in the one text nobody can skip would
+  // undermine every other measurement beside it, which is the exact failure the drift guard in
+  // measure:reads exists to catch.
+  //
+  // A model cannot change its own profile; it is set where this server is launched. So this ends by
+  // telling it to tell the person who can.
+  if (profile === "core" || profile === "lazy" || profile === "full") {
+    const standing = Math.round(ALL_GROUPS_TOKENS / 100) / 10;
+    const cheapest = Math.round((2292 + PRESET_COST_TOKENS.cpp) / 100) / 10;
+    const dearest = Math.round((2292 + PRESET_COST_TOKENS.diagnose) / 100) / 10;
+    lines.push(
+      "WHAT THIS SESSION COSTS",
+      `Tool definitions are resent with your whole context on every message, so they are not paid once.`,
+      `Everything switched on is ~${standing}k tokens per message; a thirty-call job pays that thirty times.`,
+      `The \`search\` profile starts with four tools and switches on the group the job needs - a working`,
+      `session lands around ${cheapest}k-${dearest}k per message, three to six times less, with the same tools and`,
+      `the same fully typed schemas. One extra call at the start.`,
+      "You cannot change this yourself - it is UNREAL_MCP_PROFILE where this server is launched - so if",
+      "the user is paying for tokens, tell them the option exists.",
+      ""
+    );
+  }
+
   lines.push(
     "HOW TO WORK",
     "1. Anything broken: unreal_doctor. It names which half is wrong and the remedy.",

@@ -189,9 +189,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2292 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4014 | ten tools, fixed, for a small local model |
-| `core` | 12434 | the authoring spine |
-| `lazy` | 12448 | `core` plus deferred groups |
-| `full` | 38127 | everything, for a model that can afford it |
+| `core` | 12590 | the authoring spine |
+| `lazy` | 12603 | `core` plus deferred groups |
+| `full` | 38282 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -5052,6 +5052,35 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### The biggest token lever was never mentioned to the profile that needed it
+
+Standing context is resent with **every message**, so it is not paid once — and that reframes all the
+compaction work below it. A thirty-call job on `full` pays 38k tokens of tool definitions thirty
+times. Every reply saving in this file put together does not approach that.
+
+The honest comparison, because the first version of this was wrong in the direction that flatters the
+argument:
+
+| session | per message |
+|---|---:|
+| `full` | 38,282 |
+| `search` + the `cpp` preset | 6,615 |
+| `search` + the `feature` preset | 9,817 |
+| `search` + the `diagnose` preset | 12,362 |
+
+**Three to six times, not sixteen.** Sixteen was `full` against `search` with nothing switched on —
+true of a session that never does any work. A session that does the work enables a preset, and that
+is the number that matters. Still the largest single lever here, and it had to be the real one: an
+overstated saving in the one text nobody can skip would undermine every other measurement beside it,
+which is exactly what `measure:reads`' drift guard exists to catch.
+
+`core`, `lazy` and `full` now say what they cost, computed from the same table `unreal_list_tools`
+prices groups from so it cannot go stale. It ends by telling the model to **tell the user** — a model
+cannot change `UNREAL_MCP_PROFILE`, which is set where the server is launched, so the only action
+available to it is passing the option on. `search` and `minimal` are left alone: one already opens by
+explaining how to widen a deliberately short list, the other is fixed, and paying tokens to give
+either of them advice they have already taken would be its own small joke.
 
 ### Seven commands that compile and have never run
 
