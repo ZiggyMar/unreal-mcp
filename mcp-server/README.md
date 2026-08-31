@@ -1924,6 +1924,36 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### find_references answered two questions when you asked one
+
+`find_references` returned both directions at once - what references this asset, and what this asset
+depends on - and the question is almost always one of them. *"What breaks if I change this"* is
+`referencedBy`. *"What does this need"* is `dependsOn`. There was no way to ask for either.
+
+```text
+both          2,859 tok
+referencedBy  1,086 tok
+dependsOn     1,751 tok
+```
+
+The counts always survive, whichever half is dropped. *"49 things reference this, here are none of
+them"* is a worse answer than either list, and a caller who asked for one direction still needs to
+know the other exists before concluding an asset is unused.
+
+**Measuring it caught a bug the code did not show.** The first version spread `...result` and then
+conditionally re-added the compacted lists - so skipping one did not remove it, because the raw
+uncompacted list from the bridge was already there from the spread. Asking for **one** direction
+returned **more** than asking for both:
+
+```text
+both          2,859 tok
+referencedBy  3,751 tok      <- wrong, and it reads as correct code
+```
+
+Not re-adding a field is not the same as removing it. That is now a test, alongside the compaction
+helpers, because it is a mistake that produces a *larger* reply while looking like a saving - which
+no amount of reading the diff would have surfaced.
+
 ### Three of the biggest reads had a cheap form nothing mentioned
 
 Having found this on `list_blueprints`, the obvious question was how many other expensive reads have

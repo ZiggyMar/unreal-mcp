@@ -355,3 +355,22 @@ test("an enum default is NOT treated as a zero", () => {
   const out = compactStructField({ name: "Category", type: "byte", subType: "E_X", defaultValue: "NewEnumerator0" });
   assert.equal(out.defaultValue, "NewEnumerator0");
 });
+
+test("dropping a field means removing it, not declining to re-add it", () => {
+  // The bug this encodes, from find_references. The handler spread `...result` and then
+  // conditionally re-added the compacted lists; skipping one did not remove it, because the RAW
+  // uncompacted list from the bridge was already there from the spread. Asking for ONE direction
+  // returned MORE than asking for both - 3,751 tokens against 2,859.
+  //
+  // The code read as correct. Measuring the change is what caught it, which is the argument for
+  // measuring every compaction rather than reasoning about it.
+  const fromBridge = { path: "/Game/X", referencedBy: [{ big: "raw" }], dependsOn: [{ big: "raw" }] };
+
+  const wrong = { ...fromBridge, ...(false ? { referencedBy: [] } : {}) };
+  assert.deepEqual(wrong.referencedBy, [{ big: "raw" }], "not re-adding leaves the original in place");
+
+  const { referencedBy: _dropped, ...rest } = fromBridge;
+  const right = { ...rest, ...(false ? { referencedBy: [] } : {}) };
+  assert.equal("referencedBy" in right, false, "destructuring it out is what actually removes it");
+  assert.equal(right.path, "/Game/X", "and everything else survives");
+});

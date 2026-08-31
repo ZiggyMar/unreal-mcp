@@ -1552,18 +1552,51 @@ register(
         .string()
         .describe('Asset path, e.g. "/Game/Blueprints/BP_Foo.BP_Foo" or just the package "/Game/Blueprints/BP_Foo".'),
       maxResults: z.number().optional().describe("Cap per list (referencedBy / dependsOn). Defaults to 200."),
+      direction: z
+        .enum(["referencedBy", "dependsOn", "both"])
+        .optional()
+        .describe(
+          'Which half you actually want. "referencedBy" is what breaks if you change this; "dependsOn" is ' +
+            'what this needs to exist. Defaults to "both", which is twice the reply for a question that is ' +
+            "almost always one of the two."
+        ),
     },
   },
-  async ({ path, maxResults }) => {
+  async ({ path, maxResults, direction }) => {
     try {
       const result = await bridge.send<FindReferencesResult>("find_references", { path, maxResults });
       // Both lists are rows of {package, assetName, assetClass} where two fields are derivable or
       // constant. Compacted here, in the tool, so anything internal that reads references keeps the
       // full shape.
+      const referencedBy = (result.referencedBy ?? []).map((r) => compactAssetRef(r as never));
+      const dependsOn = (result.dependsOn ?? []).map((r) => compactAssetRef(r as never));
+
+      // The counts always survive, whichever half is dropped. "49 things reference this, here are
+      // none of them" is a worse answer than either list, and a caller who asked for one direction
+      // still needs to know the other exists before concluding an asset is unused.
+      const want = direction ?? "both";
+      // Destructured OUT of `result`, not merely left unassigned below.
+      //
+      // The first version spread `...result` and then conditionally re-added the compacted lists.
+      // Skipping one did not remove it - the RAW, uncompacted list from the bridge was still there
+      // from the spread, so asking for one direction returned MORE than asking for both: 3,751
+      // tokens against 2,859. Measuring the change is what caught it; the code read as correct.
+      const { referencedBy: _rawRefBy, dependsOn: _rawDependsOn, ...rest } = result;
       return jsonResult({
-        ...result,
-        referencedBy: (result.referencedBy ?? []).map((r) => compactAssetRef(r as never)),
-        dependsOn: (result.dependsOn ?? []).map((r) => compactAssetRef(r as never)),
+        ...rest,
+        ...(want === "dependsOn" ? {} : { referencedBy }),
+        ...(want === "referencedBy" ? {} : { dependsOn }),
+        // Measured on BP_Player: both lists are 2,806 tokens and either one alone is roughly half.
+        // The question is almost always one of them - "what breaks if I change this" or "what does
+        // this need" - and nothing said the choice existed.
+        ...(want === "both" && referencedBy.length + dependsOn.length >= ADVISE_WHEN_ROWS_AT_LEAST
+          ? {
+              cheaper:
+                `Both directions returned (${referencedBy.length} referencedBy, ${dependsOn.length} dependsOn). ` +
+                `\`direction: "referencedBy"\` is what breaks if you change this; \`"dependsOn"\` is what this ` +
+                `needs - either is about half of this reply.`,
+            }
+          : {}),
       });
     } catch (err) {
       return errorResult(err);
