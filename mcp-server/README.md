@@ -1512,6 +1512,24 @@ The stopword filter also ran on the raw word while the singulariser ran after it
 dropped and `adds` was not — it passed the filter, became "add", and was reported as a concept. One
 list, applied to the form the list is written in.
 
+### A style note is not an unfinished feature
+
+`unreal_verify_feature` is the last call before telling the user a feature is done, so its verdict is
+the whole product. Run on the flow it exists for — create a Blueprint, add one variable, ask whether
+the feature is finished — it answered:
+
+```json
+{ "verdict": "fail", "score": 99,
+  "blockers": ["... [EventGraph] 3 execution chains but only 0 comment box(es) ..."] }
+```
+
+The rule was `score < 100`, so **any** imperfection failed. That finding is `unlabelled-sections`,
+severity **info**: a suggestion about comment boxes. A model that trusts the verdict goes and adds
+comment boxes to a feature that was already done; a model that learns not to trust it stops reading
+the tool at all, which is worse. The verdict now blocks on errors and warnings, and info findings are
+still reported on each asset — worth knowing, and not "not finished". Verified both ways against the
+editor: the new Blueprint passes at score 99, and `BP_Player` with 16 warnings still fails.
+
 ### The example value is a shape, not an answer
 
 Following that path to its end found the risk in it. `unreal_check_data_tables` reports each empty

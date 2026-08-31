@@ -4365,8 +4365,10 @@ register(
       "and making two calls per asset, and the model that forgets to check is the one that has " +
       "already forgotten what it touched.\n\n" +
       "Compile failures are listed before review findings, because a Blueprint that does not build " +
-      "has no graph worth reviewing. `verdict: \"pass\"` means every asset compiles and reviews clean; " +
-      "anything else means it is not done yet, whatever the last individual call said.",
+      "has no graph worth reviewing. `verdict: \"pass\"` means every asset compiles and carries no error " +
+      "or warning findings; anything else means it is not done yet, whatever the last individual call " +
+      "said. Info-level findings - naming, comment boxes, layout - are reported on each asset but do " +
+      "not fail the verdict: they are worth knowing and they are not \"not finished\".",
     inputSchema: {
       paths: z
         .array(z.string())

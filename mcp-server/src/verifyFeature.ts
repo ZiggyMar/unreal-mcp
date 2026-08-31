@@ -31,6 +31,13 @@ export interface VerifiedAsset {
   /** Absent when the compile itself could not be run. */
   score?: number;
   nextAction?: string;
+  /**
+   * Findings by severity, which is what decides the verdict.
+   *
+   * The score alone cannot: 99 is one style note and 99 is also, in principle, one nearly-harmless
+   * warning, and only one of those means "not finished".
+   */
+  problems?: { errors: number; warnings: number; infos: number };
   /** Set when this asset could not be checked at all, with the reason. */
   unavailable?: string;
 }
@@ -170,6 +177,8 @@ export async function verifyFeature(
         const review = await reviewBlueprint(bridge, path);
         asset.score = review.score;
         asset.nextAction = review.nextAction;
+        // Kept for the verdict. Blocking on `score < 100` treated a style note exactly like a bug.
+        asset.problems = review.summary;
       } catch (err) {
         asset.unavailable = err instanceof Error ? err.message : String(err);
       }
@@ -266,8 +275,25 @@ export async function verifyFeature(
         `to read them; nothing about this asset is trustworthy until it builds.`
     );
   }
-  for (const a of assets.filter((x) => x.compiled && x.nextAction && x.score !== undefined && x.score < 100)) {
-    blockers.push(`${a.path} (score ${a.score}): ${a.nextAction}`);
+  // Errors and warnings block "done". Info findings do not.
+  //
+  // The rule was `score < 100`, so ANY imperfection failed the verdict. Measured on the flow this
+  // tool exists for: create a Blueprint, add one variable, ask whether the feature is finished ->
+  // verdict "fail", score 99, blocked on "3 execution chains but only 0 comment box(es)".
+  //
+  // A model that trusts the verdict then goes and adds comment boxes to a feature that was already
+  // done. A model that learns not to trust it stops reading the tool at all, which is worse - this
+  // is the last call before telling the user the work is finished, and it is only worth having if
+  // "fail" means something is actually wrong.
+  //
+  // The info findings are still reported on each asset and in nextAction. They are worth knowing and
+  // they are not "not done yet".
+  for (const a of assets.filter(
+    (x) => x.compiled && x.nextAction && x.problems && (x.problems.errors > 0 || x.problems.warnings > 0)
+  )) {
+    blockers.push(
+      `${a.path} (score ${a.score}, ${a.problems!.errors} error(s), ${a.problems!.warnings} warning(s)): ${a.nextAction}`
+    );
   }
 
   for (const n of dataTableNulls) {

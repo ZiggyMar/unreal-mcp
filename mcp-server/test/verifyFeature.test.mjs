@@ -323,3 +323,99 @@ test("a trace that could not run says so instead of passing quietly", async () =
   assert.match(result.notReached[0].why, /could not be traced/);
   assert.match(result.notReached[0].why, /missing_param/);
 });
+
+test("a style note does not mean the feature is unfinished", async () => {
+  // Measured on the flow this tool exists for: create a Blueprint, add one variable, ask whether
+  // the feature is done -> verdict "fail", score 99, blocked on "3 execution chains but only 0
+  // comment box(es)". The rule was `score < 100`, which treats a style note exactly like a bug.
+  //
+  // A model that trusts the verdict then adds comment boxes to a feature that was already finished.
+  // A model that learns not to trust it stops reading the tool - worse, because this is the last
+  // call before telling the user the work is done, and it is only worth having if "fail" means
+  // something is actually wrong.
+  //
+  // The fixture has to be two real chains, each event wired to something. A first version used three
+  // events with no connections at all, which are DEAD NODES - a warning - so the test failed and was
+  // right to: it was asserting the wrong thing, not catching a bug. Isolated nodes and unlabelled
+  // chains are different findings at different severities, which is the whole distinction here.
+  const chain = (event, step) => [
+    {
+      id: event,
+      type: "Event",
+      title: event,
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: step, pin: "execute" }] }],
+    },
+    {
+      id: step,
+      type: "CallFunction",
+      title: `Do${step}`,
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: event, pin: "then" }] }],
+    },
+  ];
+  const twoChains = [...chain("Event BeginPlay", "s1"), ...chain("Event EndPlay", "s2")];
+  const result = await verifyFeature(fakeBridge({ "/Game/BP_New.BP_New": { compiles: true, nodes: twoChains } }), {
+    paths: ["/Game/BP_New.BP_New"],
+  });
+
+  assert.equal(result.assets[0].problems.errors, 0);
+  assert.equal(result.assets[0].problems.warnings, 0);
+  assert.ok(result.assets[0].problems.infos > 0, "the fixture has to produce an info finding or this proves nothing");
+  assert.equal(result.verdict, "pass", "info alone must not fail the verdict");
+  assert.deepEqual(result.blockers, []);
+});
+
+test("the info finding is still reported, just not as a blocker", async () => {
+  // Dropping it would trade a false alarm for a blind spot. It is worth knowing and it is not
+  // "not finished".
+  const wired = (event, step) => [
+    {
+      id: event,
+      type: "Event",
+      title: event,
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: step, pin: "execute" }] }],
+    },
+    {
+      id: step,
+      type: "CallFunction",
+      title: `Do${step}`,
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: event, pin: "then" }] }],
+    },
+  ];
+  const twoChains = [...wired("Event BeginPlay", "s1"), ...wired("Event EndPlay", "s2")];
+  const result = await verifyFeature(fakeBridge({ "/Game/BP_New.BP_New": { compiles: true, nodes: twoChains } }), {
+    paths: ["/Game/BP_New.BP_New"],
+  });
+  assert.ok(result.assets[0].nextAction, "the finding still reaches the caller");
+  assert.ok(result.assets[0].score < 100, "and the score still reflects it");
+});
+
+test("a warning still fails the verdict", async () => {
+  // The change narrows what blocks; it must not stop anything from blocking. An Event Tick running
+  // a long chain is tick-heavy, which is a warning.
+  const tick = [
+    { id: "t", type: "Event", title: "Event Tick", connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "n0", pin: "execute" }] }] },
+    ...Array.from({ length: 9 }, (_, i) => ({
+      id: `n${i}`,
+      type: "CallFunction",
+      title: `Step${i}`,
+      connectedPins: [
+        { pin: "execute", direction: "in", linkedTo: [{ node: i === 0 ? "t" : `n${i - 1}`, pin: "then" }] },
+        ...(i < 8 ? [{ pin: "then", direction: "out", linkedTo: [{ node: `n${i + 1}`, pin: "execute" }] }] : []),
+      ],
+    })),
+  ];
+  const result = await verifyFeature(fakeBridge({ "/Game/BP_Busy.BP_Busy": { compiles: true, nodes: tick } }), {
+    paths: ["/Game/BP_Busy.BP_Busy"],
+  });
+  assert.ok(result.assets[0].problems.warnings > 0, "the fixture has to produce a warning");
+  assert.equal(result.verdict, "fail");
+  assert.equal(result.blockers.length, 1);
+});
+
+test("a Blueprint that does not compile still fails whatever its findings say", async () => {
+  const result = await verifyFeature(fakeBridge({ "/Game/BP_Bad.BP_Bad": { compiles: false, errors: 2 } }), {
+    paths: ["/Game/BP_Bad.BP_Bad"],
+  });
+  assert.equal(result.verdict, "fail");
+  assert.match(result.blockers[0], /does not compile/);
+});
