@@ -1669,6 +1669,37 @@ answer given for a wrong pin name and a wrong parameter name, and for the same r
 is not guessable, and silently returning a summary with every group elided looks identical to "your
 check is real and found nothing", which is a different answer.
 
+### The audit now says which systems may already be dead
+
+Nothing in the audit consulted reachability. A finding in code nothing runs was ranked exactly like a
+finding in the code that does - and the two most expensive mistakes made against this project were
+both the same mistake: work done on a system that had been replaced and left on the canvas.
+
+The first was a skin system, diagnosed and modified before anyone noticed a newer one had taken over.
+The second the audit produced by itself: it flagged three PlayerControllers for not calling their
+parent's `BeginPlay`, at its second-highest cost, and acting on that would have been wrong in all
+three. What that chain sets is `MyRootLayout` - written once, read by nothing across 181 Blueprints -
+and the function that would consume it has one call site, itself dead.
+
+So the reply now carries a `possiblyReplaced` section: function graphs no Blueprint node appears to
+call, by the same fixpoint the bridge uses - an event graph can fire, a function is live if a live
+graph calls it, repeat. On the project this is developed against: **219 of 1,100 graphs**.
+
+It costs **no extra calls** - every graph was already read for the checks above - and about 240
+tokens.
+
+**It is a place to look, not a verdict, and the section says so.** It is blind to calls from C++, to
+delegates bound at runtime, to interface dispatch, and to `Set Timer by Function Name`, whose target
+is a string in a pin rather than a node. Two deliberate biases keep it honest: names are compared
+with everything but letters and digits removed, because Unreal renders a graph called `SetInput` on a
+node as "Set Input"; and an ambiguous match resolves to **live**. Reporting live code as dead would
+send somebody to delete something that runs, which is far worse than missing a dead graph.
+
+Checked against the bridge's own reachability on seven functions, including four this pass flagged:
+they agree, and where they differed - `PushAVSWidget` - this pass called a dead graph live. It errs
+in the direction it was built to err in. Interface Blueprints are excluded outright: their graphs are
+declarations, nothing calls them by name, and all of them would otherwise head the list.
+
 ### The project you actually work in has to be a build target
 
 `build-targets.json` had two entries, both scratch projects, and the editor doing real work was not

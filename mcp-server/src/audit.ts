@@ -33,6 +33,7 @@ import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { findUncalledParentEvents } from "./parentCalls.js";
+import { findDeadGraphs, type LivenessGraph } from "./systemLiveness.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
 import { findNiagaraFaults } from "./niagaraAudit.js";
 import { explainGraph } from "./explainGraph.js";
@@ -216,7 +217,11 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const detailedGroups = Math.max(1, Math.min(options.detailedGroups ?? 4, 30));
   const wantedCheck = (options.check ?? "").trim().toLowerCase();
 
-  const listed = await bridge.send<{ blueprints?: Array<{ name: string; path: string }> }>("list_blueprints", {
+  const listed = await bridge.send<{
+    // parentClass rides along for free and is what lets the liveness pass skip interfaces, whose
+    // graphs are declarations rather than code and would otherwise all look abandoned.
+    blueprints?: Array<{ name: string; path: string; parentClass?: string }>;
+  }>("list_blueprints", {
     pathPrefix,
   });
   const all = listed.blueprints ?? [];
@@ -246,6 +251,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const isServerOnlyClass = (className: string) => serverOnly.get(className) === true;
 
   const findings: AuditFinding[] = [];
+  /** Every graph of every Blueprint, kept so liveness costs no extra reads. */
+  const allGraphs: LivenessGraph[] = [];
   const unreadable: Array<{ name: string; error: string }> = [];
   const sessionGraphs: SessionGraph[] = [];
   const units: AuthorityUnit[] = [];
@@ -281,6 +288,15 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             cost: FINDING_COST[finding.check] ?? 1,
           });
         }
+      }
+
+      for (const graph of review.graphNodes ?? []) {
+        allGraphs.push({
+          blueprint: bp.name,
+          graphName: graph.graphName,
+          nodes: (graph.nodes ?? []) as Array<{ title?: string; type?: string }>,
+          parentClass: bp.parentClass,
+        });
       }
 
       await learn(bp.name);
@@ -687,6 +703,34 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     /* a bridge too old to read Data Tables must not lose the Blueprint half of the audit */
   }
 
+  // Function graphs nothing in any Blueprint appears to call.
+  //
+  // Its own section, deliberately, and NOT an annotation on individual findings. The reason is the
+  // blind spot it shares with the bridge's own reachability: neither can see a call from C++, a
+  // delegate bound at runtime, or an interface dispatch. Marking a finding "this is in a replaced
+  // system" on that evidence would be a confident wrong steer, which is worse than the silence it
+  // replaced. As a list to go and look at, it is exactly what was missing - the two most expensive
+  // mistakes this project has made were both work done on a system that had been replaced and left
+  // on the canvas, and nothing anywhere said so.
+  //
+  // Costs no extra calls: every graph was already read for the checks above.
+  const liveness = findDeadGraphs(allGraphs);
+  const possiblyReplaced =
+    liveness.dead.size === 0
+      ? undefined
+      : {
+          count: liveness.dead.size,
+          ofGraphs: liveness.considered,
+          examples: [...liveness.dead].slice(0, 12),
+          note:
+            "Function graphs no Blueprint node appears to call. A place to look, not a verdict. Blind " +
+            "to calls from C++, to delegates bound at runtime, to interface dispatch, and to Set Timer " +
+            "by Function Name, whose target is a string in a pin rather than a node - so a graph listed " +
+            "here may still run. unreal_trace_function_calls on one name confirms or clears it, and it " +
+            "does follow timers. Worth checking before fixing anything inside one: work on a system " +
+            "that was replaced and left on the canvas is the most expensive wasted effort there is.",
+        };
+
   const worst = groups[0];
   // A null reference leads, whatever the graph findings say. It is not a matter of taste: those are
   // things that make a Blueprint worse, and this is a thing that does not happen at all at runtime,
@@ -710,6 +754,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             `Every group below is counted only, because the one you named is not among them.`,
         }
       : {}),
+    ...(possiblyReplaced ? { possiblyReplaced } : {}),
     blueprintsScanned: blueprints.length,
     blueprintsWithFindings: costByBlueprint.size,
     findingCount: findings.length,
