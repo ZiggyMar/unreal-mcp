@@ -1623,6 +1623,33 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### Every preset was checked for the tool its own job starts from
+
+The lesson from the `diagnose` gap - *a preset check only checks the path the trial walks* - is worth
+applying to all five rather than waiting for the next one to surface. Each was started cold and asked
+whether it contains the tool its own description implies:
+
+| preset | entry points |
+| --- | --- |
+| `diagnose` | present |
+| `feature` | `map_system` absent |
+| `ui`, `data`, `cpp` | present |
+
+**And that one was measured before it was fixed, which changed the answer.** `plan_feature` is in the
+`feature` preset and already does the scanning - its `existingSystems` names `GM_Gameplay`,
+`GS_Gameplay` and `WBP_HUD` for a countdown request, with reading order and a high-risk marker. So
+`map_system` there would be redundant, and its ~690 tokens are not warranted.
+
+What *was* missing is the same thing `map_system` had been missing: **"already exists" and "already
+exists and is dead" lead to opposite plans.** Told a system exists, a plan extends it - and extending
+something nothing calls produces a feature that cannot run, built carefully on code that was replaced
+and left on the canvas. On the real project, `"add a countdown before the wave starts"` names
+`ShowCountdown` among the assets to read, and nothing anywhere calls it.
+
+One line, asked once for all matched concepts rather than once each - `"add a countdown before the
+wave starts"` examines three, and three copies of one paragraph is the per-row boilerplate this repo
+removes everywhere else. 1,021 → 1,096 tokens for the question, against 1,227 for three copies of it.
+
 ### What a bug actually costs, measured end to end
 
 A cold session, the way a frontier model really starts - `search` profile, four tools - through to a

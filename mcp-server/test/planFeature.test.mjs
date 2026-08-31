@@ -191,3 +191,31 @@ test("planning never writes anything", async () => {
   );
   assert.deepEqual(writes, [], `planning must be read-only; it called ${writes.join(", ")}`);
 });
+
+test("a plan that finds an existing system asks whether it still runs", async () => {
+  // "Already exists" and "already exists and is dead" lead to opposite plans. Told a system exists,
+  // a plan extends it - and extending something nothing calls produces a feature that cannot run,
+  // built carefully on top of code that was replaced and left on the canvas.
+  //
+  // Measured on the real project: "add a countdown before the wave starts" reports the countdown
+  // system across GM_Gameplay, GS_Gameplay and WBP_HUD and names ShowCountdown among the assets to
+  // read. Nothing anywhere calls ShowCountdown, UpdateCountdown or HideCountdown.
+  const plan = await planFeature(fakeBridge(), "add a health bar");
+  assert.ok(plan.existingSystems.length > 0, "the fixture must actually find something to extend");
+  const asked = plan.raiseWithUser.some((r) => /trace_function_calls/.test(r));
+  assert.ok(asked, `expected a liveness question; got ${JSON.stringify(plan.raiseWithUser).slice(0, 300)}`);
+});
+
+test("a plan that finds nothing existing does not ask", async () => {
+  // The question is about EXTENDING something. On a genuinely new feature it would be noise, and a
+  // warning that appears on every reply stops being read.
+  //
+  // Written properly on the second attempt: the first version of this test was `assert.ok(true)`,
+  // which is the vacuous guard this repo refuses everywhere else.
+  const plan = await planFeature(fakeBridge(), "add a stamina sprint system");
+  assert.equal(plan.existingSystems.length, 0, "the fixture must find nothing for this to be the case under test");
+  assert.ok(
+    !plan.raiseWithUser.some((r) => /trace_function_calls/.test(r)),
+    `nothing exists to be dead, so nothing should be asked: ${JSON.stringify(plan.raiseWithUser).slice(0, 200)}`
+  );
+});

@@ -154,6 +154,8 @@ export async function planFeature(
   }
 
   const existingSystems: ExistingSystem[] = [];
+  /** Concepts that already exist, so the liveness question can be asked once for all of them. */
+  const conceptsToCheck: string[] = [];
   const newWork: string[] = [];
   const raiseWithUser: string[] = [];
 
@@ -194,6 +196,22 @@ export async function planFeature(
         `and confirm with the user if their request implies replacing it.`
     );
 
+    // "Already exists" and "already exists and is dead" lead to opposite plans.
+    //
+    // This is the same gap map_system had, and it matters more here. Told a system exists, a plan
+    // extends it - and extending something nothing calls produces a feature that cannot run, built
+    // carefully on top of code that was replaced and left on the canvas.
+    //
+    // Measured on the real project: "add a countdown before the wave starts" reports the countdown
+    // system across GM_Gameplay, GS_Gameplay and WBP_HUD, naming ShowCountdown among the assets to
+    // read - and nothing anywhere calls ShowCountdown, UpdateCountdown or HideCountdown.
+    //
+    // Deciding it here would mean reading every graph in the project, which this tool does not do,
+    // so it names the call that settles it - ONCE, after the loop, however many concepts matched.
+    // A request like "add a countdown before the wave starts" examines three of them, and three
+    // copies of one paragraph is the per-row boilerplate this repo removes everywhere else.
+    conceptsToCheck.push(concept);
+
     if (map.highRisk.length > 0) {
       raiseWithUser.push(
         `Changing ${map.highRisk.join(", ")} affects assets outside the "${concept}" system. Prefer adding to ` +
@@ -230,6 +248,16 @@ export async function planFeature(
   }
   if (existingSystems.length === 0 && newWork.length === 0) {
     notes.push("Nothing conclusive was found either way. Ask the user to name the systems involved.");
+  }
+
+
+  if (conceptsToCheck.length > 0) {
+    const names = conceptsToCheck.map((c) => `"${c}"`).join(", ");
+    raiseWithUser.push(
+      `Before extending ${names}, check each still runs: unreal_trace_function_calls on one of its ` +
+        `functions says whether anything reaches it. A system that was replaced and left in place reads ` +
+        `exactly like a live one, and building on it produces a feature that cannot work.`
+    );
   }
 
   return {
