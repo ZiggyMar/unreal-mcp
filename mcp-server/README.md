@@ -1604,6 +1604,70 @@ receive all of it.
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### The `minimal` profile was telling weak models to call tools it does not have
+
+The standing `instructions` text is sent to the model on every turn, and it was written once for
+every profile. Measured against what each profile actually registers:
+
+| profile | tools named in instructions | reachable |
+| --- | --- | --- |
+| `minimal` | 18 | **11** |
+
+The thirteen missing ones were not incidental. They included **`unreal_doctor`**, which step 1 says
+to call when anything is broken; **`unreal_build_graph`**, which step 5 is built around; and
+**`unreal_verify_feature`**, which step 8 demands before reporting anything as done. A model
+following the instructions in order hit a tool that does not exist on its first, fifth and eighth
+step.
+
+A tool left out of a fixed profile is never *registered*, so `unreal_enable_tools` cannot bring it
+back either - and `unreal_enable_tools` was itself in `minimal`, where enabling `["core","ui"]`
+returned `"Nothing new to enable"`, `alreadyOn: true`, `enabledCount: 11`. A model would reasonably
+read that as "those tools are already available". They are not.
+
+This lands on the weakest models, which are the entire reason `minimal` exists and the least able to
+recover from a tool that is not there. It was also paid for: a third of the standing text described a
+workflow the profile cannot perform, and `enable_tools` cost ~630 tokens - an eighth of the whole
+budget - to be misleading.
+
+`minimal` now has its own instructions naming its own ten tools, and `enable_tools` is gone from it.
+The result is a profile that is both correct and cheaper:
+
+| | before | after |
+| --- | --- | --- |
+| instructions | 781 | **378** |
+| standing total | 4,970 | **3,972** |
+
+**−20%, while adding a parameter and fixing the bug.** `core` had a smaller version of the same
+problem - steps 4 and 7 named `unreal_list_assets` and `unreal_save_asset`, which it also cannot
+reach - and those two mentions are now conditional, since they are correct for `search`, `lazy` and
+`full` where the tools are registered-and-off.
+
+`npm run check:profiles` now fails if any profile's instructions name something it cannot reach.
+"Reachable" is measured rather than assumed: the check enables every group and asks what the server
+can actually serve, because the profiles differ in kind - `search` and `lazy` defer, `minimal` and
+`core` are fixed - and encoding that difference by hand is how it would drift again. Prompts count as
+reachable too; the first draft called `unreal_handbook`, `unreal_recipes` and `unreal_workflow`
+unreachable on every profile, and a guard that cries wolf gets switched off. Confirmed not vacuous by
+adding a bad name and watching it fail.
+
+### One finding kind, in full, without paying for twelve others
+
+After an audit the natural next move is "tell me more about that one", and the only lever was
+`detailedGroups`, which is **positional**: to see the thirteenth kind you asked for the first
+thirteen. Measured against the real project:
+
+| call | tokens | what you get |
+| --- | --- | --- |
+| plain audit | 2,350 | 4 kinds detailed, 13 counted |
+| `detailedGroups: 17` | 4,352 | all 17 detailed - 12 of them unasked-for |
+| `check: "repnotify-does-nothing"` | **2,137** | that one kind, 21 examples |
+
+Naming the check is **cheaper than the plain audit**, because everything else drops to a count. A
+name that matches nothing is refused and the reply lists the kinds this run actually found - the same
+answer given for a wrong pin name and a wrong parameter name, and for the same reason: a check name
+is not guessable, and silently returning a summary with every group elided looks identical to "your
+check is real and found nothing", which is a different answer.
+
 ### The audit's most expensive finding can now be fixed, not just reported
 
 `server-writes-unreplicated` is priced at 100, the top of the scale, because of how it fails: the

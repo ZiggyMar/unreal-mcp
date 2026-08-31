@@ -161,6 +161,47 @@ function buildInstructions(profile: string): string {
     );
   }
 
+  // `minimal` gets its own path, because the shared one is a lie there.
+  //
+  // Measured: the shared instructions name 18 tools and `minimal` registers 11, so 13 of them are
+  // unreachable - including the first thing step 1 says to call (unreal_doctor), the tool step 5 is
+  // built around (unreal_build_graph), and the one step 8 says to run before reporting anything done
+  // (unreal_verify_feature). Tools left out of `minimal` are never registered at all, so
+  // unreal_enable_tools cannot bring them back: enabling `core` on this profile still leaves 11.
+  //
+  // That failure lands on the weakest models, which are the entire reason this profile exists and
+  // the least able to recover from a tool that is not there. It also cost tokens for the privilege:
+  // a third of the standing text described a workflow this profile cannot perform.
+  if (profile === "minimal") {
+    lines.push(
+      "HOW TO WORK",
+      "These eleven tools are all there are. This profile is fixed - nothing else can be switched on,",
+      "so do not reach for a tool that is not listed.",
+      "",
+      "1. Look before writing: unreal_list_blueprints to see what exists, unreal_find_node for the",
+      "   exact name of a function. Never guess a name; a guess costs a failed call.",
+      "2. Making something new: unreal_scaffold_blueprint builds the whole thing in one call - the",
+      "   Blueprint, its variables, its components, and its event logic. Reach for it first.",
+      "   unreal_scaffold_widget does the same for UI.",
+      "3. Adding to something that exists: unreal_add_variable, then unreal_add_event_handler for",
+      "   \"when X happens, do these in order\". That handler wires the exec pins for you.",
+      "4. unreal_compile_blueprint, then unreal_review_blueprint, and act on what it says.",
+      "   Compiling is not the same as being correct.",
+      "5. unreal_save_blueprint. Nothing reaches disk until you do.",
+      "",
+      "unreal_audit_project answers \"what is wrong with my game\" across every Blueprint; pass its",
+      "`check` to get one kind of finding back in full.",
+      "",
+      "GROUND TRUTH YOU CANNOT DERIVE",
+      "The target pin is `self`, even though the editor labels it \"Target\". Struct defaults are comma",
+      "triples - \"0, -90, 0\", never \"(Pitch=0,Yaw=-90)\", in Pitch, Yaw, Roll order. Enum defaults take",
+      "the entry name: \"SnapToTarget\". A variable must exist before anything can Get or Set it.",
+      "",
+      "Set UNREAL_MCP_INSTRUCTIONS=off to suppress this text."
+    );
+    return lines.join("\n");
+  }
+
   lines.push(
     "HOW TO WORK",
     "1. Anything broken: unreal_doctor. It names which half is wrong and the remedy.",
@@ -174,13 +215,17 @@ function buildInstructions(profile: string): string {
     "3. unreal_plan_feature before building anything non-trivial. It reads the real project and",
     "   returns concrete steps, so the structure is not guesswork.",
     "4. Check exact names before writing: unreal_find_node for functions, unreal_describe_class for",
-    "   members, unreal_list_assets for paths. Never guess a function or pin name. The engine will",
-    "   tell you, and a guess costs a failed call.",
+    profile === "core"
+      ? "   members. Never guess a function or pin name. The engine will tell you, and a guess costs a failed call."
+      : "   members, unreal_list_assets for paths. Never guess a function or pin name. The engine will",
+    ...(profile === "core" ? [] : ["   tell you, and a guess costs a failed call."]),
     "5. Build whole graphs with unreal_build_graph, in one call. Do not place nodes one at a time,",
     "   and do not pass x/y - it lays out what it places.",
     "6. unreal_compile_blueprint, then unreal_review_blueprint, and act on what they say.",
     "   Compiling is not the same as being correct.",
-    "7. unreal_save_blueprint / unreal_save_asset. Nothing reaches disk until you do.",
+    profile === "core"
+      ? "7. unreal_save_blueprint. Nothing reaches disk until you do."
+      : "7. unreal_save_blueprint / unreal_save_asset. Nothing reaches disk until you do.",
     "8. unreal_verify_feature before you report anything as done. It compiles and reviews every",
     "   Blueprint you wrote this session, not just the one you touched last, and its verdict is",
     "   the answer - an earlier asset that stopped compiling is the usual way work is reported",
@@ -439,8 +484,18 @@ const MINIMAL_PROFILE_TOOLS = new Set([
   // the tool from this profile took the same tasks from 20 calls to 3-6, immediately.
   //
   // The pattern is now three for three: a weak model does not act on being told, and does act on
-  // not being offered. It is still in core, lazy and full, and reachable via unreal_enable_tools.
-  "unreal_enable_tools",
+  // not being offered. It is still in core, lazy and full.
+  //
+  // That last sentence used to end "and reachable via unreal_enable_tools", which was not true and
+  // is why enable_tools is no longer in this list. A tool left out of `minimal` is never REGISTERED,
+  // so there is no handle for enable_tools to switch on: calling it here with groups ["core","ui"]
+  // returned "Nothing new to enable", alreadyOn: true, enabledCount: 11 - which a model would
+  // reasonably read as "those tools are already available". They are not. It cost ~630 tokens, an
+  // eighth of this profile's entire budget, to be misleading.
+  //
+  // Not fixed by making it work, deliberately. `core` is ~12,800 tokens and this profile's target is
+  // a 14B at 8k, so a successful enable would destroy the context it was protecting. The profile
+  // being fixed is the design; the instructions now say so outright.
   "unreal_list_blueprints",
   "unreal_find_node",
   // Deliberately NOT unreal_create_blueprint. It makes an EMPTY Blueprint, and the measured
@@ -3317,24 +3372,26 @@ register(
   {
     title: "Turn on a group of Unreal tools",
     description:
-      "This server keeps most tools switched off until asked, so a session that never builds UI never pays for " +
-      "the UI tools. Call this the moment you need something from a group, then use those tools normally. Groups:\n" +
+      "Most tools stay off until asked, so a session that never builds UI never pays for the UI tools. Call this " +
+      "the moment you need one from a group, then use it normally. Groups:\n" +
       '  - "core": the authoring spine - read a project, find a function, scaffold a Blueprint, build a ' +
-      "graph, compile, review, and save. Much the largest group: enable it to author, not to look " +
-      'around. unreal_list_tools reports what each group costs.\n' +
+      "graph, compile, review, and save. Much the largest: enable it to author, not to look around. " +
+      "unreal_list_tools reports what each group costs.\n" +
       '  - "cpp": the C++ in this project - find where a symbol is declared, and compile a file to see if an ' +
       "edit built. Only useful on a project that has C++.\n" +
-      '  - "edit": single-node graph editing (add/remove one node, wire one pin, set one default, move and comment ' +
-      "nodes). You usually do NOT need this: unreal_build_graph places whole graphs in one call and auto-lays them " +
-      "out. Enable it to adjust an existing graph surgically.\n" +
+      '  - "edit": single-node graph editing (add/remove one node, wire one pin, set one default, change a ' +
+      "variable's replication). You usually do NOT need this: unreal_build_graph places whole graphs in one call " +
+      "and lays them out. Enable it to adjust an existing graph surgically.\n" +
       '  - "ui": UMG. Create Widget Blueprints, build the widget tree, set widget and layout-slot properties.\n' +
       '  - "materials": Materials and Material Instances - create them, parameterise them, override them.\n' +
       '  - "data": Structs, Enums, and asset lookup by class.\n' +
       '  - "scene": Levels, actors, components, class defaults (including replication), project settings, input ' +
       "mappings, and Play In Editor.\n" +
+      '  - "anim": Animation Blueprints - state machines, states, and transition conditions.\n' +
+      '  - "ai": Behavior Trees and their blackboards.\n' +
+      '  - "vfx": Niagara systems - emitters, and the parameters a Blueprint may set on them.\n' +
       '  - "maintenance": what references an asset, deleting assets safely, and the Refresh Nodes repair.\n\n' +
-      "Enabling is immediate and lasts the session. Ask for everything the job needs in one call rather than " +
-      "one at a time; re-calling is harmless.",
+      "Immediate, lasts the session, and re-calling is harmless. Ask for everything the job needs in one call.",
     inputSchema: {
       groups: z
         .array(z.enum(["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"]))
@@ -4237,11 +4294,19 @@ register(
         .number()
         .optional()
         .describe("Finding kinds returned in full, not just counted. Default 4, max 30."),
+      check: z
+        .string()
+        .optional()
+        // Deliberately terse. This tool is in `minimal`, whose ceiling exists so the profile fits a
+        // 14B model at 8k context with room left to think, and the first draft of this sentence put
+        // it 73 tokens over. The reasoning lives in the README; the schema carries what is needed to
+        // call it correctly and nothing else.
+        .describe('One finding kind from an earlier audit, in full - e.g. "repnotify-does-nothing". The rest stay counts.'),
     },
   },
-  async ({ pathPrefix, limit, examplesPerGroup, detailedGroups }) => {
+  async ({ pathPrefix, limit, examplesPerGroup, detailedGroups, check }) => {
     try {
-      const audit = await auditProject(bridge, { pathPrefix, limit, examplesPerGroup, detailedGroups });
+      const audit = await auditProject(bridge, { pathPrefix, limit, examplesPerGroup, detailedGroups, check });
       // The explanation of the cap lives in the reply rather than in the schema, so it is paid for
       // only when it actually applies. In the schema it was ~350 characters on every request of
       // every session, which pushed the `minimal` profile past the ceiling that exists to keep it

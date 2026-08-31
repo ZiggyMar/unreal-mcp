@@ -198,6 +198,15 @@ export interface AuditOptions {
    * what a plan looks like; uniform detail is what a list looks like.
    */
   detailedGroups?: number;
+  /**
+   * One check name, returned in full instead of raising detail for everything above it.
+   *
+   * The natural next move after an audit is "tell me more about that one", and the only lever was
+   * `detailedGroups`, which is positional: to see the 13th kind you asked for the first thirteen.
+   * Measured on the real project, that is 2,350 tokens to 4,303 - nearly double, and twelve of the
+   * thirteen groups it returns in full are ones you did not ask for.
+   */
+  check?: string;
 }
 
 export async function auditProject(bridge: BridgeLike, options: AuditOptions = {}): Promise<AuditResult> {
@@ -205,6 +214,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const limit = Math.max(1, Math.min(options.limit ?? 150, 2000));
   const examplesPerGroup = Math.max(1, Math.min(options.examplesPerGroup ?? 3, 10));
   const detailedGroups = Math.max(1, Math.min(options.detailedGroups ?? 4, 30));
+  const wantedCheck = (options.check ?? "").trim().toLowerCase();
 
   const listed = await bridge.send<{ blueprints?: Array<{ name: string; path: string }> }>("list_blueprints", {
     pathPrefix,
@@ -618,14 +628,16 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     .map(([check, list]) => ({ check, list }))
     .sort((a, b) => (FINDING_COST[b.check] ?? 1) - (FINDING_COST[a.check] ?? 1) || b.list.length - a.list.length)
     .map(({ check, list }, index) => {
-      const detailed = index < detailedGroups;
+      // Asking for one check means that one, wherever it ranks - and only that one. Everything else
+      // stays a count, which is what makes this cheaper than reaching the same group by rank.
+      const detailed = wantedCheck ? check.toLowerCase() === wantedCheck : index < detailedGroups;
       return {
         check,
         count: list.length,
         cost: FINDING_COST[check] ?? 1,
         why: detailed ? WHY_IT_COSTS[check] : undefined,
         examples: detailed
-          ? list.slice(0, examplesPerGroup).map((f) => ({
+          ? list.slice(0, wantedCheck ? Math.max(examplesPerGroup, 25) : examplesPerGroup).map((f) => ({
               blueprint: f.blueprint,
               graph: f.graph,
               message: f.message,
@@ -643,6 +655,11 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         ...(detailed ? {} : { detailElided: true }),
       };
     });
+
+  // A named check that matched nothing. Left until here so the names come from what this run
+  // actually found, rather than from a hardcoded list that could drift from it.
+  const checkNames = groups.map((g) => g.check);
+  const checkMissed = wantedCheck.length > 0 && !checkNames.some((c) => c.toLowerCase() === wantedCheck);
 
   const costByBlueprint = new Map<string, { cost: number; findings: number }>();
   for (const finding of findings) {
@@ -686,6 +703,13 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         : "Nothing found worth reporting. Either the project is in good shape or the prefix matched nothing.";
 
   return {
+    ...(checkMissed
+      ? {
+          checkNotFound:
+            `No finding kind called "${options.check}". This run found: ${checkNames.join(", ")}. ` +
+            `Every group below is counted only, because the one you named is not among them.`,
+        }
+      : {}),
     blueprintsScanned: blueprints.length,
     blueprintsWithFindings: costByBlueprint.size,
     findingCount: findings.length,

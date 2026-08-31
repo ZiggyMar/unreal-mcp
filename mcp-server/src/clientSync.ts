@@ -140,9 +140,11 @@ export function findEmptyRepNotifies(
         `${variable.name} is replicated with RepNotify, but ${notify} is empty. The value is sent to every ` +
         `client on every change and nothing reacts to it when it arrives.`,
       fix:
-        `Marking it RepNotify says the clients need to do something when it changes - so either put that ` +
-        `something in ${notify} (usually the UI or visual update that currently happens on the server, ` +
-        `where only the host can see it), or drop it to a plain Replicated variable.`,
+        `Marking it RepNotify says the clients need to do something when it changes, so pick one of two. ` +
+        `Either build that something in ${notify} with unreal_build_graph - usually the UI or visual update ` +
+        `that currently happens on the server, where only the host can see it - or drop it to plain ` +
+        `replication with unreal_set_variable_replication mode "replicated". Both are real answers; which one ` +
+        `depends on whether clients have anything to do when the value arrives.`,
     });
   }
   return findings;

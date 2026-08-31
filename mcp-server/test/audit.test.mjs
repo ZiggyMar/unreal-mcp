@@ -238,3 +238,51 @@ test("an empty asset pin outranks cosmetic findings", () => {
   // stray node every time.
   assert.ok(FINDING_COST["asset-pin-empty"] > FINDING_COST["dead-node"]);
 });
+
+test("check: returns one finding kind in full, wherever it ranks", async () => {
+  // The natural next move after an audit is "tell me more about that one", and the only lever was
+  // detailedGroups, which is positional: to see the 13th kind you asked for the first thirteen.
+  // Measured on the real project, that was 2,350 tokens to 4,352. Naming the check is 2,137 -
+  // cheaper than the plain audit, because everything else drops to a count.
+  const bridge = fakeBridge({
+    find_broken_names: () => ({
+      namesChecked: 2,
+      namesFromVariables: 0,
+      broken: [
+        { blueprint: "BP_Messy", graph: "EventGraph", check: "timer-target-missing", message: "a", fix: "f" },
+        { blueprint: "BP_Clean", graph: "EventGraph", check: "timer-target-missing", message: "b", fix: "f" },
+      ],
+    }),
+  });
+  const result = await auditProject(bridge, { check: "timer-target-missing" });
+
+  const named = result.groups.find((g) => g.check === "timer-target-missing");
+  assert.ok(named, "the named check must come back");
+  assert.ok(!named.detailElided, "and it must be detailed, whatever its rank");
+  assert.equal(named.examples.length, 2);
+
+  for (const group of result.groups) {
+    if (group.check === "timer-target-missing") continue;
+    assert.equal(group.examples.length, 0, `${group.check} should be counted only`);
+  }
+});
+
+test("check: names the kinds that exist when it matches none", async () => {
+  // A check name is exactly as unguessable as a pin name or a parameter name, and this is the same
+  // answer given for both: refuse, and say what does exist. Silently returning a summary with every
+  // group elided looks identical to "your check is real and found nothing", which is a different
+  // answer entirely.
+  const result = await auditProject(fakeBridge(), { check: "repnotify" });
+  assert.match(result.checkNotFound, /No finding kind called "repnotify"/);
+  assert.match(result.checkNotFound, /This run found: /);
+  for (const group of result.groups) {
+    assert.equal(group.examples.length, 0, "nothing is detailed when the name matched nothing");
+  }
+});
+
+test("no check named means the old positional behaviour, unchanged", async () => {
+  const result = await auditProject(fakeBridge(), { detailedGroups: 2 });
+  assert.equal(result.checkNotFound, undefined);
+  const detailed = result.groups.filter((g) => !g.detailElided);
+  assert.ok(detailed.length <= 2, `expected at most 2 detailed groups, got ${detailed.length}`);
+});

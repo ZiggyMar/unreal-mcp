@@ -90,6 +90,8 @@ export const PROFILES = [
 async function measure(profile) {
   const server = await startAndInitialize({ UNREAL_MCP_PROFILE: profile }, "measure-profiles");
   try {
+    // Taken before the reachability probe below enables anything, or every profile would measure as
+    // `full`.
     const { tools, chars, tokens } = await listTools(server);
 
     // The instructions field counts. A client sends it to the model on every turn exactly as it
@@ -97,6 +99,42 @@ async function measure(profile) {
     // less than half the standing cost on the `search` profile, which is the frontier default.
     const instructionChars = (server.instructions ?? "").length;
     const instructionTokens = estimateTokens(instructionChars);
+
+    // Every tool the standing text names has to be reachable from this profile.
+    //
+    // "Reachable" is measured, not assumed, because the profiles differ in kind. `search` and `lazy`
+    // DEFER: the other tools are registered and switched off, and unreal_enable_tools turns them on -
+    // so naming them is exactly right. `minimal` and `core` are FIXED: a tool outside the list is
+    // never registered at all, there is no handle to switch on, and naming it is a lie. Asking each
+    // server what it can actually reach avoids having to encode that difference here and get it
+    // wrong later.
+    //
+    // Worth the trouble: `minimal` named 18 tools and could reach 11. The first thing its step 1 told
+    // a model to call (unreal_doctor), the tool step 5 was built around (unreal_build_graph), and the
+    // one step 8 demanded before reporting anything done (unreal_verify_feature) were all absent -
+    // aimed at the weakest models, which are the reason that profile exists and the least able to
+    // recover from a tool that is not there.
+    await server
+      .request("tools/call", {
+        name: "unreal_enable_tools",
+        arguments: { groups: ["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"] },
+      })
+      .catch(() => {});
+    const afterEnabling = await listTools(server);
+
+    // Prompts count too. unreal_handbook, unreal_recipes and unreal_workflow are named in the
+    // standing text and are real - served over prompts/list, not tools/list. The first draft of this
+    // check called all three unreachable on every profile, and a guard that cries wolf gets switched
+    // off, so it asks both surfaces.
+    const prompts = await server.request("prompts/list", {}).catch(() => ({}));
+    const reachable = new Set([
+      ...afterEnabling.tools.map((t) => t.name),
+      ...(prompts.result?.prompts ?? []).map((p) => p.name),
+    ]);
+    const namedInInstructions = [
+      ...new Set([...(server.instructions ?? "").matchAll(/unreal_[a-z_]+/g)].map((m) => m[0])),
+    ];
+    const unreachable = namedInInstructions.filter((n) => !reachable.has(n));
 
     const perTool = tools
       .map((t) => ({ name: t.name, chars: JSON.stringify(t).length }))
@@ -109,6 +147,7 @@ async function measure(profile) {
       tokens,
       instructionTokens,
       standingTokens: tokens + instructionTokens,
+      unreachable,
       perTool,
     };
   } finally {
@@ -159,6 +198,24 @@ async function main() {
     }
   }
 
+  // A profile whose standing text names a tool it does not have. Reported before the budget, and
+  // fatal on its own, because it is a correctness failure rather than a cost one: the model is being
+  // told to call something that is not there.
+  const lying = results.filter((r) => r.unreachable.length > 0);
+  if (lying.length > 0) {
+    console.log(NEWLINE + `instructions name tools that are not registered (${lying.length} profile(s)):`);
+    for (const r of lying) {
+      console.log(
+        `  - ${r.profile} names ${r.unreachable.length} name(s) it serves as neither a tool nor a prompt: ${r.unreachable.join(", ")}` +
+          NEWLINE +
+          `    This profile is fixed: a tool outside its list is never registered, so enable_tools cannot reach it.` +
+          NEWLINE +
+          `    Either add the tool to this profile, or stop naming it in buildInstructions() for this profile.`
+      );
+    }
+    process.exit(1);
+  }
+
   if (problems.length > 0) {
     console.log(NEWLINE + `profile budget exceeded (${problems.length}):`);
     for (const p of problems) {
@@ -174,7 +231,7 @@ async function main() {
     }
     process.exit(1);
   }
-  console.log(NEWLINE + `profiles ok: ${results.length} profiles, all within budget`);
+  console.log(NEWLINE + `profiles ok: ${results.length} profiles, all within budget, none naming a tool it lacks`);
 }
 
 // Only when this file IS the command. measure-groups imports PROFILES from here so the two guards
