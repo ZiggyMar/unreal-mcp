@@ -310,3 +310,66 @@ test("every check a module emits has a price, because the fallback is silent", (
   const unpriced = [...emitted].filter((name) => FINDING_COST[name] === undefined);
   assert.deepEqual(unpriced, [], `emitted but unpriced, so they score 1 and sink: ${unpriced.join(", ")}`);
 });
+
+test("a check that could not run is reported, not silently dropped", async () => {
+  // Three whole checks sit behind bridge commands an older plugin may not have - animation, Niagara,
+  // and the broken-name sweep - and each catch said so in a code comment and nothing else. The reply
+  // then read as a complete audit that happened to find no animation bugs, which is the same
+  // sentence as "I could not look at animation".
+  //
+  // It matters most exactly when it is most likely: the plugin inside a running editor is routinely
+  // older than this server.
+  const bridge = {
+    async send(cmd) {
+      if (cmd === "list_blueprints") return { blueprints: [] };
+      if (cmd === "read_anim_blueprint" || cmd === "read_niagara_system" || cmd === "find_broken_names") {
+        throw new Error(`unknown_cmd: ${cmd}`);
+      }
+      return {};
+    },
+  };
+  const result = await auditProject(bridge, {});
+  const skipped = result.checksSkipped.map((c) => c.name);
+  assert.ok(skipped.length > 0, `something should have been recorded as skipped, got ${JSON.stringify(result.checksSkipped)}`);
+  assert.match(result.checksSkippedNote ?? "", /not a complete audit/);
+  // The reason has to say what to do about it, not just what failed.
+  for (const entry of result.checksSkipped) {
+    assert.match(entry.why, /older than this server|unknown_cmd/, entry.name);
+  }
+});
+
+test("a complete audit pays nothing for the skipped-check machinery", async () => {
+  // The note is absent when nothing was skipped. A field that says "0 checks skipped" on every
+  // successful run is a token cost for a fact the reader can already see.
+  const bridge = { async send(cmd) { return cmd === "list_blueprints" ? { blueprints: [] } : {}; } };
+  const result = await auditProject(bridge, {});
+  assert.deepEqual(result.checksSkipped, []);
+  assert.equal(result.checksSkippedNote, undefined);
+});
+
+test("a missing command is one skipped check, not one unreadable asset per file", async () => {
+  // Both the animation and Niagara sweeps read one asset at a time inside a per-asset try, so a
+  // plugin without the command produced an "unreadable: unknown_cmd" row for EVERY asset - sixty-two
+  // of them on the real project. That reads as sixty-two corrupt assets rather than one command this
+  // editor does not have, and it kept asking, sixty-two times, for an answer that could not change.
+  let attempts = 0;
+  const bridge = {
+    async send(cmd, params) {
+      if (cmd === "list_blueprints") return { blueprints: [] };
+      if (cmd === "list_assets") {
+        return params.className === "Niagara" || params.className === "NiagaraSystem"
+          ? { assets: [1, 2, 3, 4, 5].map((n) => ({ name: `NS_${n}`, path: `/Game/NS_${n}.NS_${n}` })) }
+          : { assets: [] };
+      }
+      if (cmd === "read_niagara_system") {
+        attempts++;
+        throw new Error("unknown_cmd: read_niagara_system");
+      }
+      return {};
+    },
+  };
+  const result = await auditProject(bridge, {});
+  assert.equal(attempts, 1, "it must stop after the first unknown_cmd, not retry per asset");
+  assert.deepEqual(result.checksSkipped.map((c) => c.name), ["niagara"]);
+  assert.equal(result.unreadable.length, 0, "a missing command is not an unreadable asset");
+});

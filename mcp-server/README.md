@@ -1923,6 +1923,47 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### Sweeping for silent catches, and what the sweep found
+
+Having written a bare `catch {}` that hid a wrong parameter name for a whole debugging session, the
+obvious question was how many others there are. Eleven catches in `src/` swallow without running any
+code - **and every one of them has a written reason.** That discipline was already here; the new one
+was the exception.
+
+But three of them share a shape worth pulling on. Animation, Niagara and the broken-name sweep each
+sit behind a bridge command an older plugin may not have, and each `catch` explained itself in a code
+comment **and nowhere else**. The reply then read as a complete audit that happened to find no
+animation bugs - which is the same sentence as "I could not look at animation".
+
+That matters most exactly when it is most likely: the plugin inside a running editor is routinely
+older than the server, which is what the doctor's freshness check exists to report.
+
+```json
+{"checksSkipped": [{"name": "niagara",
+   "why": "unknown_cmd: read_niagara_system - the plugin in this editor is older than this server."}],
+ "checksSkippedNote": "1 check(s) could not run, so this is not a complete audit: niagara.
+   \"No findings\" from a check that never ran looks exactly like a clean result."}
+```
+
+The note is absent when nothing was skipped, so a complete audit pays nothing for it.
+
+**The first attempt instrumented the wrong catch**, and running it against the live project said so:
+nothing was recorded. Both sweeps read one asset at a time inside a *per-asset* try, so a missing
+command never reaches the outer handler - it produces an `unreadable: unknown_cmd` row for **every
+asset**, sixty-two of them, which reads as sixty-two corrupt assets rather than one command this
+editor does not have. And it kept asking, sixty-two times, for an answer that could not change. A
+missing command now stops the loop the first time and is recorded once:
+
+```text
+times it retried the missing command: 1     (was going to be one per asset)
+unreadable rows: 0                          (was going to be 62)
+```
+
+One small thing worth recording because it is the guard working: the field is `name`, not `check`.
+`check: "..."` is the pattern the `FINDING_COST` test scans for, and it demanded a price for
+"animation" - correctly, since an unpriced finding name silently scores 1 and sinks. These are
+skipped *checks*, not findings, so they took a different word rather than the guard being weakened.
+
 ### "Is it finished?" never asked whether anything calls it
 
 `unreal_verify_feature` is the last call of the loop - compile every asset written this session,

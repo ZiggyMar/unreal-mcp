@@ -195,6 +195,26 @@ export interface AuditResult {
   worstBlueprints: Array<{ name: string; cost: number; findings: number }>;
   unreadable: Array<{ name: string; error: string }>;
   /**
+   * Whole checks that could not run, and why.
+   *
+   * Three of these were skipped in silence: animation, Niagara, and the broken-name sweep each sit
+   * behind a bridge command an older plugin may not have, and each `catch` said so in a code comment
+   * and nothing else. The reply then read as a complete audit that happened to find no animation
+   * bugs - which is the same sentence as "I could not look at animation", and this project has spent
+   * a lot of effort separating those two everywhere else.
+   *
+   * It matters most exactly when it is most likely: the plugin inside a running editor is routinely
+   * older than the server, which is what the doctor freshness check reports.
+   *
+   * The field is `name` and not `check` on purpose. `check: "..."` is the pattern the FINDING_COST
+   * guard scans for, and it demanded a price for "animation" - which is right of it, since an
+   * unpriced finding name silently scores 1 and sinks. These are skipped CHECKS, not findings, so
+   * they take a different word rather than weakening the guard.
+   */
+  checksSkipped: Array<{ name: string; why: string }>;
+  /** Present only when something was skipped, so a complete audit pays nothing for it. */
+  checksSkippedNote?: string;
+  /**
    * Data Table rows whose asset reference is empty while sibling rows fill it in.
    *
    * Kept out of `groups` on purpose: those are per-Blueprint findings ranked by cost, and a table
@@ -204,6 +224,28 @@ export interface AuditResult {
   dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
   truncated: boolean;
   nextAction: string;
+}
+
+/**
+ * A missing bridge command is one skipped check, not N unreadable assets.
+ *
+ * Both the animation and Niagara sweeps read one asset at a time inside a per-asset try, so a plugin
+ * without the command produced sixty-two identical "unreadable: unknown_cmd" rows - which reads as
+ * sixty-two corrupt assets rather than one command this editor does not have. It also kept trying,
+ * sixty-two times, for an answer that could not change.
+ *
+ * Returns true when the loop should stop and the check should be recorded as skipped.
+ */
+function isMissingCommand(err: unknown): boolean {
+  return /unknown_cmd/.test(err instanceof Error ? err.message : String(err));
+}
+
+/** One short line for why a check could not run, from whatever the bridge threw. */
+function reasonFor(err: unknown): string {
+  const text = err instanceof Error ? err.message : String(err);
+  return /unknown_cmd/.test(text)
+    ? `${text.slice(0, 80)} - the plugin in this editor is older than this server. Run unreal_doctor.`
+    : text.slice(0, 120);
 }
 
 export interface AuditOptions {
@@ -276,6 +318,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   /** Every graph of every Blueprint, kept so liveness costs no extra reads. */
   const allGraphs: LivenessGraph[] = [];
   const unreadable: Array<{ name: string; error: string }> = [];
+  const checksSkipped: Array<{ name: string; why: string }> = [];
   const sessionGraphs: SessionGraph[] = [];
   const units: AuthorityUnit[] = [];
   // Kept per Blueprint so a child can be compared against its parent afterwards: the parent has not
@@ -483,15 +526,21 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
           });
         }
       } catch (err) {
+        if (isMissingCommand(err)) {
+          checksSkipped.push({ name: "animation", why: reasonFor(err) });
+          break;
+        }
         unreadable.push({
           name: asset.name,
           error: err instanceof Error ? err.message.slice(0, 140) : String(err),
         });
       }
     }
-  } catch {
+  } catch (err) {
     // An older bridge has no read_anim_blueprint. The rest of the audit is still worth returning,
     // and a hard failure here would make upgrading the server a prerequisite for auditing at all.
+    // Recorded, though: "no animation findings" and "animation was never checked" are different.
+    checksSkipped.push({ name: "animation", why: reasonFor(err) });
   }
 
   // Names typed as text, checked against whether the thing they name exists. Deliberately no MCP
@@ -526,8 +575,10 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         cost: FINDING_COST[finding.check] ?? 1,
       });
     }
-  } catch {
-    // An older bridge has no find_broken_names; the rest of the audit still stands.
+  } catch (err) {
+    // An older bridge has no find_broken_names; the rest of the audit still stands - but skipping a
+    // whole check in silence reads as "nothing found", so it is recorded.
+    checksSkipped.push({ name: "broken-names", why: reasonFor(err) });
   }
 
   // VFX. Same reasoning as the animation pass: a NiagaraSystem is not a Blueprint, so list_blueprints
@@ -554,11 +605,17 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
           });
         }
       } catch (err) {
+        if (isMissingCommand(err)) {
+          checksSkipped.push({ name: "niagara", why: reasonFor(err) });
+          break;
+        }
         unreadable.push({ name: asset.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
       }
     }
-  } catch {
-    // An older bridge has no read_niagara_system; the rest of the audit is still worth returning.
+  } catch (err) {
+    // An older bridge has no read_niagara_system; the rest of the audit is still worth returning,
+    // but the caller has to know the VFX half did not happen.
+    checksSkipped.push({ name: "niagara", why: reasonFor(err) });
   }
 
   // These findings only ever come from the event graph - the map they are built from is the event
@@ -743,8 +800,9 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     for (const n of tables.nullReferences) {
       dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field });
     }
-  } catch {
+  } catch (err) {
     /* a bridge too old to read Data Tables must not lose the Blueprint half of the audit */
+    checksSkipped.push({ name: "data-tables", why: reasonFor(err) });
   }
 
   // Function graphs nothing in any Blueprint appears to call.
@@ -804,6 +862,16 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         }
       : {}),
     ...(possiblyReplaced ? { possiblyReplaced } : {}),
+    // First, before the counts, because it changes how every number below should be read.
+    checksSkipped,
+    ...(checksSkipped.length > 0
+      ? {
+          checksSkippedNote:
+            `${checksSkipped.length} check(s) could not run, so this is not a complete audit: ` +
+            `${checksSkipped.map((c) => c.name).join(", ")}. "No findings" from a check that never ran ` +
+            `looks exactly like a clean result.`,
+        }
+      : {}),
     blueprintsScanned: blueprints.length,
     blueprintsWithFindings: costByBlueprint.size,
     findingCount: findings.length,
