@@ -17,6 +17,7 @@
 // test suite while live-verify cannot.
 
 import { startAndInitialize, listTools, estimateTokens } from "./lib/mcpStdio.mjs";
+import { pathToFileURL } from "node:url";
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -33,7 +34,7 @@ const NEWLINE = String.fromCharCode(10);
 // numbers keep the same intent against the quantity that was meant all along, and each is written
 // as a fraction of the context it has to fit inside so the next person can check the arithmetic
 // rather than trust the number.
-const PROFILES = [
+export const PROFILES = [
   {
     name: "minimal",
     // The profile that exists for the 14B-at-8k case. Half its context on tool definitions is
@@ -176,7 +177,13 @@ async function main() {
   console.log(NEWLINE + `profiles ok: ${results.length} profiles, all within budget`);
 }
 
-main().catch((err) => {
-  console.error(`could not measure profiles: ${err instanceof Error ? err.message : err}`);
-  process.exit(2);
-});
+// Only when this file IS the command. measure-groups imports PROFILES from here so the two guards
+// that measure the same surface cannot drift apart again - and an unguarded main() would mean that
+// import silently spawned five servers, ran the whole profile measurement, and could call
+// process.exit on its way out, taking its caller with it.
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  main().catch((err) => {
+    console.error(`could not measure profiles: ${err instanceof Error ? err.message : err}`);
+    process.exit(2);
+  });
+}

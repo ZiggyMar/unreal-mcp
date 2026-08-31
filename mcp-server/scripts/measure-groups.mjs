@@ -24,6 +24,7 @@
 // Usage: node scripts/measure-groups.mjs [--json] [--write]
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { PROFILES } from "./measure-profiles.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -46,8 +47,14 @@ const GROUPS = ["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "
  * The number that matters is what a realistic job pays: `search` plus the groups it turns on. If
  * enabling everything costs about what `full` costs, the profile is doing its job - the saving comes
  * from not enabling everything, not from the groups being individually cheap.
+ *
+ * Taken FROM the `full` profile rather than written down again, because the two are the same
+ * measurement: every group enabled and every tool registered are the same set of tools. They were
+ * two separate literals until they disagreed - `full` was raised to 34,000 once, loudly, with a
+ * recorded argument, and this was left at 32,000, so a surface inside its documented budget was
+ * reported as over a stale one. Deriving it means the argument only has to be made in one place.
  */
-const ALL_GROUPS_CEILING = 32_000;
+const ALL_GROUPS_CEILING = PROFILES.find((p) => p.name === "full").ceilingTokens;
 
 async function measureGroup(group) {
   const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "measure-groups");
