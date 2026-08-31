@@ -859,7 +859,12 @@ register(
       match: z
         .string()
         .optional()
-        .describe('Only nodes whose title or type contains this, e.g. "Cast" or "Health". The cheapest way to read a large graph.'),
+        .describe(
+          'Only nodes whose title or type contains this, e.g. "Cast" or "Health". The cheapest way to read a ' +
+            "large graph: 809 nodes and 52k tokens down to 23 nodes and 700. Matches arrive with the nodes they " +
+            "are wired to, marked `neighbour` and carrying a title, so every link in the reply resolves inside " +
+            "the reply and the node you actually wanted is usually already named."
+        ),
       maxNodes: z
         .number()
         .optional()

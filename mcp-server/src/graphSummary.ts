@@ -95,6 +95,39 @@ const ENTRY_TYPES = ["K2Node_Event", "K2Node_CustomEvent", "K2Node_FunctionEntry
  */
 export const DEFAULT_MAX_NODES = 60;
 
+/**
+ * A neighbour of a match: id, type and title, and nothing else.
+ *
+ * The reason it carries no pins is the whole reason it is here. A caller who filtered to "Kronos
+ * Match" gets a node whose wiring reads `in HostParams <- BE59B028.ReturnValue` - an id that is not
+ * in the reply, because the node it names did not match. The link cannot be followed, so the filter
+ * that was supposed to save a call has cost one.
+ *
+ * A title fixes that outright: "Make Kronos Host Params" is immediately the thing you wanted, and
+ * you go straight to unreal_read_node_detail for its pin defaults. Carrying the neighbour's own
+ * wiring as well would drag in a second ring of unresolvable ids and undo the saving, so it stops
+ * at one hop.
+ */
+function asNeighbour(node: SummaryNodeLike): Record<string, unknown> {
+  return { id: node.id, type: shortType(node.type), title: node.title, neighbour: true };
+}
+
+/** Every node one link away from a match, in either direction, that is not itself a match. */
+function neighboursOf(matches: SummaryNodeLike[], all: SummaryNodeLike[]): SummaryNodeLike[] {
+  const matched = new Set(matches.map((n) => n.id).filter(Boolean));
+  const wanted = new Set<string>();
+  for (const node of matches) {
+    for (const pin of node.connectedPins ?? []) {
+      for (const link of pin.linkedTo ?? []) {
+        // Both directions come free: the summary records a link on the pins at both of its ends,
+        // so a match's own pin list already names everything touching it.
+        if (link.node && !matched.has(link.node)) wanted.add(link.node);
+      }
+    }
+  }
+  return wanted.size === 0 ? [] : all.filter((n) => n.id && wanted.has(n.id));
+}
+
 export interface CapOptions {
   match?: string;
   maxNodes?: number;
@@ -109,12 +142,22 @@ export function capGraphSummary(result: GraphSummaryLike, options: CapOptions = 
     ? all.filter((n) => `${n.title ?? ""} ${n.type ?? ""}`.toLowerCase().includes(needle))
     : all;
 
+  // A filter narrows to the nodes asked for and then puts back the ones they are wired to, so the
+  // links in the reply resolve inside the reply.
+  const near = needle ? neighboursOf(filtered, all) : [];
+
   if (filtered.length <= limit) {
     // Nothing was cut. Only say so when a filter was applied, so an ordinary small graph comes back
     // without bookkeeping it does not need - but the nodes are still compacted, because the wiring
     // shape costs the same per node whether there are five of them or eight hundred.
     return needle
-      ? { ...result, nodes: filtered.map(compactNode), totalNodes: all.length, matched: filtered.length }
+      ? {
+          ...result,
+          nodes: [...filtered.map(compactNode), ...near.map(asNeighbour)],
+          totalNodes: all.length,
+          matched: filtered.length,
+          ...(near.length > 0 ? { neighbours: near.length } : {}),
+        }
       : { ...result, nodes: all.map(compactNode) };
   }
 
@@ -123,11 +166,35 @@ export function capGraphSummary(result: GraphSummaryLike, options: CapOptions = 
   const kept = [...entries, ...rest].slice(0, limit);
 
   const ratio = Math.round((all.length / Math.max(kept.length, 1)) * 10) / 10;
+  // Only what the surviving nodes actually link to. A neighbour of something the cap removed
+  // explains nothing and is pure cost.
+  //
+  // Note the candidate pool is `near` PLUS the matches the cap cut. A link to a cut match dangles
+  // exactly as badly as a link to a never-matched node - the reason it was dropped makes no
+  // difference to a reader who cannot follow it.
+  const keptIds = new Set(kept.map((n) => n.id).filter(Boolean));
+  const linkedFromKept = new Set<string>();
+  for (const k of kept) {
+    for (const pin of k.connectedPins ?? []) {
+      for (const link of pin.linkedTo ?? []) {
+        if (link.node && !keptIds.has(link.node)) linkedFromKept.add(link.node);
+      }
+    }
+  }
+  // Only when a filter was used. Without one, `filtered` is the entire graph, so this would drag
+  // every capped-away node back in as a neighbour - measured at 2,121 tokens to 3,879 on the 809-node
+  // graph, an 83% rise on the commonest read of all, to fix dangling links in a reply that already
+  // says `truncated` and tells the caller how to narrow. A caller who filtered asked a specific
+  // question and needs the answer to hold together; a caller who did not is still getting oriented.
+  const cutMatches = needle ? filtered.filter((n) => n.id && !keptIds.has(n.id)) : [];
+  const keptNear = [...near, ...cutMatches].filter((n) => n.id && linkedFromKept.has(n.id));
+
   return {
     ...result,
-    nodes: kept.map(compactNode),
+    nodes: [...kept.map(compactNode), ...keptNear.map(asNeighbour)],
     totalNodes: all.length,
     ...(needle ? { matched: filtered.length } : {}),
+    ...(keptNear.length > 0 ? { neighbours: keptNear.length } : {}),
     shown: kept.length,
     omitted: filtered.length - kept.length,
     truncated: true,

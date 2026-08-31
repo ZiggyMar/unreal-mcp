@@ -1603,6 +1603,41 @@ receive all of it.
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### A filtered graph read now brings back what its matches are wired to
+
+`match` narrowed a graph read correctly and then handed back something that could not be used. Match
+`"Kronos Match"` on a real widget and the reply contains a node whose wiring reads
+`in HostParams <- BE59B028.ReturnValue` - and `BE59B028` is **not in the reply**, because it did not
+match. The link cannot be followed. The filter that was supposed to save a call had cost one.
+
+So a match now brings its immediate neighbours with it, marked `neighbour` and carrying `id`, `type`
+and `title` and no wiring of their own. One hop, deliberately: a neighbour's own links would name a
+second ring of unresolvable ids and undo the saving.
+
+The title is the whole point. Tracing a real LAN bug in this project, `match: "Kronos Match"` used to
+give the node id `BE59B028` and nothing else; it now says **`Make Kronos Host Params`**, which is
+immediately the node the bug was in.
+
+Measured against `BP_Player`'s 809-node Event Graph, whose raw bridge reply is 52,643 tokens:
+
+| call | nodes | tokens | dangling links |
+| --- | --- | --- | --- |
+| no filter | 60 (capped) | 2,121 | — |
+| `match: "Cast To"` | 8 matched + 32 near | **1,188** | **0** |
+| `match: "Skin"` | 16 matched + 16 near | **1,124** | **0** |
+| `match: "Set Timer"` | 6 matched + 17 near | **700** | **0** |
+
+**Zero dangling links** is the guarantee, and it is checked as itself rather than as the mechanism
+that delivers it - a test builds a 200-node ring, filters it below the cap so matches are genuinely
+cut, and asserts every id named in the reply is present in the reply.
+
+The backfill runs **only when a filter was used**, and that restriction was also measured. Without a
+filter the "matches" are the entire graph, so backfilling took the unfiltered read from 2,121 tokens
+to **3,879** - an 83% rise on the commonest read of all, to fix dangling links in a reply that
+already says `truncated` and tells the caller how to narrow. A caller who filtered asked a specific
+question and needs the answer to hold together; a caller who did not is still getting oriented.
+There is a test pinning that, too.
+
 **`unreal_list_variables` got filtering rather than a cap, and the measurement is why.** 84 variables
 came to 4,117 tokens with *no single field dominating* — unlike the graph read, there was no fat to
 cut, and a cap would simply have hidden state at random. What a caller actually wants is not "fewer
