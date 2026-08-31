@@ -131,6 +131,56 @@ function nameOf(path: string): string {
   return pkg.slice(pkg.lastIndexOf("/") + 1);
 }
 
+/**
+ * Does `identifier` contain `concept` as a WORD, rather than inside one?
+ *
+ * The bridge's search is a substring match, which is right for a search box and wrong for deciding
+ * that a system already exists. Asking plan_feature for "a stamina bar" produced:
+ *
+ *   "bar" already exists in this project: BP_DummyTurret, BP_MomBase, BP_Turret and 9 more.
+ *
+ * BP_DummyTurret is there because it has a variable called `TurretBarrelLoc`. That claim goes into
+ * `raiseWithUser`, the field whose whole purpose is to stop a model and make it ask - so a false
+ * one buys a pointless question, or worse, a refusal to build something the project does not have.
+ *
+ * Identifiers here are camelCase or snake_case, so the word boundaries are real and findable:
+ * `TurretBarrelLoc` is Turret / Barrel / Loc, and none of those is "bar". `WBP_DataBar`,
+ * `UpdateHealBar` and `EnergyRadialBar` all are, and all of them are genuine - this project really
+ * does have bars.
+ *
+ * A derived form counts, and getting that wrong is the opposite failure. `GetVacuumable` IS part of
+ * the vacuum system, and `BPI_Damageable` is how half of Unreal names an interface - a rule strict
+ * enough to reject `Barrel` must still accept those. The distinguishing fact is not prefix-ness,
+ * since "bar" is a prefix of "barrel" exactly as "vacuum" is a prefix of "vacuumable": it is that
+ * `-able` is a suffix English actually uses to build a word from another, and `-rel` is not.
+ *
+ * So a word matches when it IS the concept, or the concept plus one of those suffixes. That first
+ * version - concept, or concept + s/es - was caught by an existing test whose fixture contained
+ * `GetVacuumable`, which is exactly the kind of name this must not lose.
+ */
+const DERIVED_SUFFIXES = [
+  "s", "es", "ed", "d", "ing", "er", "or", "able", "ible", "ion", "tion", "ment", "ness", "ful", "less", "y",
+];
+
+export function matchesAsWord(identifier: string, concept: string): boolean {
+  const want = concept.toLowerCase();
+  if (want.length === 0) return false;
+  const words = identifier
+    // Split camelCase and PascalCase, including runs of capitals like WBP_ or HUDBar.
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    // Digits are an index, not part of the word. BP_Thing0, WBP_HUD2 and BP_Player3 are ordinary
+    // Unreal names, and a rule that reads "Thing0" as one word loses every one of them. Caught by an
+    // existing test whose whole fixture was BP_Thing0..BP_Thing9.
+    .replace(/([A-Za-z])([0-9])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase());
+  return words.some(
+    (w) => w === want || (w.startsWith(want) && DERIVED_SUFFIXES.includes(w.slice(want.length)))
+  );
+}
+
 /** Only project content is interesting; engine and plugin assets are noise in a system map. */
 function isProjectAsset(path: string): boolean {
   return path.startsWith("/Game");
@@ -200,8 +250,17 @@ export async function mapSystem(
   // --- 1. What matches the concept at all? -----------------------------------------------------
   const search = await bridge.send<SearchProjectResult>("search_project", { query, maxResults: 60 });
   const seeds: string[] = [];
+  let substringOnly = 0;
   for (const hit of search.hits ?? []) {
     if (!isProjectAsset(hit.path)) continue;
+    // The bridge searches by substring. That is right for a search box and wrong for "this system
+    // already exists" - see matchesAsWord. Checked against the thing that actually matched: the
+    // hit's own name for a function or variable, the asset name for a Blueprint.
+    const matched = hit.kind === "blueprint" ? nameOf(hit.path) : String(hit.name ?? "");
+    if (!matchesAsWord(matched, query)) {
+      substringOnly += 1;
+      continue;
+    }
     // A function or variable hit tells you far more than a name match: it says the system's
     // behaviour lives here, not just its label.
     const reason =
@@ -221,9 +280,16 @@ export async function mapSystem(
       readingOrder: [],
       highRisk: [],
       notes: [
-        `Nothing in the project matches "${query}". Either this system does not exist yet, or it is ` +
-          `named differently. Try unreal_get_project_overview to see the project's actual vocabulary ` +
-          `before assuming it is missing.`,
+        substringOnly > 0
+          ? // Different answer, and the distinction matters: "nothing found" would send a caller to
+            // rename their search, when in fact the search DID hit and every hit was a coincidence.
+            `Nothing in the project has "${query}" as a word. ${substringOnly} name(s) contain it ` +
+              `inside a longer one - the way "bar" sits inside "TurretBarrelLoc" - and none of those ` +
+              `is this system. Either it does not exist yet, or it is named differently; ` +
+              `unreal_get_project_overview shows the project's actual vocabulary.`
+          : `Nothing in the project matches "${query}". Either this system does not exist yet, or it is ` +
+            `named differently. Try unreal_get_project_overview to see the project's actual vocabulary ` +
+            `before assuming it is missing.`,
       ],
       truncated: false,
     };

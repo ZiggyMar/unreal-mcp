@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { mapSystem } from "../dist/systemMap.js";
+import { mapSystem, matchesAsWord } from "../dist/systemMap.js";
 
 /**
  * A fake project: a health system spread over five Blueprints, the shape that makes a real
@@ -362,4 +362,68 @@ test("a texture that MATCHES the query is kept, because that is a real question"
   );
   const icon = (map.assets ?? []).find((a) => a.name === "HealthIcon");
   assert.ok(icon, "an asset that matched the query by name is part of the answer");
+});
+
+test("a concept matches a word, not a substring inside one", () => {
+  // Asking plan_feature for "a stamina bar" produced, in raiseWithUser:
+  //   "bar" already exists in this project: BP_DummyTurret, BP_MomBase, BP_Turret and 9 more.
+  //
+  // BP_DummyTurret is there because it has a variable called TurretBarrelLoc. That claim lands in
+  // the one field whose purpose is to stop a model and make it ask the user - so a false one buys a
+  // pointless question, or a refusal to build something the project does not have.
+  //
+  // Every string here is real, taken from the project this was found on.
+  assert.equal(matchesAsWord("TurretBarrelLoc", "bar"), false, "Barrel is not a bar");
+  assert.equal(matchesAsWord("BP_Turret", "bar"), false);
+
+  assert.equal(matchesAsWord("WBP_DataBar", "bar"), true);
+  assert.equal(matchesAsWord("UpdateHealBar", "bar"), true);
+  assert.equal(matchesAsWord("EnergyRadialBar", "bar"), true);
+  assert.equal(matchesAsWord("ChangeSectionBarColour", "bar"), true, "a word in the middle still counts");
+});
+
+test("a plural answers the singular question", () => {
+  // "do we have a bar" is answered by a variable called DataBars. Refusing that would trade one kind
+  // of false negative for another.
+  assert.equal(matchesAsWord("DataBars", "bar"), true);
+  assert.equal(matchesAsWord("Enemies", "enemy"), false, "but only regular plurals - this is not a stemmer");
+  assert.equal(matchesAsWord("Boxes", "box"), true);
+});
+
+test("runs of capitals split where a human would split them", () => {
+  // WBP_HUDBar is WBP / HUD / Bar, not WBPHUDB / ar. Getting this wrong loses real matches on a
+  // project whose naming is full of prefixes like WBP_, BP_, ABP_ and GS_.
+  assert.equal(matchesAsWord("WBP_HUDBar", "bar"), true);
+  assert.equal(matchesAsWord("HUDBar", "hud"), true);
+  assert.equal(matchesAsWord("BP_PlayerHealth", "health"), true);
+});
+
+test("the concept itself, alone, matches", () => {
+  assert.equal(matchesAsWord("Bar", "bar"), true);
+  assert.equal(matchesAsWord("bar", "bar"), true);
+  assert.equal(matchesAsWord("", "bar"), false);
+  assert.equal(matchesAsWord("Bar", ""), false, "an empty concept matches nothing, rather than everything");
+});
+
+test("a derived form is part of the system, which is why the rule is not just equality", () => {
+  // GetVacuumable IS part of the vacuum system, and BPI_Damageable is how half of Unreal names an
+  // interface. A rule strict enough to reject "Barrel" must still accept these - and the first
+  // version did not, which an existing test caught because its fixture happened to contain
+  // GetVacuumable.
+  //
+  // The distinguishing fact is not prefix-ness: "bar" is a prefix of "barrel" exactly as "vacuum" is
+  // of "vacuumable". It is that -able builds a word from another and -rel does not.
+  assert.equal(matchesAsWord("GetVacuumable", "vacuum"), true);
+  assert.equal(matchesAsWord("BPI_Damageable", "damage"), true);
+  assert.equal(matchesAsWord("SpawnerSettings", "spawn"), true);
+  assert.equal(matchesAsWord("TurretBarrelLoc", "bar"), false, "and Barrel is still not a bar");
+  assert.equal(matchesAsWord("Barrier", "bar"), false);
+});
+
+test("a trailing index is not part of the word", () => {
+  // BP_Thing0, WBP_HUD2 and BP_Player3 are ordinary Unreal names, and a rule that reads "Thing0" as
+  // one word loses every one of them.
+  assert.equal(matchesAsWord("BP_Thing0", "thing"), true);
+  assert.equal(matchesAsWord("WBP_HUD2", "hud"), true);
+  assert.equal(matchesAsWord("BP_Player3", "player"), true);
 });

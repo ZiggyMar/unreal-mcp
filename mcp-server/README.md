@@ -1924,6 +1924,51 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### "bar already exists in this project: BP_DummyTurret"
+
+Same method as the map, applied to the feature leg. `unreal_plan_feature`, asked the way a user
+asks - *"add a stamina bar that drains when sprinting and regenerates when you stop"*:
+
+```text
+raiseWithUser:
+  "bar" already exists in this project: BP_DummyTurret, BP_MomBase, BP_Turret and 9 more.
+   Extend it rather than adding a second one...
+```
+
+`BP_DummyTurret` is in that list because it has a variable called **`TurretBarrelLoc`**. The bridge
+searches by substring, which is right for a search box and wrong for deciding a system already
+exists - and this claim lands in `raiseWithUser`, the one field whose purpose is to stop a model and
+make it ask. A false one buys a pointless question, or a refusal to build something the project does
+not have.
+
+Concepts are matched as **words** now. Identifiers are camelCase or snake_case, so the boundaries are
+real: `TurretBarrelLoc` is Turret / Barrel / Loc, and none of those is "bar". `WBP_DataBar`,
+`UpdateHealBar` and `EnergyRadialBar` all are, and all are genuine - this project really does have
+bars.
+
+**Two false negatives found by the existing tests, both worth recording.**
+
+The first rule was *equals the concept, or the concept plus s/es*. That drops `GetVacuumable` - which
+IS part of the vacuum system - and `BPI_Damageable`, which is how half of Unreal names an interface.
+The distinguishing fact is not prefix-ness: "bar" is a prefix of "barrel" exactly as "vacuum" is of
+"vacuumable". It is that `-able` builds a word from another and `-rel` does not. So the rule accepts
+a known derivational suffix.
+
+The second was `BP_Thing0`. A trailing index is not part of the word, and reading "Thing0" as one
+word loses `WBP_HUD2` and `BP_Player3` along with it.
+
+Both were caught by tests written for something else entirely - the reason-collapsing test and the
+prose-size test - because their fixtures happened to contain exactly the names the new rule got
+wrong. That is what a fixture built from a real project buys.
+
+And when filtering leaves nothing, the reply says which nothing it is:
+
+> Nothing in the project has "bar" as a word. 2 name(s) contain it inside a longer one - the way
+> "bar" sits inside "TurretBarrelLoc" - and none of those is this system.
+
+"Nothing found" would have sent a caller to rename their search, when the search did hit and every
+hit was a coincidence.
+
 ### Asking the tool a real question, and reading the answer properly
 
 `unreal_map_system` is where a plain-text bug report lands. So it got asked one, against the real
