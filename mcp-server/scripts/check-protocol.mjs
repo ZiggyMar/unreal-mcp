@@ -234,6 +234,31 @@ async function main() {
     }
   }
 
+  // --- a parameter that does not exist ----------------------------------------------------------
+  //
+  // zod strips unknown keys, so a plausible-but-wrong parameter name used to be accepted in silence
+  // and the tool ran unfiltered. Measured on the real project: `match: "ServerList"` cost 75 tokens
+  // and returned one Blueprint, while `nameContains: "ServerList"` cost 4,014 and returned all 339 -
+  // 53x, with nothing to say the filter had done nothing. Every tool schema is strict now, and this
+  // is here so it stays that way.
+  const bogusParam = await server.request("tools/call", {
+    name: "unreal_list_blueprints",
+    arguments: { nameContains: "anything" },
+  });
+  const bogusText = bogusParam.result?.content?.[0]?.text ?? bogusParam.error?.message ?? "";
+  if (!/not a parameter of/.test(bogusText)) {
+    note("an unrecognised parameter was not refused - it is being silently ignored, and the caller pays for the unfiltered reply");
+  } else if (!/pathPrefix|match/.test(bogusText)) {
+    note("an unrecognised parameter was refused without naming the parameters that do exist, which leaves the caller guessing again");
+  }
+
+  // A tool that takes no parameters at all must still accept an empty object. Making schemas strict
+  // is exactly the kind of change that breaks this without anyone noticing.
+  const noArgs = await server.request("tools/call", { name: "unreal_pie_status", arguments: {} });
+  if (noArgs.error) {
+    note(`a zero-parameter tool rejected an empty argument object: ${String(noArgs.error.message).slice(0, 80)}`);
+  }
+
   // --- several calls in flight at once -----------------------------------------------------------
   //
   // Real clients pipeline. Nothing in this project had ever sent a second request before the first

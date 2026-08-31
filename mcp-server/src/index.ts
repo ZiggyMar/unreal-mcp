@@ -526,6 +526,34 @@ function withRepeatNotice(result: unknown, notice: string | null): unknown {
   };
 }
 
+/**
+ * Reject a parameter this tool does not have, instead of ignoring it.
+ *
+ * zod strips unknown keys by default, so a plausible-but-wrong parameter name was accepted in
+ * silence and the tool ran unfiltered. Measured on the real project:
+ *
+ *   unreal_list_blueprints { match: "ServerList" }          75 tokens, one Blueprint
+ *   unreal_list_blueprints { nameContains: "ServerList" }  4014 tokens, all 339
+ *
+ * 53x the cost for one wrong word, with nothing in the reply to say the filter did nothing - so the
+ * caller may also go on to reason about "the Blueprints matching ServerList" and be wrong about all
+ * 339 of them. Both halves of that are bad, and the second is worse.
+ *
+ * The names are not guessable and there is no reason they should be: `match`, `nameContains`,
+ * `filter`, `contains` and `query` are all equally reasonable things to try. So the answer is the
+ * one this repo already gives for a wrong pin name - refuse it, and say what does exist. The list is
+ * captured at registration, so it cannot drift from the schema it came from.
+ */
+function strictSchema(toolName: string, shape: Record<string, unknown>): z.ZodTypeAny {
+  const accepted = Object.keys(shape);
+  return z.object(shape as z.ZodRawShape).strict(
+    accepted.length === 0
+      ? `${toolName} takes no parameters.`
+      : `not a parameter of ${toolName}. It accepts: ${accepted.join(", ")}. ` +
+          `Nothing was filtered or changed by the unrecognised one - call again with the right name.`
+  );
+}
+
 const register: typeof server.registerTool = ((name: string, config: never, handler: never) => {
   if (PROFILE === "core" && !CORE_PROFILE_TOOLS.has(name)) {
     return { enable() {}, disable() {}, remove() {}, update() {}, enabled: false } as never;
@@ -554,6 +582,15 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
     const result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
     return withRepeatNotice(result, verdict.notice);
   }) as never;
+  // Swap the raw shape for a strict object of the same shape. It stays a ZodObject, so the SDK
+  // still derives the advertised JSON schema from it exactly as before.
+  {
+    const cfg = config as unknown as { inputSchema?: Record<string, unknown> };
+    const shape = cfg.inputSchema;
+    if (shape && typeof shape === "object" && !("_def" in shape) && !("_zod" in shape)) {
+      cfg.inputSchema = strictSchema(name, shape) as never;
+    }
+  }
   const handle = server.registerTool(name, config, guarded);
   toolHandles.set(name, handle as unknown as { enable(): void; disable(): void; enabled: boolean });
   return handle;

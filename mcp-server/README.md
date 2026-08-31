@@ -1603,6 +1603,36 @@ receive all of it.
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### A parameter that does not exist is refused, not ignored
+
+The single worst token bug found so far, and it was found by walking into it: calling
+`unreal_list_blueprints` with `nameContains` - which is not a parameter - returned **all 339
+Blueprints** and said nothing.
+
+| call | tokens | returned |
+| --- | --- | --- |
+| `unreal_list_blueprints { match: "ServerList" }` | **75** | the one Blueprint |
+| `unreal_list_blueprints { nameContains: "ServerList" }` | **4,014** | all 339, silently |
+
+**53x the cost for one wrong word.** zod strips unknown keys by default, so the filter was dropped
+before the tool ever saw it. And the cost is the smaller half of the problem: the caller has a reply
+that looks like an answer, and may go on to reason about "the Blueprints matching ServerList" while
+holding a list of every Blueprint in the project.
+
+The names are not guessable and there is no reason they should be - `match`, `nameContains`,
+`filter`, `contains`, `query` are all equally reasonable things to try. So the answer is the one this
+repo already gives for a wrong pin name: refuse it, and say what does exist.
+
+```text
+not a parameter of unreal_list_blueprints. It accepts: pathPrefix, match, maxResults, fields.
+Nothing was filtered or changed by the unrecognised one - call again with the right name.
+```
+
+**91 tokens instead of 4,014**, and the next call is right. Every one of the 97 tool schemas is
+strict, the accepted list is captured from the schema at registration so it cannot drift, and
+`npm run check:protocol` both asserts the refusal names real parameters and asserts a zero-parameter
+tool still accepts an empty object - which is exactly what a change like this breaks quietly.
+
 ### A filtered graph read now brings back what its matches are wired to
 
 `match` narrowed a graph read correctly and then handed back something that could not be used. Match
