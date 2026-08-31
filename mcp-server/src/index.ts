@@ -4277,7 +4277,7 @@ register(
       });
     }
 
-    const { matches, filesScanned, totalMatches, truncated } = searchSource(projectFile, roots, symbol, {
+    const { matches, filesScanned, totalMatches, truncated, foundAs } = searchSource(projectFile, roots, symbol, {
       limit,
       fileFilter,
     });
@@ -4300,6 +4300,19 @@ register(
       project: ping.project,
       projectFile,
       symbol,
+      // Say WHICH name this was found under when it was not the one asked for. The whole reason the
+      // retry exists is that the caller did not know the C++ spelling - the editor and every
+      // Blueprint's parentClass call it AVSGameState, and the class is AAVSGameState - so finding
+      // the file without handing back the real name only half solves it.
+      ...(foundAs
+        ? {
+            foundAs,
+            note:
+              `Nothing declares "${symbol}"; this is "${foundAs}". Unreal prefixes its classes - A for ` +
+              `Actor, U for UObject, F for struct, E for enum, I for interface - and the editor drops ` +
+              `the prefix, so a Blueprint's parentClass never matches the C++ name exactly.`,
+          }
+        : {}),
       // Grouped by file, which is both the cheaper shape and the one that matches what happens next:
       // the reader opens a file. "<file>:<line>" is still quotable, which is what editors linkify.
       matches: matchesByFile(matches),

@@ -1924,6 +1924,44 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The C++ leg's entry point could not find a class from its Blueprint's parentClass
+
+The fourth leg, same method. A change request against C++ starts by finding where something is
+declared, and the natural way to name it is the way the editor does - `list_blueprints` returns
+`parentClass: "AVSGameState"`. Asking `find_source` for that returned:
+
+```json
+{"matches": {
+  "Source/AntiVirusSquad/AVSGameState.cpp": ["1 mention: #include \"AVSGameState.h\""],
+  "Source/AntiVirusSquad/AVSGameState.h":   ["8 mention: #include \"AVSGameState.generated.h\""]
+}}
+```
+
+**Two include lines, and not one word about the class.** The C++ class is `AAVSGameState` - Unreal
+prefixes `A` for Actor, `U` for UObject, `F` for struct, `E` for enum, `I` for interface - and the
+editor drops the prefix everywhere it shows a name. So the entry point for the entire C++ half of
+this server was missing declarations for the most common way a name is written down.
+
+It retries with the prefixes now, and reports which one worked, because the caller not knowing the
+C++ spelling is the whole reason they are here:
+
+```text
+AVSGameState                 -> foundAs AAVSGameState
+AVSBaseGameMode              -> foundAs AAVSBaseGameMode
+SpectatorDirectorController  -> foundAs ASpectatorDirectorController
+AAVSGameState                -> no retry, found on the first pass
+```
+
+The retry is gated on *"found nothing but mentions"* rather than run always, because that is exactly
+the prefix signature and nothing else looks like it. A name spelled the way the source spells it
+finds its own declaration first time and never pays for a second pass.
+
+**One optimisation in the first version was exactly wrong**, and it is the kind that reads as
+obviously correct: skip a prefix the symbol already starts with. `AVSGameState` begins with `A`
+because the project's initials do, and the Actor prefix puts *another* one in front - so skipping
+would have left the original failure untouched while looking like a fix. It was caught by running
+the same four symbols again rather than trusting the change.
+
 ### There was no way to read one Data Table row
 
 Following the change-request thread into Data Tables - one of the three jobs named in this project's

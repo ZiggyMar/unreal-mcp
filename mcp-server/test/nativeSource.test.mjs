@@ -264,3 +264,65 @@ test("ordering within a file is preserved, because rank is the product", () => {
   // And the first file is still the highest-ranked one, not whichever sorted first.
   assert.equal(Object.keys(grouped)[0], "a.h");
 });
+
+test("a Blueprint's parentClass finds its C++ class, prefix and all", () => {
+  // The chain this fixes: read a Blueprint, see parentClass "AVSGameState", ask where that is
+  // declared. The C++ class is AAVSGameState, so the plain search found the name only inside
+  // #include "AVSGameState.h" - two mention lines and not one word about the class. find_source is
+  // the entry point for the whole C++ half of this server.
+  const root = mkdtempSync(join(tmpdir(), "unreal-prefix-"));
+  mkdirSync(join(root, "Source", "Game"), { recursive: true });
+  writeFileSync(join(root, "Source", "Game", "Game.Build.cs"), "// module");
+  writeFileSync(
+    join(root, "Source", "Game", "AVSGameState.h"),
+    ['#include "AVSGameState.generated.h"', "", "class GAME_API AAVSGameState : public AGameStateBase {", "};"].join("\n")
+  );
+  const projectFile = join(root, "Game.uproject");
+  const roots = findSourceRoots(projectFile);
+
+  const found = searchSource(projectFile, roots, "AVSGameState");
+  assert.equal(found.foundAs, "AAVSGameState", "the real name is reported, not just the file");
+  assert.ok(
+    found.matches.some((m) => m.kind === "class"),
+    "the declaration is found, not only the include line"
+  );
+});
+
+test("a symbol already starting with the prefix letter is still retried", () => {
+  // The case that prompted this: AVSGameState begins with A because the project's initials do, and
+  // the Actor prefix puts another A in front. Skipping a symbol that already starts with the prefix
+  // letter felt like an obvious saving and would have left the original failure exactly as it was.
+  const root = mkdtempSync(join(tmpdir(), "unreal-prefix2-"));
+  mkdirSync(join(root, "Source", "Game"), { recursive: true });
+  writeFileSync(join(root, "Source", "Game", "Game.Build.cs"), "// module");
+  writeFileSync(join(root, "Source", "Game", "Actor.h"), "class GAME_API AArmory : public AActor {\n};");
+  const projectFile = join(root, "Game.uproject");
+  const found = searchSource(projectFile, findSourceRoots(projectFile), "Armory");
+  assert.equal(found.foundAs, "AArmory");
+});
+
+test("a name spelled the way the source spells it pays for no retry", () => {
+  // The retry is gated on "found nothing but mentions", which is exactly the prefix signature. A
+  // symbol that finds its own declaration on the first pass must not report foundAs at all.
+  const root = mkdtempSync(join(tmpdir(), "unreal-prefix3-"));
+  mkdirSync(join(root, "Source", "Game"), { recursive: true });
+  writeFileSync(join(root, "Source", "Game", "Game.Build.cs"), "// module");
+  writeFileSync(join(root, "Source", "Game", "Thing.h"), "class GAME_API UThing : public UObject {\n};");
+  const projectFile = join(root, "Game.uproject");
+  const found = searchSource(projectFile, findSourceRoots(projectFile), "UThing");
+  assert.equal(found.foundAs, undefined);
+  assert.ok(found.matches.some((m) => m.kind === "class"));
+});
+
+test("a symbol that exists nowhere reports the plain result, not a prefixed guess", () => {
+  // Trying six prefixes and finding nothing must leave the answer as it was. Reporting
+  // foundAs: "ANothing" for a symbol that does not exist would invent a name.
+  const root = mkdtempSync(join(tmpdir(), "unreal-prefix4-"));
+  mkdirSync(join(root, "Source", "Game"), { recursive: true });
+  writeFileSync(join(root, "Source", "Game", "Game.Build.cs"), "// module");
+  writeFileSync(join(root, "Source", "Game", "Thing.h"), "class GAME_API UThing {};");
+  const projectFile = join(root, "Game.uproject");
+  const found = searchSource(projectFile, findSourceRoots(projectFile), "Nonexistent");
+  assert.equal(found.foundAs, undefined);
+  assert.deepEqual(found.matches, []);
+});

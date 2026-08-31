@@ -201,7 +201,30 @@ export interface SearchOptions {
  * Whole-word matching, because a substring search for "Health" in a real project returns every
  * HealthBar, HealthComponent and bHealthDirty and buries the one line that matters.
  */
-export function searchSource(
+/**
+ * Unreal's class prefixes, and why a search has to know about them.
+ *
+ * The C++ class is `AAVSGameState`. The editor calls it `AVSGameState`, and so does the
+ * `parentClass` field of every Blueprint derived from it. So the natural chain - read a Blueprint,
+ * see its parent, ask where that parent is declared - searched for a name that appears in the source
+ * only inside `#include "AVSGameState.h"`:
+ *
+ *   "Source/AntiVirusSquad/AVSGameState.h": ["8 mention: #include \"AVSGameState.generated.h\""]
+ *
+ * Two include lines, and not one word about the class. `find_source` is the entry point for the
+ * whole C++ half of this server, and it was missing declarations for the most common way a name is
+ * written down.
+ *
+ * A = Actor, U = UObject, F = struct, E = enum, I = interface, S = Slate widget, T = template.
+ */
+const UNREAL_PREFIXES = ["A", "U", "F", "E", "I", "S", "T"];
+
+/** Did this search find the thing, or only places that mention it? */
+function foundADeclaration(matches: SourceMatch[]): boolean {
+  return matches.some((m) => m.kind !== "mention");
+}
+
+function searchOnce(
   projectFile: string,
   roots: SourceRoot[],
   symbol: string,
@@ -256,6 +279,47 @@ export function searchSource(
     mentionsOmitted: Math.max(0, mentions.length - maxMentions),
     truncated: all.length > kept.length,
   };
+}
+
+/**
+ * Find a symbol, trying Unreal's class prefixes when the plain name only turns up mentions.
+ *
+ * The retry is gated on "found nothing but mentions" rather than run always, because that is exactly
+ * the prefix signature and nothing else looks like it. `AVSGameState` appears in the source only
+ * inside `#include "AVSGameState.h"` - two mention lines and no declaration - because the class is
+ * `AAVSGameState`. A symbol that IS spelled the way the source spells it finds its own declaration
+ * on the first pass and never pays for a second.
+ *
+ * The prefixed name is reported, so a caller sees `AAVSGameState` and can use it: the whole point is
+ * that they did not know it, and finding the file without the real name only half solves it.
+ */
+export function searchSource(
+  projectFile: string,
+  roots: SourceRoot[],
+  symbol: string,
+  options: SearchOptions = {}
+): {
+  matches: SourceMatch[];
+  filesScanned: number;
+  totalMatches: number;
+  mentionsOmitted: number;
+  truncated: boolean;
+  foundAs?: string;
+} {
+  const direct = searchOnce(projectFile, roots, symbol, options);
+  if (foundADeclaration(direct.matches) || symbol.length === 0) return direct;
+
+  for (const prefix of UNREAL_PREFIXES) {
+    // Deliberately NOT skipping a symbol that already starts with this letter. The case that
+    // prompted all this is AVSGameState, whose class is AAVSGameState - the project's own initials
+    // begin with A and the Actor prefix puts another one in front. Skipping felt like an obvious
+    // saving and would have left the original failure exactly as it was.
+    const prefixed = searchOnce(projectFile, roots, `${prefix}${symbol}`, options);
+    if (foundADeclaration(prefixed.matches)) {
+      return { ...prefixed, foundAs: `${prefix}${symbol}` };
+    }
+  }
+  return direct;
 }
 
 /**
