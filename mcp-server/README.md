@@ -5930,6 +5930,44 @@ and the exact create-delete-create sequence is a regression check that also asse
 still answering afterwards. A tool that can crash the editor from a plain input mistake is worse
 than one missing the feature.
 
+### The numbers a model reads are guarded too
+
+Three token figures in tool descriptions have gone stale and been caught **by accident** — each one
+while measuring something else:
+
+| claim | was quoted | measured | how it was found |
+|---|---|---|---|
+| `read_class_defaults` | 4,728 | 3,237 | while measuring something else |
+| `list_data_table_rows` | 7,040 | 5,472 | while measuring something else |
+| `explain_graph` | ~8,800 | 2,328 | while investigating an apparent inversion |
+
+Every one drifted **downward**, because this repo keeps making replies cheaper — compact JSON, float
+trimming, deduplicated fixes — and nothing walked back through the prose afterwards. So the tool
+undersold itself to the one reader whose decision depends on the number.
+
+`measure:reads` verifies figures live against a real editor, which is the right check and not enough
+on its own: it is a hand-written list of three, so it cannot notice a *fourth* claim being added.
+That is the same rot four other indexes in this repo have already suffered.
+
+So `check:claims` does the half that runs without an editor, and does it by **finding** rather than
+being told. It scans for every token figure in text a model reads and fails in both directions:
+
+- a figure nothing is registered to watch — *you added a number and nobody decided who checks it*
+- a registered figure that no longer appears — *the registry is watching text that is gone*
+
+The second is the failure that actually happened elsewhere here, and no other guard looks for it.
+
+The scan draws one deliberate line: **60** of the token figures in `src/` are in comments and **4**
+are in model-facing strings. Comments are records of why a design exists, dated by their commit, and
+nobody acts on them; demanding they stay current would make the check noise nobody runs. Only text a
+model reads is held to being true.
+
+What it does not claim: this does not prove a number is *right* — only a live measurement does that.
+It proves something narrower and still worth having, that no figure a model reads has appeared
+without anyone deciding who watches it. All four current figures were re-measured by hand when it was
+written: `list_blueprints` 2,669 exact, `list_tools` 551 against "about 540", and both
+`explain_graph` figures fresh.
+
 ### Documentation is guarded too
 
 `npm run check:docs` (part of `npm run build` and `npm test`) checks that:

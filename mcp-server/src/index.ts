@@ -6051,7 +6051,7 @@ async function main() {
       env: {
         // "search", not "lazy". Every client this prints for - Claude Desktop, Claude Code, Cursor -
         // drives a frontier model, and "lazy" was chosen for the opposite case: it still stands 28
-        // tools up front at 9,989 tokens a turn. "search" stands four, and a capable model buys the
+        // tools up front at 12,629 tokens a turn. "search" stands four, and a capable model buys the
         // rest back in one call with the real schemas intact. Local-model users set the profile
         // explicitly; they are the ones the smaller profiles were measured for.
         UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "search",
