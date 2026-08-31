@@ -63,6 +63,28 @@ export function compactVariable(variable: Row): Row {
 }
 
 /**
+ * The prefixes the WRITE side actually parses, and no others.
+ *
+ * Read from the bridge rather than assumed: MCPCommandHandler.cpp accepts `object:`, `class:`,
+ * `struct:` and `enum:`, and nothing else takes a subtype. An earlier draft of this list also had
+ * `softobject`, `softclass` and `interface` - which would have printed `softobject:Foo`, a string
+ * this tool would then refuse if it were handed back. That is precisely the mismatch this whole
+ * change exists to remove, recreated in the other direction, so the list is now the parser's list.
+ *
+ * Anything outside it keeps `type` and `subType` as separate fields exactly as they arrived. An
+ * honest pair beats a descriptor-shaped string that does not work.
+ */
+const DESCRIPTOR_HEADS = new Set(["object", "class", "struct"]);
+
+/**
+ * How a container reaches the type string.
+ *
+ * `[]` and `<set>` are the suffixes the bridge's parser strips, so both round-trip. A map has no
+ * descriptor form at all, so it is left on the row as `container: "map"` rather than invented.
+ */
+const CONTAINER_SUFFIX: Record<string, string> = { array: "[]", set: "<set>" };
+
+/**
  * Collapse `type` + `subType` + `isArray` into the one descriptor the WRITE side already speaks.
  *
  * This started as a token saving and turned out to be a correctness problem. Reading a variable gave:
@@ -78,22 +100,59 @@ export function compactVariable(variable: Row): Row {
  * So the read now answers in the language the write accepts. 56 characters become 23, and a value
  * copied out of one call can be pasted into the next.
  *
- * Only the descriptor heads are lowercased, and only when there is a subType to attach: the engine
- * writes "Object" where the descriptor says "object", but a bare type is passed through exactly as it
- * came rather than being guessed at.
+ * A bare type is passed through exactly as it came rather than being guessed at, and a subtype this
+ * cannot spell as a descriptor keeps `type` and `subType` side by side - see DESCRIPTOR_HEADS.
  */
-const DESCRIPTOR_HEADS = new Set(["object", "class", "struct", "enum", "interface", "softobject", "softclass"]);
-
 export function asTypeDescriptor(variable: Row): Row {
-  const { type, subType, isArray, ...rest } = variable;
+  const { type, subType, isArray, container, ...rest } = variable;
   if (typeof type !== "string") return variable;
 
-  let descriptor = type;
-  if (typeof subType === "string" && subType.length > 0) {
-    const head = DESCRIPTOR_HEADS.has(type.toLowerCase()) ? type.toLowerCase() : type;
-    descriptor = `${head}:${subType}`;
+  // `container` is what the bridge sends now; `isArray` is what an older plugin sends. Both are
+  // read, because the plugin inside a running editor is often older than this server - that gap is
+  // exactly what the doctor's freshness check exists to report, and a reply that broke while it
+  // lasted would be a bad way to find out.
+  const containerName =
+    typeof container === "string" ? container : isArray === true ? "array" : undefined;
+
+  const lower = type.toLowerCase();
+  const hasSub = typeof subType === "string" && subType.length > 0;
+
+  let descriptor: string | undefined;
+  if (hasSub && DESCRIPTOR_HEADS.has(lower)) {
+    descriptor = `${lower}:${subType}`;
+  } else if (hasSub && (lower === "byte" || lower === "enum")) {
+    // A Blueprint enum is byte-typed with the UEnum as its subcategory - the bridge says so where it
+    // parses `enum:`, and the editor itself produces that form. So the honest descriptor for a byte
+    // WITH a subtype is `enum:<Name>`; `byte:<Name>` is not a thing the parser takes.
+    descriptor = `enum:${subType}`;
+  } else if (!hasSub) {
+    descriptor = type;
   }
-  if (isArray === true) descriptor += "[]";
+
+  if (descriptor === undefined) {
+    // A subtype this cannot spell as a descriptor: keep both fields exactly as they came, and keep
+    // the container beside them rather than folding it into a string that would not parse.
+    return {
+      ...variable,
+      ...(containerName === undefined ? {} : { container: containerName }),
+    };
+  }
+
+  if (containerName !== undefined) {
+    const suffix = CONTAINER_SUFFIX[containerName];
+    if (suffix) {
+      descriptor += suffix;
+    } else {
+      // A map. No suffix exists, so say so on the row instead of dropping the fact.
+      const { name: mapName, ...mapRest } = rest as Row;
+      return {
+        ...(mapName === undefined ? {} : { name: mapName }),
+        type: descriptor,
+        container: containerName,
+        ...mapRest,
+      };
+    }
+  }
 
   // isArray is now carried by the "[]", so it must not also be spelled out - that would be the same
   // fact twice, which is the thing this whole file exists to remove.
@@ -144,6 +203,24 @@ export function omitZeroDefault(variable: Row): Row {
     return { ...variable, defaultValue: trimmed };
   }
   return variable;
+}
+
+/**
+ * Compact one field of a user-defined struct.
+ *
+ * The same shape as a Blueprint variable and the same three problems, found by checking whether the
+ * read and the write of each pair in this surface speak the same language:
+ *
+ *   {"name":"Category","type":"byte","subType":"E_UpgradeCategory","isArray":false,"defaultValue":"NewEnumerator0"}
+ *
+ * `add_struct_field` takes `"enum:E_UpgradeCategory"`. Nothing in that row is the string it wants.
+ *
+ * A struct field has no category and none of the variable flags, so this is deliberately not
+ * compactVariable: running a row through checks for fields it cannot have reads as though they might
+ * be there.
+ */
+export function compactStructField(field: Row): Row {
+  return omitZeroDefault(asTypeDescriptor(field));
 }
 
 /**

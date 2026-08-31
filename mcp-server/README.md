@@ -1882,6 +1882,63 @@ obvious way to write it.
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
 
+### Auditing every read against its matching write
+
+The variable mismatch raised an obvious question: **how many other pairs in this surface disagree?**
+So each read was checked against the write it feeds - can the value one returns be passed to the
+other? Three answers came back, and two were no.
+
+**`list_struct_fields` was going out completely raw** and had all three problems at once:
+
+```json
+{"name":"Category","type":"byte","subType":"E_UpgradeCategory","isArray":false,"defaultValue":"NewEnumerator0"}
+```
+
+`unreal_add_struct_field` takes `"enum:E_UpgradeCategory"`. Nothing in that row is the string it
+wants. Compacted the same way variables are - **888 -> 508 characters, a 43% cut** - and the types are
+now the ones the write accepts.
+
+**The descriptor list itself was wrong**, and the check caught it before it shipped. The first draft
+lowercased `softobject`, `softclass` and `interface` into descriptor heads too - which would have
+printed `softobject:Foo`, a string this same tool refuses when handed back. Exactly the mismatch
+being removed, recreated in the other direction. Reading `MCPCommandHandler.cpp` rather than assuming
+gave the parser's real list: `object:`, `class:`, `struct:`, `enum:`, and nothing else takes a
+subtype. Anything outside it keeps `type` and `subType` side by side, because an honest pair beats a
+descriptor-shaped string that does not work.
+
+And a Blueprint enum reads back as `byte` with the `UEnum` as its subtype - the bridge says so where
+it parses `enum:` - so `byte:E_Rarity` was being printed for a type no call would take. It is
+`enum:E_Rarity` now.
+
+### A Set that reported itself as a scalar
+
+The same audit found a fidelity bug in the bridge, in C++:
+
+```cpp
+Entry->SetBoolField(TEXT("isArray"), PinType.ContainerType == EPinContainerType::Array);
+```
+
+A boolean over a three-valued fact. **A Set and a Map both reported `false`**, so a variable declared
+`name<set>` read back as a plain `name` - and this bridge can *create* sets, so the write side could
+produce a type the read side had no way to describe. Silence meaning two different things, in the one
+field that decides how a value is used.
+
+It sends `container: "array" | "set" | "map"` now, absent for a single value, and the tool layer maps
+`[]` and `<set>` into the descriptor - both suffixes the bridge's own parser strips, so both
+round-trip. A map has no descriptor form, so `container: "map"` stays on the row rather than being
+invented or dropped. The tool layer still reads the old `isArray` as well, because the plugin inside
+a running editor is routinely older than this server.
+
+One thing deliberately **not** compacted: an enum default of `NewEnumerator0`. It is tempting to read
+that as "index zero, therefore the type's zero" - and reordering entries in the editor does not
+renumber those internal names, so `NewEnumerator0` can sit at index 3 and be a deliberate choice.
+Plausible, and wrong.
+
+Compiling the bridge change surfaced an unrelated defect it had been hiding: `MCPCommandHandler.cpp`
+used `FFileHelper` without including `Misc/FileHelper.h`, and built only because unity builds hand a
+file its neighbours' includes. `unreal_compile_cpp` compiles one file alone by default, which is how
+it showed up. The file has to build on its own.
+
 ### A read and a write that disagreed about type names
 
 `list_variables` was the next most expensive read, and looking at it for tokens found something else

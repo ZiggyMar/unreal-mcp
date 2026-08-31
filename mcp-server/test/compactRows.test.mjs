@@ -12,6 +12,7 @@ import {
   asCountMap,
   compactAssetRef,
   asTypeDescriptor,
+  compactStructField,
 } from "../dist/compactRows.js";
 
 /** A variable shaped exactly as the engine returns one. */
@@ -286,4 +287,71 @@ test("a type the reply prints is a type the filter accepts", () => {
   for (const needle of ["object:skeletalmesh", "object:skeletalmesh[]", "skeletalmesh"]) {
     assert.ok(haystack.includes(needle), `filtering by ${needle} must find what the reply showed`);
   }
+});
+
+test("only the four prefixes the bridge parses become descriptors", () => {
+  // The list is the parser's list, read from MCPCommandHandler.cpp rather than assumed. An earlier
+  // draft included softobject/softclass/interface, which would have printed "softobject:Foo" - a
+  // string this same tool refuses if you hand it back. That is the mismatch this change removes,
+  // recreated in the other direction.
+  assert.equal(compactVariable(variable({ type: "Object", subType: "Texture2D" })).type, "object:Texture2D");
+  assert.equal(compactVariable(variable({ type: "class", subType: "Actor" })).type, "class:Actor");
+  assert.equal(compactVariable(variable({ type: "struct", subType: "Vector" })).type, "struct:Vector");
+
+  const soft = compactVariable(variable({ type: "softobject", subType: "Texture2D" }));
+  assert.equal(soft.type, "softobject", "the type is passed through, not dressed up");
+  assert.equal(soft.subType, "Texture2D", "and the subtype stays beside it as an honest pair");
+});
+
+test("a byte with a subtype is an enum, which is what the write side calls it", () => {
+  // The bridge parses "enum:<Name>" into PC_Byte with the UEnum as its subcategory, and the editor
+  // produces the same form - so reading it back as "byte" plus a subtype describes a type no call
+  // will accept. "byte:E_Rarity" is not a thing.
+  assert.equal(compactVariable(variable({ type: "byte", subType: "E_Rarity" })).type, "enum:E_Rarity");
+  assert.equal(compactVariable(variable({ type: "enum", subType: "E_Rarity" })).type, "enum:E_Rarity");
+  // A plain byte has no subcategory and stays a plain byte.
+  assert.equal(compactVariable(variable({ type: "byte" })).type, "byte");
+});
+
+test("a set is a set, not a scalar", () => {
+  // The bridge used to answer isArray:false for a Set and for a Map alike, so a variable declared
+  // "name<set>" read back as a plain "name" - and this bridge can CREATE sets. Both suffixes are
+  // ones its parser strips, so both round-trip.
+  assert.equal(compactVariable(variable({ type: "name", container: "set" })).type, "name<set>");
+  assert.equal(compactVariable(variable({ type: "name", container: "array" })).type, "name[]");
+  assert.equal(compactVariable(variable({ type: "name" })).type, "name", "absent means one value");
+});
+
+test("a map keeps its container on the row, because no descriptor spells it", () => {
+  // Inventing "name<map>" would print a string the parser rejects. Dropping the fact would report a
+  // map as a scalar. Neither is acceptable, so the fact moves next to the type instead.
+  const out = compactVariable(variable({ type: "name", container: "map" }));
+  assert.equal(out.type, "name");
+  assert.equal(out.container, "map");
+});
+
+test("an older plugin's isArray is still understood", () => {
+  // The plugin inside a running editor is routinely older than this server - which is what the
+  // doctor's freshness check reports - and a reply that broke in the meantime would be a bad way to
+  // find out.
+  assert.equal(compactVariable(variable({ type: "int", isArray: true })).type, "int[]");
+  assert.equal("isArray" in compactVariable(variable({ type: "int", isArray: true })), false);
+});
+
+test("a struct field is compacted for what a struct field actually has", () => {
+  const out = compactStructField({
+    name: "Category",
+    type: "byte",
+    subType: "E_UpgradeCategory",
+    defaultValue: "None",
+  });
+  assert.deepEqual(out, { name: "Category", type: "enum:E_UpgradeCategory" });
+});
+
+test("an enum default is NOT treated as a zero", () => {
+  // "NewEnumerator0" is Unreal's internal name for an entry, and it is tempting to read it as "index
+  // zero, therefore the default". Reordering entries in the editor does not renumber those internal
+  // names, so NewEnumerator0 can sit at index 3 and be a deliberate choice. Plausible, and wrong.
+  const out = compactStructField({ name: "Category", type: "byte", subType: "E_X", defaultValue: "NewEnumerator0" });
+  assert.equal(out.defaultValue, "NewEnumerator0");
 });

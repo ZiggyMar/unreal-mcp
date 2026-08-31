@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, asTypeDescriptor, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -3382,8 +3382,13 @@ register(
   },
   async ({ path }) => {
     try {
-      const result = await bridge.send("list_struct_fields", { path });
-      return jsonResult(result);
+      const result = (await bridge.send("list_struct_fields", { path })) as { fields?: Record<string, unknown>[] };
+      // Same compaction as a variable list, and for the same reason: a field read here should be a
+      // field add_struct_field accepts. This reply was going out completely raw.
+      return jsonResult({
+        ...result,
+        ...(Array.isArray(result.fields) ? { fields: result.fields.map(compactStructField) } : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }

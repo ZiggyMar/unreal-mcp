@@ -118,6 +118,10 @@
 #include "Misc/PackageName.h"
 #include "Misc/App.h"
 #include "Misc/Paths.h"
+// FFileHelper::SaveArrayToFile, for take_screenshot. It compiled without this only because unity
+// builds hand a file its neighbours' includes; compiling this one alone - which is what
+// unreal_compile_cpp does by default - failed on it. The file has to build on its own.
+#include "Misc/FileHelper.h"
 #include "Misc/EngineVersion.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPCommandHandler, Log, All);
@@ -2998,6 +3002,27 @@ static void MCPSampleWatches()
 }
 
 /** Stop sampling, if it is running. Safe to call when it is not. */
+/**
+ * Name the container a pin holds, or nothing at all when it holds one value.
+ *
+ * This replaced `isArray`, which was a boolean over a three-valued fact. A Set and a Map both
+ * reported false, so a variable declared `name<set>` read back as a plain `name` - and this bridge
+ * can CREATE sets, so the write side could produce a type the read side could not describe. Silence
+ * meaning two different things, in the one field that decides how a value is used.
+ *
+ * Absent means one value. "array", "set" and "map" mean what they say.
+ */
+static const TCHAR* MCPContainerName(EPinContainerType ContainerType)
+{
+	switch (ContainerType)
+	{
+	case EPinContainerType::Array: return TEXT("array");
+	case EPinContainerType::Set: return TEXT("set");
+	case EPinContainerType::Map: return TEXT("map");
+	default: return nullptr;
+	}
+}
+
 static void MCPStopWatching()
 {
 	if (GMCPWatch.Ticker.IsValid())
@@ -5264,7 +5289,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 		{
 			Entry->SetStringField(TEXT("subType"), Desc.VarType.PinSubCategoryObject->GetName());
 		}
-		Entry->SetBoolField(TEXT("isArray"), Desc.VarType.ContainerType == EPinContainerType::Array);
+		if (const TCHAR* Container = MCPContainerName(Desc.VarType.ContainerType))
+		{
+			Entry->SetStringField(TEXT("container"), Container);
+		}
 		bool bReportedDefault = false;
 		if (DefaultObject)
 		{
@@ -7483,7 +7511,10 @@ static TArray<TSharedPtr<FJsonValue>> DescribeStructFields(UUserDefinedStruct* S
 		{
 			Entry->SetStringField(TEXT("subType"), PinType.PinSubCategoryObject->GetName());
 		}
-		Entry->SetBoolField(TEXT("isArray"), PinType.ContainerType == EPinContainerType::Array);
+		if (const TCHAR* Container = MCPContainerName(PinType.ContainerType))
+		{
+			Entry->SetStringField(TEXT("container"), Container);
+		}
 		if (!Desc.DefaultValue.IsEmpty())
 		{
 			Entry->SetStringField(TEXT("defaultValue"), Desc.DefaultValue);
