@@ -157,6 +157,71 @@ function syncTree(sourceDir, targetDir) {
   return { copied, removed };
 }
 
+/**
+ * Refuse to start a build that is going to fail on a locked DLL after several minutes.
+ *
+ * A running editor holds UnrealMCPBridge.dll open, so the compile succeeds and the LINK fails with
+ * LNK1104 - a message about a file, several minutes in, that says nothing about editors. This is the
+ * one command a user has to run by hand to pick up new bridge commands, so the one obvious way to
+ * get it wrong should cost a second rather than a coffee.
+ *
+ * Asks the bridge rather than the process table where it can, because the bridge answers with WHICH
+ * project is open, and "an editor is running" is a much weaker sentence than "AntiVirusSquad is
+ * open". Falls back to the process list, which is all that is available when the plugin is not
+ * loaded - and a plugin that is not loaded still holds nothing, so that case is a warning rather
+ * than a refusal.
+ *
+ * --isolated builds into a temporary host project and installs nothing, so it is unaffected and this
+ * does not run for it.
+ */
+async function editorHoldingTheDll() {
+  // The bridge first: it is precise, and it is the same port the server itself uses.
+  try {
+    const { UnrealBridgeClient } = await import("../dist/bridgeClient.js");
+    const ping = await new UnrealBridgeClient().send("ping", {});
+    if (ping && ping.project) {
+      return { certain: true, detail: `the editor has "${ping.project}" open (its bridge answered)` };
+    }
+  } catch {
+    // Not reachable is not evidence of absence: an editor without the plugin loaded, or one still
+    // starting up, holds the DLL just the same. Fall through to the process list.
+  }
+
+  if (process.platform === "win32") {
+    const list = spawnSync("tasklist", ["/FI", "IMAGENAME eq UnrealEditor.exe", "/NH"], { encoding: "utf8" });
+    if (list.status === 0 && /UnrealEditor\.exe/i.test(list.stdout ?? "")) {
+      return { certain: true, detail: "UnrealEditor.exe is running (its bridge did not answer, so it may still be loading)" };
+    }
+  } else {
+    const list = spawnSync("pgrep", ["-f", "UnrealEditor"], { encoding: "utf8" });
+    if (list.status === 0 && (list.stdout ?? "").trim().length > 0) {
+      return { certain: true, detail: "an UnrealEditor process is running" };
+    }
+  }
+  return { certain: false };
+}
+
+if (!isolated) {
+  const running = await editorHoldingTheDll();
+  if (running.certain) {
+    console.error(
+      `
+Refusing to build: ${running.detail}.
+
+` +
+        `A running editor holds UnrealMCPBridge.dll open, so this would compile for several minutes
+` +
+        `and then fail at the link step with LNK1104 - a message about a file that says nothing about
+` +
+        `editors. Close the editor and run this again.
+
+` +
+        `To compile without installing anything, and without closing anything, use --isolated.`
+    );
+    process.exit(2);
+  }
+}
+
 const results = [];
 for (const target of chosen) {
   if (!isolated) {
