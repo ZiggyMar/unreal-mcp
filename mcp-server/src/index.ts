@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
 import { findInDataTables } from "./findInDataTables.js";
 import { matchSymptoms } from "./symptoms.js";
 import { UnrealBridgeClient } from "./bridgeClient.js";
@@ -802,14 +803,21 @@ function jsonResult(value: unknown) {
   };
 }
 
-function errorResult(err: unknown) {
+/**
+ * `hint` is for what the tool layer knows and the bridge cannot.
+ *
+ * The bridge's type error already lists every supported form, which is the right answer to a typo.
+ * It is not the right answer to "StaticMesh", where the caller is one prefix away and the list does
+ * not say which prefix - and the tool layer is the only place that can tell those two cases apart.
+ */
+function errorResult(err: unknown, hint?: string) {
   const message = err instanceof Error ? err.message : String(err);
   return {
     isError: true,
     content: [
       {
         type: "text" as const,
-        text: `UnrealMCPBridge error: ${message}`,
+        text: `UnrealMCPBridge error: ${message}${hint ? "\n\n" + hint : ""}`,
       },
     ],
   };
@@ -1440,10 +1448,12 @@ register(
   },
   async ({ path, variableName, type, category, defaultValue }) => {
     try {
+      // Translate the C++ spelling before sending. A model that has just read a header via
+      // unreal_find_source writes FVector, and the bridge takes "vector"; see engineTypes.ts.
       const result = await bridge.send<AddVariableResult>("add_variable", {
         path,
         variableName,
-        type,
+        type: normaliseEngineType(type),
         category,
         defaultValue,
       });
@@ -1463,7 +1473,7 @@ register(
       }
       return jsonResult(result);
     } catch (err) {
-      return errorResult(err);
+      return errorResult(err, typeHint(type));
     }
   }
 );
@@ -2046,7 +2056,14 @@ register(
   },
   async ({ path, functionName, inputs, outputs }) => {
     try {
-      const result = await bridge.send<CreateFunctionResult>("create_function", { path, functionName, inputs, outputs });
+      // Same translation as add_variable. A function signature is where a model is MOST likely to
+      // write the C++ spelling, because it usually has the native declaration in front of it.
+      const result = await bridge.send<CreateFunctionResult>("create_function", {
+        path,
+        functionName,
+        inputs: normaliseFieldTypes(inputs),
+        outputs: normaliseFieldTypes(outputs),
+      });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
@@ -3930,7 +3947,7 @@ register(
   },
   async ({ packagePath, fields }) => {
     try {
-      const result = await bridge.send("create_struct", { packagePath, fields });
+      const result = await bridge.send("create_struct", { packagePath, fields: normaliseFieldTypes(fields) });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
@@ -3955,10 +3972,10 @@ register(
   },
   async ({ path, name, type }) => {
     try {
-      const result = await bridge.send("add_struct_field", { path, name, type });
+      const result = await bridge.send("add_struct_field", { path, name, type: normaliseEngineType(type) });
       return jsonResult(result);
     } catch (err) {
-      return errorResult(err);
+      return errorResult(err, typeHint(type));
     }
   }
 );
@@ -5424,7 +5441,10 @@ register(
       const result = await scaffoldBlueprint(bridge, {
         packagePath,
         parentClass,
-        variables,
+        // Normalised here too, or scaffold and add_variable would take different vocabularies for
+        // the same thing - two tools disagreeing about one concept, which is the defect this repo
+        // keeps finding and would have introduced by fixing only half the surface.
+        variables: normaliseFieldTypes(variables),
         components,
         handlers,
         save,

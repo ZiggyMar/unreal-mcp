@@ -168,6 +168,49 @@ try {
   }
 
   console.log("");
+  console.log("every tool that takes a type takes the same vocabulary");
+  // Not a value passing between two tools, but the same failure shape one level up: four tools that
+  // each work, disagreeing about how one concept is spelled. A model reading a native header via
+  // unreal_find_source has FVector in front of it, and add_variable used to refuse exactly that -
+  // along with FString, FText, FName and FRotator, which are how Unreal spells them.
+  //
+  // Normalising only some of these would have been worse than normalising none: a caller who learns
+  // FVector works in add_variable would reasonably expect it in scaffold_blueprint.
+  const TYPE_STRUCT = `/Game/MCPTrial/S_Type${stamp}`;
+  const TYPE_BP = `/Game/MCPTrial/BP_Type${stamp}`;
+  const typeChecks = [
+    ["add_variable", () => call("unreal_add_variable", { path: SCRATCH, variableName: "TrialOrigin", type: "FVector" })],
+    [
+      "create_function",
+      () =>
+        call("unreal_create_function", {
+          path: SCRATCH,
+          functionName: "TrialMove",
+          inputs: [{ name: "To", type: "FVector" }],
+          outputs: [{ name: "Ok", type: "bool" }],
+        }),
+    ],
+    [
+      "create_struct",
+      () => call("unreal_create_struct", { packagePath: TYPE_STRUCT, fields: [{ name: "At", type: "FVector" }, { name: "Label", type: "FText" }] }),
+    ],
+    [
+      "scaffold_blueprint",
+      () => call("unreal_scaffold_blueprint", { packagePath: TYPE_BP, parentClass: "Actor", variables: [{ name: "Home", type: "FVector" }] }),
+    ],
+  ];
+  for (const [name, run] of typeChecks) {
+    try {
+      await run();
+      if (name === "create_struct") cleanup.push(TYPE_STRUCT);
+      if (name === "scaffold_blueprint") cleanup.push(TYPE_BP);
+      check(`${name} takes the C++ spelling "FVector"`, true);
+    } catch (err) {
+      check(`${name} takes the C++ spelling "FVector"`, false, String(err.message).slice(0, 110));
+    }
+  }
+
+  console.log("");
   console.log("find_in_data_tables -> set_data_table_row (the change request, end to end)");
   // "The machine gun should cost 500 instead of 300" is the shape of most change requests, and until
   // recently none of it worked: search_project could not see inside a table at all, and the write

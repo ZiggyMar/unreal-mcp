@@ -1476,6 +1476,41 @@ already exists, because "make the" reads as a request to create something. Chang
 checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
 cost more" is a change, and only the second half of that sentence says so.
 
+### The C++ spelling of a type was refused, by the tool that C++ leads you to
+
+`{ Cost: 500 }` named a defect class worth hunting rather than waiting for: **the tool disagreeing
+with the person using it**, which is invisible to internal tests because every test round-trips its
+own output. So the next question was what else a caller would naturally send and be refused.
+
+`unreal_add_variable` accepts 20 of 26 obvious type spellings — `int`, `int32`, `integer`, `bool`,
+`boolean`, `Float`, `String` all work — and refused exactly six:
+
+```text
+FString   FText   FName   FVector   FRotator      (and a bare class name)
+```
+
+Those five are not typos. They are how Unreal itself spells them, and they are what a model has in
+front of it **after `unreal_find_source` hands back a header**. The join that broke is C++ to
+Blueprint: read a native class, go to declare a matching variable, spell the type the way the source
+you just read spells it, and get refused by the same server that showed you the source.
+
+The engine-side resolver is where `int32` and `integer` are already handled and would have been the
+tidier place — but it is C++, so it only reaches someone who has rebuilt the plugin. Normalising in
+the tool layer reaches everyone now, and follows the rule this project already applies to
+compaction: the bridge stays faithful, the tool layer accommodates.
+
+Applied to all four tools that take a type — `add_variable`, `create_function`, `create_struct`,
+`scaffold_blueprint` — because normalising *some* would be worse than none: a caller who learns
+`FVector` works in one would reasonably expect it in the others. `trial:chain` checks all four,
+which is the right home for it: not a value passing between two tools, but the same failure shape one
+level up.
+
+Two things deliberately **not** translated. A bare `StaticMesh` could mean `object:StaticMesh` or
+`class:StaticMesh` — an instance or the type itself, genuinely different — so it gets a hint naming
+both readings and decides neither. And an unknown `F`-name is left alone: `FMyGameplayStruct` should
+be `struct:MyGameplayStruct`, but stripping the `F` blindly would also turn `FooBar` into `ooBar`.
+Only the engine's own core types are listed, and they are a closed set.
+
 ### `{ Cost: 500 }` was rejected by the schema, not by the engine
 
 With the value findable, the other half of "finds it and changes it" was tried end to end — and the
