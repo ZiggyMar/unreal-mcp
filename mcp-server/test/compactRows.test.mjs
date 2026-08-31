@@ -10,6 +10,7 @@ import {
   pickFields,
   VARIABLE_FLAGS,
   asCountMap,
+  compactAssetRef,
 } from "../dist/compactRows.js";
 
 /** A variable shaped exactly as the engine returns one. */
@@ -177,4 +178,40 @@ test("a malformed census row is skipped rather than poisoning the map", () => {
     "count"
   );
   assert.deepEqual(out, { Actor: 70 });
+});
+
+test("an asset reference drops the name the package already carries", () => {
+  // find_references rows arrived as {package, assetName, assetClass} and two of the three were free:
+  // assetName is the package's last segment, and assetClass is "Blueprint" on nearly every row of a
+  // Blueprint's dependency list. Measured on a real Blueprint with 116 references: about 1,475
+  // tokens of 3,736.
+  const out = compactAssetRef({
+    package: "/Game/Folder/PC_Gameplay",
+    assetName: "PC_Gameplay",
+    assetClass: "Blueprint",
+  });
+  // Nothing left but the package, so the row IS the package. Wrapping one value in an object
+  // spends the word "package" once per row to say what position already says.
+  assert.equal(out, "/Game/Folder/PC_Gameplay");
+});
+
+test("a class that is not Blueprint is the interesting case, and survives", () => {
+  // A Texture or a DataTable among the dependencies is exactly what somebody is looking for.
+  const out = compactAssetRef({
+    package: "/Game/Art/T_Icon",
+    assetName: "T_Icon",
+    assetClass: "Texture2D",
+  });
+  assert.deepEqual(out, { package: "/Game/Art/T_Icon", assetClass: "Texture2D" });
+});
+
+test("a name that is not derivable from the package is kept", () => {
+  // Only drop what can be reconstructed exactly. A name that differs from the package's last segment
+  // is telling you something, and dropping it would be a lie rather than a saving.
+  const out = compactAssetRef({
+    package: "/Game/Folder/Container",
+    assetName: "SomethingElse",
+    assetClass: "Blueprint",
+  });
+  assert.equal(out.assetName, "SomethingElse");
 });

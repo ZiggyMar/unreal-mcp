@@ -159,6 +159,15 @@ const CASES = [
   { label: "list_variables", tool: "unreal_list_variables", args: { path: biggest.path }, mustContain: "variables" },
   { label: "list_actors", tool: "unreal_list_actors", args: {}, mustContain: "actors" },
   { label: "project_health", tool: "unreal_project_health", args: {}, mustContain: "{" },
+  // Added after it turned out to be the most expensive read in the whole surface and the only one
+  // nobody was measuring: 3,736 tokens on a real Blueprint, larger than list_blueprints. A guard
+  // that watches seven of eight expensive reads watches the wrong thing on the eighth.
+  {
+    label: "find_references",
+    tool: "unreal_find_references",
+    args: { path: biggest.path },
+    mustContain: "referencedBy",
+  },
 ];
 
 const results = (await session(CASES)).map((r) => ({ ...r, tokens: tokensOf(r.text) }));

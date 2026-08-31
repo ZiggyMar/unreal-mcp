@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, pickFields, asCountMap } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -1471,7 +1471,14 @@ register(
   async ({ path, maxResults }) => {
     try {
       const result = await bridge.send<FindReferencesResult>("find_references", { path, maxResults });
-      return jsonResult(result);
+      // Both lists are rows of {package, assetName, assetClass} where two fields are derivable or
+      // constant. Compacted here, in the tool, so anything internal that reads references keeps the
+      // full shape.
+      return jsonResult({
+        ...result,
+        referencedBy: (result.referencedBy ?? []).map((r) => compactAssetRef(r as never)),
+        dependsOn: (result.dependsOn ?? []).map((r) => compactAssetRef(r as never)),
+      });
     } catch (err) {
       return errorResult(err);
     }

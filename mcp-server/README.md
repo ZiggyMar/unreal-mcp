@@ -1623,6 +1623,34 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### The most expensive read was the one nobody was measuring
+
+`find_references` was **3,736 tokens** on a real Blueprint - larger than `list_blueprints`, larger
+than anything else - and it was not in `measure:reads`. A guard that watches seven of eight expensive
+reads watches the wrong thing on the eighth. It is measured now.
+
+Its rows were `{package, assetName, assetClass}`, and two of the three fields were free:
+
+```json
+{"package":"/Game/.../PC_Gameplay","assetName":"PC_Gameplay","assetClass":"Blueprint"}
+```
+
+`assetName` is the package's last segment - the same redundancy `compactBlueprintRow` already removes
+from a Blueprint listing. `assetClass` is `"Blueprint"` on nearly every row of a Blueprint's
+dependency list, which is what `omitDefault` exists for. And once both are gone, a row with nothing
+left but its package **is** its package: wrapping one value in an object spends the word `"package"`
+116 times to say what position already says.
+
+| | before | after |
+| --- | --- | --- |
+| `unreal_find_references` | 3,736 | **2,361** |
+
+The array ends up mixed - plain strings for the ordinary case, objects for a row that still has
+something to add - and that is worth being explicit about rather than tidy. The objects are exactly
+the interesting rows: a Texture or a DataTable among the dependencies is what somebody is looking
+for, and it now stands out instead of hiding in a uniform list. A name that is *not* the package's
+last segment is kept, because dropping it would be a lie rather than a saving.
+
 ### A census that spelled its own column headings 79 times
 
 `get_project_overview` returned its parent-class breakdown as an array of two-key objects:

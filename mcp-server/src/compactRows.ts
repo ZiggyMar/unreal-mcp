@@ -151,3 +151,39 @@ export function asCountMap<T extends Row>(rows: T[] | undefined, keyField: strin
   }
   return out;
 }
+
+/**
+ * Compact one asset reference from find_references.
+ *
+ * The rows arrived as {package, assetName, assetClass}, and two of the three fields were free:
+ *
+ *   {"package":"/Game/.../PC_Gameplay","assetName":"PC_Gameplay","assetClass":"Blueprint"}
+ *
+ * `assetName` is the last segment of `package`, which is the same redundancy compactBlueprintRow
+ * already removes from a Blueprint listing. `assetClass` is "Blueprint" on nearly every row of a
+ * Blueprint's dependency list, which is what omitDefault exists for - it is kept whenever it is
+ * anything else, because a Texture or a DataTable among the dependencies is the interesting case.
+ *
+ * Measured on a real Blueprint with 116 references: 3,736 tokens, of which the two derivable fields
+ * were about 1,475.
+ */
+export function compactAssetRef(row: Row): Row | string {
+  const pkg = row.package;
+  const { assetName, ...rest } = row;
+  // Only when it really is derivable. A name that is not the package's last segment is telling you
+  // something, and dropping it would be a lie rather than a saving.
+  const derivable =
+    typeof pkg === "string" && typeof assetName === "string" && pkg.slice(pkg.lastIndexOf("/") + 1) === assetName;
+  const kept = omitDefault(derivable ? rest : row, "assetClass", "Blueprint");
+
+  // A row with nothing left but its package IS its package. Wrapping one value in an object spends
+  // the word "package" once per row - 116 times on a real Blueprint, for about 375 tokens - to say
+  // what position already says.
+  //
+  // The array ends up mixed: plain strings for the ordinary case, objects for a row that still has
+  // something to add. That is worth being explicit about rather than tidy, because the objects are
+  // exactly the interesting rows - a Texture or a DataTable among the dependencies is what somebody
+  // is looking for, and it now stands out instead of hiding in a uniform list.
+  const keys = Object.keys(kept);
+  return keys.length === 1 && keys[0] === "package" && typeof kept.package === "string" ? kept.package : kept;
+}
