@@ -94,6 +94,70 @@ try {
   }
 
   console.log("");
+  console.log("list_components -> set_component_property");
+  await call("unreal_add_component", { path: SCRATCH, componentClass: "SphereComponent", name: "TrialSphere" });
+  const comps = await call("unreal_list_components", { path: SCRATCH });
+  const comp = (comps.components ?? []).find((c) => c.name === "TrialSphere");
+  check("the component comes back under the name it was given", Boolean(comp), JSON.stringify(comp));
+  if (comp) {
+    try {
+      // `comp.name` into `component:`. The parameter is named differently from the field, which is
+      // normal and not what this trial is about - it checks that the VALUE passes through unedited.
+      // A first version wrote componentName/propertyName here and the trial reported a failure that
+      // was its own: worth remembering that a red result needs reading before it is believed.
+      await call("unreal_set_component_property", {
+        path: SCRATCH,
+        component: comp.name,
+        property: "SphereRadius",
+        value: "120",
+      });
+      check("set_component_property takes that name verbatim", true);
+    } catch (err) {
+      check("set_component_property takes that name verbatim", false, String(err.message).slice(0, 110));
+    }
+  }
+
+  console.log("");
+  console.log("list_struct_fields -> add_struct_field");
+  const STRUCT = `/Game/MCPTrial/S_Chain${stamp}`;
+  await call("unreal_create_struct", { packagePath: STRUCT, fields: [{ name: "Icon", type: "object:Texture2D" }] });
+  cleanup.push(STRUCT);
+  const fields = await call("unreal_list_struct_fields", { path: STRUCT });
+  const printedField = (fields.fields ?? []).find((f) => String(f.name).startsWith("Icon"))?.type;
+  check("the field type a read prints round-trips", printedField === "object:Texture2D", String(printedField));
+  try {
+    await call("unreal_add_struct_field", { path: STRUCT, name: "Icon2", type: printedField });
+    check("add_struct_field accepts it verbatim", true);
+  } catch (err) {
+    check("add_struct_field accepts it verbatim", false, String(err.message).slice(0, 110));
+  }
+
+  console.log("");
+  console.log("list_assets -> read_asset_properties -> set_asset_property");
+  const assets = await call("unreal_list_assets", { className: "DataTable", maxResults: 3 });
+  const asset = (assets.assets ?? [])[0];
+  if (asset) {
+    try {
+      const props = await call("unreal_read_asset_properties", { path: asset.path });
+      check("read_asset_properties takes the listed path verbatim", Array.isArray(props.properties), `${(props.properties ?? []).length} properties`);
+    } catch (err) {
+      check("read_asset_properties takes the listed path verbatim", false, String(err.message).slice(0, 110));
+    }
+  }
+
+  console.log("");
+  console.log("audit_project -> the tool its own fix names");
+  // The audit reports node ids truncated to what a person would copy out of a report. Whatever it
+  // hands back has to be enough for the tool it tells you to use.
+  const audit = await call("unreal_audit_project", { check: "dead-node", limit: 40 });
+  const deadGroup = (audit.groups ?? []).find((g) => g.check === "dead-node");
+  if (deadGroup && (deadGroup.examples ?? []).length > 0) {
+    check("the audit names a fix tool for its findings", /unreal_[a-z_]+/.test(String(deadGroup.fix)), String(deadGroup.fix).slice(0, 80));
+  } else {
+    console.log("  --    no dead-node findings on this project to chain from");
+  }
+
+  console.log("");
   console.log("find_source -> describe_class (the join that was actually broken)");
   // A model reads a Blueprint, sees a native parentClass, asks where it is declared, then asks what
   // it offers. find_source answers with the C++ spelling - AAVSGameState - and describe_class

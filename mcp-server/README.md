@@ -1924,6 +1924,24 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### Widening the join trial to the ones nobody had tested
+
+The joins the last five bugs came from are covered. The interesting question is the ones that are
+not, so four more went in: `list_components` into `set_component_property`, `list_struct_fields`
+into `add_struct_field`, `list_assets` into `read_asset_properties`, and the audit into the tool its
+own `fix` names.
+
+**All four passed** - fifteen joins green - which is a result worth stating plainly rather than
+padding. The type descriptor work generalised: a struct field prints `object:Texture2D` and
+`add_struct_field` takes it back unedited, exactly as variables do.
+
+One thing to be honest about. The run reported a failure on
+`list_components -> set_component_property`, and it was **the trial's own bug**: the parameters are
+`component` and `property`, and it had written `componentName` and `propertyName`. A red result needs
+reading before it is believed, and the note is now in the trial next to that call - because the
+distinction it turns on is subtle. A parameter *named* differently from the field it takes is normal.
+A *value* that has to be edited on the way is the defect this trial exists to catch.
+
 ### A trial for the joins, because that is where the last five bugs were
 
 Five defects in five iterations, and they share a shape: **two tools that each work, describing the
