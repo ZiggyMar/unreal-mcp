@@ -1458,6 +1458,60 @@ That guard also had to be fixed: it captured `/"(unreal_[a-z0-9_]+)"/`, so a too
 anything with a capital in it *vanished from the set* instead of being reported - the guard failing
 in the way it existed to prevent.
 
+### "Build me this" is not a bug report
+
+The other half of what this project promises is *"I tell it a feature I want, it scans the current
+work, adapts to it, builds with it"*. Exercised the same way as the bug half, it landed badly:
+
+```text
+"add a new shop upgrade that increases fire rate"  ->  nothing at all
+"I want to add a dash ability"                     ->  nothing at all
+"add a pause menu"     -> list_widgets, review_blueprint, audit_project
+"make the enemies drop loot" -> read_behavior_tree, audit_project
+```
+
+Nothing, or a set of tools for finding out what is **broken** handed to someone who wants something
+**built**. The subject was read correctly and the intent was not read at all. Intent now picks the
+approach and the subject still picks the domain, so "add a pause menu" plans against what exists
+*and* brings the widget tools.
+
+And "build a new weapon" was returning widget tools for a reason worth recording: **`ui` matched
+inside `b-ui-ld`**. Seventeen phrases in the index were four characters or shorter, and every one is
+a substring of ordinary English — `ai` inside "chain", `lag` inside "flag", `hang` inside "change",
+`anim` inside "animal", `key` inside "monkey". Confident nonsense, produced by the file whose own
+comment warns that a caller who believes they were understood will trust a wrong answer. Matching now
+depends on the phrase: multi-word phrases stay substring (`"aren't showing"` must match "upgrades
+aren't showing up"), single words of five or more get a word boundary with a free suffix (`crash`
+still catches "crashes" and "crashing"), and short words must match whole.
+
+### What `plan_feature` got wrong, and what it got right
+
+Following the build path to `unreal_plan_feature` on the real project: it decomposed the request into
+`shop`, `upgrade`, `fire`, `rate`, found `BP_ShopUpgrade`, `BP_ShopComponent.HasUpgrade` and
+`BP_Player.FireProjectile`, flagged `BP_Player` as high-risk with 49 referencers, reported the
+project's own naming conventions, and told the caller to extend rather than duplicate. That is the
+tool working as intended.
+
+Three defects around it:
+
+- **`newWork: ["increas"]`.** The stemmer's `(?:s|x|z|ch|sh)es$` rule is right for boxes→box and
+  wrong for every word already ending in `-se`. That non-word reached the user as *"model the data
+  for the new parts first (structs and enums for increas)"* — a stemmer that invents words writes
+  plans naming assets nobody could build. `-sses` still takes the whole `es` (classes→class), a
+  single `-ses` takes only the `s` (increases→increase, phases→phase, purchases→purchase).
+- **A verb of effect treated as a thing to build.** "Increases" is what the upgrade *does*, not
+  something to create. The nouns in a feature request are the concepts. Deliberately *not* filtered:
+  show, hide, display, play, run, start, stop — each is a real noun in a game ("a start menu", "a run
+  animation"), and over-filtering loses the subject itself.
+- **A cap reported as a count.** Every concept came back as exactly 12 — `shop(12) upgrade(12)
+  fire(12) rate(12)` — because `mapSystem` is called with `maxAssets: 12`. That reads as four small
+  systems and is really four systems of unknown size. `SystemMap` already tracks `truncated`;
+  `plan_feature` was dropping it. It now reports `assetCountIsACap`.
+
+The stopword filter also ran on the raw word while the singulariser ran after it, so `add` was
+dropped and `adds` was not — it passed the filter, became "add", and was reported as a concept. One
+list, applied to the form the list is written in.
+
 ### The example value is a shape, not an answer
 
 Following that path to its end found the risk in it. `unreal_check_data_tables` reports each empty

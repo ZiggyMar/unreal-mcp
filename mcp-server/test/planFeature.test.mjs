@@ -264,3 +264,71 @@ test("this is not a stemmer, and must not become one", () => {
   assert.equal(singularise("die"), "die");
   assert.equal(singularise("loot"), "loot");
 });
+
+test("a word ending in -ses keeps its e", async () => {
+  // `(?:s|x|z|ch|sh)es$` -> slice(-2) is right for boxes/matches/meshes and wrong for every word
+  // that already ends in "-se". "increases" became "increas", and that non-word reached the user as
+  // advice to "model the data for the new parts first (structs and enums for increas)". A stemmer
+  // that invents words writes plans naming assets nobody could build.
+  for (const [plural, singular] of [
+    ["increases", "increase"],
+    ["houses", "house"],
+    ["phases", "phase"],
+    ["releases", "release"],
+    ["purchases", "purchase"],
+    ["poses", "pose"],
+  ]) {
+    assert.equal(singularise(plural), singular);
+  }
+});
+
+test("a doubled s still takes the whole es", async () => {
+  // classes -> class, not "classe". The two -ses cases pull in opposite directions and both appear
+  // in a real project.
+  assert.equal(singularise("classes"), "class");
+  assert.equal(singularise("passes"), "pass");
+  assert.equal(singularise("misses"), "miss");
+});
+
+test("the plurals that were already right stay right", async () => {
+  for (const [plural, singular] of [
+    ["boxes", "box"],
+    ["matches", "match"],
+    ["meshes", "mesh"],
+    ["buzzes", "buzz"],
+    ["enemies", "enemy"],
+    ["guns", "gun"],
+    ["bars", "bar"],
+  ]) {
+    assert.equal(singularise(plural), singular, `${plural} regressed`);
+  }
+  assert.equal(singularise("axis"), "axis", "Unreal has input axes; this one is not a plural");
+});
+
+test("a verb of effect is not a thing to build", async () => {
+  // "add a new shop upgrade that increases fire rate" listed "increase" as new work and told the
+  // caller to create structs and enums for it. The nouns in a feature request are the concepts; a
+  // verb of effect is the relationship between them.
+  assert.deepEqual(extractConcepts("add a new shop upgrade that increases fire rate"), [
+    "shop",
+    "upgrade",
+    "fire",
+    "rate",
+  ]);
+  assert.deepEqual(extractConcepts("I want a dash ability that reduces stamina"), ["dash", "ability", "stamina"]);
+});
+
+test("an inflected stopword is dropped like its base form", async () => {
+  // The stopword filter ran on the raw word and the singulariser ran after it, so "add" was dropped
+  // and "adds" was not: it passed the filter, became "add", and was reported as a concept. One list,
+  // applied to the form the list is written in.
+  assert.ok(!extractConcepts("adds a menu").includes("add"));
+  assert.ok(!extractConcepts("this feature needs things").includes("thing"));
+});
+
+test("a noun that happens to be a verb elsewhere survives", async () => {
+  // Over-filtering loses the subject. "a start menu" and "a run animation" are real requests, so
+  // show/hide/display/play/run/start/stop are deliberately NOT stopwords.
+  assert.ok(extractConcepts("add a start menu").includes("start"));
+  assert.ok(extractConcepts("add a run animation").includes("run"));
+});

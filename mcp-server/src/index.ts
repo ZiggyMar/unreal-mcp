@@ -4124,11 +4124,17 @@ register(
                 summary: toolCatalog.get(name)!.summary,
               })),
               why: symptom!.because,
+              intent: symptom!.intent,
               next:
-                `No tool name or summary contains "${needle}", but it reads like a description of a symptom, ` +
-                `so these are the tools that find that class of problem. This is a keyword match on the ` +
-                `words listed in matchedSymptomWords, not an understanding of the sentence - check the ` +
-                `suggestions against what you are actually seeing.` +
+                (symptom!.intent === "building"
+                  ? `No tool name or summary contains "${needle}", but it reads like a request to BUILD ` +
+                    `something rather than a report of something broken, so these are the tools for that: ` +
+                    `plan first against what the project already has, then the tools for the part of the ` +
+                    `engine the request names.`
+                  : `No tool name or summary contains "${needle}", but it reads like a description of a ` +
+                    `symptom, so these are the tools that find that class of problem.`) +
+                ` This is a keyword match on the words listed in matchedSymptomWords, not an ` +
+                `understanding of the sentence - check the suggestions against what you actually want.` +
                 (groupsFor.length > 0
                   ? ` unreal_enable_tools({ groups: ${JSON.stringify(groupsFor)} }) turns them on.`
                   : ""),

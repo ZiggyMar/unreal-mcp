@@ -173,19 +173,85 @@ export const SYMPTOMS: SymptomEntry[] = [
 
 ];
 
+/**
+ * Words that mean "I want this built", as opposed to "this is broken".
+ *
+ * The index answered only bug reports at first, and the other half of what this project promises is
+ * "I tell it a feature I want, it scans the current work, adapts to it, builds with it". Measured,
+ * that half landed badly:
+ *
+ *   "add a new shop upgrade"  -> nothing at all
+ *   "I want to add a dash"    -> nothing at all
+ *   "add a pause menu"        -> list_widgets, review_blueprint, audit_project
+ *   "make the enemies drop loot" -> read_behavior_tree, audit_project
+ *
+ * Nothing, or a set of tools for finding out what is BROKEN handed to someone who wants something
+ * BUILT. The subject was read correctly and the intent was not read at all.
+ *
+ * Intent picks the approach, subject picks the domain: "add a pause menu" should plan the work and
+ * map what exists, AND bring the widget tools because the subject is a menu.
+ */
+const BUILDING = [
+  "add a", "add an", "add some", "i want to add", "i want a", "i want an", "i need a", "i need an",
+  "create a", "create an", "make a", "make an", "build a", "build an", "implement", "set up a",
+  "set up an", "new feature", "how do i add", "how would i add", "can you add", "let's add",
+  "hook up a", "wire up a", "make the", "give the", "give me a",
+];
+
+/** The tools that answer "build me this", before anything domain-specific. */
+const BUILD_TOOLS = ["unreal_plan_feature", "unreal_map_system"];
+
+const BUILD_BECAUSE =
+  "This reads as something to build rather than something broken. plan_feature reads the project " +
+  "first and returns a plan that fits what is already there - the parent classes, the naming, the " +
+  "Data Tables a system is driven by - rather than a generic recipe. map_system shows every asset " +
+  "an existing system spans, which is what you extend rather than duplicate. Build on top of those " +
+  "two, not from scratch.";
+
 export interface SymptomMatch {
   matched: string[];
   tools: string[];
   because: string[];
+  /** "building" when the text asks for something new; otherwise a report of something wrong. */
+  intent: "building" | "broken";
+}
+
+/**
+ * Does one symptom phrase appear in what the caller said?
+ *
+ * Plain substring matching shipped first and was wrong in a way that produced confident nonsense:
+ *
+ *   "build a new weapon"    -> ui   (inside b-UI-ld)      -> widget tools
+ *   "explain the chain"     -> ai   (inside ch-AI-n)      -> behaviour tree tools
+ *   "change the flag"       -> hang, lag                  -> crash and performance tools
+ *   "the animal spawns"     -> anim                       -> animation tools
+ *   "a monkey and a guide"  -> key, ui                    -> input and widget tools
+ *
+ * Seventeen phrases were four characters or shorter, and every one of them is a substring of
+ * ordinary English. This is exactly the failure the module comment warns about - a caller who
+ * believes they were understood trusting a wrong answer - shipped in the same file.
+ *
+ * The rule now depends on the phrase:
+ *
+ *   - contains a space -> substring. Multi-word phrases are specific enough on their own, and they
+ *     NEED substring matching: "aren't showing" has to match "upgrades aren't showing up".
+ *   - single word, 5+ characters -> word boundary at the start, suffix free. "crash" matches
+ *     "crashes" and "crashing"; "animation" matches "animations".
+ *   - single word, 4 or fewer -> whole word only. "ai" must not match "aim" or "air", "ui" must not
+ *     match "build", "lag" must not match "flag". The lists already carry the variants that matters
+ *     ("key" and "keys", "save" and "saving", "anim" and "animation"), so nothing is lost.
+ */
+function saysIt(said: string, phrase: string): boolean {
+  if (phrase.includes(" ")) return said.includes(phrase);
+  // The phrases are hand-written lowercase words, but escaping costs nothing, and a hyphen or
+  // bracket slipped into one later would be a silent misparse rather than an error.
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+  const pattern = phrase.length <= 4 ? `\\b${escaped}\\b` : `\\b${escaped}`;
+  return new RegExp(pattern).test(said);
 }
 
 /**
  * Symptom entries whose vocabulary appears in the caller's text.
- *
- * Substring matching in both directions is deliberate. "crash" must match a caller who wrote
- * "the game crashes when I open the shop", and "not showing" must match "upgrades are not showing
- * up" - neither is a whole-word match, and requiring one would fail on exactly the sentences this
- * exists to serve.
  */
 export function matchSymptoms(text: string): SymptomMatch | undefined {
   const said = (text ?? "").toLowerCase();
@@ -195,8 +261,17 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
   const tools: string[] = [];
   const because: string[] = [];
 
+  // Read the intent before the subject. A build request that also names a domain gets both: the
+  // tools that plan against what exists, then the tools for that part of the engine.
+  const buildWord = BUILDING.find((phrase) => saysIt(said, phrase));
+  if (buildWord) {
+    matched.push(buildWord);
+    because.push(BUILD_BECAUSE);
+    tools.push(...BUILD_TOOLS);
+  }
+
   for (const entry of SYMPTOMS) {
-    const hit = entry.says.find((phrase) => said.includes(phrase));
+    const hit = entry.says.find((phrase) => saysIt(said, phrase));
     if (!hit) continue;
     matched.push(hit);
     because.push(entry.because);
@@ -213,5 +288,5 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
   if (tools.length === 0) return undefined;
   // Four tools at most. Two entries of three tools each cost 667 tokens on "the game crashes when I
   // open the menu", for a sentence whose first three words already said where to look.
-  return { matched, tools: tools.slice(0, 4), because };
+  return { matched, tools: tools.slice(0, 4), because, intent: buildWord ? "building" : "broken" };
 }

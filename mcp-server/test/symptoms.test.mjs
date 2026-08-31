@@ -106,3 +106,66 @@ test("every entry says why, in the caller's terms", () => {
     assert.ok(entry.tools.length > 0);
   }
 });
+
+test("a short word does not match inside an unrelated one", async () => {
+  // Plain substring matching shipped first and produced confident nonsense on ordinary English:
+  //
+  //   "build a new weapon"   -> ui  (inside b-UI-ld)  -> widget tools
+  //   "explain the chain"    -> ai  (inside ch-AI-n)  -> behaviour tree tools
+  //   "change the flag"      -> hang, lag             -> crash and performance tools
+  //   "the animal spawns"    -> anim                  -> animation tools
+  //
+  // Seventeen phrases were four characters or shorter and every one is a substring of common words.
+  // This is the exact failure the module comment warns about, shipped in the same file.
+  for (const said of ["build a new weapon", "explain the chain", "change the flag", "the animal spawns", "a monkey and a guide", "the status is fine"]) {
+    const found = matchSymptoms(said);
+    // A build request may still match on intent; what must not happen is a DOMAIN match on a
+    // fragment of an unrelated word.
+    const domain = (found?.tools ?? []).filter((t) => !["unreal_plan_feature", "unreal_map_system"].includes(t));
+    assert.deepEqual(domain, [], `"${said}" matched ${JSON.stringify(found?.matched)}`);
+  }
+});
+
+test("morphological variants still match", async () => {
+  // A word boundary at the start with a free suffix, so the fix does not cost the endings that
+  // matter: "crash" has to catch "crashes" and "crashing".
+  for (const [said, expect] of [
+    ["the game crashes on startup", "crash"],
+    ["it keeps crashing", "crash"],
+    ["the animation is wrong", "animation"],
+    ["my keys dont work", "keys"],
+    ["it is really laggy", "laggy"],
+    ["the ui never appears", "ui"],
+    ["the ai wont move", "ai"],
+  ]) {
+    const found = matchSymptoms(said);
+    assert.ok(found, `"${said}" matched nothing`);
+    assert.ok(found.matched.includes(expect), `"${said}" matched ${JSON.stringify(found.matched)}`);
+  }
+});
+
+test("a request to build something is answered with tools that build", async () => {
+  // The other half of what this project promises, and it landed badly: "add a new shop upgrade"
+  // matched nothing at all, and "add a pause menu" returned list_widgets, review_blueprint and
+  // audit_project - tools for finding what is BROKEN, handed to someone who wants something BUILT.
+  // The subject was read correctly and the intent was not read at all.
+  const found = matchSymptoms("add a new shop upgrade that increases fire rate");
+  assert.equal(found.intent, "building");
+  assert.equal(found.tools[0], "unreal_plan_feature");
+  assert.ok(found.tools.includes("unreal_map_system"));
+});
+
+test("intent picks the approach and the subject still picks the domain", async () => {
+  // "add a pause menu" should plan against what exists AND bring the widget tools, because the
+  // subject is a menu. Dropping the domain would trade one half-answer for another.
+  const found = matchSymptoms("add a pause menu");
+  assert.equal(found.intent, "building");
+  assert.equal(found.tools[0], "unreal_plan_feature");
+  assert.ok(found.tools.includes("unreal_list_widgets"), "the domain survives the intent");
+});
+
+test("a bug report is not mistaken for a build request", async () => {
+  for (const said of ["the game crashes on startup", "upgrades aren't showing up in the shop", "the jump key does nothing"]) {
+    assert.equal(matchSymptoms(said).intent, "broken", said);
+  }
+});
