@@ -1476,6 +1476,36 @@ already exists, because "make the" reads as a request to create something. Chang
 checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
 cost more" is a change, and only the second half of that sentence says so.
 
+### `{ Cost: 500 }` was rejected by the schema, not by the engine
+
+With the value findable, the other half of "finds it and changes it" was tried end to end — and the
+write refused the obvious call:
+
+```text
+add_data_table_row { values: { Cost: 300 } }
+  ->  Expected string, received number at values.Cost
+```
+
+Everything Unreal writes goes through `ImportText`, which takes a string, so every write parameter
+here was declared `z.string()`. That is faithful to the engine and wrong for the caller: the natural
+way to say "make it cost 500" is a number, on the single commonest change request there is.
+
+The read/write round trip was never broken — `list_data_table_rows` returns `"300"` and
+`set_data_table_row` accepts `"300"` — so this was not two tools disagreeing with each other, which
+is the defect this repo usually finds. It was the tool disagreeing with the person using it, which is
+harder to see from inside.
+
+Ten write parameters now accept a string, a number or a boolean and stringify it: `500` → `"500"`,
+`1.5` → `"1.5"`, `true` → `"true"` — exactly what `ImportText` wants for an int, a float and a bool.
+Anything with real structure still has to be spelled the Unreal way (`"(X=0,Y=0,Z=100)"`, an asset
+path), because no coercion could guess that. The exposed JSON Schema is a clean
+`"type": ["string","number","boolean"]`.
+
+The whole change request now runs **find → change → verify in 6 calls and 408 tokens**, and
+`trial:chain` covers it, since a value passing from one tool to the next unedited is exactly what
+that trial is for. `check:protocol` asserts the six write parameters still accept a number, and fails
+when one is reverted.
+
 ### An entire substrate was unsearchable
 
 Following that change request to its end found something worse than a routing gap. To change what the

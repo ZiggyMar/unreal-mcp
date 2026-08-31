@@ -319,6 +319,47 @@ async function main() {
     }
   }
 
+  // --- a value being written accepts the shape a caller would naturally send ---------------------
+  //
+  // Everything Unreal writes goes through ImportText, which takes a string, so every write parameter
+  // was declared `z.string()`. Faithful to the engine and wrong for the caller: the natural way to
+  // say "make it cost 500" is `{ Cost: 500 }`, and it was answered with
+  //
+  //   Expected string, received number at values.Cost
+  //
+  // on the single commonest change request there is. The read/write round trip was never broken - a
+  // read returns "300" and a write takes "300" - so this was not two tools disagreeing, it was the
+  // tool disagreeing with the person using it, which is harder to notice from inside.
+  //
+  // Asserted on the schema rather than by writing to an asset: this guard runs against a real
+  // project and must not change it.
+  const writeValueParams = [
+    ["unreal_set_class_default", "value"],
+    ["unreal_set_component_property", "value"],
+    ["unreal_set_asset_property", "value"],
+    ["unreal_set_pin_default_value", "value"],
+    ["unreal_add_data_table_row", "values"],
+    ["unreal_set_data_table_row", "values"],
+  ];
+  for (const [toolName, param] of writeValueParams) {
+    const tool = tools.find((t) => t.name === toolName);
+    if (!tool) continue; // a renamed tool is check:parity's problem, not this one's
+    const schema = tool.inputSchema?.properties?.[param];
+    if (!schema) {
+      note(`${toolName} has no "${param}" parameter any more - this check has drifted from the tool`);
+      continue;
+    }
+    // Either the parameter itself is the union, or it is a record whose values are.
+    const valueSchema = schema.type === "object" ? schema.additionalProperties : schema;
+    const types = Array.isArray(valueSchema?.type) ? valueSchema.type : [valueSchema?.type];
+    if (!types.includes("number")) {
+      note(
+        `${toolName}.${param} refuses a number, so { Cost: 500 } is rejected with a zod type error - ` +
+          `the commonest change request there is, answered by the schema rather than by the engine`
+      );
+    }
+  }
+
   // --- several calls in flight at once -----------------------------------------------------------
   //
   // Real clients pipeline. Nothing in this project had ever sent a second request before the first

@@ -612,6 +612,28 @@ const SEARCH_PROFILE_TOOLS = new Set([
 // How much to spend per build. The floor never moves: every mode still builds atomically, lays the
 // graph out, and compiles. Modes trade polish and paperwork, never correctness.
 const { policy: MODE, warning: MODE_WARNING } = resolveMode(process.env.UNREAL_MCP_MODE);
+/**
+ * A value being written into the engine, accepted as a string, a number or a boolean.
+ *
+ * Everything Unreal writes goes through ImportText, which takes a string, so every write parameter
+ * here was `z.string()`. That is faithful to the engine and wrong for the caller: the natural way to
+ * say "make it cost 500" is `{ Cost: 500 }`, and it was answered with
+ *
+ *   Expected string, received number at values.Cost
+ *
+ * on the single commonest change request there is. The round trip was never broken - a read returns
+ * `"300"` and a write takes `"300"` - so this is not a mismatch between two tools, it is a mismatch
+ * between the tool and the person using it, which is the harder one to notice from inside.
+ *
+ * Coercion is safe because the target is a string either way: 500 becomes "500", 1.5 becomes "1.5",
+ * true becomes "true", which is exactly what ImportText wants for an int, a float and a bool.
+ * Anything with real structure - a vector, a colour, an asset path - still has to be spelled the way
+ * Unreal spells it, and no coercion could guess that.
+ */
+const engineValue = z
+  .union([z.string(), z.number(), z.boolean()])
+  .transform((v) => String(v));
+
 const registeredToolNames: string[] = [];
 /** name -> the group that switches it on. Built from TOOL_GROUPS; anything absent is core. */
 const GROUP_OF_TOOL = new Map<string, string>(
@@ -1355,7 +1377,7 @@ register(
       graphName: z.string().describe("Graph name containing the node."),
       nodeId: z.string().describe("Node id (GUID) of the node owning the pin."),
       pinName: z.string().describe("Input pin name."),
-      value: z.string().describe("Literal value, serialized as a string the way Blueprint pin defaults are stored."),
+      value: engineValue.describe("The literal. A number or boolean is accepted; structured values are spelled the way Blueprint pin defaults are stored."),
     },
   },
   async ({ path, graphName, nodeId, pinName, value }) => {
@@ -1763,7 +1785,7 @@ register(
         .optional()
         .describe('Wires, each "ref.pinName" -> "ref.pinName". Existing node ids also work as the ref part.'),
       pinDefaults: z
-        .array(z.object({ node: z.string(), pin: z.string(), value: z.string() }))
+        .array(z.object({ node: z.string(), pin: z.string(), value: engineValue }))
         .optional()
         .describe("Literal defaults to set on unconnected input pins."),
       compile: z.boolean().optional().describe("Compile the Blueprint after building. Defaults to true."),
@@ -2403,7 +2425,7 @@ register(
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
       component: z.string().describe("Component name, exactly as returned by unreal_list_components."),
       property: z.string().describe('Property name, e.g. "StaticMesh", "SphereRadius", "FieldOfView", "bGenerateOverlapEvents".'),
-      value: z.string().describe('Value as a string: "true", "250.0", an asset path, or a struct literal like "(X=0,Y=0,Z=100)".'),
+      value: engineValue.describe('The value. A number or boolean is accepted and stringified; anything structured is spelled the Unreal way: an asset path, or "(X=0,Y=0,Z=100)".'),
     },
   },
   async ({ path, component, property, value }) => {
@@ -2645,7 +2667,7 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint asset path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
       property: z.string().describe('Property name on the class, e.g. "bReplicates", "NetUpdateFrequency", "InitialLifeSpan".'),
-      value: z.string().describe('Value as a string, e.g. "true", "10.0", an asset path, or a struct literal.'),
+      value: engineValue.describe('The value. A number or boolean is accepted and stringified; anything structured is spelled the Unreal way: an asset path or a struct literal.'),
     },
   },
   async ({ path, property, value }) => {
@@ -3275,7 +3297,7 @@ register(
             widgetClass: z.string().describe('e.g. "TextBlock", "Button", "ProgressBar", "Image", "VerticalBox".'),
             name: z.string(),
             parent: z.string().optional().describe("Nest inside this panel instead of the root."),
-            properties: z.record(z.string()).optional().describe('Properties to set, e.g. {"Text":"Score"}.'),
+            properties: z.record(engineValue).optional().describe('Properties to set, e.g. {"Text":"Score"}.'),
           })
         )
         .optional()
@@ -3401,7 +3423,7 @@ register(
       path: z.string().describe('Widget Blueprint path, e.g. "/Game/UI/W_HealthBar.W_HealthBar".'),
       widget: z.string().describe("Widget name, exactly as returned by unreal_list_widgets."),
       property: z.string().describe('Property name, e.g. "Text", "Percent", "ColorAndOpacity", "Padding", "ZOrder".'),
-      value: z.string().describe('Value as a string: "Health", "0.75", "(R=1,G=0,B=0,A=1)", "(Left=8,Top=8,Right=8,Bottom=8)".'),
+      value: engineValue.describe('The value. A number or boolean is accepted; structured values are spelled the Unreal way: "(R=1,G=0,B=0,A=1)".'),
       onSlot: z
         .boolean()
         .optional()
@@ -3460,7 +3482,7 @@ register(
     inputSchema: {
       path: z.string().describe('Asset path, e.g. "/Game/Data/DA_EnemyTuning.DA_EnemyTuning".'),
       property: z.string().describe("Exact property name, as unreal_read_asset_properties spells it."),
-      value: z.string().describe("The new value, spelled the way the current one is spelled."),
+      value: engineValue.describe("The new value, spelled the way the current one is spelled."),
     },
   },
   async ({ path, property, value }) => {
@@ -3536,9 +3558,9 @@ register(
       path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
       rowName: z.string().describe('The row key, e.g. "Potion". This is what Blueprints look up.'),
       values: z
-        .record(z.string())
+        .record(engineValue)
         .optional()
-        .describe('Field values by name, e.g. {"DisplayName":"Health Potion","Value":"25"}.'),
+        .describe('Field values by name, e.g. {"DisplayName":"Health Potion","Value":25}. Numbers and booleans are accepted.'),
     },
   },
   async ({ path, rowName, values }) => {
@@ -3766,7 +3788,7 @@ register(
       path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
       rowName: z.string().describe('The existing row key to change, e.g. "Potion".'),
       values: z
-        .record(z.string())
+        .record(engineValue)
         .describe('Only the fields to change, by name, e.g. {"Value":"30"}. Others are left alone.'),
     },
   },
@@ -5049,7 +5071,7 @@ register(
     inputSchema: {
       actor: z.string().describe("The actor's World Outliner label, or its internal name. Get exact values from unreal_list_actors."),
       property: z.string().describe('Property name, e.g. "LightColor", "Intensity", "bHidden".'),
-      value: z.string().describe('Value as a string: "true", "3000.0", an asset path, or a struct literal like "(R=1,G=0,B=0,A=1)".'),
+      value: engineValue.describe('The value. A number or boolean is accepted and stringified; structured values are spelled the Unreal way: an asset path or "(R=1,G=0,B=0,A=1)".'),
     },
   },
   async ({ actor, property, value }) => {
@@ -5318,7 +5340,7 @@ register(
             function: z.string().describe('Function to call, e.g. "PrintString".'),
             className: z.string().optional().describe('Owning class, e.g. "KismetSystemLibrary". Looked up if omitted.'),
             params: z
-              .record(z.string())
+              .record(engineValue)
               .optional()
               .describe('Input values by pin name, e.g. {"In String":"hello"}. Near-miss pin names are resolved for you.'),
           })
@@ -5372,7 +5394,7 @@ register(
             componentClass: z.string().describe('e.g. "StaticMeshComponent", "SphereComponent", "AudioComponent", "NiagaraComponent".'),
             name: z.string(),
             parent: z.string().optional().describe("Attach under this component instead of the root."),
-            properties: z.record(z.string()).optional().describe('Properties to set, e.g. {"SphereRadius":"120"}.'),
+            properties: z.record(engineValue).optional().describe('Properties to set, e.g. {"SphereRadius":"120"}.'),
           })
         )
         .optional()
@@ -5386,7 +5408,7 @@ register(
                 z.object({
                   function: z.string(),
                   className: z.string().optional().describe("Looked up in the live engine when omitted."),
-                  params: z.record(z.string()).optional(),
+                  params: z.record(engineValue).optional(),
                 })
               )
               .describe("What happens, in order. The execution chain is wired for you."),

@@ -168,6 +168,43 @@ try {
   }
 
   console.log("");
+  console.log("find_in_data_tables -> set_data_table_row (the change request, end to end)");
+  // "The machine gun should cost 500 instead of 300" is the shape of most change requests, and until
+  // recently none of it worked: search_project could not see inside a table at all, and the write
+  // refused `{ Cost: 500 }` because every write parameter was declared as a string.
+  const STRUCT2 = `/Game/MCPTrial/S_Chg${stamp}`;
+  const TABLE = `/Game/MCPTrial/DT_Chg${stamp}`;
+  await call("unreal_create_struct", {
+    packagePath: STRUCT2,
+    fields: [{ name: "Cost", type: "int" }, { name: "Label", type: "string" }],
+  });
+  cleanup.push(STRUCT2);
+  await call("unreal_create_data_table", { packagePath: TABLE, rowStruct: STRUCT2 });
+  cleanup.push(TABLE);
+  try {
+    // A number, not "300". This is the call that used to fail.
+    await call("unreal_add_data_table_row", { path: TABLE, rowName: "Weapon_MachineGun", values: { Cost: 300, Label: "Machine Gun" } });
+    check("a write takes a number for a numeric field", true);
+  } catch (err) {
+    check("a write takes a number for a numeric field", false, String(err.message).slice(0, 110));
+  }
+
+  const searched = await call("unreal_find_in_data_tables", { query: "MachineGun", pathPrefix: "/Game/MCPTrial" });
+  const hit = (searched.hits ?? [])[0];
+  check("find_in_data_tables locates the row", Boolean(hit), hit ? `${hit.rowName} in ${hit.field}` : "no hit");
+  if (hit) {
+    try {
+      // hit.table and hit.rowName verbatim into the writer, which is the whole point of this trial.
+      await call("unreal_set_data_table_row", { path: hit.table, rowName: hit.rowName, values: { Cost: 500 } });
+      const after = await call("unreal_list_data_table_rows", { path: TABLE });
+      const cost = (after.rows ?? [])[0]?.values?.Cost;
+      check("the change lands and reads back", String(cost) === "500", `Cost is now ${JSON.stringify(cost)}`);
+    } catch (err) {
+      check("set_data_table_row takes what find_in_data_tables returned", false, String(err.message).slice(0, 110));
+    }
+  }
+
+  console.log("");
   console.log("find_source -> describe_class (the join that was actually broken)");
   // A model reads a Blueprint, sees a native parentClass, asks where it is declared, then asks what
   // it offers. find_source answers with the C++ spelling - AAVSGameState - and describe_class
