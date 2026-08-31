@@ -830,8 +830,43 @@ function jsonResult(value: unknown) {
  * It is not the right answer to "StaticMesh", where the caller is one prefix away and the list does
  * not say which prefix - and the tool layer is the only place that can tell those two cases apart.
  */
+/**
+ * `unknown_cmd` is the one bridge error the tool layer understands better than the bridge does.
+ *
+ * The plugin answers `unknown_cmd: run_console_command` and stops there, which is all it can say: it
+ * has never heard of the command. But this server only sends commands it was built against, so the
+ * pair of facts - the server sends it, the plugin does not know it - can only mean the plugin binary
+ * is older than the server.
+ *
+ * It says "sends" rather than "has a tool for" on purpose. Three bridge commands are deliberately
+ * internal - find_broken_names, live_coding_compile, live_coding_status - reached only through a
+ * composite, and hot_reload_cpp hits exactly this error on a stale plugin. Claiming a tool exists
+ * for one of those would be a confident falsehood inside a message whose whole job is to correct a
+ * wrong conclusion.
+ *
+ * Measured on this project right now: nine of twelve probed commands are missing, and a model
+ * calling one gets six words with no way to tell whether the feature does not exist, the call was
+ * wrong, or a rebuild is needed. It would reasonably conclude the first and stop asking.
+ *
+ * unreal_doctor already diagnoses this properly - "At least 9 of the 12 probed commands are missing
+ * from this plugin" and "the C++ source on disk is newer" - but a model in the middle of a task hits
+ * the error, not the diagnosis. This is the sentence that points from one to the other.
+ */
+function explainUnknownCommand(message: string): string | undefined {
+  const match = /unknown_cmd:\s*([a-z0-9_]+)/i.exec(message);
+  if (!match) return undefined;
+  return (
+    `This server sends "${match[1]}" and the UnrealMCPBridge plugin running in your editor has never ` +
+    `heard of it, which means the plugin binary is older than this server - not that the feature is ` +
+    `missing or the call was wrong. Everything the older plugin does know still works, so this is ` +
+    `not a reason to stop. unreal_doctor lists every command affected and how out of date the build ` +
+    `is; the cure is to close the editor, run \`npm run build:engines\`, and reopen.`
+  );
+}
+
 function errorResult(err: unknown, hint?: string) {
   const message = err instanceof Error ? err.message : String(err);
+  hint = hint ?? explainUnknownCommand(message);
   return {
     isError: true,
     content: [

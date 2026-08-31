@@ -4882,6 +4882,40 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### `unknown_cmd` told a model the feature did not exist
+
+This repo has carried a line for many sessions saying roughly "the plugin binary is older than the
+server, so about eleven bridge commands are dark until it is rebuilt". What was never checked is what
+a model **experiences** when it calls one:
+
+```text
+UnrealMCPBridge error: unknown_cmd: run_console_command
+```
+
+Six words. Nothing to say the tool exists, that the plugin is stale rather than the feature missing,
+that a rebuild fixes it, or that the rest of the surface is fine. A model reads that as *this cannot
+be done* and stops asking — which on this project is happening to **nine of twelve probed commands**.
+
+`unreal_doctor` diagnoses it properly and always has:
+
+```text
+fail  plugin features    At least 9 of the 12 probed commands are missing from this plugin
+warn  plugin freshness   The running plugin was built Aug 30 2026 19:42:16, and the C++ source
+                         on disk is newer.
+```
+
+But a model in the middle of a task hits the error, not the diagnosis. The error now points at it:
+the plugin binary is older than this server, everything the older plugin knows still works so this is
+not a reason to stop, `unreal_doctor` lists what is affected, and the cure is to close the editor, run
+`npm run build:engines`, and reopen. It costs nothing in standing context — it is attached on error
+only, and a working call carries no such note.
+
+The message says the server **sends** the command rather than *has a tool for* it, deliberately.
+Three bridge commands are internal — `find_broken_names`, `live_coding_compile`,
+`live_coding_status` — reached only through a composite, and `hot_reload_cpp` hits exactly this error
+on a stale plugin. Claiming a tool exists for one of those would be a confident falsehood inside a
+message whose whole job is to correct a wrong conclusion.
+
 ### The three promises, run from the sentence: `npm run trial:workflows`
 
 Each of the journeys this project is built around was verified by hand, once, in the session that

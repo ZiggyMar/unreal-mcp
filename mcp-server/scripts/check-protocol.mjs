@@ -319,6 +319,32 @@ async function main() {
     }
   }
 
+  // --- a command the plugin has never heard of explains itself ------------------------------------
+  //
+  // The plugin answers `unknown_cmd: run_console_command` and stops, which is all it can say. On the
+  // project this was written against, NINE of twelve probed commands are missing because the plugin
+  // binary predates them - and a model calling one got six words with no way to tell whether the
+  // feature does not exist, the call was wrong, or a rebuild is needed. It would reasonably conclude
+  // the first and stop asking.
+  //
+  // unreal_doctor diagnoses this properly. A model in the middle of a task hits the error, not the
+  // diagnosis, so the error has to point at it.
+  const stale = await server.request("tools/call", {
+    name: "unreal_run_console_command",
+    arguments: { command: "stat fps" },
+  });
+  const staleText = stale.result?.content?.[0]?.text ?? "";
+  if (/unknown_cmd/.test(staleText)) {
+    if (!/older than this server/.test(staleText)) {
+      note(
+        "a command the plugin does not know was reported as bare unknown_cmd, with nothing to say the " +
+          "plugin binary is stale rather than the feature missing - a model reads that as 'this cannot be done'"
+      );
+    } else if (!/build:engines/.test(staleText) || !/unreal_doctor/.test(staleText)) {
+      note("the unknown_cmd explanation does not name both the diagnosis (unreal_doctor) and the cure (build:engines)");
+    }
+  }
+
   // --- one convention, described the same way by every tool that applies it ----------------------
   //
   // list_variables, read_class_defaults and read_asset_properties all drop a value that is the
