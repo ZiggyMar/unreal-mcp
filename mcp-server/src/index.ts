@@ -184,6 +184,12 @@ function buildInstructions(profile: string): string {
       "",
       "1. Look before writing: unreal_list_blueprints to see what exists, unreal_find_node for the",
       "   exact name of a function. Never guess a name; a guess costs a failed call.",
+      // Worth more here than anywhere. This profile exists for a 14B at 8k, where an unfiltered
+      // list_blueprints is 2,669 tokens - a third of the whole window - and `match` or
+      // fields:["path"] brings it down without giving anything up. Tuned to the tools this profile
+      // actually has: no direction, no replicatedOnly, because neither tool is registered here.
+      "   Narrow it: `match` finds by name and `fields: [\"path\"]` drops the rest. Unfiltered that",
+      "   call is 2,669 tokens on a real project, which is a third of your whole context.",
       "2. Making something new: unreal_scaffold_blueprint builds the whole thing in one call - the",
       "   Blueprint, its variables, its components, and its event logic. Reach for it first.",
       "   unreal_scaffold_widget does the same for UI.",
@@ -212,6 +218,13 @@ function buildInstructions(profile: string): string {
     "2. Orient before writing. unreal_get_project_overview, then unreal_search_project and",
     "   unreal_list_blueprints to find what already exists. Assume the project is to be extended,",
     "   not rebuilt: match what is there.",
+    // Twenty-five tokens a request against a saving measured in thousands on the first read that
+    // would otherwise go unfiltered. read_class_defaults on a real class is 4,685 tokens whole and
+    // 292 with `match`; list_variables is 2,397 and 599; list_data_table_rows is 6,985 and 945.
+    // Every reply now says so after the fact, which is free but one read too late - this is the only
+    // line in the standing text that pays for itself several times over on a single call.
+    "   Every large read takes a filter (match, fields, replicatedOnly, direction, limit). Use it:",
+    "   the difference is 4,685 tokens against 292, not a trim.",
     "   Not everything is a Blueprint. If a parentClass is not itself a Blueprint it is native C++,",
     "   and unreal_find_source locates the file and line that declares it - then read and edit it",
     "   with your own file tools. Call unreal_find_source with no symbol to see whether the project",

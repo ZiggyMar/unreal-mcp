@@ -1924,6 +1924,39 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The one line in the standing text that pays for itself on a single call
+
+Every expensive read now says how to ask for less - but it says it *after* the reply has been paid
+for. That is free and one read too late. The instructions, which are billed on every request, never
+mentioned narrowing at all.
+
+Almost everything in this project argues against adding to the standing text: the group bullets came
+out at 306 tokens, the `fields` hint stayed out of a description at 25. Both were break-even inside a
+normal session. This one is not close:
+
+```text
+costs   38 tokens x every request
+saves   4,393 tokens the first time it prevents an unfiltered read_class_defaults
+```
+
+So two lines went in, with the numbers, because generic advice about being efficient is the kind
+models nod at and ignore:
+
+> Every large read takes a filter (match, fields, replicatedOnly, direction, limit). Use it:
+> the difference is 4,685 tokens against 292, not a trim.
+
+The `minimal` profile gets its own version, and it matters more there than anywhere. That profile
+exists for a 14B at 8k context, where an unfiltered `list_blueprints` is **2,669 tokens - a third of
+the entire window.** It is tuned to the tools that profile actually registers: no `direction`, no
+`replicatedOnly`, because neither tool is there and advice naming a tool you do not have is the thing
+three commits ago went to some trouble to remove.
+
+```text
+minimal   3,972 -> 4,015 standing    (ceiling 5,000)
+core     12,635 -> 12,673            (ceiling 13,000)
+search    2,219 ->  2,257            (ceiling 2,500)
+```
+
 ### The most expensive read of all, where row count says nothing about cost
 
 `list_data_table_rows` is the largest read in the surface and the last one with no guidance in its
