@@ -42,6 +42,7 @@
 #include "K2Node_IfThenElse.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_DynamicCast.h"
+#include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_MacroInstance.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
@@ -2272,6 +2273,58 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		Params->TryGetBoolField(TEXT("pure"), bPure);
 		CastNode->SetPurity(bPure);
 		NewNode = CastNode;
+	}
+	else if (NodeType == TEXT("SpawnActor"))
+	{
+		// Spawning an actor is one of the commonest things a Blueprint does, and until now nothing
+		// here could build one.
+		//
+		// Worse than missing: the server's own standing instructions told every model that "Spawn
+		// Actor" IS a nodeType, in four separate places, while the enum did not contain it and the
+		// bridge had no code for it. A model following the instructions asked for something that did
+		// not exist. Now it does.
+		//
+		// It cannot be a CallFunction, which is why it needs its own branch. The editor's node is a
+		// DEFERRED spawn - BeginDeferredActorSpawnFromClass, then expose-on-spawn pins, then
+		// FinishSpawningActor - and UK2Node_SpawnActorFromClass is what expands into that. Wiring the
+		// two library calls by hand would be three nodes and a struct pin for something the engine
+		// already does in one.
+		FString ActorClassName;
+		if (!Params->TryGetStringField(TEXT("targetClass"), ActorClassName))
+		{
+			return MakeErrorResponse(
+				TEXT("missing_param: targetClass is required for nodeType=SpawnActor - the class to spawn, either ")
+				TEXT("an engine class name or a Blueprint asset path."));
+		}
+		FString ClassError;
+		UClass* ActorClass = ResolveClassByName(ActorClassName, ClassError);
+		if (!ActorClass)
+		{
+			return MakeErrorResponse(ClassError);
+		}
+		if (!ActorClass->IsChildOf(AActor::StaticClass()))
+		{
+			// Said plainly rather than left to fail at compile: the Class pin accepts only actors, and
+			// a widget or object class here produces a node that never resolves.
+			return MakeErrorResponse(FString::Printf(
+				TEXT("not_an_actor: %s does not derive from Actor, so it cannot be spawned into a world. ")
+				TEXT("Use a Blueprint whose parent is Actor, Pawn, Character or similar."), *ActorClassName));
+		}
+
+		UK2Node_SpawnActorFromClass* SpawnNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
+		SpawnNode->CreateNewGuid();
+		SpawnNode->PostPlacedNewNode();
+		SpawnNode->AllocateDefaultPins();
+		// The Class pin has to be set BEFORE the node is asked to reallocate, because the exposed
+		// spawn pins it grows are derived from the class. Setting it afterwards leaves a node with the
+		// right class and none of its properties.
+		if (UEdGraphPin* ClassPin = SpawnNode->GetClassPin())
+		{
+			ClassPin->DefaultObject = ActorClass;
+			ClassPin->DefaultValue = ActorClass->GetPathName();
+			SpawnNode->PinDefaultValueChanged(ClassPin);
+		}
+		NewNode = SpawnNode;
 	}
 	else if (NodeType == TEXT("Macro"))
 	{

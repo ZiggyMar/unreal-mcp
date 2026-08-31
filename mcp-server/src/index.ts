@@ -242,7 +242,9 @@ function buildInstructions(profile: string): string {
     "- Enum pin defaults take the entry name: \"SnapToTarget\".",
     "- Static library functions need their className: PrintString is on KismetSystemLibrary.",
     "- A variable must exist before a Get or Set node can reference it.",
-    "- Branch, Sequence, Cast, Create Widget and Spawn Actor are `nodeType` values, not functions.",
+    "- Branch, Sequence, Cast and Spawn Actor are `nodeType` values, not functions.",
+    "  Spawn Actor takes `targetClass`. Create Widget is NOT one: it is a CallFunction on",
+    "  WidgetBlueprintLibrary::Create.",
     "  Searching the function catalogue for them will never find them.",
     "",
     "WHEN YOU NEED MORE",
@@ -1086,7 +1088,7 @@ register(
     inputSchema: {
       path: z.string().describe('Full asset path of the Blueprint, e.g. "/Game/Blueprints/BP_Foo.BP_Foo".'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
-      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
+      nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "SpawnActor"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
       // These three were implemented in the bridge and reachable from no tool, so a Server RPC -
       // the thing every piece of multiplayer logic is built from - could not be authored at all.
@@ -1540,7 +1542,7 @@ register(
         .array(
           z.object({
             ref: z.string().describe("Your short handle for this node, unique in the batch, no dots."),
-            nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent"]),
+            nodeType: z.enum(["Event", "CustomEvent", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "SpawnActor"]),
             eventName: z.string().optional(),
             functionName: z.string().optional(),
             className: z.string().optional(),
@@ -2699,7 +2701,8 @@ register(
       "different root when the layout is inherently stacked (VerticalBox, HorizontalBox) or layered (Overlay), " +
       "because a box that lays itself out is far easier to keep tidy than absolute coordinates.\n\n" +
       "Then: unreal_add_widget to build the tree, unreal_set_widget_property to style it, and " +
-      "unreal_compile_blueprint. To actually show it on screen, add a Create Widget + Add to Viewport chain in a " +
+      "unreal_compile_blueprint. To actually show it on screen, build a CallFunction on " +
+      "WidgetBlueprintLibrary::Create followed by AddToViewport, in a " +
       "gameplay Blueprint with unreal_build_graph. A Widget Blueprint that is never added to the viewport is " +
       "invisible, which is the most common reason UI work appears to have done nothing.",
     inputSchema: {
@@ -3899,7 +3902,7 @@ server.registerPrompt(
       "the target pin is named `self`, exec pin names differ per node kind (`execute`/`then`, Branch's `then`/`else`, " +
       "Sequence's `then_0`, and `Exec` with a capital E on loop macros), struct pin defaults are comma triples, enum " +
       "defaults take the entry name, static library functions need their className, and Branch/Cast/Sequence/Create " +
-      "Widget/Spawn Actor are node types rather than functions the catalogue can find. Also the Blueprint mental " +
+      "Spawn Actor is a node type rather than a function the catalogue can find. Also the Blueprint mental " +
       "model, choosing a parent class, cross-actor references, interfaces, multiplayer in one page, and where state " +
       "belongs. Pull this in before the first write of any session. Being confident about Unreal's exact strings and " +
       "being right about them are different things, and every one of these costs a failed call to learn the hard way.",
@@ -3917,7 +3920,7 @@ server.registerPrompt(
       "Complete, step-by-step builds for health and damage via an interface, interaction by line trace, pickups, a " +
       "HUD bound to a value, timers instead of Tick, spawning, and save/load - each with the exact tool call order " +
       "and the exact node names. Every function name is verified against the running engine, and the guide names " +
-      "the nodes that are NOT functions (Branch, Cast, Create Widget, Spawn Actor) which no amount of searching the " +
+      "the nodes that are NOT functions (Branch, Cast, Spawn Actor) which no amount of searching the " +
       "function catalog will ever find. Pull this in before building any common system.",
   },
   () => ({
