@@ -402,6 +402,15 @@ static FString DescribeDisplacedLinks(const UEdGraphPin* SourcePin)
 		*FString::Join(Lost, TEXT(", ")));
 }
 
+// Declared here, defined further down beside build_graph, which has given these errors for a long
+// time. The single-node tools below deserve the same: a pin name is the one thing nobody can guess -
+// the server instructions carry a whole section on it, because "self", "then", "execute", "Exec" and
+// "then_0" are not derivable from anything - and a bare "pin_not_found" costs a round trip every
+// time, which is the cost this project exists to remove.
+static FString DescribePins(const UEdGraphNode* Node, EEdGraphPinDirection Direction);
+static UEdGraphPin* ResolvePinForgivingly(UEdGraphNode* Node, const FString& Requested,
+	EEdGraphPinDirection Direction, FString& OutCorrection);
+
 UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString& OutError)
 {
 	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *Path);
@@ -2410,16 +2419,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 		return MakeErrorResponse(NodeError);
 	}
 
-	UEdGraphPin* SourcePin = SourceNode->FindPin(FName(*SourcePinName), EGPD_Output);
+	FString SourceCorrection;
+	UEdGraphPin* SourcePin = ResolvePinForgivingly(SourceNode, SourcePinName, EGPD_Output, SourceCorrection);
 	if (!SourcePin)
 	{
-		return MakeErrorResponse(FString::Printf(TEXT("pin_not_found: output pin '%s' on node %s"), *SourcePinName, *SourceNodeId));
+		return MakeErrorResponse(FString::Printf(
+			TEXT("pin_not_found: no output pin '%s' on %s. Use one of: %s"),
+			*SourcePinName, *SourceNodeId, *DescribePins(SourceNode, EGPD_Output)));
 	}
 
-	UEdGraphPin* TargetPin = TargetNode->FindPin(FName(*TargetPinName), EGPD_Input);
+	FString TargetCorrection;
+	UEdGraphPin* TargetPin = ResolvePinForgivingly(TargetNode, TargetPinName, EGPD_Input, TargetCorrection);
 	if (!TargetPin)
 	{
-		return MakeErrorResponse(FString::Printf(TEXT("pin_not_found: input pin '%s' on node %s"), *TargetPinName, *TargetNodeId));
+		return MakeErrorResponse(FString::Printf(
+			TEXT("pin_not_found: no input pin '%s' on %s. Use one of: %s"),
+			*TargetPinName, *TargetNodeId, *DescribePins(TargetNode, EGPD_Input)));
 	}
 
 	const UEdGraphSchema* Schema = Graph->GetSchema();
@@ -2461,6 +2476,20 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleConnectPins(const TSharedPtr<F
 	{
 		Result->SetStringField(TEXT("displaced"), Displaced);
 	}
+	TArray<FString> Corrections;
+	if (!SourceCorrection.IsEmpty())
+	{
+		Corrections.Add(SourceCorrection);
+	}
+	if (!TargetCorrection.IsEmpty())
+	{
+		Corrections.Add(TargetCorrection);
+	}
+	if (Corrections.Num() > 0)
+	{
+		// Said out loud rather than silently accepted, so the next call spells it right.
+		Result->SetStringField(TEXT("corrected"), FString::Join(Corrections, TEXT("; ")));
+	}
 	return MakeOkResponse(Result);
 }
 
@@ -2498,10 +2527,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		return MakeErrorResponse(NodeError);
 	}
 
-	UEdGraphPin* Pin = Node->FindPin(FName(*PinName), EGPD_Input);
+	FString PinCorrection;
+	UEdGraphPin* Pin = ResolvePinForgivingly(Node, PinName, EGPD_Input, PinCorrection);
 	if (!Pin)
 	{
-		return MakeErrorResponse(FString::Printf(TEXT("pin_not_found: input pin '%s' on node %s"), *PinName, *NodeId));
+		return MakeErrorResponse(FString::Printf(
+			TEXT("pin_not_found: no input pin '%s' on %s. Use one of: %s"),
+			*PinName, *NodeId, *DescribePins(Node, EGPD_Input)));
 	}
 
 	if (Pin->LinkedTo.Num() > 0)
@@ -2540,6 +2572,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 	Result->SetBoolField(TEXT("set"), true);
 	Result->SetStringField(TEXT("pin"), PinName);
 	Result->SetStringField(TEXT("value"), Pin->DefaultObject ? Pin->DefaultObject->GetPathName() : Pin->DefaultValue);
+	if (!PinCorrection.IsEmpty())
+	{
+		Result->SetStringField(TEXT("corrected"), PinCorrection);
+	}
 	return MakeOkResponse(Result);
 }
 
@@ -3218,6 +3254,26 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr
  * Every correction is reported back, so the caller learns the real name instead of being quietly
  * carried. Silent forgiveness would teach a model nothing and hide genuine mistakes.
  */
+static FString DescribePins(const UEdGraphNode* Node, EEdGraphPinDirection Direction)
+{
+	TArray<FString> Names;
+	for (const UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin && Pin->Direction == Direction)
+		{
+			Names.Add(Pin->PinName.ToString());
+		}
+	}
+	if (Names.Num() == 0)
+	{
+		// An empty list reads as a tooling failure and tells the caller nothing. Say what
+		// is actually true: this node has none of that kind, so the reference is wrong.
+		return FString::Printf(TEXT("(none - '%s' has no %s pins at all, so the node reference is probably wrong)"),
+			*Node->GetName(), Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+	}
+	return FString::Join(Names, TEXT(", "));
+}
+
 static UEdGraphPin* ResolvePinForgivingly(UEdGraphNode* Node, const FString& Requested,
 	EEdGraphPinDirection Direction, FString& OutCorrection)
 {
@@ -3433,26 +3489,6 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 				return *Found;
 			}
 			return FindNodeById(Graph, Token, OutError);
-		};
-
-		auto DescribePins = [](const UEdGraphNode* Node, EEdGraphPinDirection Direction) -> FString
-		{
-			TArray<FString> Names;
-			for (const UEdGraphPin* Pin : Node->Pins)
-			{
-				if (Pin && Pin->Direction == Direction)
-				{
-					Names.Add(Pin->PinName.ToString());
-				}
-			}
-			if (Names.Num() == 0)
-			{
-				// An empty list reads as a tooling failure and tells the caller nothing. Say what
-				// is actually true: this node has none of that kind, so the reference is wrong.
-				return FString::Printf(TEXT("(none - '%s' has no %s pins at all, so the node reference is probably wrong)"),
-					*Node->GetName(), Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
-			}
-			return FString::Join(Names, TEXT(", "));
 		};
 
 		if (Connections)
