@@ -26,6 +26,15 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
 
 2. **Orient once, cheaply.** `unreal_get_project_overview` first. It costs one index lookup and
    tells you the project's shape: how many Blueprints, in which folders, derived from what.
+   `unreal_list_blueprints` narrows that to what actually exists by name or folder when the overview
+   is not specific enough.
+
+   **Not everything is a Blueprint.** If a `parentClass` is not itself a Blueprint, it is native C++
+   - and the bug may well live there. `unreal_find_source` locates the file and line that declares a
+   symbol, and called with no symbol at all it answers "does this project have C++, and where are its
+   modules". Read and edit the file with your own tools, `unreal_compile_cpp` to check the edit built,
+   and `unreal_hot_reload_cpp` to make the running editor actually run it - without that last step the
+   fix sits on disk while the editor keeps executing the old code.
 
 3. **On a shared project, check you can actually write before you start.** `unreal_asset_status` on
    anything you intend to edit. A Blueprint is a binary asset, so it is locked by whoever checked it
@@ -56,7 +65,8 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
    graphs you do not need; that cost is exactly what this server exists to avoid.
 
 7. **Check reality before writing.** For any function you are not certain about, `unreal_find_node`
-   (search by intent) then `unreal_get_node_signature` (exact pins). Guessing Unreal's API surface
+   (search by intent) then `unreal_get_node_signature` (exact pins). For a class's own members -
+   what a parent already gives you, what you would be duplicating - `unreal_describe_class`. Guessing Unreal's API surface
    from memory is the single most common cause of a failed edit. For any *asset* path, the same
    applies: `unreal_list_assets` rather than inventing a path. If you guess and miss, the error's
    `didYouMean` list corrects you in one step; use it rather than retrying blind.
@@ -93,8 +103,24 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
     editing further: writes during PIE apply to the editor world, not the running one, so they look
     like they did nothing.
 
-14. **Save.** `unreal_save_blueprint`, and `unreal_save_level` for actors you placed. Edits live
-    only in editor memory until saved.
+14. **Save.** `unreal_save_blueprint` for a Blueprint, `unreal_save_level` for actors you placed,
+    and `unreal_save_asset` for everything else you touched - a Data Table, a Data Asset, a Material
+    Instance, an Input Mapping Context. Edits live only in editor memory until saved, and a tool that
+    reports `changed: true` has changed the asset in memory and nothing on disk.
+
+15. **Verify before you say it is done.** `unreal_verify_feature`. This is the step that separates
+    "the calls returned ok" from "the work is finished", and it is the one most easily skipped
+    because everything already looks fine.
+
+    It compiles and reviews **every** asset written this session, not the one you touched last -
+    the usual way work gets reported finished when it is not is an asset edited twenty calls ago
+    that no longer compiles. It also checks the Data Table rows written this session for references
+    that resolve to nothing, and asks whether the functions this session created are actually
+    **called by anything**: a function that compiles, scores well and is reached by nothing does
+    nothing, which is the commonest way a finished-looking feature turns out not to work.
+
+    Its verdict is the answer. If it says `fail`, the work is not done, however good the last call
+    looked.
 
 ### If a tool you need is not in your tool list
 

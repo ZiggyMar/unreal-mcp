@@ -294,6 +294,14 @@ These are specific, and they are why an untrained model flails:
   `KismetSystemLibrary`, not on your Blueprint.
 - **Variables must exist before a Get/Set node can reference them.**
 - **A Widget Blueprint that is never added to the viewport is invisible.**
+- **Branch, Sequence and Cast are `nodeType` values, not functions.** Searching the function
+  catalogue for "Branch" finds nothing, because a Branch is not a UFunction.
+- **Spawn Actor and Create Widget cannot be built by this server, and nothing else will tell you.**
+  They are their own `UK2Node` classes rather than functions, so `unreal_find_node` will never find
+  them however you spell the search - and a graph that quietly lacks the spawn step compiles
+  perfectly and does nothing at runtime. Say so plainly rather than emitting the rest of the graph
+  and calling it finished. This one is written down because it was attempted: the node was built,
+  it crashed the editor four times, and the whole feature was reverted.
 
 ## 10. How to not guess
 

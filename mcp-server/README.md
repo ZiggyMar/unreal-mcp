@@ -1924,6 +1924,47 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The guide the instructions call "the long form" stopped before the last step
+
+The instructions every session starts with give an eight-step order and then say *"unreal_workflow is
+the long form of the order above"*. Holding one against the other:
+
+```text
+NOT in AGENT_WORKFLOW.md: unreal_list_blueprints, unreal_find_source,
+                          unreal_describe_class, unreal_verify_feature
+```
+
+`verify_feature` is the one that matters. The instructions call it step 8 - *"before you report
+anything as done"* - and the long-form document's golden path ran fifteen steps and **ended at
+Save**. A model that pulled the long form got an order that stops before the step whose entire job is
+to catch work reported finished when it is not.
+
+The other three were real too. `find_source` is half of instruction step 2 - *"not everything is a
+Blueprint"* - and the C++ path (locate, `compile_cpp`, `hot_reload_cpp`) appeared nowhere in the
+document that claims to be the full order.
+
+The handbook had the same shape of gap from the other side. The instructions tell a model to *"pull
+in the handbook before your first write"* and separately list the strings it cannot derive - and one
+of them was missing from the handbook entirely:
+
+> **Spawn Actor and Create Widget cannot be built by this server, and nothing else will tell you.**
+
+That fact was learned expensively - the node was built, it crashed the editor four times, and the
+whole feature was reverted - written into the instructions, and never into the document a model is
+told to read.
+
+Three guards now hold the two together: every tool the instruction steps name must appear in the
+workflow guide, every unguessable string must appear in the handbook, and no guide may name a tool
+this server does not register. The third direction is the one that goes stale silently; it is clean
+today.
+
+The first version of that test failed for its own reason, which is worth recording: it searched the
+source for a marker containing a newline, and this repo checks out CRLF, so the extraction returned
+an empty block and the test failed with nothing to do with the guides. Line endings are normalised
+now - and once it actually ran, it found a fifth gap nobody had spotted by eye: `unreal_save_asset`,
+which the instructions name for everything that is not a Blueprint, and which the workflow guide's
+save step never mentioned.
+
 ### The same gap in five places, answered once
 
 Last commit fixed this for the audit. The obvious question was how many other tools give advice
