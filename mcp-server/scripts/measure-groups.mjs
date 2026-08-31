@@ -39,7 +39,11 @@ const TOLERANCE_TOKENS = 150;
 const NEWLINE = String.fromCharCode(10);
 
 /** The groups unreal_enable_tools offers. Kept in the order its description lists them. */
-const GROUPS = ["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"];
+// Asked for rather than typed out. This was the third hardcoded copy of the group list, and it is
+// the one that fails quietly: a group missing here is simply never measured, so unreal_list_tools
+// reports "~? tok" for it and a model choosing what to enable is choosing blind. The census names
+// every group the server actually has, so ask the server.
+const GROUPS = await discoverGroups();
 
 /**
  * A ceiling on the whole surface, not on any one group.
@@ -55,6 +59,29 @@ const GROUPS = ["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "
  * reported as over a stale one. Deriving it means the argument only has to be made in one place.
  */
 const ALL_GROUPS_CEILING = PROFILES.find((p) => p.name === "full").ceilingTokens;
+
+/**
+ * Every group the server actually has, from its own census.
+ *
+ * "core" is not in the census - it is the profile's set rather than a group - so it is added, which
+ * is the one thing this still has to know.
+ */
+async function discoverGroups() {
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "measure-groups-discover");
+  try {
+    const result = await server.request("tools/call", {
+      name: "unreal_list_tools",
+      arguments: {},
+    });
+    const census = JSON.parse((result.result ?? result).content[0].text);
+    // Deduplicated: the census counts tools by the group they were registered under, and core tools
+    // are registered under "core" - so it is already in there. Prepending it unconditionally wrote
+    // the key twice and TypeScript refused the generated file, which is a fine way to find out.
+    return [...new Set(["core", ...Object.keys(census.groups)])];
+  } finally {
+    server.child.kill();
+  }
+}
 
 async function measureGroup(group) {
   const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "measure-groups");

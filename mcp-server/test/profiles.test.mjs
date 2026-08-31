@@ -362,7 +362,16 @@ test("list_tools answers with a census, not every tool, unless asked", async () 
   const census = JSON.parse(messages.find((m) => m.id === 2).result.content[0].text);
   const everything = JSON.parse(messages.find((m) => m.id === 3).result.content[0].text);
 
-  assert.ok(Array.isArray(census.groups), "the default answer is the groups");
+  // A map from group name to one line about it, not rows of {group, count, costTokens, what} - those
+  // four keys were 146 tokens of a 716-token reply, on the one call whose entire job is to cost less
+  // than the profile it protects.
+  const groupNames = Object.keys(census.groups);
+  assert.ok(groupNames.length >= 5, `the default answer is the groups, got ${groupNames.join(", ")}`);
+  // The price has to survive the compaction. Choosing a group without it is choosing blind, which is
+  // the whole reason this reply carries costs at all.
+  for (const [name, line] of Object.entries(census.groups)) {
+    assert.match(line, /^\d+ tools, ~\d+ tok - /, `${name} must still say what it costs`);
+  }
   assert.equal(census.tools, undefined, "the default answer must not carry every tool");
   assert.ok(census.totalTools > 50, `the census still reports the total, got ${census.totalTools}`);
   assert.match(census.next, /match/, "and says how to narrow");
@@ -385,4 +394,33 @@ test("filtering list_tools still returns actual tools", async () => {
   const body = JSON.parse(messages.find((m) => m.id === 2).result.content[0].text);
   assert.ok(Array.isArray(body.tools) && body.tools.length > 0, "a filter means you want the tools");
   assert.ok(body.tools.every((t) => /data|table/i.test(t.name + t.summary)));
+});
+
+test("every group the census reports is one enable_tools will accept and describe", async () => {
+  // The group list lived in three places - TOOL_GROUPS, the enable_tools enum, and
+  // measure-groups.mjs - and adding "input" updated one of them. The census advertised a group that
+  // enable_tools then rejected as an invalid value, and measure-groups never measured it, so the
+  // census reported its price as "~? tok" to a model deciding what to switch on.
+  //
+  // Two of those are derived now. This covers the third, which is prose and cannot be: the
+  // description enumerates the groups by hand, and a group missing from it is invisible to any model
+  // that reads the tool rather than calling it.
+  const messages = await callServer("search", [
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "unreal_list_tools", arguments: {} } },
+    listRequest(3),
+  ]);
+  const census = JSON.parse(messages.find((m) => m.id === 2).result.content[0].text);
+  const enableTool = messages.find((m) => m.id === 3).result.tools.find((t) => t.name === "unreal_enable_tools");
+  const accepted = enableTool.inputSchema.properties.groups.items.enum;
+
+  const advertised = Object.keys(census.groups);
+  const notAccepted = advertised.filter((g) => !accepted.includes(g));
+  assert.deepEqual(notAccepted, [], `the census offers groups enable_tools refuses: ${notAccepted.join(", ")}`);
+
+  const undescribed = advertised.filter((g) => !enableTool.description.includes(`"${g}"`));
+  assert.deepEqual(undescribed, [], `groups exist but the description never mentions them: ${undescribed.join(", ")}`);
+
+  // And the price is real, not the "~?" that a missing measurement produces.
+  const unpriced = Object.entries(census.groups).filter(([, line]) => line.includes("~? tok"));
+  assert.deepEqual(unpriced.map(([g]) => g), [], "a group with no measured cost is one nobody can choose sensibly");
 });

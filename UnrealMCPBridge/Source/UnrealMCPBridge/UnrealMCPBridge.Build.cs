@@ -44,7 +44,12 @@ public class UnrealMCPBridge : ModuleRules
 			"AIModule",
 			// For reading Niagara systems: emitters and the user parameters a Blueprint may set.
 			"Niagara",
-			"SourceControl"
+			"SourceControl",
+			// Enhanced Input is where every modern UE project keeps its bindings. It is a runtime
+			// plugin module, not an editor one, so reading a mapping context costs no editor
+			// machinery - and the legacy project-settings path this bridge already had returns
+			// nothing at all on a project that uses it, which is most of them.
+			"EnhancedInput"
 		});
 
 		// Live coding is Windows-only and is compiled out of some targets entirely, so it is asked for

@@ -200,7 +200,10 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_set_class_default` | `set_class_default` | Set a Class Defaults (CDO) property. This is how replication gets turned on: `bReplicates`, `NetUpdateFrequency`, `bAlwaysRelevant`. |
 | `unreal_set_game_settings` | `set_game_settings` | Project `UGameMapsSettings`: default GameMode, editor startup map, packaged-game default map. Persisted to config. |
 | `unreal_describe_class` | `describe_class` | A class's real ancestry, and whether it is server-only. Ask before casting in a networked game. |
-| `unreal_list_input_mappings` | `list_input_mappings` | Read what input is bound and to which key. First call when a key does nothing. |
+| `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
+| `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
+| `unreal_map_input_key` | `map_input_key` | Bind a key to an Input Action, with modifiers. Refuses unknown keys and duplicates. |
+| `unreal_unmap_input_key` | `unmap_input_key` | Remove one key binding, and say so honestly when it was not bound. |
 | `unreal_get_game_settings` | `get_game_settings` | Read the default GameMode and map, plus the open level's override. |
 | `unreal_add_input_mapping` | `add_input_mapping` | Add an action or axis mapping and save it to config, so `InputAction`/`InputAxis` event nodes have something real behind them. |
 | `unreal_start_pie` | `start_pie` | Start Play In Editor, including multi-client sessions (`numPlayers`, `listenServer`) to exercise replication. |
@@ -1881,6 +1884,107 @@ obvious way to write it.
 
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
+
+### One list, written down three times
+
+Adding the `input` group broke two tests and a budget, and each failure pointed at the same thing:
+**the list of groups existed in three places.** `TOOL_GROUPS`, the hardcoded `z.enum` on
+`enable_tools`, and a third copy in `measure-groups.mjs`. Adding a group updated one of them.
+
+The result was a listing that disagreed with behaviour, in both directions at once. `list_tools`
+advertised a group `enable_tools` then rejected as an invalid value — a model reads that the group
+exists, asks for it, and is told no. And `measure-groups` never measured it, so the census reported
+its price as `~? tok` to a model deciding what to switch on.
+
+Two of the three are derived now: the enum is `["core", ...Object.keys(TOOL_GROUPS)]`, and the
+measurement script asks the server's own census instead of carrying a list. The third is prose — the
+tool description enumerates the groups by hand — so a test covers it: every group the census reports
+must be one `enable_tools` accepts, mentions by name, and has a measured price for.
+
+While fixing that, the reply-budget guard failed honestly and usefully:
+
+```text
+list_tools (no filter) is ~716 tokens, over its 700 ceiling.
+  That ceiling exists because: the first call of every session on `search`;
+  it must cost less than the profile it protects.
+  Trim what the reply repeats, or argue for a higher ceiling here - but do not
+  raise it silently.
+```
+
+So it was trimmed rather than raised. The census sent rows of
+`{group, count, costTokens, what}` — four keys spelled once per group, **146 tokens of a 716-token
+reply**, on the one call whose entire job is to cost less than the profile it protects. It is a map
+from group name to one line now, and the price stays in the line, because choosing a group without it
+is choosing blind:
+
+```json
+{"input": "4 tools, ~998 tok - key bindings: Enhanced Input contexts - read what is bound, ..."}
+```
+
+```text
+list_tools (no filter)  716 -> 540
+```
+
+Two group costs had also drifted silently while this was going on — `cpp` recorded 316 against 679
+measured, `scene` 6,387 against 6,863 — because `hot_reload_cpp` and `run_console_command` were added
+without re-measuring. `npm run measure:groups` catches that by comparing rather than trusting, which
+is why it was caught at all.
+
+### The input system the project actually uses
+
+The read/write audit reached input and found something worse than a mismatch. `list_input_mappings`
+returned this against a real project:
+
+```json
+{"actionMappings":[],"axisMappings":[],"actionCount":0,"axisCount":0,
+ "note":"These are the legacy (project settings) input mappings. A project using Enhanced Input
+         keeps its bindings in InputMappingContext and InputAction assets instead..."}
+```
+
+Honest, and a dead end. The note is correct — that project has **three InputMappingContexts and a
+dozen InputActions** — and it then points at `list_assets`, which finds the files and says nothing
+about what is in them. Enhanced Input is what every UE5 project made in the last few years uses, so
+"what is W bound to" had one available answer: `read_asset_properties` on the context, which hands
+back the raw export string of the `Mappings` array. Per binding:
+
+```text
+(Modifiers=("/Script/EnhancedInput.InputModifierSwizzleAxis'/Game/.../IMC_Default.IMC_Default
+:InputModifierSwizzleAxis_1'","/Script/EnhancedInput.InputModifierNegate'/Game/...'"),
+Action="/Script/EnhancedInput.InputAction'/Game/.../IA_Move.IA_Move'",Key=S)
+```
+
+Every modifier carries a full object path to an instance whose only interesting fact is its class.
+The question was "which key moves the player backwards"; the answer was several thousand tokens of
+package paths with the word `Negate` buried in them.
+
+Three commands answer it directly and close the loop — read what is bound, bind a key, unbind one:
+
+```text
+unreal_read_input_context({ path: "IMC_Default" })
+-> { "context": "IMC_Default",
+     "actions": { "IA_Move": ["W", "S (Negate)", "A (SwizzleAxis, Negate)", "D (SwizzleAxis)"],
+                  "IA_Jump": ["SpaceBar"] },
+     "mappingCount": 14 }
+```
+
+Grouped by action because that is the question, and the modifier prefix is dropped — the field it
+sits in already says whether it is a modifier or a trigger, so `InputModifierNegate` is just
+`Negate`, and the short form the read prints is the form the write accepts.
+
+Three refusals are the part worth having. **A misspelled key is silent in every direction**: `FKey`
+takes any `FName` without complaint, so a binding to `"Qq"` compiles, saves, appears in the editor,
+and never fires — `EKeys` knows every real key, so it is asked. **A duplicate mapping fires twice**,
+which reads as an action triggering for no reason, so an existing binding reports `changed: false`
+instead of being added again. And unbinding a key that was not bound reports `changed: false` too,
+because the engine's own `UnmapKey` does nothing and says nothing for a mapping that is not there —
+a misspelling would otherwise look like a successful unbinding.
+
+Mappings whose `Action` is null — an InputAction asset that was deleted out from under the context —
+are counted and warned about rather than skipped. They do nothing, and they are easy to miss in the
+editor unless you happen to scroll to them.
+
+They live in their own `input` group, for the same reason animation and AI do: a project still on
+legacy input has three tools here that answer nothing.
 
 ### Auditing every read against its matching write
 

@@ -400,7 +400,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_list_enum_entries",
     "unreal_list_assets",
   ],
-  scene: ["unreal_read_class_defaults", "unreal_list_input_mappings", "unreal_get_game_settings", 
+  scene: ["unreal_read_class_defaults", "unreal_get_game_settings", 
     "unreal_create_level",
     "unreal_open_level",
     "unreal_spawn_actor",
@@ -446,7 +446,32 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // VFX is its own group for the same reason animation and AI are: a project without Niagara should
   // not carry the definition.
   vfx: ["unreal_read_niagara_system"],
+  // Enhanced Input is its own group for the same reason animation and AI are. A project on legacy
+  // input has three tools here that answer nothing, and one on Enhanced Input - which is most of
+  // them - could not answer "what is W bound to" at all before these.
+  input: [
+    // All four together, including the legacy reader that used to sit in `scene`. Splitting them
+    // would mean a model looking for input tools finds half of them, and enabling "input" would not
+    // give you the one call that says "this project is on Enhanced Input, look elsewhere".
+    "unreal_list_input_mappings",
+    "unreal_read_input_context",
+    "unreal_map_input_key",
+    "unreal_unmap_input_key",
+  ],
 };
+
+/**
+ * The groups `enable_tools` accepts, derived rather than typed out again.
+ *
+ * This list existed in three places - TOOL_GROUPS, this enum, and measure-groups.mjs - and adding a
+ * group updated one of them. The `input` group was reachable from the census and rejected by
+ * enable_tools, which is a listing that disagrees with behaviour: a model reads that the group
+ * exists, asks for it, and is told it is not a valid value. Two separate tests caught it, which is
+ * two tests doing a job the type system should be doing.
+ *
+ * "core" is not a key of TOOL_GROUPS - it is the profile's own set - so it is named once, here.
+ */
+const ENABLEABLE_GROUPS = ["core", ...Object.keys(TOOL_GROUPS)] as [string, ...string[]];
 
 const GROUP_SUMMARY: Record<string, string> = {
   cpp: "compile a C++ source file to see whether an edit built (find_source, which locates it, is in core)",
@@ -457,7 +482,8 @@ const GROUP_SUMMARY: Record<string, string> = {
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
   materials: "Materials and Material Instances: create them, parameterise them, override them",
   data: "Structs, Enums, and asset lookup",
-  scene: "Levels, actors, components, class defaults, project settings, input mappings, Play In Editor",
+  scene: "Levels, actors, components, class defaults, project settings, Play In Editor",
+  input: "key bindings: Enhanced Input contexts - read what is bound, bind a key, unbind one - and the legacy reader",
   maintenance: "reference lookup, asset deletion, Refresh Nodes repair",
 };
 
@@ -2579,6 +2605,86 @@ register(
 );
 
 register(
+  "unreal_read_input_context",
+  {
+    title: "Read what an Input Mapping Context binds",
+    description:
+      "Answers \"what is W bound to\" for Enhanced Input, which is where every modern Unreal project keeps its " +
+      "bindings. Returns the keys grouped under the action they fire, with modifiers and triggers named: " +
+      "`{\"IA_Move\": [\"W\", \"S (Negate)\"], \"IA_Jump\": [\"SpaceBar\"]}`.\n\n" +
+      "unreal_list_input_mappings reads the LEGACY project-settings bindings and returns nothing on a project that " +
+      "uses Enhanced Input. Reading the context asset with unreal_read_asset_properties works but hands back the raw " +
+      "export string - kilobytes of package paths per binding, with the one interesting word buried in it.",
+    inputSchema: {
+      path: z
+        .string()
+        .describe('An InputMappingContext: short name like "IMC_Default", or a full path. Find them with unreal_list_assets className=InputMappingContext.'),
+    },
+  },
+  async ({ path }) => {
+    try {
+      return jsonResult(await bridge.send("read_input_context", { path }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_map_input_key",
+  {
+    title: "Bind a key to an Input Action",
+    description:
+      "Adds a key binding to an Input Mapping Context - the Enhanced Input equivalent of \"bind Q to interact\". " +
+      "Refuses a key the engine does not know, because FKey accepts any name without complaint and a binding to a " +
+      "misspelled key saves happily, shows in the editor, and never fires. Refuses to add a duplicate too: two " +
+      "identical mappings both fire, which reads as the action triggering twice for no reason.\n\n" +
+      "The asset is left dirty, not saved - follow with unreal_save_asset.",
+    inputSchema: {
+      path: z.string().describe('The InputMappingContext, e.g. "IMC_Default".'),
+      action: z.string().describe('The InputAction, e.g. "IA_Interact". Find them with unreal_list_assets className=InputAction.'),
+      key: z
+        .string()
+        .describe('Key name as the editor spells it: "Q", "SpaceBar", "LeftMouseButton", "Gamepad_FaceButton_Bottom".'),
+      modifiers: z
+        .array(z.string())
+        .optional()
+        .describe('Input modifiers, in the short form this server prints: ["Negate"], ["SwizzleAxis", "Negate"]. Common ones are Negate, SwizzleAxis, DeadZone, Scalar, SmoothDelta.'),
+    },
+  },
+  async ({ path, action, key, modifiers }) => {
+    try {
+      return jsonResult(await bridge.send("map_input_key", { path, action, key, modifiers }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_unmap_input_key",
+  {
+    title: "Remove a key binding from an Input Mapping Context",
+    description:
+      "Removes one key binding. Reports `changed: false` when that key was not bound to that action rather than " +
+      "claiming success, because the engine's own UnmapKey does nothing and says nothing for a mapping that is not " +
+      "there - so a misspelled key would otherwise look like a successful unbinding.",
+    inputSchema: {
+      path: z.string().describe('The InputMappingContext, e.g. "IMC_Default".'),
+      action: z.string().describe('The InputAction, e.g. "IA_Interact".'),
+      key: z.string().describe('The key to unbind, e.g. "Q".'),
+    },
+  },
+  async ({ path, action, key }) => {
+    try {
+      return jsonResult(await bridge.send("unmap_input_key", { path, action, key }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
   "unreal_run_console_command",
   {
     title: "Run a console command",
@@ -3491,18 +3597,24 @@ register(
       return jsonResult({
         totalTools: toolCatalog.size,
         enabled: enabledNow,
-        groups: [...byGroup.entries()]
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([name, count]) => ({
-            group: name,
-            count,
-            // What it costs to switch on, so the choice is made with the price visible. Measured and
-            // generated by `npm run measure:groups`, which fails when these drift.
-            costTokens: GROUP_COST_TOKENS[name],
-            what:
-              GROUP_SUMMARY[name] ??
-              "the authoring spine: read a project, find a function, scaffold, build a graph, compile, review, save",
-          })),
+        // A map from group name to one line about it, rather than rows of
+        // {group, count, costTokens, what}. Those four keys were spelled once per group and were
+        // 146 tokens of a 716-token reply - on the first call of every `search` session, which is
+        // the one reply whose whole job is to cost less than the profile it protects.
+        //
+        // The price stays visible in the line, because choosing a group without it is choosing
+        // blind. Measured and generated by `npm run measure:groups`, which fails when these drift.
+        groups: Object.fromEntries(
+          [...byGroup.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([name, count]) => [
+              name,
+              `${count} tools, ~${GROUP_COST_TOKENS[name] ?? "?"} tok - ${
+                GROUP_SUMMARY[name] ??
+                "the authoring spine: read a project, find a function, scaffold, build a graph, compile, review, save"
+              }`,
+            ])
+        ),
         next:
           "Call again with a `group` to list the tools in it, or `match` to search names and summaries " +
           '(e.g. {"match":"data table"}). Listing every tool costs about 5.5k tokens and is rarely ' +
@@ -3565,8 +3677,10 @@ register(
       '  - "ui": UMG. Create Widget Blueprints, build the widget tree, set widget and layout-slot properties.\n' +
       '  - "materials": Materials and Material Instances - create them, parameterise them, override them.\n' +
       '  - "data": Structs, Enums, and asset lookup by class.\n' +
-      '  - "scene": Levels, actors, components, class defaults (including replication), project settings, input ' +
-      "mappings, and Play In Editor.\n" +
+      '  - "scene": Levels, actors, components, class defaults (including replication), project settings, and ' +
+      "Play In Editor.\n" +
+      '  - "input": key bindings. Enhanced Input contexts - read what is bound, bind a key, unbind one - plus ' +
+      "the legacy project-settings reader.\n" +
       '  - "anim": Animation Blueprints - state machines, states, and transition conditions.\n' +
       '  - "ai": Behavior Trees and their blackboards.\n' +
       '  - "vfx": Niagara systems - emitters, and the parameters a Blueprint may set on them.\n' +
@@ -3574,7 +3688,7 @@ register(
       "Immediate, lasts the session, and re-calling is harmless. Ask for everything the job needs in one call.",
     inputSchema: {
       groups: z
-        .array(z.enum(["core", "cpp", "anim", "ai", "vfx", "edit", "ui", "materials", "data", "scene", "maintenance"]))
+        .array(z.enum(ENABLEABLE_GROUPS))
         .optional()
         .describe('Whole groups to turn on, e.g. ["core","ui"].'),
       tools: z

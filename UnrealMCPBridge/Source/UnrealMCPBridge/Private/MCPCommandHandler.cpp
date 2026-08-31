@@ -1083,6 +1083,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleWatchRuntime(Params);
 	}
+	else if (Cmd == TEXT("read_input_context"))
+	{
+		Response = HandleReadInputContext(Params);
+	}
+	else if (Cmd == TEXT("map_input_key"))
+	{
+		Response = HandleMapInputKey(Params);
+	}
+	else if (Cmd == TEXT("unmap_input_key"))
+	{
+		Response = HandleUnmapInputKey(Params);
+	}
 	else if (Cmd == TEXT("run_console_command"))
 	{
 		Response = HandleRunConsoleCommand(Params);

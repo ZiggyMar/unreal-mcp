@@ -49,6 +49,11 @@ private:
 	static TSharedRef<FJsonObject> HandleSetVariableReplication(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleWatchRuntime(const TSharedPtr<FJsonObject>& Params);
 
+	/** Enhanced Input, in MCPInput.cpp: the input system every modern Unreal project actually uses. */
+	static TSharedRef<FJsonObject> HandleReadInputContext(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleMapInputKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleUnmapInputKey(const TSharedPtr<FJsonObject>& Params);
+
 	/** The console, in MCPConsole.cpp: the one command a human reaches for when no verb exists yet. */
 	static TSharedRef<FJsonObject> HandleRunConsoleCommand(const TSharedPtr<FJsonObject>& Params);
 
