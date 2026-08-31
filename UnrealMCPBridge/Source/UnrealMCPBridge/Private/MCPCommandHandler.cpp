@@ -1079,6 +1079,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleWatchRuntime(Params);
 	}
+	else if (Cmd == TEXT("run_console_command"))
+	{
+		Response = HandleRunConsoleCommand(Params);
+	}
 	else if (Cmd == TEXT("live_coding_status"))
 	{
 		Response = HandleLiveCodingStatus(Params);

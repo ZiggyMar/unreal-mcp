@@ -35,6 +35,7 @@ import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_T
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
 import { hotReloadCpp } from "./liveCoding.js";
+import { describeConsoleResult } from "./consoleCommand.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -420,6 +421,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_pie_status",
     "unreal_screenshot",
     "unreal_find_orphans",
+    "unreal_run_console_command",
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
@@ -2560,6 +2562,42 @@ register(
   async ({ action, watch, intervalMs, maxSamples }) => {
     try {
       return jsonResult(await bridge.send("watch_runtime", { action, watch, intervalMs, maxSamples }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_run_console_command",
+  {
+    title: "Run a console command",
+    description:
+      "The tilde key. One command covering the enormous surface that has no tool of its own: " +
+      "\"ce StartWave\" to fire an event nothing is calling yet, \"Ke * ResetHealth\" to call a function on every " +
+      "instance of a class, \"stat unit\" to see whether a frame is CPU or GPU bound, \"slomo 0.1\" to watch " +
+      "something too fast to see, cvars, showdebug, and every cheat the project defines.\n\n" +
+      "Reach for it when you need the game to DO something to test a fix, and no specific tool exists.\n\n" +
+      "Read `recognised` before believing anything. A misspelled command does nothing, prints nothing, and " +
+      "looks exactly like a correct command with no visible effect - `recognised: false` is the engine saying it " +
+      "never ran. Most commands answer through the log rather than to the caller, so `log` is usually where the " +
+      "answer is. While a game is running the command goes through the player controller, which is the only path " +
+      "`ce` and cheats exist on; otherwise it goes to the editor.",
+    inputSchema: {
+      command: z.string().describe('The console line, e.g. "stat fps" or "ce StartWave".'),
+      world: z
+        .enum(["auto", "pie", "editor"])
+        .optional()
+        .describe(
+          'Where to run it. Default "auto": the running game if there is one, otherwise the editor. ' +
+            '"pie" fails plainly rather than quietly running against the editor when no game is up.'
+        ),
+    },
+  },
+  async ({ command, world }) => {
+    try {
+      const reply = await bridge.send("run_console_command", { command, world });
+      return jsonResult(describeConsoleResult(command, reply as never));
     } catch (err) {
       return errorResult(err);
     }

@@ -163,7 +163,18 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
 
   cpp: {
     what: "read and change the project's C++",
-    tools: [...ORIENT, "unreal_find_source", "unreal_compile_cpp", "unreal_describe_class", "unreal_find_references"],
+    tools: [
+      ...ORIENT,
+      "unreal_find_source",
+      "unreal_compile_cpp",
+      // The preset says "read and CHANGE the project's C++", and until this was added the change was
+      // the one thing it could not finish: compile_cpp proves an edit builds, and the running editor
+      // goes on running the old code until somebody closes it. Same shape as find_orphans missing
+      // from `diagnose` - a preset without the tool that completes its own sentence.
+      "unreal_hot_reload_cpp",
+      "unreal_describe_class",
+      "unreal_find_references",
+    ],
   },
 };
 

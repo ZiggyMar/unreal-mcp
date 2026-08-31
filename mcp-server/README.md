@@ -63,6 +63,7 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_add_variable` | `add_variable` | Add a member variable (compact type descriptor: `bool`, `int`, `float`, `vector`, `object:<Class>`, ...). |
 | `unreal_set_variable_replication` | `set_variable_replication` | Set an existing variable to `none` / `replicated` / `repnotify`, creating or reusing its `OnRep_` graph. |
 | `unreal_watch_runtime` | `watch_runtime` | Sample variables on live actors during PIE, in every world, labelled by net role. |
+| `unreal_run_console_command` | `run_console_command` | Run a console line - `ce`, `Ke`, cheats, cvars, `stat` - in the running game or the editor. |
 | `unreal_compile_blueprint` | `compile_blueprint` | Compile and return structured errors/warnings. **Run this after every batch of edits** (see below). |
 | `unreal_save_blueprint` | `save_blueprint` | Save the Blueprint's package to disk. |
 
@@ -2169,6 +2170,48 @@ One distinction is called out separately in the reply because getting it wrong i
 **"nothing changed" and "nothing was ever found" look identical in a table of values and mean opposite
 things.** A spec that matched no actor anywhere is reported as `notFound` — a naming problem, not a
 finding about the game.
+
+### The tilde key: `unreal_run_console_command`
+
+Almost every tool here is a specific verb - create this, connect that, read the other. The console is
+the opposite shape, and that is exactly why it belongs: it is what a person reaches for when the
+specific verb does not exist yet.
+
+```text
+unreal_run_console_command({ command: "ce StartWave" })     # fire an event nothing calls yet
+unreal_run_console_command({ command: "Ke * ResetHealth" }) # call it on every instance of a class
+unreal_run_console_command({ command: "stat unit" })        # is this frame CPU or GPU bound
+unreal_run_console_command({ command: "slomo 0.1" })        # watch something too fast to see
+```
+
+One tool definition covers `ce`, `Ke`, every cheat the project defines, every cvar, `stat`,
+`showdebug`, and `DumpConsoleCommands`. Defining a tool for each would cost a session more standing
+context than the whole console does.
+
+**The care is all in reporting it honestly, because the console is unusually good at appearing to
+work.** Type `stat untis` and the game carries on exactly as before: nothing runs, nothing prints,
+nothing changes. That is indistinguishable from `stat units` having had no visible effect - and a
+model that cannot tell them apart spends its next several calls investigating a game that is fine.
+`UEngine::Exec` returns false for the typo, so the reply carries `recognised: false` and a next step
+naming `DumpConsoleCommands`.
+
+Two more things had to be right or the tool would be quietly useless:
+
+**Most commands answer through the log, not to the caller.** `stat fps` returns an empty string. So do
+the cvars, so does `showdebug`. A tool reporting only the return value would say nothing about almost
+every command worth running, so the log is captured for the length of the exec and handed back with
+it - capped at 60 lines, with the true total reported when there were more, because `obj list` prints
+thousands and "60 lines" and "the first 60 of 4,312" are different answers.
+
+**In a running game the console belongs to the player controller.** `ce`, cheats, and everything the
+cheat manager owns route through `APlayerController::ConsoleCommand`, not through the engine. Sending
+those to `GEditor` does nothing at all, silently. So PIE goes through the player controller - the same
+path the tilde key uses - and the server world is chosen deliberately over a client, because a client
+would answer about its own copy of the state.
+
+Two commands are refused: `quit` and `exit` (and `debug crash` and relatives). Not a policy about what
+you may do - this bridge runs *inside* the editor, so the model would not receive an error, it would
+receive nothing ever again, having deleted the thing that would have reported the problem.
 
 ### The audit's most expensive finding can now be fixed, not just reported
 

@@ -30,8 +30,7 @@
  */
 
 #include "MCPCommandHandler.h"
-#include "Misc/OutputDevice.h"
-#include "Misc/ScopeLock.h"
+#include "MCPLogCapture.h"
 #include "Modules/ModuleManager.h"
 
 #if WITH_LIVE_CODING
@@ -45,61 +44,13 @@ namespace
 /**
  * Everything LogLiveCoding says while a compile is running.
  *
- * Registered on the global log for the length of one compile and taken off again when it finishes,
- * because an output device left on the log costs on every line the editor ever prints.
- *
- * Serialize can be called from any thread - the live coding console talks back on its own - so the
- * lines are held under a lock and only ever handed out by value.
+ * Not scoped, unlike the console's use of the same capture: this one is attached by one command and
+ * taken off by a later one, because a live coding compile outlives the call that starts it. That is
+ * the whole reason the compile is asked for in its non-blocking form - see the note at the top.
  */
-class FMCPLiveCodingLog : public FOutputDevice
+FMCPLogCapture& GetCaptureDevice()
 {
-public:
-	virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
-	{
-		if (Category != TEXT("LogLiveCoding"))
-		{
-			return;
-		}
-		FScopeLock Lock(&Mutex);
-		// A compile that goes wrong can be talkative. Keep the front of it: the first lines say what
-		// was attempted and what failed, and the tail is repetition of the same failure.
-		if (Lines.Num() < 60)
-		{
-			const TCHAR* Prefix = TEXT("");
-			if (Verbosity == ELogVerbosity::Error)
-			{
-				Prefix = TEXT("error: ");
-			}
-			else if (Verbosity == ELogVerbosity::Warning)
-			{
-				Prefix = TEXT("warning: ");
-			}
-			Lines.Add(FString::Printf(TEXT("%s%s"), Prefix, V));
-		}
-	}
-
-	TArray<FString> Take()
-	{
-		FScopeLock Lock(&Mutex);
-		TArray<FString> Out = MoveTemp(Lines);
-		Lines.Reset();
-		return Out;
-	}
-
-	void Reset()
-	{
-		FScopeLock Lock(&Mutex);
-		Lines.Reset();
-	}
-
-private:
-	FCriticalSection Mutex;
-	TArray<FString> Lines;
-};
-
-FMCPLiveCodingLog& GetCaptureDevice()
-{
-	static FMCPLiveCodingLog Device;
+	static FMCPLogCapture Device(FName(TEXT("LogLiveCoding")));
 	return Device;
 }
 
@@ -201,7 +152,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingStatus(const TShared
 	// off, unhook the device, and keep the lines for whoever asks first.
 	if (bCompileOutstanding)
 	{
-		LastCompileLines = GetCaptureDevice().Take();
+		int32 TotalSeen = 0;
+		LastCompileLines = GetCaptureDevice().Take(TotalSeen);
 		DetachCapture();
 		bCompileOutstanding = false;
 	}
@@ -285,7 +237,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingCompile(const TShare
 		// It never got going, so nothing more will come off the log. Take what it managed to say -
 		// "Unable to start live coding session. Missing executable..." is a whole diagnosis on its own -
 		// and unhook, rather than leaving a device attached waiting for a compile that is not coming.
-		LastCompileLines = GetCaptureDevice().Take();
+		int32 TotalSeen = 0;
+		LastCompileLines = GetCaptureDevice().Take(TotalSeen);
 		DetachCapture();
 		bCompileOutstanding = false;
 		AddLogField(Result, LastCompileLines);

@@ -49,6 +49,9 @@ private:
 	static TSharedRef<FJsonObject> HandleSetVariableReplication(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleWatchRuntime(const TSharedPtr<FJsonObject>& Params);
 
+	/** The console, in MCPConsole.cpp: the one command a human reaches for when no verb exists yet. */
+	static TSharedRef<FJsonObject> HandleRunConsoleCommand(const TSharedPtr<FJsonObject>& Params);
+
 	/** Live coding, in MCPLiveCoding.cpp: apply a C++ change to the editor that is already running. */
 	static TSharedRef<FJsonObject> HandleLiveCodingStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleLiveCodingCompile(const TSharedPtr<FJsonObject>& Params);
