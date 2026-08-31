@@ -1705,6 +1705,13 @@ answer to "does this ever change" is one word, and the distinct values behind it
 returning the raw trajectory would cost more tokens than reading the whole Blueprint. Sampling stops
 itself at `maxSamples`, so a watch nobody stopped costs nothing after the window it was asked for.
 
+`npm run trial:runtime` is the proof, and it is deliberately a loop rather than a check. It builds an
+actor whose server copy increments a **non-replicated** counter, plays with two players, and asserts
+the Authority value moves while the Client's does not - the bug, observed. Then it calls
+`unreal_set_variable_replication`, plays again, and asserts the Client value now moves too - the fix,
+observed. Every other check in this repository can tell you a change was *written*; this is the only
+one that can tell you it *worked*.
+
 One distinction is called out separately in the reply because getting it wrong is expensive:
 **"nothing changed" and "nothing was ever found" look identical in a table of values and mean opposite
 things.** A spec that matched no actor anywhere is reported as `notFound` — a naming problem, not a

@@ -33,7 +33,8 @@
     "trial:feature": "node scripts/trial-feature.mjs",
     "check:engines": "node scripts/build-engines.mjs --isolated",
     "measure:groups": "node scripts/measure-groups.mjs",
-    "trial:diagnose": "node scripts/trial-diagnose.mjs"
+    "trial:diagnose": "node scripts/trial-diagnose.mjs",
+    "trial:runtime": "node scripts/trial-runtime.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
