@@ -40,7 +40,8 @@
     "trial:runtime": "node scripts/trial-runtime.mjs",
     "trial:parent-call": "node scripts/trial-parent-call.mjs",
     "trial:chain": "node scripts/trial-chain.mjs",
-    "trial:workflows": "node scripts/trial-workflows.mjs"
+    "trial:workflows": "node scripts/trial-workflows.mjs",
+    "trial:lifecycle": "node scripts/trial-lifecycle.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

@@ -5053,6 +5053,33 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### Seven commands that compile and have never run
+
+Three sessions added `rename_asset`, `duplicate_asset`, `rename_variable`, `remove_variable`,
+`rename_component`, `remove_component` and `remove_function`. Every one compiles against 5.6, 5.8 and
+the game target. **Not one has ever been executed**, because the plugin binary in the editor predates
+all of them.
+
+That risk grows quietly. The day the plugin is rebuilt, seven commands go live having never run once
+— and nothing existed that would exercise them, so they would go live untested and stay that way
+until something broke in front of a user.
+
+`npm run trial:lifecycle` is the thing that runs the moment they exist. It checks **consequences, not
+return codes**, because a rename that changed a name and left every referencing node pointing at the
+old one has not renamed anything:
+
+- a variable is renamed **while a graph reads it**, then the Blueprint is compiled — the cheapest way
+  to ask the engine whether the nodes really moved
+- removing a variable that something still reads must **refuse and name the graphs**, and only then
+  succeed with `force`
+- a component answers to its new name, then removes, then is confirmed gone
+- an asset is copied, renamed, and both the new path and the *absence* of the old one are checked
+
+Today it prints five `--` skips and exits **2**: nothing failed, and nothing was proved either. The
+setup it depends on was verified separately — create, add variable, build a graph that reads it, add
+a component, create a function, compile — all green, so the subject will be real when the commands
+arrive.
+
 ### A stale plugin looks like four broken features
 
 Running the remaining trials: `feature` (33 calls, ~2,760 tokens), `chain` and `parent-call` all pass.
