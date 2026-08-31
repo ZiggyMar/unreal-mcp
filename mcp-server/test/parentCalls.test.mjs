@@ -26,17 +26,40 @@ test("an overridden BeginPlay with no Parent call is reported, with what it skip
 });
 
 test("a child that does call the parent is left alone", () => {
-  const found = findUncalledParentEvents(vacuumCase(["Event BeginPlay", "Parent: BeginPlay", "SetMoveSpeed"]));
+  // The parent call is IN the chain, which is what "does call the parent" means. This fixture used
+  // to put it only in the node-title list and passed anyway, which is the bug below.
+  const found = findUncalledParentEvents({
+    ...vacuumCase(["Event BeginPlay", "Parent: BeginPlay", "SetMoveSpeed"]),
+    childChains: [chain("Event BeginPlay", ["Parent: BeginPlay", "Switch Has Authority", "SetMoveSpeed"])],
+  });
   assert.deepEqual(found, []);
 });
 
 test("the parent call counts wherever it sits, not only in the same chain", () => {
-  // A child may route the parent call through a Sequence pin or another branch entirely.
+  // A child may route the parent call through a Sequence pin or another branch entirely, and that
+  // is still a call. What matters is that some chain reaches it - not which one.
   const found = findUncalledParentEvents({
     ...vacuumCase(["Event BeginPlay", "Parent: BeginPlay"]),
-    childChains: [chain("Event BeginPlay", ["Sequence"])],
+    childChains: [chain("Event BeginPlay", ["Sequence"]), chain("Event BeginPlay", ["Parent: BeginPlay"])],
   });
   assert.deepEqual(found, []);
+});
+
+test("a parent call nothing runs is not a parent call", () => {
+  // The case this check used to get wrong, and the common one. Creating an override event makes the
+  // editor add "Parent: BeginPlay" for you; the next thing to touch the event's exec pin displaces
+  // it, silently. The node is then in the graph, in no chain, doing nothing - and scanning node
+  // TITLES counted that as fixed, so the audit stayed quiet about the bug in exactly the situation
+  // that produces it.
+  //
+  // Found by building unreal_call_parent_function, which had the identical bug in its own
+  // "is it already there" check.
+  const found = findUncalledParentEvents({
+    ...vacuumCase(["Event BeginPlay", "Parent: BeginPlay", "SetMoveSpeed"]),
+    childChains: [chain("Event BeginPlay", ["Switch Has Authority", "SetMoveSpeed"])],
+  });
+  assert.equal(found.length, 1, "an orphaned parent call must not suppress the finding");
+  assert.match(found[0].fix, /unreal_call_parent_function/, "and the fix wires it rather than adding a second");
 });
 
 test("a parent that does nothing worth keeping is not a reason to send anybody anywhere", () => {

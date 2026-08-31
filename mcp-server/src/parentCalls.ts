@@ -78,10 +78,24 @@ export interface OverrideCheckInput {
 export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallFinding[] {
   const findings: ParentCallFinding[] = [];
 
-  // "Parent: BeginPlay" is how the editor titles the call, whichever graph it sits in - a child may
-  // route the parent call through a different chain, and that still counts.
+  // "Parent: BeginPlay" is how the editor titles the call, and a child may route it through a
+  // different chain than the one that overrides the event - that still counts, so every chain is
+  // searched rather than just the matching one.
+  //
+  // What does NOT count is a parent call sitting in the graph that nothing runs, and this used to
+  // count it. The scan was over childNodeTitles - every node in the graph, reached or not - so an
+  // orphaned "Parent: BeginPlay" suppressed the finding entirely.
+  //
+  // That is not a corner case, it is the common one. Creating an override event makes the editor add
+  // the parent call for you; the next thing to touch the event's exec pin displaces it, silently.
+  // The graph then contains the node, runs none of it, and this check called that fixed. Found by
+  // building unreal_call_parent_function, which had the identical bug in its own "is it already
+  // there" test, and by a trial whose fixture reproduced the displacement by accident.
+  //
+  // Chains are what execution reaches. Titles are what exists. They are not the same question.
   const parentCalls = new Set(
-    input.childNodeTitles
+    input.childChains
+      .flatMap((chain) => chain.steps)
       .map((title) => /^Parent:\s*(.+)$/i.exec(String(title).trim())?.[1]?.trim().toLowerCase())
       .filter((name): name is string => !!name)
   );

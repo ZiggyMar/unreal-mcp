@@ -33,6 +33,7 @@ import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { findUncalledParentEvents } from "./parentCalls.js";
+import { execTargets, type FlowNode } from "./execFlow.js";
 import { findDeadGraphs, type LivenessGraph } from "./systemLiveness.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
 import { findNiagaraFaults } from "./niagaraAudit.js";
@@ -346,11 +347,26 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       // event, and whether a RepNotify function has a body. Asked for lazily, and only when a graph
       // has already shown it might matter.
       const variables = (review.variables ?? []) as Array<{ name: string; repNotify?: string }>;
+      // "Does this function do anything" is a reachability question, not a node count.
+      //
+      // This used to answer it as "is every node unconnected", which is closer than counting nodes
+      // and still not the question: a wired pair of nodes that the function's ENTRY never reaches
+      // does nothing at all, and was read as a body. Same mistake, in its third place today - the
+      // parent-call finding scanned node titles, and unreal_call_parent_function's own "is it
+      // already there" check asked whether the node existed rather than whether anything ran it.
+      //
+      // Biased toward silence, deliberately: a graph whose entry cannot be identified is reported as
+      // "not readable" rather than as empty, because a wrong warning about a function that does work
+      // costs more than a missed one about a function that does not.
       const graphIsEmpty = (functionName: string): boolean | undefined => {
         const graph = (review.graphNodes ?? []).find((g) => g.graphName === functionName);
         if (!graph) return undefined;
-        const nodes = (graph.nodes ?? []) as Array<{ connectedPins?: Array<{ linkedTo?: unknown[] }> }>;
-        return nodes.every((n) => (n.connectedPins ?? []).every((pin) => (pin.linkedTo ?? []).length === 0));
+        const nodes = (graph.nodes ?? []) as FlowNode[];
+        if (nodes.length === 0) return true;
+        const byId = new Map(nodes.map((n) => [n.id, n]));
+        const entry = nodes.find((n) => /FunctionEntry|K2Node_Event/.test(n.type ?? ""));
+        if (!entry) return undefined;
+        return execTargets(entry, byId).length === 0;
       };
       for (const finding of findEmptyRepNotifies(variables, graphIsEmpty)) {
         findings.push({

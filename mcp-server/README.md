@@ -1923,6 +1923,45 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The same mistake, in three places, found by building one tool
+
+`unreal_call_parent_function` had the bug it was written to fix - it asked whether a
+`K2Node_CallParentFunction` **existed** rather than whether anything ran it. That prompted the
+obvious question: where else does this project confuse presence with effect?
+
+Two more, immediately.
+
+**The finding itself had it, and worse.** `findUncalledParentEvents` scanned `childNodeTitles` -
+every node in the graph, reached or not - so an orphaned `Parent: BeginPlay` suppressed the finding
+entirely. And that is not a corner case, it is *the* case: creating an override event makes the
+editor add the parent call for you, and the next thing to touch the event's exec pin displaces it.
+**The audit stayed quiet about the bug in exactly the situation that produces it.** It scans the
+chains now - what execution reaches - rather than the node list.
+
+Two of its own tests had been passing for that same wrong reason. Both put `"Parent: BeginPlay"` in
+the node-title list and in no chain, then asserted no finding. The fixtures now say what they claim,
+and a third test covers the orphan case explicitly.
+
+**`repnotify-does-nothing` had a milder version.** "Is this function empty" was answered as "is every
+node unconnected", which is closer than counting nodes and still not the question - a wired pair the
+function's entry never reaches does nothing at all and was read as a body. It is reachability from
+the entry now, and a graph whose entry cannot be identified reports "not readable" rather than
+"empty", because a wrong warning about a function that works costs more than a missed one about a
+function that does not.
+
+**What it changed on the real project: nothing.** Both checks were re-run against the 150-Blueprint
+project with the old rule and the new one, by patching the built file and comparing:
+
+```text
+parent-event-not-called   old: 3 (PC_Lobby, PC_Gameplay, PC_MainMenu)   new: 3, same three
+repnotify-does-nothing    old: 21                                       new: 21
+```
+
+That is the honest result and it is worth stating plainly rather than quietly shipping a "fix" with a
+number attached to it. The old rule was wrong; this project does not happen to contain the graph that
+proves it. The trial does - `npm run trial:parent-call` builds exactly that graph, because the editor
+builds it for you if you are not careful.
+
 ### And the fix tool had the same bug it was written to fix
 
 The trial for it - plant the defect, fix it, check the chain - failed on the first run, and what it
