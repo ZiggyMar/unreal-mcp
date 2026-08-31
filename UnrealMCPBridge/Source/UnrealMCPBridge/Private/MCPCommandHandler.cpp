@@ -715,6 +715,74 @@ bool FMCPCommandHandler::ResolvePinType(const FString& TypeStr, FEdGraphPinType&
 	// The suffix is stripped and the rest resolved as normal, so every element type works for free
 	// and always will, including ones added later.
 	FString Bare = TypeStr.TrimStartAndEnd();
+
+	// Maps, which this bridge could REPORT and never create.
+	//
+	// A TMap needs two types, so it does not fit the suffix shape the other containers use - and a
+	// score keyed by player name, a cooldown per ability, a count per item are ordinary Blueprint
+	// state. Until this existed the answer to "keyed by" was two parallel arrays, which is the bug
+	// this project exists to stop a model from writing.
+	//
+	// Spelled as a person says it, and resolved recursively, so every key and value type works for
+	// free - including ones added later.
+	if (Bare.StartsWith(TEXT("map<")) && Bare.EndsWith(TEXT(">")))
+	{
+		const FString Inner = Bare.Mid(4, Bare.Len() - 5);
+		int32 Split = INDEX_NONE;
+		int32 Depth = 0;
+		for (int32 i = 0; i < Inner.Len(); ++i)
+		{
+			if (Inner[i] == TEXT('<')) { ++Depth; }
+			else if (Inner[i] == TEXT('>')) { --Depth; }
+			else if (Inner[i] == TEXT(',') && Depth == 0) { Split = i; break; }
+		}
+		if (Split == INDEX_NONE)
+		{
+			OutError = TEXT("bad_type: a map needs a key and a value, e.g. \"map<name,int>\" or \"map<name,object:Actor>\".");
+			return false;
+		}
+
+		const FString KeyStr = Inner.Left(Split).TrimStartAndEnd();
+		const FString ValueStr = Inner.Mid(Split + 1).TrimStartAndEnd();
+
+		FEdGraphPinType ValueType;
+		if (!ResolvePinType(ValueStr, ValueType, OutError))
+		{
+			return false;
+		}
+		if (!ResolvePinType(KeyStr, OutType, OutError))
+		{
+			return false;
+		}
+		if (OutType.ContainerType != EPinContainerType::None || ValueType.ContainerType != EPinContainerType::None)
+		{
+			OutError = TEXT("bad_type: a map key or value cannot itself be an array, set or map. Blueprint does not allow it.");
+			return false;
+		}
+		// Asked of the engine rather than hard-coded. A key with no hash - a vector, a text, a struct
+		// without GetTypeHash - produces a map the editor cannot use, and refusing here with the
+		// reason beats creating a variable that looks right and is not.
+		if (!FBlueprintEditorUtils::HasGetTypeHash(OutType))
+		{
+			OutError = FString::Printf(
+				TEXT("bad_type: \"%s\" cannot be a map key because it has no hash. Blueprint allows int, name, ")
+				TEXT("string, enums and object references as keys, among others; vectors, texts and structs ")
+				TEXT("without GetTypeHash are not among them."),
+				*KeyStr);
+			return false;
+		}
+
+		OutType.ContainerType = EPinContainerType::Map;
+		// Built by hand rather than through a helper: FEdGraphPinType has no GetPrimaryTerminalType,
+		// which the compiler said when this was written the obvious way. Three fields, explicit.
+		FEdGraphTerminalType Terminal;
+		Terminal.TerminalCategory = ValueType.PinCategory;
+		Terminal.TerminalSubCategory = ValueType.PinSubCategory;
+		Terminal.TerminalSubCategoryObject = ValueType.PinSubCategoryObject;
+		OutType.PinValueType = Terminal;
+		return true;
+	}
+
 	if (Bare.EndsWith(TEXT("[]")))
 	{
 		OutType.ContainerType = EPinContainerType::Array;
@@ -3171,6 +3239,27 @@ static void MCPSampleWatches()
  *
  * Absent means one value. "array", "set" and "map" mean what they say.
  */
+/**
+ * The value half of a TMap.
+ *
+ * `container: "map"` says a variable is keyed, and never said what it maps to - so a
+ * map<name,int> and a map<name,Actor> read back identically, and a model deciding how to use one
+ * had nothing to go on. The same silence-means-two-things bug the container field itself was
+ * written to fix, one level down.
+ */
+static void MCPAddMapValueType(const TSharedRef<FJsonObject>& Entry, const FEdGraphPinType& PinType)
+{
+	if (PinType.ContainerType != EPinContainerType::Map)
+	{
+		return;
+	}
+	Entry->SetStringField(TEXT("valueType"), PinType.PinValueType.TerminalCategory.ToString());
+	if (PinType.PinValueType.TerminalSubCategoryObject.IsValid())
+	{
+		Entry->SetStringField(TEXT("valueSubType"), PinType.PinValueType.TerminalSubCategoryObject->GetName());
+	}
+}
+
 static const TCHAR* MCPContainerName(EPinContainerType ContainerType)
 {
 	switch (ContainerType)
@@ -5452,6 +5541,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 		{
 			Entry->SetStringField(TEXT("container"), Container);
 		}
+		MCPAddMapValueType(Entry, Desc.VarType);
 		bool bReportedDefault = false;
 		if (DefaultObject)
 		{
@@ -7749,6 +7839,7 @@ static TArray<TSharedPtr<FJsonValue>> DescribeStructFields(UUserDefinedStruct* S
 		{
 			Entry->SetStringField(TEXT("container"), Container);
 		}
+		MCPAddMapValueType(Entry, PinType);
 		if (!Desc.DefaultValue.IsEmpty())
 		{
 			Entry->SetStringField(TEXT("defaultValue"), Desc.DefaultValue);

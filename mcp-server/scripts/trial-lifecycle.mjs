@@ -181,6 +181,39 @@ try {
   }
   // ---------------------------------------------------------------------------------------------
   console.log("");
+  console.log("keyed state: a map variable, written and read back");
+  // add_variable is not one of the dark commands - this runs today. It is here because the map
+  // spelling is new, and because the consequence worth checking is the read side: a map that reads
+  // back without its value type is the bug this was written to fix.
+  const madeMap = await call("unreal_add_variable", { path: BP, variableName: "ScoreByPlayer", type: "map<name,int>" });
+  // "The plugin has never heard of this TYPE" is not the same as "maps are broken", and they must
+  // not share an outcome. add_variable is an old command, so the unknown_cmd path above does not
+  // catch this: an out-of-date binary accepts the call and rejects the spelling. Reporting that as
+  // a failure would make this trial cry wolf every run until the rebuild, which is how a red check
+  // becomes something people stop reading.
+  if (/unknown_type/.test(madeMap.body)) {
+    if (!cannotRun.includes("add_variable map<>")) cannotRun.push("add_variable map<>");
+    skipped("map variables", "the plugin has never heard of the map<> spelling");
+  } else {
+    check("a map variable is created", madeMap.ok, madeMap.body.slice(0, 90));
+
+    const mapVars = await call("unreal_list_variables", { path: BP });
+    const theMap = (mapVars.json?.variables ?? []).find((v) => v.name === "ScoreByPlayer");
+    check("it reads back as a map", theMap?.container === "map", `container: ${theMap?.container}`);
+    check(
+      "and says what it maps to",
+      theMap?.valueType === "int",
+      `valueType: ${theMap?.valueType ?? "(absent - a map that will not say what it holds)"}`
+    );
+
+    // A key with no hash must be refused rather than made. An unusable map that reports success is
+    // worse than an error, and the engine is the one that knows which keys hash.
+    const badKey = await call("unreal_add_variable", { path: BP, variableName: "ByPosition", type: "map<vector,int>" });
+    check("a key with no hash is refused, with the reason", /bad_type|hash/i.test(badKey.body), badKey.body.slice(0, 90));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  console.log("");
   console.log("an asset of a type with no dedicated tool");
   const IA = `${SCRATCH_ROOT}/IA_Life${stamp}`;
   const madeAsset = await call("unreal_create_asset", { path: IA, assetClass: "InputAction" });

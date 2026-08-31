@@ -1591,8 +1591,14 @@ register(
     title: "Add a member variable to a Blueprint",
     description:
       "Adds a new member variable to a Blueprint. type is a compact type descriptor: bool, byte, int, int64, float, " +
-      "double, string, name, text, vector, rotator, transform, or object:<ClassName> / class:<ClassName> for object " +
-      "references. Fails if a variable with that name already exists on this Blueprint.",
+      "double, string, name, text, vector, rotator, transform; object:<ClassName> or class:<ClassName> for object " +
+      "and class references; struct:<Name> and enum:<Name> for your own types.\n\n" +
+      "Containers, which most real Blueprint state is: append \"[]\" for an array (\"name[]\", \"object:Actor[]\"), " +
+      "append \"<set>\" for a set of unique values (\"name<set>\"), or write map<key,value> for a keyed table " +
+      "(\"map<name,int>\" for a score per player, \"map<name,object:Actor>\"). Two parallel arrays is the shape " +
+      "this replaces. A map key must be hashable - int, name, string, enum and object references are; vector, text " +
+      "and hashless structs are refused with the reason.\n\n" +
+      "Fails if a variable with that name already exists on this Blueprint.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       variableName: z.string().describe("New variable name."),

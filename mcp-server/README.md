@@ -188,10 +188,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2292 | four tools; hand it a sentence or a preset name |
-| `minimal` | 4008 | ten tools, fixed, for a small local model |
-| `core` | 12651 | the authoring spine |
-| `lazy` | 12664 | `core` plus deferred groups |
-| `full` | 39153 | everything, for a model that can afford it |
+| `minimal` | 4143 | ten tools, fixed, for a small local model |
+| `core` | 12785 | the authoring spine |
+| `lazy` | 12798 | `core` plus deferred groups |
+| `full` | 39288 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6008,6 +6008,41 @@ that uses Enhanced Input they compile perfectly and then never fire — no error
 just does nothing. The description now says so, and says how to tell the two kinds of project apart
 (`list_assets className=InputMappingContext`), because this is the failure mode that costs the most
 time: everything looks right.
+
+### Keyed state, and a container nobody could ask for
+
+Sweeping the same way as the node types — every place the C++ switches on a string a model has to
+spell correctly — turned up the `type` descriptor, the second-widest surface in the project. Two
+things were wrong with it.
+
+**A container that existed and could not be requested.** `ResolvePinType` accepts `<set>`, and the
+string appeared **nowhere** in anything a model reads. This server ships instructions saying *"never
+guess a name; a guess costs a failed call"* and then left models guessing about containers.
+
+**Maps could be read and not written.** The bridge could *report* `container: "map"` on an existing
+variable and had no way to create one. So "a score keyed by player name" — ordinary Blueprint state —
+had no answer but two parallel arrays, which is precisely the shape this project exists to stop a
+model from writing. `map<name,int>` and `map<name,object:Actor>` now work, resolved recursively so
+every key and value type works for free.
+
+Two refusals come with it, both asked of the engine rather than hard-coded: a key with no hash
+(`FBlueprintEditorUtils::HasGetTypeHash`) is refused with the reason, because a vector-keyed map is
+one the editor cannot use; and a nested container is refused, because Blueprint does not allow it.
+
+**And a map read back never said what it mapped to.** `container: "map"` was the whole answer, so a
+`map<name,int>` and a `map<name,Actor>` were indistinguishable to the model deciding how to use one.
+The reads now carry `valueType` and `valueSubType` — the same silence-means-two-things bug the
+`container` field itself was written to fix, one level further down.
+
+`check:types` guards the direction that can be silent: a form the bridge accepts that no description
+names. The reverse — prose naming a form the C++ rejects — announces itself immediately with a
+`bad_type` error, so it does not need automating. Four spellings are listed as deliberately untaught
+(`boolean`, `int32`, `integer`, `real`): a model needs one way to say a thing, and teaching synonyms
+costs tokens in every profile. The guard also fails if one of *those* notes outlives the alias it
+describes.
+
+The grammar text costs 135 standing tokens. `minimal`, the profile built for a 14B at 8k, went 4,008
+to 4,143 against a 5,000 ceiling — worth it for the containers most real state is made of.
 
 ### The numbers a model reads are guarded too
 
