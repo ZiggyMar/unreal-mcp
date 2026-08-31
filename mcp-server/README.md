@@ -4889,6 +4889,34 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### Neither did the one text every model reads
+
+The guide has to be *fetched*. The server instructions do not — they are the standing context every
+model holds before its first call, and on the `search` profile they are the only thing it has besides
+four tool names. They taught presets, group pricing, and `enable_tools`. They never mentioned that
+`unreal_list_tools` will take the user's sentence.
+
+So the routing was invisible in both places a model could have learned about it. Fixed in the more
+important one for **+87 tokens** on `search` (2,205 → 2,292), with the detail left in the guide rather
+than repeated here:
+
+```text
+OR JUST HAND OVER WHAT THE USER SAID, if you have their words and no plan yet:
+  unreal_list_tools({ match: "upgrades aren't showing up in the shop" })
+It reads the sentence when no tool name matches, tells a bug from a feature from a change, and
+names the words it matched so you can judge the answer. unreal_guide topic:"workflow" has the rest.
+```
+
+**An example in the standing instructions is the first thing a model tries**, so one that returns
+nothing teaches it the mechanism does not work. `check:protocol` now extracts the calls the
+instructions show and *runs* them, rather than checking that the text mentions them.
+
+That guard was written wrong first, in the way this repo keeps finding. `startServer()` defaults to
+`full`, whose instructions contain no such example — so the regex matched zero calls and the check
+passed **without doing anything**. It now reads the `search` profile where the example lives, and
+treats finding *no* example as a failure, because vacuity is the one result that must never look like
+success. Verified by pointing the example at a phrase that matches nothing and watching it fail.
+
 ### The guide never mentioned the way in
 
 `unreal_guide` serves three documents — the Blueprint handbook, the recipes, the agent workflow — and

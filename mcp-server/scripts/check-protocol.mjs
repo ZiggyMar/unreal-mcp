@@ -319,6 +319,50 @@ async function main() {
     }
   }
 
+  // --- the examples in the standing instructions actually work -----------------------------------
+  //
+  // The instructions are the one text every model reads before any call, and they now contain a
+  // worked example: unreal_list_tools({ match: "upgrades aren't showing up in the shop" }). An
+  // example that returns nothing is worse than no example - it is the first thing a model tries, and
+  // failing there teaches it that the mechanism does not work.
+  //
+  // Against the `search` profile, not this one. The example lives in the search block, so reading
+  // `full`'s instructions finds zero examples and the whole check passes without doing anything -
+  // which is what the first version of it did.
+  const searchServer = startServer("search");
+  const searchInit = await searchServer.request("initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "protocol-check", version: "1" },
+  });
+  const instructions = searchInit.result?.instructions ?? "";
+  const examples = [...instructions.matchAll(/(unreal_[a-z_]+)\(\{\s*match:\s*"([^"]+)"\s*\}\)/g)];
+  for (const [, toolName, arg] of examples) {
+    const shown = await searchServer.request("tools/call", { name: toolName, arguments: { match: arg } });
+    const text = shown.result?.content?.[0]?.text ?? shown.error?.message ?? "";
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      note(`the instructions show ${toolName}({match: "${arg}"}) and it did not return JSON: ${text.slice(0, 90)}`);
+      continue;
+    }
+    const answered = (body.suggested ?? body.tools ?? []).length > 0;
+    if (!answered) {
+      note(
+        `the instructions show ${toolName}({match: "${arg}"}) as the way in, and it answers with nothing - ` +
+          `the first thing a model tries teaches it the mechanism does not work`
+      );
+    }
+  }
+
+  // Vacuity is a failure here, not a pass: this check exists because the instructions carry a worked
+  // example, and finding none means either the example was removed or this stopped looking.
+  if (examples.length === 0) {
+    note("the search profile's instructions contain no worked example to verify - either it was removed, or this check has stopped finding it");
+  }
+  searchServer.child.kill();
+
   // --- a command the plugin has never heard of explains itself ------------------------------------
   //
   // The plugin answers `unknown_cmd: run_console_command` and stops, which is all it can say. On the

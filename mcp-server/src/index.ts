@@ -185,6 +185,14 @@ function buildInstructions(profile: string): string {
       `One preset beats the core group (~${Math.round(GROUP_COST_TOKENS.core / 100) / 10}k). Two is roughly a wash; if the job genuinely spans three`,
       "or more, enable core instead. Whole groups and exact tool names also work, and unreal_list_tools",
       "prices every group without paying for its schemas.",
+      "",
+      // The routing exists, is measured, and was findable only by a model that already knew about
+      // it: the guide had to be fetched and this text - the one thing every model reads before any
+      // call - described list_tools as a way to price groups and nothing else.
+      "OR JUST HAND OVER WHAT THE USER SAID, if you have their words and no plan yet:",
+      "  unreal_list_tools({ match: \"upgrades aren't showing up in the shop\" })",
+      "It reads the sentence when no tool name matches, tells a bug from a feature from a change, and",
+      "names the words it matched so you can judge the answer. unreal_guide topic:\"workflow\" has the rest.",
       ""
     );
   }
