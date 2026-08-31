@@ -3643,6 +3643,14 @@ register(
       path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
       limit: z.number().optional().describe("Rows to return. Defaults to 25, capped at 500."),
       offset: z.number().optional().describe("Rows to skip, for paging through a large table."),
+      rowName: z
+        .string()
+        .optional()
+        .describe(
+          'One row, by name - e.g. "WeaponDmg". The row comes back in full, including fields at their ' +
+            "default, because somebody asking for one row by name is usually about to change it. Case " +
+            "insensitive, and a name that matches nothing lists the ones that exist."
+        ),
       full: z
         .boolean()
         .optional()
@@ -3653,14 +3661,44 @@ register(
         ),
     },
   },
-  async ({ path, limit, offset, full }) => {
+  async ({ path, limit, offset, full, rowName }) => {
     try {
+      // Asking for one row by name is a different job from listing a table, and it was not possible:
+      // the only read was paged, so "what is WeaponDmg's price" meant 7,040 tokens of paging to find
+      // one row. There is no bridge command for it, and there does not need to be - the filter is
+      // free here, and this works against a plugin that predates this change.
+      //
+      // Two things follow from it being a TARGETED read, both the rule established for
+      // read_class_defaults: fetch past the default page so the row cannot be missed by paging, and
+      // return it in full, because whoever asked by name is usually about to change it and a field
+      // omitted for being at its default is the field they are asking about.
+      const wantedRow = (rowName ?? "").trim();
       const table = (await bridge.send("list_data_table_rows", {
         path,
-        limit,
-        offset,
-        omitDefaults: full !== true,
-      })) as { rows?: unknown[] };
+        limit: wantedRow ? 5000 : limit,
+        offset: wantedRow ? 0 : offset,
+        omitDefaults: wantedRow ? false : full !== true,
+      })) as { rows?: Array<{ rowName?: string }>; rowCount?: number };
+
+      if (wantedRow) {
+        const rows = Array.isArray(table.rows) ? table.rows : [];
+        const found = rows.filter((r) => String(r.rowName ?? "").toLowerCase() === wantedRow.toLowerCase());
+        if (found.length === 0) {
+          const names = rows.map((r) => String(r.rowName ?? "")).filter(Boolean);
+          return jsonResult({
+            path,
+            error: "row_not_found",
+            detail:
+              `No row called "${wantedRow}" in this table. Row names are case insensitive here but exact ` +
+              `otherwise - no partial matching.`,
+            // The names, not a count. "12 rows exist" tells a caller nothing they can act on, and the
+            // whole reason they are here is that they do not know what the row is called.
+            ...(names.length > 0 && names.length <= 60 ? { rowNames: names } : {}),
+            ...(names.length > 60 ? { rowCount: names.length, next: "Too many rows to list; page with limit and offset." } : {}),
+          });
+        }
+        return jsonResult({ ...table, rows: found, rowCount: table.rowCount ?? rows.length, matched: wantedRow });
+      }
 
       // The largest read in the whole surface, and the one where row COUNT says nothing about cost.
       // DT_UniversalActions is nine rows and 6,985 tokens, because a single untouched FSlateBrush

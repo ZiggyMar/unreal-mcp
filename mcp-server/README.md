@@ -1924,6 +1924,42 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### There was no way to read one Data Table row
+
+Following the change-request thread into Data Tables - one of the three jobs named in this project's
+brief - the read side had a hole. `list_data_table_rows` pages; there is no bridge command for a
+single row; so *"what is WeaponDmg's price"* meant paging a table to find it:
+
+```text
+DT_UniversalActions, whole table   7,040 tok
+DT_UniversalActions, one row         933 tok
+DT_UpgradesOld,      whole table   1,117 tok
+DT_UpgradesOld,      one row         269 tok
+```
+
+`rowName` does it, and **no plugin change was needed** - the filter is free on this side, so it works
+against an editor whose plugin predates it.
+
+Two things follow from it being a *targeted* read, and both are the rule the previous commit
+established. It **pages past the default page** first, or a row that happens to be number 400 of 900
+is reported missing. And it returns the row **in full**, defaults included, because a field omitted
+for being at its default is exactly the field somebody asking for one row by name is about to change.
+
+A name that matches nothing lists the names that exist:
+
+```json
+{"error": "row_not_found",
+ "rowNames": ["WeaponDmg", "VacuumStorage", "Healing", "MaxHealth", "MaxHealthSquad"]}
+```
+
+Not a count. The reason a caller is here is that they do not know what the row is called, and "12
+rows exist" is nothing they can act on.
+
+The test for it failed twice for its own reasons before it tested anything - once slicing from the
+first *mention* of the tool name, which is in a group list far from the handler, and once on a string
+literal with a newline in it. Source-text tests are brittle exactly there, and it is worth saying so
+next to one rather than pretending it read cleanly.
+
 ### The change-request leg, and a compaction that answered the wrong question
 
 Third leg, same method: *"make the countdown 5 seconds instead of 10"*. `search_project` found

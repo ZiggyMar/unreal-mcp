@@ -475,3 +475,35 @@ test("an expensive read tells you how to ask for less, and a cheap one does not"
   );
   assert.ok(bySize > 0, "the read whose cost is unrelated to row count must be gated on size");
 });
+
+test("one data table row can be read by name, in full, without paging to it", () => {
+  // There was no way to read one row. The only read was paged, so "what is WeaponDmg's price" meant
+  // paging a table that costs 7,040 tokens to find one row that costs 933. A change request against
+  // a Data Table - one of the three jobs this server exists for - started with that.
+  //
+  // No bridge command was needed: the filter is free on this side, so it works against a plugin that
+  // predates it. This checks the SHAPE of the rule from the handler's own source, which is what a
+  // test can do without an editor.
+  const source = readFileSync(join(REPO_ROOT, "mcp-server/src/index.ts"), "utf8").replace(/\r\n/g, "\n");
+  // Anchored on the REGISTRATION, not the first mention. The tool name also appears in a group list
+  // near the top of the file, and slicing from there covers a region that has nothing to do with the
+  // handler - which is how the first version of this test failed, for its own reason rather than the
+  // code's. Source-text tests are brittle exactly here.
+  const NEEDLE = `register(\n  "unreal_list_data_table_rows"`;
+  const start = source.indexOf(NEEDLE);
+  assert.ok(start > 0, "could not find the list_data_table_rows registration");
+  const end = source.indexOf(`\nregister(`, start + 10);
+  const handler = source.slice(start, end > start ? end : undefined);
+
+  assert.match(handler, /rowName/, "the tool must take a row name");
+
+  // Both halves of the targeted rule, and both matter. Paging past the default page, or the row is
+  // missed for being row 400 of 900. And full fidelity, because a field omitted for being at its
+  // default is exactly the field somebody asking by name is about to change.
+  assert.match(handler, /wantedRow \? 5000 : limit/, "a targeted read must not be limited to one page");
+  assert.match(handler, /omitDefaults: wantedRow \? false/, "a targeted read must not omit defaults");
+
+  // A miss lists the names rather than a count. The whole reason a caller is here is that they do
+  // not know what the row is called.
+  assert.match(handler, /rowNames/, "a name that matches nothing must say which names exist");
+});
