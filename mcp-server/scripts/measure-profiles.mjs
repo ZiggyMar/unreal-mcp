@@ -82,10 +82,37 @@ export const PROFILES = [
     // 34,000 is 17% of a 200k window, for the profile whose whole premise is "everything, for a
     // model that can afford it". Anything that cannot afford it has `search` and the presets, which
     // is where the real work on this went.
-    ceilingTokens: 34_000,
+    // Raised a second time, to 36,000, and for the first time NOT on the strength of the per-tool
+    // average alone - that argument is now enforced by PER_TOOL_CEILING above rather than restated
+    // here. Between the two raises `full` gained live runtime observation, variable replication,
+    // Niagara, Behavior Trees, Animation Blueprints, C++ compilation and Data Assets, and the
+    // average went 320 -> 330 -> 335. The surface grew because the tool can do more.
+    //
+    // What is being protected has not changed: 36,000 is 18% of a 200k window, for the profile whose
+    // entire premise is "everything, for a model that can afford it". Nothing that cannot afford it
+    // should be loading this - `search` costs 2,373 and the presets 4-10k, which is where the real
+    // work went, and all four of those profiles have comfortable headroom.
+    ceilingTokens: 36_000,
     why: "everything, for frontier models that can afford it",
   },
 ];
+
+/**
+ * What one tool is allowed to cost, on average, in any profile.
+ *
+ * This is the number that distinguishes the two things a rising total can mean, and until now it was
+ * printed and never checked. A total that grows because six new capabilities arrived is the tool
+ * getting better; a total that grows because descriptions are drifting long is the tool getting
+ * worse, and only the per-tool average tells them apart. `full`'s own ceiling comment has said so
+ * since it was last raised - "the number that says whether descriptions are bloating is the per-tool
+ * average, and it is flat" - while the assertion underneath it went on gating the total.
+ *
+ * 420 against a spread of 335-376 today. Close enough to catch a description that doubles, loose
+ * enough that adding a tool with an honest paragraph does not trip it. It is the tighter guard of
+ * the two: a total ceiling can be argued up when real capability arrives, and this one cannot,
+ * because nothing about new capability makes the average tool more expensive.
+ */
+const PER_TOOL_CEILING = 420;
 
 async function measure(profile) {
   const server = await startAndInitialize({ UNREAL_MCP_PROFILE: profile }, "measure-profiles");
@@ -171,10 +198,13 @@ async function main() {
   console.log("  profile   tools   ~tools   ~instrs   standing   per tool   ceiling   ");
   console.log("  --------  ------  -------  --------  ---------  ---------  ----------");
   const problems = [];
+  const bloated = [];
   for (const result of results) {
     const spec = PROFILES.find((p) => p.name === result.profile);
     const over = result.standingTokens > spec.ceilingTokens;
     if (over) problems.push({ ...result, spec });
+    const perTool = Math.round(result.tokens / Math.max(result.toolCount, 1));
+    if (perTool > PER_TOOL_CEILING) bloated.push({ ...result, spec, perTool });
     console.log(
       `  ${result.profile.padEnd(8)}  ${String(result.toolCount).padStart(6)}  ` +
         `${String(result.tokens).padStart(7)}  ${String(result.instructionTokens).padStart(8)}  ` +
@@ -216,6 +246,20 @@ async function main() {
     process.exit(1);
   }
 
+  if (bloated.length > 0) {
+    console.log(NEWLINE + `descriptions are bloating (${bloated.length} profile(s)):`);
+    for (const b of bloated) {
+      console.log(
+        `  - ${b.profile} averages ~${b.perTool} tokens per tool across ${b.toolCount}, over the ${PER_TOOL_CEILING} ceiling.` +
+          NEWLINE +
+          `    This is the one that means the descriptions got worse rather than that the tool got bigger.` +
+          NEWLINE +
+          `    Trim the longest definitions - the list above names them - rather than raising this.`
+      );
+    }
+    process.exit(1);
+  }
+
   if (problems.length > 0) {
     console.log(NEWLINE + `profile budget exceeded (${problems.length}):`);
     for (const p of problems) {
@@ -231,7 +275,7 @@ async function main() {
     }
     process.exit(1);
   }
-  console.log(NEWLINE + `profiles ok: ${results.length} profiles, all within budget, none naming a tool it lacks`);
+  console.log(NEWLINE + `profiles ok: ${results.length} profiles, all within budget, none naming a tool it lacks, none averaging over ${PER_TOOL_CEILING} tokens a tool`);
 }
 
 // Only when this file IS the command. measure-groups imports PROFILES from here so the two guards

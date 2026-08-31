@@ -62,6 +62,7 @@ graph -> drill into one node, instead of ever dumping a whole Blueprint's raw en
 | `unreal_remove_node` | `remove_node` | Remove a node by id, breaking its links first. |
 | `unreal_add_variable` | `add_variable` | Add a member variable (compact type descriptor: `bool`, `int`, `float`, `vector`, `object:<Class>`, ...). |
 | `unreal_set_variable_replication` | `set_variable_replication` | Set an existing variable to `none` / `replicated` / `repnotify`, creating or reusing its `OnRep_` graph. |
+| `unreal_watch_runtime` | `watch_runtime` | Sample variables on live actors during PIE, in every world, labelled by net role. |
 | `unreal_compile_blueprint` | `compile_blueprint` | Compile and return structured errors/warnings. **Run this after every batch of edits** (see below). |
 | `unreal_save_blueprint` | `save_blueprint` | Save the Blueprint's package to disk. |
 
@@ -1667,6 +1668,47 @@ name that matches nothing is refused and the reply lists the kinds this run actu
 answer given for a wrong pin name and a wrong parameter name, and for the same reason: a check name
 is not guessable, and silently returning a summary with every group elided looks identical to "your
 check is real and found nothing", which is a different answer.
+
+### Watching the game run, which is the half nothing here could see
+
+Every other read in this repository answers what a Blueprint **says** it will do. The expensive bugs
+live in the gap between that and what it **does**: a variable that never changes, an actor that never
+spawns, a value the server has and the client does not. None of that is visible in a graph, and all
+of it is obvious in three seconds of a running game.
+
+```text
+unreal_watch_runtime({ action: "start", watch: ["BP_DummyTurret.CurrentHeadYaw"] })
+... let real time pass ...
+unreal_watch_runtime({ action: "read" })
+```
+
+**It samples every PIE world, labelled by net role.** That is the point of it. `server-writes-unreplicated`
+is the most expensive check this project has, and its whole difficulty is that it reads as "it works
+for the host" and cannot be reproduced by one person. With two PIE clients running:
+
+```text
+watch                          role       first  last  changed
+BP_DummyTurret.CurrentHeadYaw  Authority  0.0    47.3  true
+BP_DummyTurret.CurrentHeadYaw  Client0    0.0    0.0   false
+```
+
+That is the bug, observed. Static analysis says the variable is not replicated; this says nobody ever
+received it — and the same two lines prove the fix afterwards.
+
+**It does not block the game thread, and that is not an optimisation.** The bridge runs *on* the game
+thread, so the obvious implementation — read, sleep, read — stops the world ticking and returns forty
+identical samples. Nothing would change because nothing would be running. So sampling is a ticker and
+reading is a separate call: start, let real time pass, read.
+
+**The reply is a verdict, not a table.** Forty samples of a float is forty numbers nobody reads. The
+answer to "does this ever change" is one word, and the distinct values behind it are worth a line;
+returning the raw trajectory would cost more tokens than reading the whole Blueprint. Sampling stops
+itself at `maxSamples`, so a watch nobody stopped costs nothing after the window it was asked for.
+
+One distinction is called out separately in the reply because getting it wrong is expensive:
+**"nothing changed" and "nothing was ever found" look identical in a table of values and mean opposite
+things.** A spec that matched no actor anywhere is reported as `notFound` — a naming problem, not a
+finding about the game.
 
 ### The audit's most expensive finding can now be fixed, not just reported
 

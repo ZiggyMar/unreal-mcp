@@ -411,6 +411,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_set_game_settings",
     "unreal_add_input_mapping",
     "unreal_start_pie",
+    "unreal_watch_runtime",
     "unreal_stop_pie",
     "unreal_pie_status",
     "unreal_screenshot",
@@ -2478,6 +2479,41 @@ register(
     try {
       const result = await bridge.send("pie_status", {});
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_watch_runtime",
+  {
+    title: "Watch values change while the game runs",
+    description:
+      "Samples variables on live actors during Play-In-Editor, in every running world, labelled by net role. " +
+      "Every other read here answers what a Blueprint SAYS it does; this answers what it DID. " +
+      "\"Authority: 0 -> 47, Client0: 0 -> 0\" is a replication bug observed rather than argued, which is the one " +
+      "class of bug that cannot be reproduced by one person. " +
+      "Call with action \"start\", let real time pass (do other work, or make another call), then \"read\". " +
+      "Sampling runs on the editor tick, so a read issued immediately after a start has nothing to report.",
+    inputSchema: {
+      action: z
+        .enum(["start", "read", "stop"])
+        .describe('"start" begins sampling, "read" returns what changed so far, "stop" ends it.'),
+      watch: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'For "start": what to sample, as "ClassName.PropertyName" - e.g. ["BP_DummyTurret.CurrentHeadYaw"]. ' +
+            "The class is the Blueprint's name without _C, and derived classes match too."
+        ),
+      intervalMs: z.number().optional().describe("Sampling interval. Default 250, minimum 30."),
+      maxSamples: z.number().optional().describe("Stop after this many samples. Default 40, so a forgotten watch costs nothing."),
+    },
+  },
+  async ({ action, watch, intervalMs, maxSamples }) => {
+    try {
+      return jsonResult(await bridge.send("watch_runtime", { action, watch, intervalMs, maxSamples }));
     } catch (err) {
       return errorResult(err);
     }

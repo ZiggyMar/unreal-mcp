@@ -98,6 +98,7 @@
 #include "SceneTypes.h"
 #include "Engine/Texture.h"
 #include "EngineUtils.h"
+#include "Containers/Ticker.h"
 #include "Editor/Transactor.h"
 #include "SourceControlHelpers.h"
 #include "HAL/FileManager.h"
@@ -1073,6 +1074,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	else if (Cmd == TEXT("stop_pie"))
 	{
 		Response = HandleStopPie(Params);
+	}
+	else if (Cmd == TEXT("watch_runtime"))
+	{
+		Response = HandleWatchRuntime(Params);
 	}
 	else if (Cmd == TEXT("pie_status"))
 	{
@@ -2739,6 +2744,435 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddVariable(const TSharedPtr<F
  * from C++ lives somewhere else, and silently doing nothing would be the worst available answer, so
  * both cases are named rather than reported as "not found".
  */
+/**
+ * Watch values change while the game is actually running.
+ *
+ * Everything else here reads assets: what a Blueprint SAYS it will do. This reads what it DOES. The
+ * gap between the two is where the expensive bugs live - a variable that never changes, a value the
+ * server has and the client does not, an actor that never spawns. None of that is visible in a
+ * graph, and all of it is obvious in three seconds of a running game.
+ *
+ * Two things make it worth building rather than telling somebody to press Play.
+ *
+ * FIRST, IT SAMPLES EVERY PIE WORLD, LABELLED BY NET ROLE. The most expensive bug class this project
+ * finds - a server writing state that never reaches clients - reads as "it works for the host" and
+ * cannot be reproduced by one person. With two PIE clients running, "Authority: 0 -> 47, Client: 0 ->
+ * 0" is the entire bug, observed rather than argued. Static analysis says that variable is not
+ * replicated; this says nobody ever received it.
+ *
+ * SECOND, IT DOES NOT BLOCK THE GAME THREAD. The obvious implementation - loop, read, sleep, read -
+ * is worse than useless: the bridge runs ON the game thread, so sleeping stops the world ticking and
+ * every sample comes back identical. Nothing would change because nothing would be running. So the
+ * sampling is a ticker and the reads are separate calls: start, let real time pass, read.
+ *
+ * The reply is a verdict, not a table. Forty samples of a float is forty numbers nobody reads; the
+ * answer to "does this ever change" is one word, and the distinct values behind it are worth about a
+ * line. Reporting the raw trajectory would cost more tokens than reading the whole Blueprint.
+ */
+
+/** One thing being watched: a class to find, and a property to read off it. */
+struct FMCPWatchSpec
+{
+	FString ClassName;
+	FString PropertyName;
+	/** As the caller wrote it, so the reply names it back the same way. */
+	FString Raw;
+};
+
+/** What one watch has been seen to hold, in one PIE world. */
+struct FMCPWatchSeries
+{
+	FString First;
+	FString Last;
+	TArray<FString> Distinct;
+	int32 Samples = 0;
+	int32 ActorsSeen = 0;
+};
+
+struct FMCPWatchState
+{
+	TArray<FMCPWatchSpec> Specs;
+	/** "role|spec" -> what that spec did in that role's world. */
+	TMap<FString, FMCPWatchSeries> Series;
+	FTSTicker::FDelegateHandle Ticker;
+	double StartedAt = 0.0;
+	int32 Ticks = 0;
+	int32 MaxSamples = 40;
+	bool bPieEnded = false;
+	/** Specs that matched no actor anywhere, so "nothing changed" is not mistaken for "it is broken". */
+	TSet<FString> NeverFound;
+};
+
+static FMCPWatchState GMCPWatch;
+
+/**
+ * The net role of a world, as the words a person uses for it.
+ *
+ * This is the label the whole tool turns on, so it says Authority/Client rather than the enum names:
+ * "the client never got it" is the sentence somebody is trying to write.
+ */
+static FString MCPWorldRoleName(const UWorld* World, int32 Index)
+{
+	if (!World)
+	{
+		return TEXT("unknown");
+	}
+	switch (World->GetNetMode())
+	{
+		case NM_DedicatedServer: return TEXT("DedicatedServer");
+		case NM_ListenServer:    return TEXT("Authority");
+		case NM_Client:          return FString::Printf(TEXT("Client%d"), Index);
+		case NM_Standalone:      return TEXT("Standalone");
+		default:                 return TEXT("unknown");
+	}
+}
+
+/** Read one property off one object as text, or empty if it has no such property. */
+static bool MCPReadPropertyText(UObject* Object, const FString& PropertyName, FString& OutValue)
+{
+	if (!Object)
+	{
+		return false;
+	}
+	FProperty* Property = Object->GetClass()->FindPropertyByName(FName(*PropertyName));
+	if (!Property)
+	{
+		return false;
+	}
+	const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Object);
+	Property->ExportTextItem_Direct(OutValue, ValuePtr, nullptr, Object, PPF_None);
+	return true;
+}
+
+/**
+ * Does this actor's class match what the caller asked for?
+ *
+ * Blueprint classes are generated with a _C suffix that nobody types, and a caller naturally writes
+ * the parent's name to mean "and everything derived from it". Both are accepted, and so is the
+ * suffixed form, because a caller who copied the name out of an earlier reply has the _C.
+ */
+static bool MCPActorClassMatches(const AActor* Actor, const FString& Wanted)
+{
+	if (!Actor)
+	{
+		return false;
+	}
+	for (const UClass* Class = Actor->GetClass(); Class; Class = Class->GetSuperClass())
+	{
+		FString Name = Class->GetName();
+		if (Name == Wanted)
+		{
+			return true;
+		}
+		Name.RemoveFromEnd(TEXT("_C"));
+		if (Name == Wanted)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+/** One pass over every running PIE world, recording what each watch currently reads. */
+static void MCPSampleWatches()
+{
+	if (!GEditor)
+	{
+		return;
+	}
+
+	int32 ClientIndex = 0;
+	bool bAnyWorld = false;
+	for (const FWorldContext& Context : GEditor->GetWorldContexts())
+	{
+		if (Context.WorldType != EWorldType::PIE || !Context.World())
+		{
+			continue;
+		}
+		UWorld* World = Context.World();
+		bAnyWorld = true;
+		const FString Role = MCPWorldRoleName(World, ClientIndex);
+		if (World->GetNetMode() == NM_Client)
+		{
+			++ClientIndex;
+		}
+
+		for (const FMCPWatchSpec& Spec : GMCPWatch.Specs)
+		{
+			const FString Key = FString::Printf(TEXT("%s|%s"), *Role, *Spec.Raw);
+			FMCPWatchSeries& Series = GMCPWatch.Series.FindOrAdd(Key);
+
+			int32 Found = 0;
+			FString Value;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				AActor* Actor = *It;
+				if (!MCPActorClassMatches(Actor, Spec.ClassName))
+				{
+					continue;
+				}
+				FString ThisValue;
+				if (!MCPReadPropertyText(Actor, Spec.PropertyName, ThisValue))
+				{
+					continue;
+				}
+				++Found;
+				// With several matching actors the first one read is the sample. Reporting every
+				// actor separately would turn one question into fifty answers; the count is carried
+				// instead, so a caller can see there were fifty and ask about one.
+				if (Found == 1)
+				{
+					Value = ThisValue;
+				}
+			}
+
+			Series.ActorsSeen = FMath::Max(Series.ActorsSeen, Found);
+			if (Found == 0)
+			{
+				continue;
+			}
+
+			++Series.Samples;
+			if (Series.Distinct.Num() == 0)
+			{
+				Series.First = Value;
+			}
+			Series.Last = Value;
+			// Capped: a float that changes every frame would otherwise collect forty entries and
+			// bury the answer, which is that it changes.
+			if (!Series.Distinct.Contains(Value) && Series.Distinct.Num() < 8)
+			{
+				Series.Distinct.Add(Value);
+			}
+		}
+	}
+
+	if (!bAnyWorld)
+	{
+		GMCPWatch.bPieEnded = true;
+	}
+	++GMCPWatch.Ticks;
+}
+
+/** Stop sampling, if it is running. Safe to call when it is not. */
+static void MCPStopWatching()
+{
+	if (GMCPWatch.Ticker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(GMCPWatch.Ticker);
+		GMCPWatch.Ticker.Reset();
+	}
+}
+
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleWatchRuntime(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Action = TEXT("read");
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("action"), Action);
+	}
+	Action = Action.ToLower();
+
+	if (Action == TEXT("stop"))
+	{
+		MCPStopWatching();
+		TSharedRef<FJsonObject> Stopped = MakeShared<FJsonObject>();
+		Stopped->SetBoolField(TEXT("watching"), false);
+		Stopped->SetNumberField(TEXT("samplesTaken"), GMCPWatch.Ticks);
+		GMCPWatch.Specs.Empty();
+		GMCPWatch.Series.Empty();
+		return MakeOkResponse(Stopped);
+	}
+
+	if (Action == TEXT("start"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* WatchList = nullptr;
+		if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("watch"), WatchList) || WatchList->Num() == 0)
+		{
+			return MakeErrorResponse(
+				TEXT("missing_param: watch is required for action \"start\" - a list of \"ClassName.PropertyName\", ")
+				TEXT("e.g. [\"BP_DummyTurret.CurrentHeadYaw\"]."));
+		}
+
+		MCPStopWatching();
+		GMCPWatch = FMCPWatchState();
+
+		for (const TSharedPtr<FJsonValue>& Entry : *WatchList)
+		{
+			FString Raw;
+			if (!Entry.IsValid() || !Entry->TryGetString(Raw) || Raw.IsEmpty())
+			{
+				continue;
+			}
+			FString ClassName, PropertyName;
+			// Split on the LAST dot: a property name has no dots, and this leaves any path in the
+			// class part alone rather than mangling it.
+			if (!Raw.Split(TEXT("."), &ClassName, &PropertyName, ESearchCase::CaseSensitive, ESearchDir::FromEnd) ||
+				ClassName.IsEmpty() || PropertyName.IsEmpty())
+			{
+				return MakeErrorResponse(FString::Printf(
+					TEXT("bad_param: \"%s\" is not \"ClassName.PropertyName\". The class is the Blueprint's name ")
+					TEXT("without _C, the property is a variable on it - \"BP_Player.Health\"."), *Raw));
+			}
+			FMCPWatchSpec Spec;
+			Spec.Raw = Raw;
+			Spec.ClassName = ClassName;
+			Spec.PropertyName = PropertyName;
+			GMCPWatch.Specs.Add(Spec);
+		}
+
+		if (GMCPWatch.Specs.Num() == 0)
+		{
+			return MakeErrorResponse(TEXT("bad_param: watch contained no usable \"ClassName.PropertyName\" entries."));
+		}
+
+		double IntervalSeconds = 0.25;
+		double Requested = 0.0;
+		if (Params->TryGetNumberField(TEXT("intervalMs"), Requested) && Requested >= 30.0)
+		{
+			IntervalSeconds = Requested / 1000.0;
+		}
+		int32 MaxSamples = 40;
+		Params->TryGetNumberField(TEXT("maxSamples"), MaxSamples);
+		GMCPWatch.MaxSamples = FMath::Clamp(MaxSamples, 1, 400);
+		GMCPWatch.StartedAt = FPlatformTime::Seconds();
+
+		GMCPWatch.Ticker = FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([](float) -> bool
+			{
+				MCPSampleWatches();
+				// Returning false unregisters. Stopping at the cap rather than running forever means
+				// a caller who forgets to stop costs nothing after the window they asked for.
+				return GMCPWatch.Ticks < GMCPWatch.MaxSamples && !GMCPWatch.bPieEnded;
+			}),
+			static_cast<float>(IntervalSeconds));
+
+		const bool bPieRunning = GEditor && GEditor->PlayWorld != nullptr;
+
+		TSharedRef<FJsonObject> Started = MakeShared<FJsonObject>();
+		Started->SetBoolField(TEXT("watching"), true);
+		Started->SetNumberField(TEXT("watching_count"), GMCPWatch.Specs.Num());
+		Started->SetNumberField(TEXT("intervalMs"), IntervalSeconds * 1000.0);
+		Started->SetNumberField(TEXT("maxSamples"), GMCPWatch.MaxSamples);
+		Started->SetBoolField(TEXT("pieRunning"), bPieRunning);
+		Started->SetStringField(TEXT("next"),
+			bPieRunning
+				? TEXT("Sampling has begun. Let real time pass before reading - do something else, or make another "
+					   "call - then action \"read\". Reading immediately returns one sample, which cannot show a "
+					   "change.")
+				: TEXT("Nothing is running yet, so nothing will be sampled until it is. start_pie, then let time "
+					   "pass, then action \"read\"."));
+		return MakeOkResponse(Started);
+	}
+
+	if (Action != TEXT("read"))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("bad_param: action \"%s\" is not one of \"start\", \"read\", \"stop\"."), *Action));
+	}
+
+	if (GMCPWatch.Specs.Num() == 0)
+	{
+		return MakeErrorResponse(
+			TEXT("not_watching: nothing has been started. Call again with action \"start\" and a watch list."));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<FString> Unmatched;
+	for (const FMCPWatchSpec& Spec : GMCPWatch.Specs)
+	{
+		bool bSeenAnywhere = false;
+		for (const TPair<FString, FMCPWatchSeries>& Pair : GMCPWatch.Series)
+		{
+			FString Role, Which;
+			if (!Pair.Key.Split(TEXT("|"), &Role, &Which) || Which != Spec.Raw)
+			{
+				continue;
+			}
+			const FMCPWatchSeries& Series = Pair.Value;
+			if (Series.Samples == 0)
+			{
+				continue;
+			}
+			bSeenAnywhere = true;
+
+			TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("watch"), Spec.Raw);
+			Row->SetStringField(TEXT("role"), Role);
+			Row->SetStringField(TEXT("first"), Series.First);
+			Row->SetStringField(TEXT("last"), Series.Last);
+			const bool bChanged = Series.Distinct.Num() > 1;
+			Row->SetBoolField(TEXT("changed"), bChanged);
+			Row->SetNumberField(TEXT("samples"), Series.Samples);
+			if (Series.ActorsSeen > 1)
+			{
+				// Said only when it matters: with one actor the sample is unambiguous, and with
+				// several the caller needs to know the value came from one of them.
+				Row->SetNumberField(TEXT("matchingActors"), Series.ActorsSeen);
+			}
+			if (bChanged)
+			{
+				Row->SetStringField(TEXT("values"), FString::Join(Series.Distinct, TEXT(" -> ")));
+			}
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		if (!bSeenAnywhere)
+		{
+			Unmatched.Add(Spec.Raw);
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("watched"), Rows);
+	Result->SetNumberField(TEXT("samplesTaken"), GMCPWatch.Ticks);
+	Result->SetNumberField(TEXT("secondsElapsed"),
+		FMath::RoundToDouble((FPlatformTime::Seconds() - GMCPWatch.StartedAt) * 10.0) / 10.0);
+	Result->SetBoolField(TEXT("stillWatching"), GMCPWatch.Ticker.IsValid());
+
+	if (Unmatched.Num() > 0)
+	{
+		// The difference that matters most in this whole reply. "Nothing changed" and "nothing was
+		// ever found" look identical in a table of values and mean opposite things: one is a finding
+		// about the game, the other is a wrong name.
+		Result->SetStringField(TEXT("notFound"), FString::Printf(
+			TEXT("%s matched no actor with that property in any running world. That is a naming problem, not a "
+				 "finding: check the class name (without _C) and that the variable is on that class and not a "
+				 "parent's component. list_actors names what is actually in the level."),
+			*FString::Join(Unmatched, TEXT(", "))));
+	}
+
+	if (GMCPWatch.Ticks == 0)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("No sample has been taken yet. Either nothing is running - start_pie first - or no real time has "
+				 "passed since starting. Sampling happens on the editor's tick, so a read issued immediately after "
+				 "a start has nothing to report."));
+	}
+	else if (GMCPWatch.bPieEnded)
+	{
+		Result->SetStringField(TEXT("verdict"),
+			TEXT("Play ended while watching, so these values are what was seen up to that point."));
+	}
+	else if (Rows.Num() > 0)
+	{
+		int32 Changed = 0;
+		for (const TSharedPtr<FJsonValue>& Row : Rows)
+		{
+			bool bDidChange = false;
+			if (Row.IsValid() && Row->AsObject()->TryGetBoolField(TEXT("changed"), bDidChange) && bDidChange)
+			{
+				++Changed;
+			}
+		}
+		Result->SetStringField(TEXT("verdict"), FString::Printf(
+			TEXT("%d of %d watched values changed over %d samples. A value that holds still in one role and moves "
+				 "in another is the shape of a replication bug: the machine that changed it has it, and the other "
+				 "one never received it."),
+			Changed, Rows.Num(), GMCPWatch.Ticks));
+	}
+	return MakeOkResponse(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetVariableReplication(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path, VariableName, Mode;
