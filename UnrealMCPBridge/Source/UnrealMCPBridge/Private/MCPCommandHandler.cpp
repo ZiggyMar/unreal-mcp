@@ -1911,6 +1911,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 
 	UEdGraphNode* NewNode = nullptr;
 
+	/** Set by the SpawnActor branch, applied once the shared code below has allocated pins. */
+	UClass* PendingSpawnClass = nullptr;
+
 	if (NodeType == TEXT("Event"))
 	{
 		FString EventName;
@@ -2311,20 +2314,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 				TEXT("Use a Blueprint whose parent is Actor, Pawn, Character or similar."), *ActorClassName));
 		}
 
-		UK2Node_SpawnActorFromClass* SpawnNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
-		SpawnNode->CreateNewGuid();
-		SpawnNode->PostPlacedNewNode();
-		SpawnNode->AllocateDefaultPins();
-		// The Class pin has to be set BEFORE the node is asked to reallocate, because the exposed
-		// spawn pins it grows are derived from the class. Setting it afterwards leaves a node with the
-		// right class and none of its properties.
-		if (UEdGraphPin* ClassPin = SpawnNode->GetClassPin())
-		{
-			ClassPin->DefaultObject = ActorClass;
-			ClassPin->DefaultValue = ActorClass->GetPathName();
-			SpawnNode->PinDefaultValueChanged(ClassPin);
-		}
-		NewNode = SpawnNode;
+		// Create it and nothing else. The shared code below already does CreateNewGuid,
+		// PostPlacedNewNode and AllocateDefaultPins for every node type, and doing them again here
+		// CRASHED THE EDITOR - AllocateDefaultPins twice on a K2Node builds a second set of pins over
+		// the first. The class is applied after that shared step, where the pins exist.
+		NewNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
+		PendingSpawnClass = ActorClass;
 	}
 	else if (NodeType == TEXT("Macro"))
 	{
@@ -2393,6 +2388,24 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	NewNode->CreateNewGuid();
 	NewNode->PostPlacedNewNode();
 	NewNode->AllocateDefaultPins();
+
+	// A spawn node's Class pin, set now that its pins exist.
+	//
+	// It has to happen after AllocateDefaultPins and it matters that it happens at all: the exposed
+	// spawn pins the node grows are derived from the class, so a node whose class is set later has
+	// the right class and none of its properties. PinDefaultValueChanged is what makes it reallocate.
+	if (PendingSpawnClass)
+	{
+		if (UK2Node_SpawnActorFromClass* SpawnNode = Cast<UK2Node_SpawnActorFromClass>(NewNode))
+		{
+			if (UEdGraphPin* ClassPin = SpawnNode->GetClassPin())
+			{
+				ClassPin->DefaultObject = PendingSpawnClass;
+				ClassPin->DefaultValue = PendingSpawnClass->GetPathName();
+				SpawnNode->PinDefaultValueChanged(ClassPin);
+			}
+		}
+	}
 
 	// Optional comment, so a caller can annotate as it builds instead of needing a second
 	// call per node. AGENT_WORKFLOW.md tells agents to do exactly that.

@@ -53,7 +53,24 @@ const NAME = `BP_RuntimeTrial_${RUN}`;
 const PKG = `/Game/__MCPRuntimeTrial/${NAME}`;
 const PATH = `${PKG}.${NAME}`;
 const WATCH = `${NAME}.Ticks`;
-const LABEL = `MCPRuntimeTrial_${RUN}`;
+
+/**
+ * A second Blueprint whose only job is to spawn the first one, on the server, at runtime.
+ *
+ * The counter used to be placed in the level at edit time, and that is why the client half of this
+ * trial could never pass. A level-placed actor binds to its server counterpart by a stable path name
+ * that comes from the SAVED package; this trial deliberately does not save the map (save_level opens
+ * a checkout prompt that blocks the game thread), so server and client each ended up holding an
+ * unrelated actor and no amount of correct replication setup could connect them.
+ *
+ * An actor the SERVER SPAWNS AT RUNTIME has no such problem: it gets a net GUID from the connection
+ * and is replicated to clients as a matter of course. So the thing placed in the level is the
+ * spawner, which does not replicate and does not matter, and the thing being watched is spawned.
+ */
+const SPAWNER_NAME = `BP_RuntimeSpawner_${RUN}`;
+const SPAWNER_PKG = `/Game/__MCPRuntimeTrial/${SPAWNER_NAME}`;
+const SPAWNER_PATH = `${SPAWNER_PKG}.${SPAWNER_NAME}`;
+const LABEL = `MCPRuntimeSpawner_${RUN}`;
 
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "trial-runtime");
 
@@ -242,8 +259,36 @@ await step("count, but only with authority", "unreal_build_graph", {
 
 await step("save it", "unreal_save_blueprint", { path: PATH });
 
-await step("put one in the level", "unreal_spawn_actor",
-  { actorClass: PATH, label: LABEL, locX: 0, locY: 0, locZ: 200 },
+// The spawner. Placed in the level, spawns the counter on the server when play starts.
+await step("create the spawner", "unreal_create_blueprint",
+  { packagePath: SPAWNER_PKG, parentClass: "Actor", save: false },
+  (t, j) => (j && j.path ? null : "no asset path came back"));
+
+await step("spawn the counter, on the server, at runtime", "unreal_build_graph", {
+  path: SPAWNER_PATH,
+  graphName: "EventGraph",
+  nodes: [
+    { ref: "begin", nodeType: "Event", eventName: "ReceiveBeginPlay" },
+    { ref: "auth", nodeType: "CallFunction", functionName: "HasAuthority", pure: true },
+    { ref: "br", nodeType: "Branch" },
+    // The node type the standing instructions promised for months and the bridge did not have.
+    { ref: "spawn", nodeType: "SpawnActor", targetClass: PATH },
+  ],
+  connections: [
+    { from: "begin.then", to: "br.execute" },
+    { from: "auth.ReturnValue", to: "br.Condition" },
+    { from: "br.then", to: "spawn.execute" },
+  ],
+  // Without this the spawn can be refused for overlapping whatever is at the origin, and a trial
+  // that silently spawns nothing looks exactly like a replication failure.
+  pinDefaults: [{ node: "spawn", pin: "CollisionHandlingOverride", value: "AlwaysSpawn" }],
+  compile: true,
+}, (t, j) => (j && j.nodes ? null : "the spawner graph did not come back built"));
+
+await step("save the spawner", "unreal_save_blueprint", { path: SPAWNER_PATH });
+
+await step("put the spawner in the level", "unreal_spawn_actor",
+  { actorClass: SPAWNER_PATH, label: LABEL, locX: 0, locY: 0, locZ: 200 },
   (t, j) => (j && (j.spawned || j.name || j.label) ? null : "nothing was spawned"));
 
 // Deliberately NOT saving the level, and the reasoning is worth more than the line.
@@ -343,8 +388,8 @@ if (!fixedClient) {
 console.log(NL + "cleaning up");
 // The actor first. An asset referenced by a live level actor does not delete cleanly, which is how
 // the leftovers accumulated in the first place.
-await step("take the actor back out of the level", "unreal_delete_actor", { actor: LABEL });
-await step("delete the trial asset", "unreal_delete_asset", { path: PATH, force: true });
+await step("take the spawner back out of the level", "unreal_delete_actor", { actor: LABEL });
+await step("delete the trial assets", "unreal_delete_asset", { paths: [SPAWNER_PATH, PATH], force: true });
 
 console.log(NL + `${calls} calls`);
 if (stalls.length > 0) {
