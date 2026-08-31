@@ -67,7 +67,13 @@ expensive to undo. Rules of thumb:
 - `Event ActorBeginOverlap` / `EndOverlap` — something entered a collision volume.
 - `Event Hit` — a physics blocking hit.
 - `Event Destroyed`
-- **Input events** — from a mapping added with `unreal_add_input_mapping`.
+- **Input events** — and there are two systems, which is a real trap. **Enhanced Input** is what
+  every UE5 project uses: bindings live in `InputMappingContext` and `InputAction` assets, the event
+  node is `Enhanced Input Action IA_Whatever`, and you read and change them with
+  `unreal_read_input_context` and `unreal_map_input_key`. The **legacy** project-settings system uses
+  `unreal_add_input_mapping` and an `InputAction Whatever` node. `unreal_list_input_mappings`
+  returning an empty list does not mean the project has no input; it almost always means the project
+  is on Enhanced Input and you are looking in the wrong place.
 - **Custom events** — your own named entry points. Also how you do RPCs.
 
 There is no `main()`. If logic is not reachable from an event, it does not run.

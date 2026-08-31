@@ -66,13 +66,23 @@ entry -> Set Health (Health - Amount, clamped at 0)
 
 1. `unreal_create_blueprint` — `/Game/BP/BPI_Interactable`, parent `Interface`
 2. `unreal_create_function` on it — `Interact`, input `Interactor` (`object:Actor`)
-3. `unreal_add_input_mapping` — kind `action`, name `Interact`, key `E`
+3. A key binding. **Check which input system the project uses first** — the two are not
+   interchangeable and the wrong one binds a key nothing ever reads:
+   - **Enhanced Input** (everything made in UE5, and what `unreal_list_input_mappings` returning an
+     empty list means): the project already has an `InputMappingContext`. Find it with
+     `unreal_list_assets` `className=InputMappingContext`, read it with
+     `unreal_read_input_context`, create an `InputAction` asset for `Interact` if there is not one,
+     and bind with `unreal_map_input_key`. The event node in the graph is **Enhanced Input Action
+     IA_Interact**, not `InputAction Interact`.
+   - **Legacy project-settings input**: `unreal_add_input_mapping` — kind `action`, name `Interact`,
+     key `E`, and the event node is `InputAction Interact` as written below.
 4. On the player: the graph below.
 
 **The graph** (player EventGraph):
 
 ```
-InputAction Interact
+InputAction Interact                 (legacy; on Enhanced Input this node is
+                                     "Enhanced Input Action IA_Interact")
   -> LineTraceByChannel  (start = camera location, end = start + forward * 300)
   -> Branch (Return Value)
        true -> Does Implement Interface (BPI_Interactable) on Hit Actor

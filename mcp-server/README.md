@@ -1924,6 +1924,35 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### The recipes taught an input system the reader's project does not use
+
+`unreal_recipes` is described to every model as *"verified end-to-end builds of the systems people
+usually ask for"*. The interaction recipe - look at a thing, press a key, it responds - said:
+
+```text
+3. unreal_add_input_mapping - kind action, name Interact, key E
+```
+
+That is the **legacy** project-settings input system. Every UE5 project uses Enhanced Input, keeping
+its bindings in `InputMappingContext` and `InputAction` assets, and following that step there binds a
+key nothing ever reads. The symptom is silence: no error, no warning, a graph that compiles and an
+`E` that does nothing.
+
+The handbook had the same line in its list of entry points - *"Input events, from a mapping added
+with `unreal_add_input_mapping`"* - which is the one document a model is told to read before its
+first write.
+
+Both now name the two systems and say which is which, including the part that is genuinely
+unguessable and cost a session to learn here: **`unreal_list_input_mappings` returning an empty list
+does not mean the project has no input.** It almost always means the project is on Enhanced Input
+and you are reading the wrong place. The event node differs too - `Enhanced Input Action IA_Interact`
+rather than `InputAction Interact` - which is exactly the kind of exact string a model cannot derive.
+
+A guard holds it: a guide that mentions `unreal_add_input_mapping` must also mention Enhanced Input.
+Confirmed by breaking the string and watching it fail. It is a weak check by design - it cannot tell
+whether the prose is *correct* - but it makes "teaches only the legacy system" a failing test rather
+than something noticed a year later.
+
 ### The guide the instructions call "the long form" stopped before the last step
 
 The instructions every session starts with give an eight-step order and then say *"unreal_workflow is

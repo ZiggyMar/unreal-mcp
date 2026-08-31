@@ -59,6 +59,12 @@ test("every exact string the instructions call unguessable is in the handbook", 
     "Spawn Actor",
     "Create Widget",
     "nodeType",
+    // Enhanced Input is what every UE5 project uses, and the guides taught only the legacy system:
+    // the handbook listed input events as coming "from a mapping added with unreal_add_input_mapping"
+    // and the interaction recipe bound a key that way. On a modern project that binds a key nothing
+    // ever reads, and unreal_list_input_mappings comes back empty - which reads as "this project has
+    // no input" rather than "you are looking in the wrong place".
+    "Enhanced Input",
   ];
   const missing = facts.filter((fact) => !handbook.includes(fact));
   assert.deepEqual(missing, [], `the handbook is missing ground truth the instructions rely on: ${missing.join(", ")}`);
@@ -76,5 +82,21 @@ test("no guide names a tool this server does not register", () => {
     const named = new Set([...read(doc).matchAll(/unreal_[a-z0-9_]+/g)].map((m) => m[0]));
     const gone = [...named].filter((tool) => !registered.has(tool)).sort();
     assert.deepEqual(gone, [], `${doc} names tools that no longer exist: ${gone.join(", ")}`);
+  }
+});
+
+test("a guide that teaches the legacy input system also teaches the current one", () => {
+  // Enhanced Input is what every UE5 project uses. The guides taught only the legacy path - the
+  // handbook listed input events as coming "from a mapping added with unreal_add_input_mapping", and
+  // the interaction recipe bound `E` that way. Following either on a modern project binds a key
+  // nothing reads, and the symptom is silence rather than an error.
+  for (const doc of ["BLUEPRINT_HANDBOOK.md", "RECIPES.md"]) {
+    const text = read(doc);
+    if (!text.includes("unreal_add_input_mapping")) continue;
+    assert.ok(
+      text.includes("Enhanced Input"),
+      `${doc} teaches the legacy input system without mentioning Enhanced Input, which is what the ` +
+        `reader's project almost certainly uses`
+    );
   }
 });
