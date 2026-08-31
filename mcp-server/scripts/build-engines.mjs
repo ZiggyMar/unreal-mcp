@@ -24,7 +24,7 @@
 // Usage: node scripts/build-engines.mjs [--only 5.6] [--isolated]
 
 import { readFileSync, existsSync } from "node:fs";
-import { cpSync } from "node:fs";
+import { cpSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -99,6 +99,19 @@ for (const target of chosen) {
 
     process.stdout.write(`${target.name}: syncing source... `);
     try {
+      // Replace, do not merge.
+      //
+      // cpSync copies what exists and removes nothing, so a file that used to be in the source and
+      // is not any more stayed behind in the target project forever. Reviewing a pull request is
+      // where that bites: install the branch, install main again, and the project is left holding
+      // main's headers plus the branch's extra .cpp, which references symbols main does not have.
+      // It does not even fail honestly - UBT's makefile cache saw no reason to rebuild and reported
+      // "ok" in four seconds over a source tree that cannot compile.
+      //
+      // rmSync first makes the target a copy of the source rather than a union with every source
+      // tree that was ever installed here. The cost is a full recompile whenever the sync runs,
+      // which is what was supposed to happen anyway.
+      rmSync(pluginDir, { recursive: true, force: true });
       cpSync(PLUGIN_SOURCE, pluginDir, { recursive: true, force: true });
     } catch (err) {
       console.log("FAILED");
