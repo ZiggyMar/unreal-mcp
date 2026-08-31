@@ -52,6 +52,11 @@ export const FINDING_COST: Record<string, number> = {
   // A name typed as text that names nothing. The Blueprint compiles and the call does nothing.
   "row-name-not-in-table": 85,
   "timer-target-missing": 85,
+  // A call whose only job is to use an asset, running with that asset pin empty. Priced just under
+  // the two above because those are always a defect and this one has a rare honest form: an author
+  // who has wired the node and has not yet picked the asset. Everything else about it is the same
+  // shape - it compiles, it runs, it reports success, and it does nothing.
+  "asset-pin-empty": 80,
   "niagara-system-empty": 60,
   "niagara-all-emitters-disabled": 60,
   // Draws exactly like a working transition and behaves like a wall.
@@ -431,7 +436,14 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   // ~330 tokens of definition for a check nobody calls directly.
   try {
     const broken = await bridge.send<{
-      broken?: Array<{ blueprint: string; graph: string; check: string; message: string; fix: string }>;
+      broken?: Array<{
+        blueprint: string;
+        graph: string;
+        check: string;
+        message: string;
+        fix: string;
+        nodeId?: string;
+      }>;
       namesChecked?: number;
       namesFromVariables?: number;
     }>("find_broken_names", { pathPrefix });
@@ -442,7 +454,11 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         graph: finding.graph,
         check: finding.check,
         severity: "warning",
-        message: `${finding.blueprint} ${finding.message}`,
+        // The node id when the check has one, because "somewhere in this graph" is a search and
+        // "this node" is an edit.
+        message: finding.nodeId
+          ? `${finding.blueprint} ${finding.message} (node ${finding.nodeId})`
+          : `${finding.blueprint} ${finding.message}`,
         fix: finding.fix,
         cost: FINDING_COST[finding.check] ?? 1,
       });

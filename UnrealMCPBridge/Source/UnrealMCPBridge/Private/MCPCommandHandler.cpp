@@ -5595,6 +5595,62 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 //
 // Only LITERAL names are checked. A row name coming from a variable is a runtime value and this says
 // nothing about it, rather than guessing.
+/**
+ * Calls where an empty asset pin means the call does nothing, and nothing reports it.
+ *
+ * These are not "a null could be a problem" guesses. Each one is a function whose whole job is to
+ * use the asset named in that pin: Play Sound At Location with no Sound plays no sound, Spawn
+ * Emitter with no template spawns nothing. The node still compiles, still sits in the execution
+ * path, and still returns success. Nothing anywhere says the effect was skipped.
+ *
+ * This is what a deleted or moved asset leaves behind: Unreal nulls the reference on load and the
+ * node stays, wired and silent, with a clean compile. The other honest source is an author who
+ * wired the node and never came back to pick the asset. Names are matched exactly, never by
+ * substring, so a project's own "PlaySoundAtLocation_Custom" is not swept up.
+ *
+ * Not covered, because it does not need to be: removing a plugin takes its node CLASSES with it and
+ * the Blueprint fails to compile outright. That is loud. This is for the quiet half.
+ *
+ * Deliberately absent: DamageType on Apply Damage, and any other pin where None is the documented
+ * default and means "use the standard one". Those are correct authoring, not bugs.
+ */
+struct FMCPRequiredAssetPin
+{
+	const TCHAR* Function;
+	const TCHAR* Pin;
+	const TCHAR* Consequence;
+};
+
+static const FMCPRequiredAssetPin GRequiredAssetPins[] = {
+	{ TEXT("PlaySoundAtLocation"), TEXT("Sound"), TEXT("no sound plays") },
+	{ TEXT("PlaySound2D"), TEXT("Sound"), TEXT("no sound plays") },
+	{ TEXT("SpawnSoundAtLocation"), TEXT("Sound"), TEXT("no sound plays and the returned component is null") },
+	{ TEXT("SpawnSoundAttached"), TEXT("Sound"), TEXT("no sound plays and the returned component is null") },
+	{ TEXT("SpawnSound2D"), TEXT("Sound"), TEXT("no sound plays and the returned component is null") },
+	{ TEXT("SetSound"), TEXT("NewSound"), TEXT("the audio component has nothing to play") },
+	{ TEXT("SpawnEmitterAtLocation"), TEXT("EmitterTemplate"), TEXT("no particles spawn") },
+	{ TEXT("SpawnEmitterAttached"), TEXT("EmitterTemplate"), TEXT("no particles spawn") },
+	{ TEXT("SpawnSystemAtLocation"), TEXT("SystemTemplate"), TEXT("no Niagara effect spawns") },
+	{ TEXT("SpawnSystemAttached"), TEXT("SystemTemplate"), TEXT("no Niagara effect spawns") },
+	{ TEXT("SetStaticMesh"), TEXT("NewMesh"), TEXT("the component renders nothing") },
+	{ TEXT("SetSkeletalMesh"), TEXT("NewMesh"), TEXT("the component renders nothing") },
+	{ TEXT("SetSkeletalMeshAsset"), TEXT("NewMesh"), TEXT("the component renders nothing") },
+	{ TEXT("Montage_Play"), TEXT("MontageToPlay"), TEXT("no montage plays and the returned length is 0") },
+	{ TEXT("PlayAnimMontage"), TEXT("AnimMontage"), TEXT("no montage plays") },
+	{ TEXT("SetAnimInstanceClass"), TEXT("NewClass"), TEXT("the mesh runs no animation blueprint") },
+	{ TEXT("PlayWorldCameraShake"), TEXT("Shake"), TEXT("no camera shake happens") },
+	{ TEXT("StartCameraShake"), TEXT("ShakeClass"), TEXT("no camera shake happens") },
+	{ TEXT("ClientStartCameraShake"), TEXT("ShakeClass"), TEXT("no camera shake happens") },
+	{ TEXT("SetChildActorClass"), TEXT("InClass"), TEXT("the child actor component spawns nothing") },
+};
+
+/** True when a pin holds no asset at all: no object, and no soft path text either. */
+static bool PinHoldsNothing(const UEdGraphPin* Pin)
+{
+	return Pin && Pin->DefaultObject == nullptr &&
+		   (Pin->DefaultValue.IsEmpty() || Pin->DefaultValue == TEXT("None"));
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindBrokenNames(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PathPrefix = TEXT("/Game");
@@ -5615,6 +5671,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindBrokenNames(const TSharedP
 	TArray<TSharedPtr<FJsonValue>> Findings;
 	int32 Checked = 0;
 	int32 Scanned = 0;
+	/** Empty asset pins on nodes no execution reaches - counted, not reported. */
+	int32 Unreached = 0;
 	// Candidates whose name arrives from a variable rather than typed in. Counted and reported,
 	// because "0 broken" out of 3 checks reads as "all good" when it means "barely looked" - and on
 	// the project this was written against, 3 of 40 candidates had a literal name.
@@ -5645,6 +5703,57 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindBrokenNames(const TSharedP
 					continue;
 				}
 				const FString Called = CallNode->FunctionReference.GetMemberName().ToString();
+
+				// An asset pin left empty on a call whose only job is to use that asset.
+				for (const FMCPRequiredAssetPin& Required : GRequiredAssetPins)
+				{
+					if (Called != Required.Function)
+					{
+						continue;
+					}
+					UEdGraphPin* AssetPin = nullptr;
+					for (UEdGraphPin* Pin : CallNode->Pins)
+					{
+						if (Pin && Pin->Direction == EGPD_Input && Pin->PinName == Required.Pin)
+						{
+							AssetPin = Pin;
+							break;
+						}
+					}
+					// A connected pin gets its value at runtime; this knows nothing about it and
+					// says nothing about it.
+					if (!AssetPin || AssetPin->LinkedTo.Num() > 0)
+					{
+						break;
+					}
+					++Checked;
+					if (!PinHoldsNothing(AssetPin))
+					{
+						break;
+					}
+					// A node no execution reaches cannot be the bug being looked for, and reporting
+					// it buries the ones that can.
+					if (!IsReachableFromEntry(Node))
+					{
+						++Unreached;
+						break;
+					}
+
+					TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+					Entry->SetStringField(TEXT("blueprint"), Blueprint->GetName());
+					Entry->SetStringField(TEXT("graph"), Graph->GetName());
+					Entry->SetStringField(TEXT("nodeId"), MakeShortNodeId(Node, 8));
+					Entry->SetStringField(TEXT("check"), TEXT("asset-pin-empty"));
+					Entry->SetStringField(TEXT("message"), FString::Printf(
+						TEXT("%s runs with its %s pin empty, so %s. The node compiles and reports success."),
+						*Called, Required.Pin, Required.Consequence));
+					Entry->SetStringField(TEXT("fix"), FString::Printf(
+						TEXT("Set the %s pin, or wire it. An asset that was deleted or moved nulls this pin "
+							 "on load and leaves the node behind looking correct."),
+						Required.Pin));
+					Findings.Add(MakeShared<FJsonValueObject>(Entry));
+					break;
+				}
 
 				auto LiteralPin = [CallNode](const TCHAR* PinName) -> UEdGraphPin*
 				{
@@ -5745,6 +5854,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindBrokenNames(const TSharedP
 	Result->SetNumberField(TEXT("blueprintsScanned"), Scanned);
 	Result->SetNumberField(TEXT("namesChecked"), Checked);
 	Result->SetNumberField(TEXT("namesFromVariables"), Runtime);
+	if (Unreached > 0)
+	{
+		Result->SetNumberField(TEXT("emptyPinsOnUnreachableNodes"), Unreached);
+	}
 	Result->SetArrayField(TEXT("broken"), Findings);
 	if (Findings.Num() == 0)
 	{

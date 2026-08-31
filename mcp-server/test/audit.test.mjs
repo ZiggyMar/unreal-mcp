@@ -185,3 +185,56 @@ test("a bridge that cannot read Data Tables still returns the Blueprint half", a
   assert.deepEqual(r.dataTableNulls, []);
   assert.equal(typeof r.nextAction, "string");
 });
+
+test("an empty asset pin carries its node id into the finding", async () => {
+  // "PlaySoundAtLocation runs with its Sound pin empty" is a search across the graph; the same
+  // sentence with a node id is an edit. The bridge sends one, so the audit must not drop it.
+  const bridge = fakeBridge({
+    find_broken_names: () => ({
+      namesChecked: 4,
+      namesFromVariables: 0,
+      broken: [
+        {
+          blueprint: "BP_Messy",
+          graph: "EventGraph",
+          check: "asset-pin-empty",
+          nodeId: "a1b2c3d4",
+          message: "PlaySoundAtLocation runs with its Sound pin empty, so no sound plays.",
+          fix: "Set the Sound pin, or wire it.",
+        },
+      ],
+    }),
+  });
+  const result = await auditProject(bridge);
+  const group = result.groups.find((g) => g.check === "asset-pin-empty");
+  assert.ok(group, `expected an asset-pin-empty group in ${result.groups.map((g) => g.check).join(", ")}`);
+  assert.match(group.examples[0].message, /node a1b2c3d4/);
+});
+
+test("a check with no node id still reads as a sentence", async () => {
+  const bridge = fakeBridge({
+    find_broken_names: () => ({
+      namesChecked: 1,
+      namesFromVariables: 0,
+      broken: [
+        {
+          blueprint: "BP_Messy",
+          graph: "EventGraph",
+          check: "timer-target-missing",
+          message: "starts a timer on \"Tik\", which BP_Messy has no function by.",
+          fix: "Check the spelling.",
+        },
+      ],
+    }),
+  });
+  const result = await auditProject(bridge);
+  const group = result.groups.find((g) => g.check === "timer-target-missing");
+  assert.ok(group);
+  assert.doesNotMatch(group.examples[0].message, /node undefined/);
+});
+
+test("an empty asset pin outranks cosmetic findings", () => {
+  // It compiles, it runs, it reports success, and the effect never happens. That belongs above a
+  // stray node every time.
+  assert.ok(FINDING_COST["asset-pin-empty"] > FINDING_COST["dead-node"]);
+});

@@ -381,8 +381,30 @@ value and this says nothing about it. Measured on the project: 3 literal names c
 variables and skipped**. That is reported as coverage rather than as a clean bill of health - zero
 broken out of three reads as "all good" when it means "barely looked".
 
-There is deliberately **no MCP tool** for it. It belongs inside "find every bug", and a separate tool
-would cost every session ~330 tokens of definition for something nobody calls directly.
+### The same check, one step out: an asset pin left empty
+
+A name that resolves to nothing and an asset pin that holds nothing fail identically, so they are
+checked together. `Play Sound at Location` with no Sound plays no sound. `Spawn Emitter at Location`
+with no template spawns nothing. `Set Static Mesh` with no mesh leaves the component invisible. In
+every case the node compiles, sits in the execution path, runs, and reports success.
+
+This is what **a deleted or moved asset leaves behind**. Unreal nulls the reference on load and the
+node stays, wired and silent, with a clean compile and not one warning. The other honest source is
+an author who wired the node and never came back to pick the asset. Both look finished in the editor.
+
+Worth being exact about the case it does *not* cover, because it is the one people expect: removing
+a plugin takes that plugin's **node classes** with it, and a Blueprint holding one fails to compile
+outright. That is loud, and it needs no tool. This check is for the quiet half.
+
+Twenty calls are checked, chosen so that an empty pin is definitionally a no-op rather than a
+legitimate default. Function names are matched **exactly**, never by substring, so a project's own
+`PlaySoundAtLocation_Custom` is not swept up; `DamageType` on Apply Damage and every other pin where
+`None` means "use the standard one" is deliberately absent. A **connected** pin gets its value at
+runtime, so it is never reported. Nodes no execution reaches are counted, not listed - one of them
+cannot be the bug, and listing them buries the ones that can.
+
+There is deliberately **no MCP tool** for either. They belong inside "find every bug", and a separate
+tool would cost every session ~330 tokens of definition for something nobody calls directly.
 
 ### VFX: `unreal_read_niagara_system`
 
