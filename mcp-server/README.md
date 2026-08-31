@@ -1885,6 +1885,54 @@ obvious way to write it.
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
 
+### The largest read in the surface, and nobody was watching it
+
+Continuing the read/write audit into Data Tables found something bigger than a mismatch. Measured:
+
+```text
+list_data_table_rows        6985 tokens
+list_blueprints             3293
+read_blueprint_summary      3110    <- an 809-node graph
+```
+
+**More than double the next largest read, from nine rows**, and it was not in `measure:reads` at all
+— the third time that gap has produced the most expensive thing in the surface. It is measured now,
+against the biggest Data Table in the project, discovered the same way the worst graph is.
+
+The cause is that Unreal exports a row in full. One untouched `FSlateBrush` column, per row:
+
+```text
+(Key=None,OverrrideState=Enabled,bActionRequiresHold=False,HoldTime=0.500000,
+ HoldRollbackTime=0.000000,OverrideBrush=(TintColor=(SpecifiedColor=(R=1.000000,G=1.000000,
+ B=1.000000,A=1.000000),ColorUseRule=UseColor_Specified),DrawAs=NoDrawType,Tiling=NoTile,
+ Mirroring=NoMirror,ImageType=NoImage,ImageSize=(X=32.000000,Y=32.000000),Margin=(...),...)
+```
+
+The facts in that are *no keyboard key* and *hold for half a second*. Everything else is a brush
+nobody touched, spelled out in full, nine times.
+
+A first attempt trimmed zero-valued members out of the literal with a string parser: 42%, and stuck,
+because `ColorUseRule=UseColor_Specified` and `DrawAs=NoDrawType` are defaults that are not zeros and
+no string parser can know it. **Unreal already knows how to say only what differs** — it is how a
+`.uasset` stores anything — and the mechanism is a `Defaults` pointer on `ExportText`. So a default
+row is constructed once, each property compared against it, identical ones skipped entirely, and the
+rest exported as a delta that prunes untouched members out of nested structs too.
+
+**It is a parameter, not the behaviour, and that distinction matters more than the saving.**
+`check_data_tables` exists to find asset references that are *empty* — and an empty reference is
+identical to the default, so under a delta it disappears and the finding disappears with it. The read
+tool asks for the short form; the audit asks for the full one. A test asserts the audit never starts
+asking for the delta by accident, because that regression would be silent and total: the audit would
+keep passing, and simply stop finding anything.
+
+The convention is stated on the tool, as it is for variables: *a field that is absent is at the row
+struct's default*, with `full: true` when you need to see an empty field rather than infer it, and
+`unreal_list_struct_fields` on the row struct to see the columns themselves.
+
+One process note. The Data Table discovery silently found nothing on the first run and the read just
+did not appear in the results — which reads exactly like "this project has no Data Tables". The
+`catch` says why now. A measurement that quietly measures nothing is worse than one that fails.
+
 ### One list, written down three times
 
 Adding the `input` group broke two tests and a budget, and each failure pointed at the same thing:

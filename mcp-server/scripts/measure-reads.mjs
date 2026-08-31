@@ -136,6 +136,31 @@ for (const r of graphCounts) {
   }
 }
 
+// And the biggest Data Table, discovered the same way and for the same reason. Hardcoding a name
+// would measure one machine's project; picking the first would measure whichever happened to sort
+// first, which on this project is a five-row table and tells you nothing.
+const [tableList] = await session([
+  { tool: "unreal_list_assets", args: { className: "DataTable", maxResults: 40 } },
+]);
+let BIGGEST_DATA_TABLE = null;
+try {
+  const tables = JSON.parse(tableList.text).assets ?? [];
+  const reads = await session(
+    tables.map((t) => ({ tool: "unreal_list_data_table_rows", args: { path: t.path } }))
+  );
+  let worst = 0;
+  reads.forEach((r, i) => {
+    if (r.text.length > worst) {
+      worst = r.text.length;
+      BIGGEST_DATA_TABLE = tables[i].path;
+    }
+  });
+} catch (err) {
+  // Silence here once hid the whole measurement: the table was never found and the read simply did
+  // not appear in the table of results, which reads exactly like "there are no Data Tables".
+  console.error(`could not pick a Data Table to measure: ${err.message}`);
+}
+
 console.log(`measuring reads against ${biggest.path}`);
 console.log(`worst graph found: ${biggest.graphName}, ${biggest.nodes} nodes`);
 console.log("");
@@ -161,6 +186,12 @@ const CASES = [
   // 3,900 tokens - while being the only expensive reads not watched here. Exactly the gap that let
   // find_references sit at 3,736 tokens unnoticed: a guard covering seven of nine reads is watching
   // the wrong thing on the other two.
+  // The largest read in the whole surface, and it was not watched. DT_UniversalActions returned
+  // 26,993 characters for NINE rows - more than read_blueprint_summary on an 809-node graph - because
+  // Unreal exports every field of every row whether anybody set it or not.
+  ...(BIGGEST_DATA_TABLE
+    ? [{ label: "list_data_table_rows", tool: "unreal_list_data_table_rows", args: { path: BIGGEST_DATA_TABLE }, mustContain: "rows" }]
+    : []),
   { label: "find_source (modules)", tool: "unreal_find_source", args: {}, mustContain: "modules" },
   { label: "find_source (symbol)", tool: "unreal_find_source", args: { symbol: "AActor" }, mustContain: "matches" },
   { label: "list_actors", tool: "unreal_list_actors", args: {}, mustContain: "actors" },

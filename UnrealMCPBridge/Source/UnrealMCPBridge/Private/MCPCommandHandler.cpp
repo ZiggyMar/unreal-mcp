@@ -7564,15 +7564,66 @@ static UDataTable* ResolveDataTable(const FString& Path, FString& OutError)
 
 // The row's own values, by field name. Shared by add and list so what you write back is spelled the
 // same way as what you read.
-static TSharedRef<FJsonObject> DescribeDataTableRow(const UScriptStruct* RowStruct, const uint8* RowData)
+/**
+ * One Data Table row as JSON, optionally as a diff against a default-constructed row.
+ *
+ * The full form is what every caller got, and on a real table it is enormous. DT_UniversalActions
+ * is nine rows and returned 26,993 characters - larger than any read this server measures - because
+ * a single FSlateBrush column exports like this, per row:
+ *
+ *   (Key=None,OverrrideState=Enabled,bActionRequiresHold=False,HoldTime=0.500000,
+ *    HoldRollbackTime=0.000000,OverrideBrush=(TintColor=(SpecifiedColor=(R=1.000000,G=1.000000,
+ *    B=1.000000,A=1.000000),ColorUseRule=UseColor_Specified),DrawAs=NoDrawType,Tiling=NoTile,
+ *    Mirroring=NoMirror,ImageType=NoImage,ImageSize=(X=32.000000,Y=32.000000),Margin=(Left=0.000000,
+ *    ...))
+ *
+ * The facts in that are "no keyboard key" and "hold for half a second". Everything else is an
+ * FSlateBrush nobody touched, spelled out in full, nine times.
+ *
+ * Unreal already knows how to say only what differs - it is how a .uasset stores anything - and the
+ * mechanism is a Defaults pointer on ExportText. So a default row is constructed once and each
+ * property is compared against it: identical ones are skipped entirely, and the rest export as a
+ * delta, which prunes untouched members out of nested structs as well.
+ *
+ * bOmitDefaults is a parameter and not the behaviour, because check_data_tables looks for asset
+ * references that are EMPTY. Under a delta an empty reference is identical to the default and
+ * vanishes - which would delete the one finding that tool exists to produce. It asks for the full
+ * form; the read tool asks for the delta.
+ */
+static TSharedRef<FJsonObject> DescribeDataTableRow(const UScriptStruct* RowStruct, const uint8* RowData, bool bOmitDefaults = false)
 {
 	TSharedRef<FJsonObject> Values = MakeShared<FJsonObject>();
+
+	uint8* DefaultRow = nullptr;
+	if (bOmitDefaults && RowStruct)
+	{
+		DefaultRow = static_cast<uint8*>(FMemory::Malloc(RowStruct->GetStructureSize(), RowStruct->GetMinAlignment()));
+		RowStruct->InitializeStruct(DefaultRow);
+	}
+
 	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
 	{
 		FProperty* Property = *It;
+		if (DefaultRow)
+		{
+			if (Property->Identical_InContainer(RowData, DefaultRow))
+			{
+				continue;
+			}
+			FString Delta;
+			Property->ExportText_InContainer(0, Delta, RowData, DefaultRow, nullptr, PPF_None);
+			Values->SetStringField(DataTableUtils::GetPropertyExportName(Property), Delta);
+			continue;
+		}
 		Values->SetStringField(
 			DataTableUtils::GetPropertyExportName(Property),
 			DataTableUtils::GetPropertyValueAsString(Property, RowData, EDataTableExportFlags::None));
+	}
+
+	if (DefaultRow)
+	{
+		RowStruct->DestroyStruct(DefaultRow);
+		FMemory::Free(DefaultRow);
 	}
 	return Values;
 }
@@ -8211,6 +8262,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListDataTableRows(const TShare
 		return MakeErrorResponse(TEXT("missing_param: path is required"));
 	}
 
+	// Off unless asked for, so a caller that needs every field - check_data_tables, hunting empty
+	// asset references - keeps getting them. An empty reference IS the default, so under a delta it
+	// disappears, and the finding disappears with it.
+	bool bOmitDefaults = false;
+	Params->TryGetBoolField(TEXT("omitDefaults"), bOmitDefaults);
+
 	FString TableError;
 	UDataTable* Table = ResolveDataTable(Path, TableError);
 	if (!Table)
@@ -8248,7 +8305,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListDataTableRows(const TShare
 		}
 		TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
 		Row->SetStringField(TEXT("rowName"), Pair.Key.ToString());
-		Row->SetObjectField(TEXT("values"), DescribeDataTableRow(Table->RowStruct, Pair.Value));
+		Row->SetObjectField(TEXT("values"), DescribeDataTableRow(Table->RowStruct, Pair.Value, bOmitDefaults));
 		Rows.Add(MakeShared<FJsonValueObject>(Row));
 	}
 

@@ -3399,16 +3399,31 @@ register(
     description:
       "Lists rows with their values. Paged deliberately: a Data Table is the one asset designed to get large, and " +
       "returning nine hundred rows of item data would cost more context than the question that needed them. " +
-      "Defaults to 25 rows and tells you the total and the next offset.",
+      "Defaults to 25 rows and tells you the total and the next offset.\n\n" +
+      "**A field that is absent is at the row struct's default**, the same convention unreal_list_variables uses. " +
+      "Unreal exports a row in full - one untouched FSlateBrush column is 900 characters of ImageSize, Margin and " +
+      "OutlineSettings - so on a real nine-row table that was 26,993 characters, of which 20,000 were fields nobody " +
+      "had set. Pass `full: true` when you need to see an empty field rather than infer it, and read the columns " +
+      "themselves with unreal_list_struct_fields on the row struct.",
     inputSchema: {
       path: z.string().describe('Data Table asset path, e.g. "/Game/Data/DT_Items.DT_Items".'),
       limit: z.number().optional().describe("Rows to return. Defaults to 25, capped at 500."),
       offset: z.number().optional().describe("Rows to skip, for paging through a large table."),
+      full: z
+        .boolean()
+        .optional()
+        .describe(
+          "Return every field of every row, including the ones still at the row struct's default. Off by " +
+            "default: on a real table those are most of the reply, and a field that is absent is at its default. " +
+            "Turn it on when you need to see a field that is empty rather than infer it."
+        ),
     },
   },
-  async ({ path, limit, offset }) => {
+  async ({ path, limit, offset, full }) => {
     try {
-      return jsonResult(await bridge.send("list_data_table_rows", { path, limit, offset }));
+      return jsonResult(
+        await bridge.send("list_data_table_rows", { path, limit, offset, omitDefaults: full !== true })
+      );
     } catch (err) {
       return errorResult(err);
     }

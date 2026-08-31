@@ -166,3 +166,26 @@ test("rows that could not be judged make the verdict partial, not clean", async 
   assert.ok(result.undecidable.length > 0, "but nothing was provably right either");
   assert.equal(result.verdict, "partial");
 });
+
+test("the audit never asks for the shortened rows, because empty IS the default", async () => {
+  // The regression this guards is subtle and total. list_data_table_rows now defaults to omitting
+  // fields still at the row struct's default, which is most of a real reply. An EMPTY asset
+  // reference is exactly that default - so under the shortened form it vanishes, and the one finding
+  // this whole module exists to produce vanishes with it.
+  //
+  // The read tool asks for the short form. The audit must not, and must not start to by accident.
+  const asked = [];
+  const inner = fakeBridge({ "/Game/D.D": ENEMY_TABLE });
+  const bridge = {
+    async send(cmd, params) {
+      if (cmd === "list_data_table_rows") asked.push(params);
+      return inner.send(cmd, params);
+    },
+  };
+  const result = await auditDataTables(bridge, { paths: ["/Game/D.D"] });
+  assert.ok(asked.length > 0, "the audit does read rows");
+  for (const params of asked) {
+    assert.notEqual(params.omitDefaults, true, "asking for the delta would hide every empty reference");
+  }
+  assert.equal(result.nullReferences.length, 1, "and the finding still comes out");
+});
