@@ -189,9 +189,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2292 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4008 | ten tools, fixed, for a small local model |
-| `core` | 12578 | the authoring spine |
-| `lazy` | 12591 | `core` plus deferred groups |
-| `full` | 38288 | everything, for a model that can afford it |
+| `core` | 12616 | the authoring spine |
+| `lazy` | 12629 | `core` plus deferred groups |
+| `full` | 38327 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -5052,6 +5052,38 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### A claim that looked inverted, and a comparison that was never fair
+
+`explain_graph` says it costs *"about a tenth"* of a structured read. Measured on `BP_Player`'s
+EventGraph, `explain_graph` is **2,284** tokens and `read_blueprint_summary` is **2,121** — the prose
+form apparently dearer than the structure it exists to replace.
+
+It is not. `read_blueprint_summary` returned **60 of 809 nodes with `truncated: true`**, while
+`explain_graph` covered the whole graph. 2,121 tokens buys 7% of that graph; 2,284 buys all of it.
+The comparison was never like-for-like, and the honest conclusion is the opposite of the one the
+numbers first suggested — worth recording because it is the second time in three sections that a
+measurement looked like a defect and turned out to be my reading of it.
+
+Measured properly, on a 59-node graph that does **not** truncate:
+
+```text
+read_blueprint_summary   2,328
+explain_graph              323      a seventh
+```
+
+So the direction was right and the figure was overstated: *a seventh*, not a tenth. The description
+also cited "a real 104-node EventGraph costs ~8,800 tokens", written before compact JSON, float
+trimming and the rest — a number that has been wrong for weeks in a tool description a model reads
+when choosing between two tools.
+
+It now carries the measured pair, and one fact it never mentioned: on a graph too big to return
+whole, the choice is not cheaper-versus-dearer but **all of it versus part**. `read_blueprint_summary`
+caps at 60 nodes and says so; `explain_graph` explains all 809. That is a better reason to reach for
+it than the token count, and it was missing.
+
+The sibling claim checked at the same time — `map_system detail:true` being *"roughly 8x"* — is still
+true: 6,786 against 817.
 
 ### Looking for waste in the presets, and not finding it
 

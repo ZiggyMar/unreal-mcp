@@ -1185,9 +1185,10 @@ register(
     description:
       "**Read this before reading a graph node by node.** Returns each entry point and the ordered chain of things " +
       "it does, in plain text. " +
-      "A real 104-node EventGraph costs ~8,800 tokens as a node-and-pin structure and about a tenth of that as an " +
-      "explanation, so this is usually the only read you need - and on a small model it is the difference between " +
-      "the graph fitting in context and not. " +
+      "A 59-node EventGraph costs 2,328 tokens as a node-and-pin structure and 323 as an explanation - a seventh - " +
+      "so this is usually the only read you need, and on a small model it is the difference between " +
+      "the graph fitting in context and not. On a graph too big to return whole it is the difference between " +
+      "all of it and part: unreal_read_blueprint_summary caps at 60 nodes and says so, this explains all 809. " +
       "Deliberately lossy: it names what happens, not exact pins or node ids. When you need those, call " +
       "unreal_read_blueprint_summary for the one chain you are changing.",
     inputSchema: {
