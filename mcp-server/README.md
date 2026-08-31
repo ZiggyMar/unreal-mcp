@@ -1476,6 +1476,53 @@ already exists, because "make the" reads as a request to create something. Chang
 checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
 cost more" is a change, and only the second half of that sentence says so.
 
+### 1,338 tokens per request for a label nobody reads
+
+The previous pass left `full` at 37,400 of its 37,500 ceiling, so the next question was where the
+standing context actually goes. Measured rather than guessed — 146,119 characters on `full`:
+
+| part | chars | share |
+|---|---:|---:|
+| descriptions | 70,614 | 48% |
+| input schemas | 59,200 | 41% |
+| — of which parameter prose | 26,138 | 18% |
+| titles | 4,199 | 3% |
+| names | 2,582 | 2% |
+
+So **23% is JSON Schema structure** rather than anything anyone wrote, and its largest single line
+item is one string repeated once per tool:
+
+```json
+"$schema": "http://json-schema.org/draft-07/schema#"
+```
+
+50 characters × 107 tools ≈ **1,338 tokens on every single request**. `zod-to-json-schema` emits it
+and the MCP SDK calls that converter without an option to turn it off, so it is stripped at the
+transport — the one place that sees the finished payload.
+
+`$schema` declares which dialect a schema is written in. It is optional metadata: a validator with no
+declaration uses its newest supported draft, and every construct these schemas use — `type`,
+`properties`, `required`, `additionalProperties`, `items`, `enum`, and a union spelled
+`"type": ["string","number","boolean"]` — means precisely the same thing in draft-07 and 2020-12.
+That is the test a saving like this has to pass: **a compaction that removes an ability is not worth
+having at any price, and this removes a label.** Verified against the running server that unknown
+parameters are still refused by name, missing required ones are still named back, a wrong type is
+still rejected, and a number is still accepted where a value is written.
+
+Every profile got smaller, not just the one that was tight:
+
+| profile | before | after |
+|---|---:|---:|
+| minimal | 4,015 | **3,917** |
+| search | 2,257 | **2,205** |
+| core | 12,720 | **12,337** |
+| lazy | 12,734 | **12,351** |
+| full | 37,400 | **36,009** |
+
+`check:protocol` fails if any schema starts carrying the declaration again, because a dependency
+bump that changes the message shape would otherwise be a quiet 1,300-token regression nobody would
+think to look for.
+
 ### Six decimal places on every float, and 20% of the biggest read
 
 A measurement pass rather than a hunt. `unreal_list_data_table_rows` is the most expensive read on

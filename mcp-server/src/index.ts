@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { stripSchemaDeclaration } from "./trimSchemaDeclaration.js";
 import { trimFloatPaddingIn, trimFloatPadding } from "./trimFloats.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
 import { findInDataTables } from "./findInDataTables.js";
@@ -5596,6 +5597,11 @@ async function main() {
   }
 
   const transport = new StdioServerTransport();
+  // The one place that sees the finished payload. See trimSchemaDeclaration.ts: the $schema line is
+  // 50 characters repeated once per tool, about 1,338 tokens on every request, declaring a dialect
+  // that changes nothing about what these schemas accept.
+  const sendUnmodified = transport.send.bind(transport);
+  transport.send = (message) => sendUnmodified(stripSchemaDeclaration(message));
   await server.connect(transport);
   console.error(
     `unreal-mcp-server: connected via stdio; bridge target ${BRIDGE_HOST}:${BRIDGE_PORT}; ` +

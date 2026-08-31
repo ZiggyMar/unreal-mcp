@@ -319,6 +319,21 @@ async function main() {
     }
   }
 
+  // --- no tool schema carries a dialect declaration ----------------------------------------------
+  //
+  // "$schema":"http://json-schema.org/draft-07/schema#" is 50 characters emitted once per tool by
+  // zod-to-json-schema, about 1,338 tokens on every request, declaring a dialect that changes
+  // nothing about what these schemas accept. It is stripped at the transport, and this is here so a
+  // dependency bump that changes the message shape shows up as a failure rather than as a quiet
+  // 1,300-token regression nobody would look for.
+  const declaring = tools.filter((t) => t.inputSchema && "$schema" in t.inputSchema).map((t) => t.name);
+  if (declaring.length > 0) {
+    note(
+      `${declaring.length} tool schema(s) still carry a $schema declaration (${declaring.slice(0, 3).join(", ")}...), ` +
+        `which is ~${Math.round((declaring.length * 50) / 4)} tokens on every request for a label no client needs`
+    );
+  }
+
   // --- a value being written accepts the shape a caller would naturally send ---------------------
   //
   // Everything Unreal writes goes through ImportText, which takes a string, so every write parameter
