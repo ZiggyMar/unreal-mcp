@@ -34,6 +34,7 @@ import { compactBlueprintRow, compactVariable, pickFields, asCountMap, compactAs
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
+import { hotReloadCpp } from "./liveCoding.js";
 import { capGraphSummary } from "./graphSummary.js";
 import type {
   AddNodeResult,
@@ -433,7 +434,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   //
   // find_source also earns its place in the spine: called with no symbol it answers "does this
   // project have C++ at all", which is orientation, not C++ work.
-  cpp: ["unreal_compile_cpp"],
+  cpp: ["unreal_compile_cpp", "unreal_hot_reload_cpp"],
   // Animation is its own group: 62 of the assets on the project this was measured against, and
   // irrelevant to a project that has none.
   anim: ["unreal_read_anim_blueprint"],
@@ -2559,6 +2560,50 @@ register(
   async ({ action, watch, intervalMs, maxSamples }) => {
     try {
       return jsonResult(await bridge.send("watch_runtime", { action, watch, intervalMs, maxSamples }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_hot_reload_cpp",
+  {
+    title: "Apply C++ changes to the running editor",
+    description:
+      "Compiles the C++ you just changed and patches it into the editor that is already open - the Ctrl+Alt+F11 " +
+      "a human presses, without closing anything. This is the step that makes a native fix real: unreal_compile_cpp " +
+      "proves code builds, this makes the running editor actually run it, so you can then test the fix in the same " +
+      "session you wrote it in.\n\n" +
+      "Save your edits first, then call this once and wait - it returns when the compile is done, however long that " +
+      "takes. It reports which of six things happened, and they are not interchangeable: \"no-changes\" means nothing " +
+      "was rebuilt (usually an unsaved file, or one in a module this editor never loaded), and \"patched-but-unsafe\" " +
+      "means it worked but you changed data types - adding a UPROPERTY, typically - which live coding patches without " +
+      "guaranteeing. Only \"patched\" means test it and move on.\n\n" +
+      "Live coding is Windows-only and can be switched off per project; when it is unavailable the reply says so and " +
+      "names the rebuild that does work.",
+    inputSchema: {
+      timeoutSeconds: z
+        .number()
+        .optional()
+        .describe(
+          "How long to wait before returning while the compile continues. Default 300. The first compile of a " +
+            "session is far slower than later ones."
+        ),
+    },
+  },
+  async ({ timeoutSeconds }) => {
+    try {
+      return jsonResult(
+        await hotReloadCpp(
+          {
+            send: (cmd, params) => bridge.send(cmd, params),
+            wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            now: () => Date.now(),
+          },
+          { timeoutSeconds }
+        )
+      );
     } catch (err) {
       return errorResult(err);
     }

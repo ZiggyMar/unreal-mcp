@@ -48,6 +48,10 @@ private:
 	static TSharedRef<FJsonObject> HandleAddVariable(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetVariableReplication(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleWatchRuntime(const TSharedPtr<FJsonObject>& Params);
+
+	/** Live coding, in MCPLiveCoding.cpp: apply a C++ change to the editor that is already running. */
+	static TSharedRef<FJsonObject> HandleLiveCodingStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleLiveCodingCompile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSaveBlueprint(const TSharedPtr<FJsonObject>& Params);
 

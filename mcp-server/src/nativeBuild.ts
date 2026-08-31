@@ -24,7 +24,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export interface NativeDiagnostic {
@@ -218,6 +218,15 @@ export function guidanceFor(reason: string[]): string {
       "be compiled until it is fixed or that plugin is disabled in the .uproject."
     );
   }
+  if (/ActionGraphInvalid|Action graph is invalid/i.test(text)) {
+    return (
+      "UnrealBuildTool could not plan the build: two actions wanted to produce the same file. The " +
+      "usual cause is building the wrong editor target for this project, so the engine's editor and " +
+      "the project's own both try to link the same plugin DLLs - but a second copy of a plugin " +
+      "somewhere under the project does it too. UBT writes the two conflicting actions to JSON files " +
+      "and names them in its output; diffing those two files says which pair collided."
+    );
+  }
   if (/LNK|link/i.test(text)) {
     return (
       "The compile succeeded and the LINK failed. That is usually the editor running and holding the " +
@@ -238,6 +247,52 @@ export interface CompileOptions {
 }
 
 /** Where UnrealBuildTool lives, given an engine directory. Ping reports .../Engine/, and it varies. */
+/**
+ * The editor target to build, which is NOT always "UnrealEditor".
+ *
+ * This was hardcoded, and the bug it caused is worth writing down because it hid for so long and
+ * because the symptom named nothing useful.
+ *
+ * A project with C++ of its own defines its own editor target - `AntiVirusSquadEditor.Target.cs` in
+ * `Source/`. Asking UnrealBuildTool to build `UnrealEditor` for that project puts BOTH targets in one
+ * action graph, and each of them wants to link the project's plugin DLLs to the same paths. Two
+ * actions producing one file is exactly what UBT refuses:
+ *
+ *   Action graph is invalid; unable to continue.
+ *   Result: Failed (ActionGraphInvalid)
+ *
+ * Nothing in that says "wrong target". The two actions differ in one prerequisite - a shared PCH
+ * under `Intermediate/Build/Win64/x64/UnrealEditor/` versus one under `.../AntiVirusSquadEditor/` -
+ * and finding that meant diffing the two JSON files UBT writes on the way out.
+ *
+ * It survived because UBT caches a makefile: as long as one built by other means was valid, the
+ * wrong target name never got as far as planning a graph. The first edit to any `.Build.cs`
+ * invalidates that cache, and then every compile fails at once, for a reason that appears to have
+ * nothing to do with the edit.
+ *
+ * The rule is the one the engine uses: a target is a `<Name>.Target.cs` under `Source/`, and the
+ * editor one ends in `Editor`. A Blueprint-only project has no `Source/` at all and correctly gets
+ * `UnrealEditor`, which is the engine's own editor and the thing such a project actually runs.
+ */
+export function editorTargetName(projectFile: string): string {
+  const sourceDir = join(dirname(projectFile), "Source");
+  if (!existsSync(sourceDir)) return "UnrealEditor";
+  let entries: string[];
+  try {
+    entries = readdirSync(sourceDir);
+  } catch {
+    return "UnrealEditor";
+  }
+  const targets = entries
+    .filter((name) => name.endsWith(".Target.cs"))
+    .map((name) => name.slice(0, -".Target.cs".length));
+  // A project has a game target and an editor target and they are named the same but for the suffix.
+  // Matching on the suffix rather than on "starts with the project name" is deliberate: the module
+  // and the .uproject do not always share a name, and the suffix is what UBT itself keys on.
+  const editor = targets.find((name) => name.endsWith("Editor"));
+  return editor ?? "UnrealEditor";
+}
+
 export function buildBatchPath(engineDir: string): string {
   const normalized = engineDir.replace(/[\\/]+$/, "");
   const withEngine = normalized.toLowerCase().endsWith("engine")
@@ -259,8 +314,8 @@ export async function compileNative(options: CompileOptions): Promise<NativeBuil
 
   const args = [
     // The editor target is what a running editor is; building anything else answers a question
-    // nobody asked.
-    "UnrealEditor",
+    // nobody asked. Which editor target that is depends on the project - see editorTargetName.
+    editorTargetName(projectFile),
     "Win64",
     "Development",
     `-Project=${projectFile}`,

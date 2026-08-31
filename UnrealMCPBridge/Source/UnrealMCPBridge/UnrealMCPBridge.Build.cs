@@ -47,6 +47,15 @@ public class UnrealMCPBridge : ModuleRules
 			"SourceControl"
 		});
 
+		// Live coding is Windows-only and is compiled out of some targets entirely, so it is asked for
+		// the same way the engine's own modules ask for it: gated on the target flag, matched by a
+		// `#if WITH_LIVE_CODING` in MCPLiveCoding.cpp. Without both, this plugin would stop building on
+		// any target that does not have it - which is every shipping build.
+		if (Target.bWithLiveCoding)
+		{
+			PrivateDependencyModuleNames.Add("LiveCoding");
+		}
+
 		bEnableExceptions = false;
 	}
 }

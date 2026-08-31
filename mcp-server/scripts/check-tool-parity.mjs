@@ -46,7 +46,12 @@ const compositeTools = new Set(["read_runtime_errors", "auto_layout_graph", "rev
   // compile_cpp asks the bridge only where the engine and project are (ping) and then runs
   // UnrealBuildTool itself. It is deliberately NOT a bridge command: the compile must survive the
   // editor being busy, and a build that takes minutes has no business occupying the game thread.
-  "compile_cpp"]);
+  "compile_cpp",
+  // hot_reload_cpp starts live_coding_compile and then polls live_coding_status until it finishes.
+  // Two bridge commands rather than one because the engine's blocking form spins on the game thread
+  // behind a modal dialog, which would hang this plugin's own ticker and every later command with it.
+  // The waiting belongs on this side, where it costs the model nothing: still one tool call.
+  "hot_reload_cpp"]);
 
 const covered = new Set();
 for (const tool of registeredTools) {
@@ -60,7 +65,12 @@ for (const tool of registeredTools) {
 // find_broken_names checks names typed as text - a Data Table row, a timer's target function -
 // against whether that thing exists. It belongs inside "find every bug", and audit_project is what
 // calls it. Exposing it as well would add ~330 tokens of standing context to earn nothing.
-const internalCommands = new Set(["find_broken_names"]);
+//
+// live_coding_compile and live_coding_status are the two halves of hot_reload_cpp. Separately they
+// are a start button and a poll, and neither is a job anybody asks for; together they are "make the
+// running editor run my fix". Two more tool definitions would cost every session standing context to
+// let a caller do by hand what the composite already does correctly.
+const internalCommands = new Set(["find_broken_names", "live_coding_compile", "live_coding_status"]);
 
 const unreachable = [...bridgeCommands]
   .filter((cmd) => !covered.has(cmd) && !internalCommands.has(cmd))

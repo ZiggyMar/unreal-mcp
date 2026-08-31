@@ -970,6 +970,60 @@ The engine and project locations come from `unreal_ping`, not from configuration
 things a client cannot know and the editor always can. `ping` reports `engineDir` for exactly this
 reason — an engine install moves, and there is no registry entry a cross-platform client can trust.
 
+### Making that C++ actually run: `unreal_hot_reload_cpp`
+
+Every other leg of this server could finish its own job. The C++ leg could not. A model could find a
+bug in native code, write the fix, and prove it compiled — and the change then sat on disk, because
+the running editor holds the DLL it was built from. Applying it meant a human closing the editor,
+rebuilding, and reopening. A human working alone does not do that. A human presses **Ctrl+Alt+F11**.
+
+This is that keystroke:
+
+```text
+unreal_hot_reload_cpp({})
+-> { outcome: "patched",
+     meaning: "The code compiled and is running in the editor now. No restart needed." }
+```
+
+One tool call. It starts a Live Coding compile, waits for it, and reports which of six things
+happened. The waiting is on this side deliberately — the engine's own blocking form,
+`Compile(WaitForCompletion)`, spins on `FPlatformProcess::Sleep` on the game thread *behind a modal
+slow-task dialog*. That would stop this plugin's ticker, so the reply could never flush and the
+client would report the editor as hung — and it is the exact failure `blockingDialogTitle()` exists
+to diagnose. So the bridge half is two non-blocking commands and the polling happens where polling is
+free.
+
+**The outcomes are not interchangeable, and the engine makes that easy to get wrong.** Three
+different results all start with the same four words:
+
+```text
+"Live coding succeeded"                                             -> patched, running now
+"Live coding succeeded, no code changes detected"                   -> nothing was rebuilt at all
+"Live coding succeeded, data type changes ... will likely ... crash" -> patched, and now unsafe
+```
+
+A substring test for `"Live coding succeeded"` calls all three a win, and the middle one is the
+common case: a model forgets to save, calls this, is told it succeeded, and concludes its fix is
+live. So the checks run most-specific first and the no-op has its own outcome — `no-changes`, whose
+reply names the three reasons it happens (unsaved file, a module this editor never loaded, a copy of
+the source outside the project).
+
+`patched-but-unsafe` is not this tool being cautious; it is the engine reporting that re-instancing
+occurred, which means the change altered data types rather than function bodies — adding a
+`UPROPERTY` to a live `UCLASS`, typically. Live Coding patches it and says out loud that it does not
+guarantee it. Dropping that line and reporting `patched` would be lying in the most expensive
+possible way, so the warning *is* the outcome.
+
+One real limit, stated rather than hidden: on `compile-failed` the compiler errors go to the Live
+Coding console, a separate process this server cannot read. The reply says so and names
+`unreal_compile_cpp` on the changed file, which builds it through UnrealBuildTool and parses the
+diagnostics properly. The errors are one call away rather than unavailable.
+
+Live Coding is Windows-only and can be compiled out entirely, so the plugin asks for it the way the
+engine's own modules do — `Target.bWithLiveCoding` in `Build.cs`, `#if WITH_LIVE_CODING` in the code.
+Where it is missing, the reply says which of those two is missing and names the full rebuild instead
+of just refusing.
+
 `unreal_compile_cpp` is the whole of the **`cpp` group**, so a Blueprint-only project never pays for
 it. `find_source` deliberately stays in `core`: enabling `"core"` enables `CORE_PROFILE_TOOLS` rather
 than this table's `core` entry, so moving `find_source` would have changed what `unreal_list_tools`
