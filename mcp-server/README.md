@@ -1885,6 +1885,50 @@ obvious way to write it.
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
 
+### 167 properties, and the Blueprint changed a handful
+
+`read_class_defaults` was the second-largest read and, like the first, unmeasured: **16,129
+characters on BP_Player, 167 editable properties**. Of those, 95 values were the type's zero and 74
+categories were "Default". Most of the list is `PrimaryActorTick`, `CapsuleComponent` and the whole
+of `ACharacter`'s details panel, restated on every read.
+
+"What are this Blueprint's class defaults" almost always means **"what did this Blueprint change"**,
+and the engine can answer that exactly - compare each property against the parent class default
+object. Same mechanism as the Data Table delta, same one that decides what a `.uasset` stores.
+
+Two things it has to get right. A property the Blueprint declares *itself* does not exist on the
+parent, so comparing at the same offset would read whatever is at that address - it is only compared
+when the parent class actually descends from the class that owns the property, and otherwise always
+included, which is correct anyway. And the omitted ones are **counted and named in the reply**:
+"12 properties" and "12 of 167, the rest inherited unchanged from ACharacter" are different answers,
+and a reader who cannot tell them apart will conclude the Blueprint has twelve properties.
+
+`match` overrides the whole thing. Asking about a property by name answers whether or not it was
+overridden, because a search that silently returns nothing for an inherited property is worse than
+one that returns the inherited value.
+
+### Raising a ceiling, with the argument written down
+
+Adding the three Enhanced Input tools pushed the `full` profile to 36,038 against its 36,000 ceiling,
+and the guard refused it:
+
+```text
+full is ~36038 tokens standing, over its 36000 ceiling.
+  Either trim a description, move a tool to a group this profile does not include,
+  or argue for a higher ceiling here - but do not raise it silently.
+```
+
+The raise was not the first move. The `read_class_defaults` description was tightened by 66 tokens -
+not enough on its own - and `unreal_build_graph`, the largest definition at 3,530 characters, was
+read and left alone. Trimming descriptions was measured and rejected as a lever for this project long
+ago: they are the teaching a model relies on, and the per-tool average is **339 against a 420
+ceiling**, so there is no bloat to reclaim.
+
+So the ceiling moved to 37,000, with the reasoning in the file beside the previous two raises. The
+surface grew because the tool can do more, which is the only reason that number is ever allowed to
+move - and `full` is the opt-in profile whose whole premise is "everything, for a model that can
+afford it". The defaults people actually run are unchanged: `search` at 2,424 and `core` at 12,839.
+
 ### The largest read in the surface, and nobody was watching it
 
 Continuing the read/write audit into Data Tables found something bigger than a mismatch. Measured:

@@ -5583,10 +5583,37 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetComponentProperty(const TSh
 // One walk over an object's editable properties, shared by the asset reader and the class-default
 // reader. They ask the same question of different objects - "what can a human change here, and what
 // does it say now" - and two copies of that would answer it two ways the first time one was touched.
+/**
+ * The editable properties of an object, optionally only the ones somebody actually changed.
+ *
+ * BP_Player answers this with 167 properties and 16,129 characters, and 95 of the values are the
+ * type's zero. Most of them are engine properties nobody has ever touched: PrimaryActorTick,
+ * CapsuleComponent, the whole of ACharacter's details panel, restated on every read.
+ *
+ * "What are this Blueprint's class defaults" almost always means "what did this Blueprint CHANGE",
+ * and the engine can answer that exactly - compare each property against the parent class default
+ * object. It is the same mechanism the Data Table rows use and the same one that decides what a
+ * .uasset stores: identical to the parent means the parent already says it.
+ *
+ * Two things this must get right.
+ *
+ * A property the Blueprint declares itself does not exist on the parent at all, so comparing at the
+ * same offset would read whatever happens to be at that address. It is only compared when the parent
+ * class actually descends from the class that owns the property; otherwise it is always included,
+ * which is correct anyway - a Blueprint's own variable defaults are exactly what somebody chose.
+ *
+ * And the ones left out are counted and reported, not silently dropped. "12 properties" and "12 of
+ * 167 properties, the rest inherited unchanged" are different answers.
+ */
 static void DescribeEditableProperties(UObject* Object, const FString& MatchFilter,
-	TArray<TSharedPtr<FJsonValue>>& OutProperties, int32& OutTotal)
+	TArray<TSharedPtr<FJsonValue>>& OutProperties, int32& OutTotal,
+	const UObject* CompareAgainst = nullptr, int32* OutUnchanged = nullptr)
 {
 	OutTotal = 0;
+	if (OutUnchanged)
+	{
+		*OutUnchanged = 0;
+	}
 	for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
 	{
 		FProperty* Property = *It;
@@ -5605,9 +5632,31 @@ static void DescribeEditableProperties(UObject* Object, const FString& MatchFilt
 			continue;
 		}
 
-		FString Value;
 		const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Object);
-		Property->ExportTextItem_Direct(Value, ValuePtr, nullptr, Object, PPF_None);
+
+		// Only comparable when the thing being compared against actually has this property.
+		const void* DefaultPtr = nullptr;
+		if (CompareAgainst)
+		{
+			const UClass* Owner = Property->GetOwnerClass();
+			if (Owner && CompareAgainst->GetClass()->IsChildOf(Owner))
+			{
+				DefaultPtr = Property->ContainerPtrToValuePtr<void>(CompareAgainst);
+				if (Property->Identical(ValuePtr, DefaultPtr))
+				{
+					if (OutUnchanged)
+					{
+						++(*OutUnchanged);
+					}
+					continue;
+				}
+			}
+		}
+
+		FString Value;
+		// DefaultPtr also prunes untouched members out of nested structs, the same way it does for a
+		// Data Table row - a component reference that differs in one field says only that field.
+		Property->ExportTextItem_Direct(Value, ValuePtr, DefaultPtr, Object, PPF_None);
 
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), Name);
@@ -6922,7 +6971,23 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadClassDefaults(const TShare
 
 	TArray<TSharedPtr<FJsonValue>> Properties;
 	int32 Total = 0;
-	DescribeEditableProperties(CDO, MatchFilter, Properties, Total);
+	// Only what this Blueprint changed, unless asked otherwise - or unless a `match` was given, in
+	// which case the caller is asking about a NAMED property and wants an answer whether or not it was
+	// overridden. A search that silently returns nothing because the property is inherited is worse
+	// than one that returns the inherited value.
+	bool bAllProperties = false;
+	Params->TryGetBoolField(TEXT("all"), bAllProperties);
+	const UObject* ParentDefaults = nullptr;
+	if (!bAllProperties && MatchFilter.IsEmpty())
+	{
+		if (UClass* ParentClass = Blueprint->GeneratedClass->GetSuperClass())
+		{
+			ParentDefaults = ParentClass->GetDefaultObject();
+		}
+	}
+
+	int32 Unchanged = 0;
+	DescribeEditableProperties(CDO, MatchFilter, Properties, Total, ParentDefaults, &Unchanged);
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("path"), Path);
@@ -6938,6 +7003,16 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadClassDefaults(const TShare
 	if (Properties.Num() != Total)
 	{
 		Result->SetNumberField(TEXT("totalProperties"), Total);
+	}
+	// Say what was left out and why. "12 properties" and "12 of 167, the rest inherited unchanged"
+	// are different answers, and a reader who cannot tell them apart will assume the Blueprint has
+	// twelve properties.
+	if (Unchanged > 0)
+	{
+		Result->SetNumberField(TEXT("inheritedUnchanged"), Unchanged);
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("%d editable properties are identical to %s and are not listed. Pass all=true for every property, or match=<name> to ask about one by name."),
+			Unchanged, *Blueprint->GeneratedClass->GetSuperClass()->GetName()));
 	}
 	return MakeOkResponse(Result);
 }

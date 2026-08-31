@@ -189,18 +189,18 @@ const ZERO_DEFAULTS = new Set(["", "()", "None", "0", "False", "0.0"]);
  * wants 100. Trailing zeros after a decimal point carry nothing, and trimming them cannot change the
  * number.
  */
-export function omitZeroDefault(variable: Row): Row {
-  const value = variable.defaultValue;
+export function omitZeroDefault(variable: Row, key = "defaultValue"): Row {
+  const value = variable[key];
   if (typeof value !== "string") return variable;
   if (ZERO_DEFAULTS.has(value) || /^0\.0+$/.test(value)) {
-    const { defaultValue: _dropped, ...rest } = variable;
+    const { [key]: _dropped, ...rest } = variable;
     return rest;
   }
   // 100.000000 -> 100, 0.100000 -> 0.1. Only a plain decimal number, so nothing inside a struct
   // literal or an asset path is touched.
   if (/^-?\d+\.\d+$/.test(value)) {
     const trimmed = value.replace(/0+$/, "").replace(/\.$/, "");
-    return { ...variable, defaultValue: trimmed };
+    return { ...variable, [key]: trimmed };
   }
   return variable;
 }

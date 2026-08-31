@@ -92,7 +92,16 @@ export const PROFILES = [
     // entire premise is "everything, for a model that can afford it". Nothing that cannot afford it
     // should be loading this - `search` costs 2,373 and the presets 4-10k, which is where the real
     // work went, and all four of those profiles have comfortable headroom.
-    ceilingTokens: 36_000,
+    //
+    // Raised a third time, to 37,000, for three tools that read and change Enhanced Input - the
+    // system every UE5 project keeps its key bindings in, and which nothing here could touch. The
+    // raise was not the first move: the description of read_class_defaults was tightened by 66
+    // tokens first, which was not enough on its own, and unreal_build_graph was looked at and left
+    // alone. Trimming descriptions was measured and rejected as a lever for this project years of
+    // sessions ago - they are the teaching a model relies on, and the per-tool average is 339
+    // against a 420 ceiling, so there is no bloat to reclaim. The surface grew because the tool can
+    // do more, which is the only reason this number is ever allowed to move.
+    ceilingTokens: 37_000,
     why: "everything, for frontier models that can afford it",
   },
 ];

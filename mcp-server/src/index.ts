@@ -30,7 +30,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, omitZeroDefault, omitDefault, pickFields, asCountMap, compactAssetRef } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -2336,22 +2336,41 @@ register(
   {
     title: "Read a Blueprint's class defaults",
     description:
-      "What a Blueprint's Class Defaults panel holds: every editable property with its type, current value and " +
-      "category. unreal_set_class_default could already change one; nothing could read them, so a model had to " +
-      "already know the property name, its current value and the spelling of the new one.\n\n" +
-      "**For an Actor this also hoists `replicates` and `replicatesMovement` to the top level**, because those two " +
+      "What a Blueprint's Class Defaults panel holds, with each property's type and value. Pair it with " +
+      "unreal_set_class_default, which can change one but needs the name and current value first.\n\n" +
+      "**Only the properties this Blueprint actually changed are listed** - that is what the question almost always " +
+      "means, and a real class inherits most of its 167 editable properties untouched. What was left out is counted; " +
+      "`match` overrides it, so asking about a property by name answers whether or not it was overridden.\n\n" +
+      "**For an Actor it also hoists `replicates` and `replicatesMovement` to the top level**, because those two " +
       "decide whether a multiplayer finding is a real bug. A server writing an unreplicated variable is only broken " +
-      "if the thing it holds does not replicate by itself: an object reference to an Actor that replicates is " +
-      "ordinary server-side bookkeeping, and \"fixing\" it changes nothing but bandwidth.\n\n" +
-      "Use `match` to ask about one setting rather than reading a class with two hundred of them.",
+      "if the thing it holds does not replicate by itself: a reference to an Actor that replicates is ordinary " +
+      "server-side bookkeeping, and \"fixing\" it changes nothing but bandwidth.",
     inputSchema: {
       path: z.string().describe('Blueprint path, e.g. "/Game/Blueprints/BP_Player.BP_Player".'),
-      match: z.string().optional().describe('Only properties whose name contains this, e.g. "Replicat".'),
+      match: z
+        .string()
+        .optional()
+        .describe('Only properties whose name contains this, e.g. "Replicat". Implies `all` - a named property answers whether or not it was overridden.'),
+      all: z
+        .boolean()
+        .optional()
+        .describe("Include properties identical to the parent class default. Off by default; they are most of a real class."),
     },
   },
-  async ({ path, match }) => {
+  async ({ path, match, all }) => {
     try {
-      return jsonResult(await bridge.send("read_class_defaults", { path, match }));
+      const result = (await bridge.send("read_class_defaults", { path, match, all })) as {
+        properties?: Record<string, unknown>[];
+      };
+      // Same treatment the variable list gets, for the same reasons: "Default" is what UE calls a
+      // property nobody filed anywhere, and a value that is the type's zero is what the type already
+      // said. Measured on BP_Player: 74 of 167 categories were "Default" and 95 of the values zero.
+      return jsonResult({
+        ...result,
+        ...(Array.isArray(result.properties)
+          ? { properties: result.properties.map((row) => omitDefault(omitZeroDefault(row, "value"), "category", "Default")) }
+          : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }

@@ -192,6 +192,9 @@ const CASES = [
   ...(BIGGEST_DATA_TABLE
     ? [{ label: "list_data_table_rows", tool: "unreal_list_data_table_rows", args: { path: BIGGEST_DATA_TABLE }, mustContain: "rows" }]
     : []),
+  // 16,129 characters on BP_Player, second only to the Data Table read, and also unwatched. 167
+  // editable properties, of which the Blueprint changed a fraction.
+  { label: "read_class_defaults", tool: "unreal_read_class_defaults", args: { path: biggest.path }, mustContain: "class" },
   { label: "find_source (modules)", tool: "unreal_find_source", args: {}, mustContain: "modules" },
   { label: "find_source (symbol)", tool: "unreal_find_source", args: { symbol: "AActor" }, mustContain: "matches" },
   { label: "list_actors", tool: "unreal_list_actors", args: {}, mustContain: "actors" },
