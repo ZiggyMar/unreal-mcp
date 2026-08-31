@@ -99,7 +99,30 @@ export async function sweepScratch({ list, remove, log = console.log }) {
       `before it could clean up` +
       (failed.length > 0 ? `; ${failed.length} could not be deleted` : "")
   );
-  for (const f of failed) log(`  could not delete ${f.path}: ${f.error}`);
+
+  // One line per distinct reason, not one per asset.
+  //
+  // Twenty leftovers all stuck for the same reason printed twenty identical sentences and buried the
+  // trial's own output. The reason is worth saying once and the names are worth listing; saying the
+  // reason twenty times is the repetition this repo trims everywhere else.
+  const byReason = new Map();
+  for (const f of failed) {
+    if (!byReason.has(f.error)) byReason.set(f.error, []);
+    byReason.get(f.error).push(f.path.split("/").pop());
+  }
+  for (const [reason, names] of byReason) {
+    const shown = names.slice(0, 6).join(", ");
+    log(`  ${names.length}x ${reason}`);
+    log(`     ${shown}${names.length > 6 ? `, and ${names.length - 6} more` : ""}`);
+  }
+  if (failed.some((f) => /deleted nothing/.test(f.error))) {
+    // Named once, because a reader who does not know this will assume a retry is worth trying.
+    log(
+      `     These are assets something else depended on, deleted separately - a struct whose Data Table ` +
+        `went first, or a Blueprint whose child did. Nothing in this session can release them; an editor ` +
+        `restart can. Deleting a set in ONE delete_asset({paths:[...]}) call avoids creating them.`
+    );
+  }
   return { found: stale.length, removed, failed };
 }
 

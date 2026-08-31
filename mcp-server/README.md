@@ -4882,6 +4882,46 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### The three promises, run from the sentence: `npm run trial:workflows`
+
+Each of the journeys this project is built around was verified by hand, once, in the session that
+built it — and none of them was repeatable. The headline claims rested on a measurement nobody could
+re-run, and the routing they depend on is a keyword table: the single most fragile thing here, where
+a rename or a word dropped from a `says` list breaks a journey without breaking a unit test.
+
+```text
+1 a bug in plain language: "upgrades aren't showing up in the shop"      3 calls, ~1629 tokens
+2 a feature request: "add a new shop upgrade that increases fire rate"   3 calls, ~1751 tokens
+3 a change request: "the machine gun should cost 500 instead of 300"     8 calls, ~1100 tokens
+
+standing context on the `search` profile: ~1135 tokens, paid on every request
+all three journeys: 14 calls, ~4480 tokens of replies
+```
+
+It reports **calls and tokens per journey** as well as pass/fail, because "does it still work" and
+"did it get more expensive" are different regressions and only the first one throws. Journeys 1 and 2
+are read-only against the real project; journey 3 builds its own table in the scratch namespace.
+
+Three things this trial got wrong about itself before it was right, all worth keeping:
+
+- **Its teardown used tools the journeys had not enabled.** It left two assets behind and said so —
+  `Tool unreal_delete_asset disabled`. The fix was not to enable everything up front, which would
+  have quietly made journeys 1 and 2 dishonest about what a bare session can reach, but to enable
+  the teardown tools *at teardown*, which is not part of any journey.
+- **A bare `catch` over the scratch sweep hid a validation error.** `list_assets` requires a
+  `className`; the sweep omitted it, the catch ate the rejection, the sweep silently did nothing, and
+  journey 3 then found a *leftover* table from a previous run, wrote the new value into that, and
+  verified the table it had just created. Two different tables, reported as a failure whose cause was
+  nowhere in the output — the bare-catch pattern this repo keeps finding, in a file written to catch
+  exactly that.
+- **The headline counted its own setup.** Reporting total calls meant the number moved with how much
+  residue happened to be lying around, which is the opposite of something you can compare between
+  runs.
+
+The sweep also generalised the delete diagnosis. The stuck leftovers are not only Blueprints: a
+`UserDefinedStruct` used as a Data Table's row struct gets stuck the same way when the table is
+deleted first. Same shape, same cure — delete the set in one `paths[]` call.
+
 ### The loop test: `npm run trial:feature`
 
 The unit tests cover the pieces, and all 315 were green while five separate defects sat in the path
