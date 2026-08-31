@@ -1924,6 +1924,30 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### Asking the engine instead of inferring it
+
+Two checks were fooled by dispatcher signatures, and both fixes worked by matching graph names
+against delegate-typed variables. That is inference about a fact the engine already knows: a
+dispatcher's signature graph lives in `Blueprint->DelegateSignatureGraphs`, its own array, separate
+from the function graphs.
+
+`GetAllGraphs` flattens them together, which is why they arrive looking exactly like unfinished
+functions - a function entry node, nothing wired to it, an ordinary name. `list_blueprint_graphs`
+marks them now, from the array rather than from the name:
+
+```json
+{"name": "ChangeHealth", "nodeCount": 1, "kind": "delegate"}
+```
+
+Absent for an ordinary graph, so a Blueprint with no dispatchers pays nothing. It also helps anyone
+reading the graph list directly, which is where this confusion starts - a model picking a graph to
+open has no other way to tell a signature from a function it could fill in.
+
+The audit prefers the mark when it is there and keeps the name-matching as a fallback, because the
+plugin inside a running editor is routinely older than this server and the variable list is already
+in hand. Verified with the current stale plugin: **52 of 511 and 7 empty functions, unchanged** - the
+fallback is carrying it, and the mark is a strict upgrade rather than a replacement.
+
 ### The same discovery corrected a number on the front page
 
 Finding that event dispatchers appear in the graph list raised an obvious question: what else counts

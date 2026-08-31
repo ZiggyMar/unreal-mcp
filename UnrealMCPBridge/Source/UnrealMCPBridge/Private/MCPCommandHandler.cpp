@@ -1455,6 +1455,25 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 	TArray<UEdGraph*> AllGraphs;
 	Blueprint->GetAllGraphs(AllGraphs);
 
+	// Which of these are event dispatcher signatures rather than functions.
+	//
+	// GetAllGraphs returns everything, and a dispatcher's signature graph is indistinguishable from
+	// an unfinished function once it is in the list: a function entry node, nothing wired to it, and
+	// a perfectly ordinary name. On BP_Player that is twelve of sixty. Two separate checks were
+	// fooled by it - one reported every dispatcher in the project as a function with no body, and the
+	// dead-graph pass counted them as abandoned, which was 41% of what it reported.
+	//
+	// The engine already knows: they live in their own array. Marking them from that is exact, where
+	// matching graph names against delegate-typed variables is inference about the same fact.
+	TSet<const UEdGraph*> DelegateSignatures;
+	for (const TObjectPtr<UEdGraph>& Signature : Blueprint->DelegateSignatureGraphs)
+	{
+		if (Signature)
+		{
+			DelegateSignatures.Add(Signature.Get());
+		}
+	}
+
 	TArray<TSharedPtr<FJsonValue>> GraphArray;
 	for (UEdGraph* Graph : AllGraphs)
 	{
@@ -1465,6 +1484,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListBlueprintGraphs(const TSha
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), Graph->GetName());
 		Entry->SetNumberField(TEXT("nodeCount"), Graph->Nodes.Num());
+		// Absent means an ordinary graph, the same convention the rest of this surface uses, so a
+		// Blueprint with no dispatchers pays nothing for the distinction.
+		if (DelegateSignatures.Contains(Graph))
+		{
+			Entry->SetStringField(TEXT("kind"), TEXT("delegate"));
+		}
 		GraphArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 

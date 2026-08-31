@@ -30,6 +30,8 @@ export interface BlueprintReview {
   blueprint: Array<{ check: string; severity: "warning" | "info"; message: string; fix: string; observed?: string }>;
   /** Raw graph nodes, only when asked for. See reviewBlueprint's includeGraphNodes. */
   graphNodes?: Array<{ graphName: string; nodes: unknown[] }>;
+  /** Which listed graphs the engine says are dispatcher signatures, when the plugin reports it. */
+  graphKinds?: Array<{ graphName: string; kind: string }>;
   /** The one thing most worth fixing next, or a note that nothing needs fixing. */
   nextAction: string;
 }
@@ -48,11 +50,17 @@ export async function reviewBlueprint(
   options: { includeGraphNodes?: boolean } = {}
 ): Promise<BlueprintReview> {
   let graphNames: string[];
+  let graphKinds: Array<{ graphName: string; kind: string }> = [];
   if (graphName) {
     graphNames = [graphName];
   } else {
     const list = await bridge.send<ListBlueprintGraphsResult>("list_blueprint_graphs", { path });
     graphNames = (list.graphs ?? []).map((graph) => graph.name).filter(Boolean);
+    // The engine's own answer to "which of these are dispatcher signatures", carried through for the
+    // audit. Absent on a plugin older than that change, which is why the caller keeps a fallback.
+    graphKinds = (list.graphs ?? [])
+      .filter((graph) => (graph as { kind?: string }).kind)
+      .map((graph) => ({ graphName: graph.name, kind: (graph as { kind?: string }).kind as string }));
   }
 
   const reports: QualityReport[] = [];
@@ -163,6 +171,7 @@ export async function reviewBlueprint(
     variables: options.includeGraphNodes ? variables : undefined,
     parentClass: options.includeGraphNodes ? parentClass : undefined,
     graphNodes: options.includeGraphNodes ? graphNodes : undefined,
+    graphKinds: options.includeGraphNodes && graphKinds.length > 0 ? graphKinds : undefined,
     // `observed` rides along deliberately. It is the evidence a check gathered, and two of these
     // checks fire identically on a real bug and on a deliberate choice - dropping it here would have
     // handed the audit a verdict with none of the reasoning behind it.

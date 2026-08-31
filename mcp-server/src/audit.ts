@@ -380,11 +380,26 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       //
       // Same reasoning as the interface and animation exclusions already here: a graph the engine
       // reaches by a route other than a call node is not evidence of anything.
-      const dispatcherNames = new Set(
-        (review.variables ?? [])
-          .filter((v) => /delegate/i.test(String((v as { type?: string }).type ?? "")))
-          .map((v) => v.name)
+      // Two sources, and the better one is preferred. list_blueprint_graphs marks these as
+      // kind:"delegate" from the engine's own DelegateSignatureGraphs array, which is exact. Matching
+      // graph names against delegate-typed variables is inference about the same fact - accurate in
+      // practice, since a dispatcher's signature graph carries its name, but inference.
+      //
+      // The inference stays because the plugin inside a running editor is routinely older than this
+      // server, and the variable list is already in hand here. When the mark is present it wins.
+      const markedDelegates = new Set(
+        ((review.graphKinds ?? []) as Array<{ graphName?: string; kind?: string }>)
+          .filter((g) => g.kind === "delegate")
+          .map((g) => String(g.graphName))
       );
+      const dispatcherNames =
+        markedDelegates.size > 0
+          ? markedDelegates
+          : new Set(
+              (review.variables ?? [])
+                .filter((v) => /delegate/i.test(String((v as { type?: string }).type ?? "")))
+                .map((v) => v.name)
+            );
       for (const graph of review.graphNodes ?? []) {
         if (dispatcherNames.has(graph.graphName)) continue;
         allGraphs.push({
