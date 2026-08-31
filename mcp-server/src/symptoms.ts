@@ -154,6 +154,19 @@ export const SYMPTOMS: SymptomEntry[] = [
       "sections, and a muted track. All three play perfectly and do nothing.",
   },
   {
+    // The one substrate where finding the value is not the end of the job. A Blueprint change is live
+    // the moment it compiles; a C++ change sits in a file the running editor has never read, so a
+    // model that edits the header and reports the work done has left the editor running the old code.
+    says: ["c++", "cpp", "native class", "native code", "header file", "recompile", "hot reload", "live coding", ".cpp", "in the header"],
+    tools: ["unreal_find_source", "unreal_compile_cpp", "unreal_hot_reload_cpp"],
+    because:
+      "find_source gives the file and line - it returns locations rather than contents on purpose, because your " +
+      "own file tools read and edit better than it could. The part that is easy to miss is what comes after: a " +
+      "C++ edit changes a file the running editor has never read, so unreal_compile_cpp says whether it built " +
+      "and unreal_hot_reload_cpp patches it into the editor already open. Skip that last step and the code on " +
+      "disk is right while the editor keeps running the old version, which looks exactly like the change not working.",
+  },
+  {
     says: ["where is", "who calls", "what uses", "what references", "find the", "which blueprint", "can't find", "cannot find", "where does"],
     tools: ["unreal_search_project", "unreal_find_references", "unreal_find_source"],
     because:
@@ -287,7 +300,10 @@ const CHANGE_BECAUSE =
   "unreal_list_components then unreal_set_component_property, because those are set on the component " +
   "and never appear in read_class_defaults. A C++ default: unreal_find_source. " +
   "Check more than one before concluding a value is not there - a number missing from all of them is " +
-  "usually spelled differently, not absent.";
+  "usually spelled differently, not absent. And if it turns out to be in C++, finding it is only half " +
+  "the job: the edit changes a file the running editor has never read, so unreal_hot_reload_cpp is what " +
+  "makes it real. Skipping that leaves the code on disk right and the editor running the old version, " +
+  "which looks exactly like the change not working.";
 
 /** The tools that answer "build me this", before anything domain-specific. */
 const BUILD_TOOLS = ["unreal_plan_feature", "unreal_map_system"];
@@ -338,6 +354,10 @@ export interface SymptomMatch {
  */
 function saysIt(said: string, phrase: string): boolean {
   if (phrase.includes(" ")) return said.includes(phrase);
+  // A phrase with punctuation is already distinctive, and word boundaries do not work around one:
+  // /c\+\+/ never matches "C++ class", because the boundary after "+" needs a word character
+  // and a space is not one. "c++" is exactly the token this index most needed to match.
+  if (/[^a-z0-9]/.test(phrase)) return said.includes(phrase);
   // The phrases are hand-written lowercase words, but escaping costs nothing, and a hyphen or
   // bracket slipped into one later would be a silent misparse rather than an error.
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");

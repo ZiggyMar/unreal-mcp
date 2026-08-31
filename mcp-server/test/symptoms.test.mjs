@@ -282,3 +282,43 @@ test("every intent list names only tools that exist", async () => {
   const lists = [...source.matchAll(/const ([A-Z_]*TOOLS)\s*=\s*\[/g)].map((m) => m[1]);
   assert.ok(lists.length >= 4, `expected at least four intent lists, found ${lists.join(", ")}`);
 });
+
+test("a C++ change is told how to make the edit real", async () => {
+  // The one substrate where finding the value is not the end of the job. A Blueprint change is live
+  // the moment it compiles; a C++ change sits in a file the running editor has never read - so a
+  // model that edits the header and reports the work done has left the editor running the old code,
+  // which looks exactly like the change not working.
+  //
+  // find_source was routed from the start. compile_cpp and hot_reload_cpp were not, and their own
+  // descriptions say the right thing - "this is the step that makes a native fix real" - while
+  // nothing pointed a caller at them.
+  for (const said of ["I edited the header file", "recompile the C++", "the native class needs a hot reload"]) {
+    const found = matchSymptoms(said);
+    assert.ok(found, `"${said}" matched nothing`);
+    assert.ok(found.tools.includes("unreal_hot_reload_cpp"), `"${said}" -> ${found.tools.join(", ")}`);
+  }
+
+  // And a CHANGE phrased around C++ takes the change route, so the advice has to carry it instead.
+  const change = matchSymptoms("change the walk speed in the C++ class");
+  assert.match(change.because.join(" "), /hot_reload_cpp/);
+});
+
+test("a phrase with punctuation is matched as a substring", async () => {
+  // "c++" is three characters, so the short-word rule would have demanded a word boundary - and
+  // /\bc\+\+\b/ never matches "C++ class", because the boundary after "+" needs a word character and
+  // a space is not one. The rule exists to stop "ai" matching "chain"; that reasoning only applies
+  // to letters, and a token with punctuation in it is already distinctive.
+  const found = matchSymptoms("the value lives in C++ somewhere");
+  assert.ok(found, "c++ matched nothing");
+  assert.ok(found.matched.includes("c++"));
+});
+
+test("the short-word rule still holds for letters", async () => {
+  // The punctuation exception must not reopen what it was carved out of.
+  const domain = (t) =>
+    (matchSymptoms(t)?.tools ?? []).filter(
+      (x) => !["unreal_plan_feature", "unreal_map_system", "unreal_find_in_data_tables", "unreal_search_project", "unreal_trace_variable", "unreal_find_source"].includes(x)
+    );
+  assert.deepEqual(domain("explain the chain"), [], "ai must not match inside chain");
+  assert.deepEqual(domain("change the flag"), [], "lag must not match inside flag");
+});

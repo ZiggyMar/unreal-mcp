@@ -4889,6 +4889,38 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### The C++ leg stopped one step short of working
+
+Applying the same question to the substrate the goal names last: *"whether it's C++ or Blueprints or a
+Data Table."*
+
+```text
+"my C++ change is not showing up"     -> find_in_data_tables, search_project, trace_variable, find_source
+"I edited the header file"            -> nothing
+"recompile the C++"                   -> nothing
+  advice mentions rebuilding C++: false
+```
+
+`find_source` was routed from the start, and it is only half the job. **A Blueprint change is live the
+moment it compiles; a C++ change sits in a file the running editor has never read.** A model that
+edits the header and reports the work done has left the editor running the old code — which looks
+exactly like the change not working, and is the failure mode this repo cares most about: reported
+finished, isn't.
+
+`unreal_compile_cpp` and `unreal_hot_reload_cpp` already existed and their own descriptions say
+precisely the right thing — *"this is the step that makes a native fix real"*. Nothing pointed a
+caller at them. Same defect as the previous section, one substrate over.
+
+There is now a C++ entry in the index, and the change advice carries the follow-up for a request
+phrased as a change rather than as a compile problem.
+
+One matching rule had to change to make it work. `"c++"` is three characters, so the short-word rule
+demanded a word boundary — and `/c\+\+/` **never matches "C++ class"**, because the boundary after
+`+` needs a word character and a space is not one. That rule exists to stop `ai` matching inside
+"chain"; the reasoning only applies to letters, so a phrase containing punctuation is matched as a
+substring. The tests pin both halves: `c++` matches, and `ai`/`lag` still do not match inside "chain"
+and "flag".
+
 ### The tools existed and the routing never heard about them
 
 Three commits went into closing "it finds it and then cannot change it" — rename and remove for
