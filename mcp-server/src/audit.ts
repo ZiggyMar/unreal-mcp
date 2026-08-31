@@ -82,6 +82,14 @@ export const FINDING_COST: Record<string, number> = {
   "branch-dead-path": 60,
   "tick-heavy": 55,
   "level-sweep-maybe-repeating": 50,
+  // Several Get All Actors Of Class in one graph: each walks the whole level, and if they are
+  // looking for the same thing it is one sweep repeated. Priced beside graph-too-large because it is
+  // the mildest of the three sweep checks and is reported at "info".
+  //
+  // It had NO entry until a mutation test found it, which meant `FINDING_COST[check] ?? 1` gave it 1
+  // and it sank under every cosmetic finding in the audit. Not a decision anyone made - a name that
+  // was never added here, scoring the fallback in silence.
+  "level-sweep-repeated": 20,
   "replicated-set-without-server-event": 50,
   "empty-event": 40,
   "dead-node": 30,

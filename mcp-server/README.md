@@ -1623,6 +1623,35 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### The tests were mutation-tested, and two guards were not guarding
+
+417 tests, and every one of them has assertions - but "has assertions" is not "can fail". So twelve
+deliberate mutations were made across the modules this project relies on, each running the whole
+suite to see whether anything noticed.
+
+Eleven were caught. **One was not: renaming the `repnotify-does-nothing` check broke no test.** The
+function is tested, but nothing asserted on the check NAME - and that name is what the audit prices
+by. `FINDING_COST[check] ?? 1` means a drifted name silently drops a cost-60 finding to **1**, under
+every cosmetic result in the report. The ranking is the entire product of that tool.
+
+Checking the class instead of the instance then found a second one already live:
+**`level-sweep-repeated` was emitted by `quality.ts` and priced nowhere**, so it had been scoring 1
+since it was written. Not a decision anyone made - a name that was never added to the table, taking
+the fallback in silence. It is now 20, beside `graph-too-large`, which is where an info-severity
+sweep check belongs among its two priced siblings at 85 and 50.
+
+The guard is general rather than one more assertion: every `check: "..."` string in `src/` must have
+a `FINDING_COST` entry. Confirmed by drifting a name and watching it fail:
+
+```text
+not ok - every check a module emits has a price, because the fallback is silent
+    emitted but unpriced, so they score 1 and sink: level-sweep-repeated-often
+```
+
+Worth recording that the first attempt to confirm it used `level-sweep-DRIFTED`, which slipped past
+the check's own lowercase-kebab regex and looked like the guard failing. The mutant was
+unrepresentative, not the guard - but a mutation that cannot happen proves nothing either way.
+
 ### Every preset was checked for the tool its own job starts from
 
 The lesson from the `diagnose` gap - *a preset check only checks the path the trial walks* - is worth

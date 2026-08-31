@@ -1,5 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 import { auditProject, FINDING_COST } from "../dist/audit.js";
 
@@ -285,4 +290,23 @@ test("no check named means the old positional behaviour, unchanged", async () =>
   assert.equal(result.checkNotFound, undefined);
   const detailed = result.groups.filter((g) => !g.detailElided);
   assert.ok(detailed.length <= 2, `expected at most 2 detailed groups, got ${detailed.length}`);
+});
+
+test("every check a module emits has a price, because the fallback is silent", () => {
+  // FINDING_COST[check] ?? 1 is the whole failure mode. A check name that is never added here, or
+  // that drifts from the one a module emits, scores 1 and sinks under every cosmetic finding in the
+  // audit - and nothing anywhere says so. The ranking is the entire product of this tool.
+  //
+  // Found by mutation testing rather than by reading: renaming "repnotify-does-nothing" broke no
+  // test, which meant nothing tied that name to its price. Checking the class instead of the
+  // instance then turned up "level-sweep-repeated", emitted by quality.ts and priced nowhere.
+  const src = readdirSync(SRC_DIR).filter((f) => f.endsWith(".ts"));
+  const emitted = new Set();
+  for (const file of src) {
+    const text = readFileSync(join(SRC_DIR, file), "utf8");
+    for (const m of text.matchAll(/check:\s*"([a-z0-9-]+)"/g)) emitted.add(m[1]);
+  }
+  assert.ok(emitted.size > 20, `expected to find the check names; found ${emitted.size}`);
+  const unpriced = [...emitted].filter((name) => FINDING_COST[name] === undefined);
+  assert.deepEqual(unpriced, [], `emitted but unpriced, so they score 1 and sink: ${unpriced.join(", ")}`);
 });
