@@ -115,3 +115,41 @@ test("a child that reads none of it is flagged as possibly deliberate", () => {
   assert.match(finding.observed, /may be deliberate/i);
   assert.match(finding.observed, /second one/i, "it must warn what 'fixing' it could do");
 });
+
+test("a parent that sets things nobody reads is not treated as a missing call", () => {
+  // The real case this came from: PC_Lobby, PC_Gameplay and PC_MainMenu all skip PC_Base's
+  // BeginPlay, and following the old advice would have been wrong in all three. What that chain
+  // sets is MyRootLayout - written once, read by nothing across 181 Blueprints - and the function
+  // that would consume it has one call site, itself dead. A replaced UI system, not a missing call.
+  // Adding the parent call there does not fix a bug; it puts an unused widget back on screen.
+  const findings = findUncalledParentEvents({
+    blueprint: "PC_Gameplay",
+    parentBlueprint: "PC_Base",
+    childChains: [chain("Event BeginPlay", ["Delay", "Get ShopWidget"])],
+    childNodeTitles: ["Event BeginPlay", "Delay", "Get ShopWidget"],
+    parentChains: [chain("Event BeginPlay", ["Create Widget", "Set MyRootLayout", "Add to Viewport"])],
+  });
+  const finding = findings.find((f) => f.check === "parent-event-not-called");
+  assert.ok(finding, "the check should still fire - it is a real observation, just not a real fix");
+  assert.match(finding.fix, /Check before adding it/);
+  assert.match(finding.fix, /unreal_trace_variable/);
+  assert.doesNotMatch(finding.fix, /^unreal_add_node/, "it must not LEAD with the action it is unsure about");
+});
+
+test("a parent that sets nothing is safe to inherit, and the fix says so", () => {
+  // The other half of the same split, and the one a test in this file caught me getting wrong.
+  // "Nothing reads what the parent sets" is vacuously true when the parent sets NOTHING - a chain
+  // that clears a timer or registers input has no state to duplicate, and cleanup is the one thing
+  // you always want to inherit.
+  const findings = findUncalledParentEvents({
+    blueprint: "BP_Child",
+    parentBlueprint: "BP_Parent",
+    childChains: [chain("Event EndPlay", ["Print String"])],
+    childNodeTitles: ["Event EndPlay", "Print String"],
+    parentChains: [chain("Event EndPlay", ["Clear and Invalidate Timer by Handle"])],
+  });
+  const finding = findings.find((f) => f.check === "parent-event-not-called");
+  assert.ok(finding);
+  assert.match(finding.fix, /^unreal_add_node/, "with no state to duplicate, the action leads");
+  assert.match(finding.observed, /sets no variables at all/);
+});

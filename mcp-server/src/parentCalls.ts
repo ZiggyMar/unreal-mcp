@@ -112,13 +112,28 @@ export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallF
       .filter((name): name is string => !!name && setByParent.has(name.toLowerCase()));
     const depended = [...new Set(readByChild)];
 
+    // Three situations, not two.
+    //
+    // The first version of this split on "does the child read what the parent sets", and that
+    // conflates a parent which SETS THINGS NOBODY READS with one which SETS NOTHING AT ALL. The
+    // second is not evidence of anything: a parent EndPlay that clears a timer, or a BeginPlay that
+    // only adds a widget to the viewport, sets no variables, so the test is vacuously true and
+    // concluding "the override is probably deliberate" from it is unfounded. A test in this repo
+    // caught exactly that - parent EndPlay doing Clear and Invalidate Timer by Handle, told not to
+    // inherit cleanup, which is the one thing you always want to inherit.
+    const parentSetsNothing = setByParent.size === 0;
+
     const observed =
       depended.length > 0
         ? `${input.blueprint} reads ${depended.join(", ")}, which ${input.parentBlueprint}'s ${name} is ` +
           `what sets. Those reads get None. This one is a real bug, not a style choice.`
-        : `Nothing in ${input.blueprint} reads what ${input.parentBlueprint}'s ${name} sets, so the ` +
-          `override may be deliberate. Check what the parent does before adding the call - if it ` +
-          `creates a widget or adds an input mapping, calling it could produce a second one.`;
+        : parentSetsNothing
+          ? `${input.parentBlueprint}'s ${name} sets no variables at all - it does side-effect work ` +
+            `(${what}). So "nothing reads it" proves nothing here, and side effects like clearing a ` +
+            `timer or registering input are usually meant to be inherited.`
+          : `Nothing in ${input.blueprint} reads what ${input.parentBlueprint}'s ${name} sets, so the ` +
+            `override may be deliberate. Check what the parent does before adding the call - if it ` +
+            `creates a widget or adds an input mapping, calling it could produce a second one.`;
 
     findings.push({
       check: "parent-event-not-called",
@@ -128,15 +143,38 @@ export function findUncalledParentEvents(input: OverrideCheckInput): ParentCallF
         `${input.blueprint} overrides ${name} but never calls Parent: ${bare}, so ${input.parentBlueprint}'s ` +
         `${name} never runs - including ${what}. Nothing warns about this, and the child's own logic works, ` +
         `so the Blueprint looks correct while everything the parent set up is missing.`,
-      // Names the tool call, not the right-click. A model reading "right-click the node and choose
-      // Add call to parent function" cannot do that, so it hands the work back to the person who
-      // asked - which is the exact failure this project exists to prevent. The editor idiom stays,
-      // because it is how a human recognises the node, but the tool that performs it comes first.
+      // The fix follows the EVIDENCE, and it did not used to.
+      //
+      // `observed` above already worked out whether the child depends on what the parent sets. The
+      // fix text ignored it and said "add the node, then wire it" either way - so the two fields of
+      // one finding contradicted each other, and the actionable one was the wrong one. A model reads
+      // `fix` and acts.
+      //
+      // Measured on the real project this is developed against: PC_Lobby, PC_Gameplay and
+      // PC_MainMenu all skip PC_Base's BeginPlay, and following the old fix text would have been a
+      // mistake in all three. What that chain sets is MyRootLayout - written once, and across 181
+      // Blueprints read by NOTHING - and the function that would consume it, PushAVSWidget, has one
+      // call site which is itself dead. It is a replaced UI system, not a missing call. Adding the
+      // parent call would not fix a bug; it would put an unused widget back on screen.
+      //
+      // So when nothing reads what the parent sets, the fix leads with verifying rather than acting,
+      // and names the cheapest way to settle it. When something does read it, the call is the
+      // answer and the fix says so plainly. Same finding, same cost, opposite instruction.
       fix:
-        `unreal_add_node with nodeType "CallParent" and functionName "${bare}" on ${input.blueprint}, ` +
-        `then wire it as the first thing ${name} runs. (This is the "Add call to parent function" ` +
-        `right-click, done through the bridge.) If the parent's version is genuinely meant to be ` +
-        `replaced that is fine, but check what it does first: ${what}.`,
+        depended.length > 0 || parentSetsNothing
+          ? `unreal_add_node with nodeType "CallParent" and functionName "${bare}" on ${input.blueprint}, ` +
+            `then wire it as the first thing ${name} runs. (This is the "Add call to parent function" ` +
+            `right-click, done through the bridge.) ` +
+            (depended.length > 0
+              ? `${input.blueprint} reads ${depended.join(", ")}, so this is a real defect rather than a style choice.`
+              : `The parent does ${what} and sets nothing, so there is no state to duplicate by calling it.`)
+          : `Check before adding it. Nothing in ${input.blueprint} reads what ` +
+            `${input.parentBlueprint}'s ${name} sets, and an override that skips a parent on purpose ` +
+            `looks exactly like this. The parent does: ${what}. unreal_trace_variable on what that ` +
+            `chain sets settles it in one call - written there and read nowhere means adding the call ` +
+            `revives a replaced system rather than fixing a bug. If it IS wanted, it is the ` +
+            `"Add call to parent function" right-click: unreal_add_node with nodeType "CallParent" ` +
+            `and functionName "${bare}", wired first.`,
     });
   }
 
