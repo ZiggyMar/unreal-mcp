@@ -1623,6 +1623,43 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### What a bug actually costs, measured end to end
+
+A cold session, the way a frontier model really starts - `search` profile, four tools - through to a
+diagnosis of a real bug in a real project:
+
+| step | tokens |
+| --- | --- |
+| standing cost, before a word is typed | 2,424 |
+| `enable_tools({preset: "diagnose"})` | 245 + the tool list it turns on |
+| `map_system({query: "countdown"})` | ~600 |
+| `trace_function_calls({function: "ShowCountdown"})` | 166 |
+| `trace_variable({variable: "CountdownTime"})` | 415 |
+| **total, cold session to diagnosis** | **~10,500** |
+
+Most of that is the preset's tool definitions, which is the honest shape of the trade: about 2.4k to
+be ready for anything, and a one-off ~7k when the job is known.
+
+**Measuring it found a real gap.** `map_system` returned an error - the `diagnose` preset, whose
+entire job is "find and fix a reported bug", did not contain the tool a plain-text bug report lands
+on. `search_project` was there and covers the raw lookup, which is why nothing looked broken: it
+returns hits, and `map_system` returns a system.
+
+The reason it stayed invisible is worth more than the fix. `trial:diagnose --by-preset` exists
+precisely to prove a preset is sufficient by running the whole loop on it - but the trial plants a
+defect and goes straight to the tools that find *that* defect. **A preset check only checks the path
+the trial walks.** The trial now starts from a name in prose, the way a bug report does, and refusing
+to include `map_system` fails it:
+
+```text
+1 step(s) did not do their job:
+  - find the system from a name alone: no reply
+      reply: MCP error -32602: Tool unreal_map_system disabled
+```
+
+`diagnose` costs 9,568 → 10,257 tokens for it, which is the right trade for the preset whose purpose
+it is.
+
 ### The tool a plain-text bug lands on now asks whether the system still runs
 
 `unreal_map_system` is where "the countdown never shows up" goes first, and it answered *what this

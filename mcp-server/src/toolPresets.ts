@@ -67,6 +67,17 @@ export const TOOL_PRESETS: Record<string, ToolPreset> = {
       // handle to an Actor that replicates itself is ordinary bookkeeping, and the only way to know
       // which it is, is to read whether that Actor replicates.
       "unreal_read_class_defaults",
+      // The tool a plain-text bug report actually lands on, and it was not here.
+      //
+      // "the countdown never shows up" goes to map_system first: it groups the hits by asset, shows
+      // what uses what, orders them for reading, and - since the last change - says outright that a
+      // system matching a search may be the replaced one rather than the live one. That warning was
+      // added BECAUSE this is where bug reports arrive, into a preset for finding bugs that could
+      // not reach it.
+      //
+      // search_project was here and covers the raw lookup, which is why nothing looked broken. It
+      // returns hits; this returns a system.
+      "unreal_map_system",
       // And the fix for it. server-writes-unreplicated is the most expensive finding this produces;
       // a preset that can report it and not act on it hands the work straight back to the person who
       // asked, which is the whole failure this project is against.

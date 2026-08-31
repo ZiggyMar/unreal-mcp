@@ -132,6 +132,18 @@ await step("compile, to prove it is not a compile error", "unreal_compile_bluepr
 await step("find orphans project-wide", "unreal_find_orphans", {}, (t, j) =>
   j || t.length > 0 ? null : "no reply at all");
 
+// The way a bug report actually arrives: a name, in prose, and nothing else.
+//
+// This step exists because its absence hid a real gap. The `diagnose` preset - the one whose whole
+// job is finding a reported bug - did not contain unreal_map_system, the tool "the countdown never
+// shows up" lands on. Nothing caught it, because this trial planted a defect and went straight to
+// the tools that find THAT defect. A preset check only checks the path the trial walks.
+await step("find the system from a name alone", "unreal_map_system", { query: "DiagnoseTrial" }, (t, j) => {
+  if (!j) return "no reply";
+  if (/disabled/i.test(t)) return "map_system is not in this preset - a bug report has nowhere to land";
+  return String(j.text ?? "").includes("DiagnoseTrial") ? null : "the planted Blueprint was not in the map";
+});
+
 // ---------------------------------------------------------------------------------------------
 // Fix it, and prove the fix. "It says it fixed it" is the failure mode this whole repo keeps
 // running into, so the score has to actually move.
