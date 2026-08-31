@@ -127,7 +127,11 @@ export function capActorList(result: ActorListLike, options: CapActorOptions = {
 
   if (all.length <= limit) {
     const { actors, sharedClass } = hoistSharedClass(all);
-    return { ...result, actors, ...(sharedClass ? { class: sharedClass } : {}) };
+    return {
+      ...result,
+      actors,
+      ...(sharedClass ? { class: sharedClass } : {}),
+    };
   }
 
   const kept = filtered ? all.slice(0, limit) : pickInteresting(all, limit);
@@ -150,3 +154,23 @@ export function capActorList(result: ActorListLike, options: CapActorOptions = {
         `class name, e.g. "BP_", "Light", "PlayerStart".`,
   };
 }
+
+/**
+ * NOT dropped: an actor's `class`, even though its `blueprint` path usually ends in it.
+ *
+ * A row carries both - class "CharacterHologram_C" and blueprint
+ * "/Game/.../CharacterHologram.CharacterHologram_C" - so the class looks free. It was implemented,
+ * measured, and reverted, because both halves of the trade turned out to be worse than they looked.
+ *
+ * The saving is 38 tokens on a 1,115-token reply. hoistSharedClass already lifts the class out
+ * whenever a level is dominated by one, so what is left is the case where the classes differ and the
+ * duplication is not there to remove.
+ *
+ * The cost is that `class` is how anybody identifies an actor here. `classFilter` is a parameter of
+ * this very tool, and the test guarding the rare-Blueprint cap asks `a.class === "BP_Boss_C"` -
+ * which is the obvious way to write it. Making a caller parse a path to recover something the row
+ * used to state is a bad trade at any price, and at 38 tokens it is not a trade at all.
+ *
+ * Kept as a comment because the idea looks good until it is measured, and the next person to have it
+ * should get the measurement rather than the idea.
+ */

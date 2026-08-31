@@ -1623,6 +1623,28 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### Two compactions measured and reverted, which is also a result
+
+The repeated-key scan scored every row-shaped reply. `list_blueprint_graphs` came out highest at 44%
+and `list_actors` at 28%, so both were tried. Both went back.
+
+**`list_blueprint_graphs` as a `{name: nodeCount}` map** is the same shape as the parent-class census
+and saves about 250 tokens of 643. The difference is what the reply is *for*. A census is terminal -
+you read it and you are done. This is **navigation**: every name in it gets fed straight into
+`read_blueprint_summary` or `explain_graph`, and callers iterate it as a list. Changing it broke
+`measure:reads` on the first run, which picks the largest graph from that array to measure the reads
+that follow. That is a consumer inside this repo; the ones outside it cannot be fixed by finding out.
+
+**Dropping an actor's `class`**, which its `blueprint` path usually ends in, saves **38 tokens** on a
+1,115-token reply - because `hoistSharedClass` already lifts the class out whenever a level is
+dominated by one, so what remains is the case where classes differ and the duplication is not there.
+Against that, `class` is how anybody identifies an actor: `classFilter` is a parameter of this very
+tool, and the test guarding the rare-Blueprint cap asks `a.class === "BP_Boss_C"`, which is the
+obvious way to write it.
+
+Both reasons are recorded next to the code rather than in a commit message, because the ideas look
+good until they are measured and the next person to have them should get the measurement.
+
 ### The most expensive read was the one nobody was measuring
 
 `find_references` was **3,736 tokens** on a real Blueprint - larger than `list_blueprints`, larger

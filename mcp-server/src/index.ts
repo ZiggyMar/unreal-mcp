@@ -867,6 +867,17 @@ register(
   async ({ path }) => {
     try {
       const result = await bridge.send<ListBlueprintGraphsResult>("list_blueprint_graphs", { path });
+      // NOT turned into a {name: nodeCount} map, although it is the same shape as the parent-class
+      // census and would save about 250 tokens of 643.
+      //
+      // The difference is what the reply is FOR. A census is terminal - you read it and you are
+      // done. This is NAVIGATION: every name in it gets fed straight back into
+      // read_blueprint_summary or explain_graph, and callers iterate it as a list. Changing it to a
+      // map broke measure-reads on the first run, which picks the largest graph from this array to
+      // measure the reads that follow. That is a consumer inside this repo; the ones outside it
+      // cannot be fixed by finding out.
+      //
+      // A saving that changes a navigation contract costs more than 250 tokens.
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
