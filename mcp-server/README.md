@@ -233,6 +233,9 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_data_table` | `create_data_table` | Create a Data Table backed by a struct. The data-driven route: item 200 is a row, not a rewire. |
 | `unreal_add_data_table_row` | `add_data_table_row` | Add one named row and set its values. Field names are checked before anything is written. |
 | `unreal_list_data_table_rows` | `list_data_table_rows` | Read rows with their values, paged, because a Data Table is the one asset built to get large. |
+| `unreal_rename_component` | `rename_component` | Rename a component and rebind the member variable graphs reach it through. |
+| `unreal_remove_component` | `remove_component` | Remove a component, promoting its children rather than deleting them silently. |
+| `unreal_remove_function` | `remove_function` | Remove a function graph, refusing while anything still calls it unless forced. |
 | `unreal_rename_variable` | `rename_variable` | Rename a variable and rebind every GET and SET node that reads it, in every graph. Editing the descriptor by hand breaks the Blueprint. |
 | `unreal_remove_variable` | `remove_variable` | Delete a variable, refusing while graph nodes still use it unless forced — and naming which graphs. |
 | `unreal_rename_asset` | `rename_asset` | Rename or move an asset through the editor's asset tools, so every reference to the old path is fixed up. Moving the `.uasset` yourself breaks them silently. |
@@ -4885,6 +4888,45 @@ The sweep runs `force:true` against the real project, so it matches on a path bo
 string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a different folder. That
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
+
+### Finishing the lifecycle, and a trim that was not there
+
+The asymmetry is now closed: everything this server can create, it can also remove or rename.
+`rename_component` goes through `FBlueprintEditorUtils::RenameComponentMemberVariable`, because a
+component is reached from a graph through a member variable of the same name and only that rebinds
+both. `remove_component` promotes attached children rather than deleting them, and says how many —
+the editor does the same thing silently, which is how a subtree disappears unnoticed.
+`remove_function` refuses while anything still calls it, naming the graphs and the count, the same
+rule `remove_variable` and `delete_asset` apply.
+
+Before adding them, the growth of `full` was worth testing rather than assuming. **Trimming was
+looked for and is not available**, which is worth recording as a result:
+
+- The largest description, `unreal_build_graph` at 3,499 characters, was read end to end. Four
+  paragraphs: when to use `add_event_handler` instead, the transactional rollback semantics, the
+  exact `"ref.pinName"` connection format with examples, and the round-trip cost that drives a caller
+  to batch. Every one changes behaviour. There is no fat.
+- `title` is 3% of the payload and is only a *fallback* for the internal summary — but it is a
+  human-readable label some MCP clients render, so removing it trades a real UX loss for tokens.
+  Unlike `$schema`, which no client reads, this one is not free.
+
+So the honest position is that `full` grows with capability, and that is not bloat. Which meant the
+guard was wrong, not the surface.
+
+**`full` is now budgeted per tool rather than in total.** Its absolute ceiling had been raised five
+times — 30k, 33k, 35k, 37k, 37.5k, 38k — each time for capability that was genuinely wanted and each
+raise argued for honestly. That is the problem: "everything" grows whenever the tool can do more, so
+an absolute ceiling on it can only ratchet upward, and a number that always moves when it is touched
+has stopped being a budget and become a changelog.
+
+What that ceiling was really protecting is efficiency, and there is already a number for it: **327
+tokens per tool against a 350 budget**, falling as tools are added. That fails when descriptions
+bloat and does not fail when the surface honestly grows.
+
+The profiles that are *meant* to be small keep their absolute ceilings, because those are real
+promises — `search` must cost less than the thing it discovers, `minimal` must fit a small local
+model. **Those are the numbers a frontier model actually pays: `search` is 2,205 and has not moved
+while `full` doubled**, and the three journeys are 3,858.
 
 ### You could add a variable but never remove or rename one
 

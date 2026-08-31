@@ -475,7 +475,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -3901,6 +3901,80 @@ async function savedAfter<T extends object>(result: T, path: string, save?: bool
     } as T & { saved: boolean };
   }
 }
+
+register(
+  "unreal_rename_component",
+  {
+    title: "Rename a component and the graph nodes that use it",
+    description:
+      "Renames a component a Blueprint declares. A component is reached from a graph through a member variable " +
+      "of the same name, so this rebinds that variable too - setting the name any other way leaves every node " +
+      "that used the component pointing at a name that is gone.",
+    inputSchema: {
+      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      component: z.string().describe('Current component name, e.g. "Sphere".'),
+      newName: z.string().describe('New name, e.g. "InteractionRange".'),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, component, newName, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("rename_component", { path, component, newName });
+      return jsonResult(await savedAfter(result, path, save));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_component",
+  {
+    title: "Remove a component from a Blueprint",
+    description:
+      "Deletes a component a Blueprint declares. Any components attached under it are promoted to its parent " +
+      "rather than deleted, and the number is reported - the editor does the same thing silently, which is how " +
+      "a subtree disappears without anyone noticing.",
+    inputSchema: {
+      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      component: z.string().describe("The component to remove."),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, component, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("remove_component", { path, component });
+      return jsonResult(await savedAfter(result, path, save));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_function",
+  {
+    title: "Remove a Blueprint function",
+    description:
+      "Deletes a function graph. **Refuses while anything still calls it**, naming the graphs and the call " +
+      "count, because removing it leaves those calls broken - the same rule unreal_remove_variable and " +
+      "unreal_delete_asset apply. Pass force:true when that is what you mean.",
+    inputSchema: {
+      path: z.string().describe('The Blueprint, e.g. "/Game/Player/BP_Player".'),
+      functionName: z.string().describe("The function to remove. An event is not a function; use unreal_remove_node for those."),
+      force: z.boolean().optional().describe("Remove it even though calls remain, leaving them broken. Off by default."),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, functionName, force, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("remove_function", { path, functionName, force });
+      return jsonResult(await savedAfter(result, path, save));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
 
 register(
   "unreal_rename_variable",

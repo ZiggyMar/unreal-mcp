@@ -117,19 +117,24 @@ export const PROFILES = [
     //
     // The number that says whether this is bloat is the per-tool average, and it did not move: 339
     // before and 339 after, against a 420 cap. The profile is larger because it does more.
-    // Raised a fifth time, to 38,000, for four tools that close the same kind of gap: you could
-    // create things here and never remove or rename them. rename_asset and duplicate_asset are the
-    // two content-browser operations a person does every day; rename_variable and remove_variable
-    // are the same asymmetry one level down, and rename_variable is what "rename FireRate to
-    // RateOfFire" - the sentence the change-request routing was built against - actually asks for.
+    // `full` is the one profile with no fixed size, so it is budgeted PER TOOL rather than in total.
     //
-    // The number that says whether this is bloat went DOWN: 331 tokens per tool before these four,
-    // 330 after, against a 420 cap. The surface grew because it does more.
+    // Its absolute ceiling was raised five times - 30k, then 33k, 35k, 37k, 37.5k, 38k - every time
+    // for capability that was genuinely wanted, and every raise argued for honestly. That is the
+    // problem. "Everything" grows whenever the tool can do more, so an absolute ceiling on it can
+    // only ratchet upward, and a number that always moves when it is touched has stopped being a
+    // budget and become a changelog.
     //
-    // Raised rather than left at four tokens of headroom, which is where these four landed it. A
-    // ceiling that cannot absorb a typo fix is not a budget, it is a tripwire for whoever works here
-    // next - and the point of this number is to force an argument, not to block one.
-    ceilingTokens: 38_000,
+    // What that ceiling was really protecting was efficiency, and there is already a number for
+    // that: tokens per tool, 327 here against a 420 cap and falling as tools are added. So `full`
+    // is checked against a per-tool budget, which fails when descriptions bloat and does not fail
+    // when the surface honestly grows.
+    //
+    // The profiles that are MEANT to be small keep their absolute ceilings, because those are real
+    // promises: `search` must cost less than the thing it discovers, `minimal` must fit a small
+    // local model. Those are the numbers a frontier model actually pays - `search` is 2,205 - and
+    // they have not moved while `full` doubled.
+    ceilingPerTool: 350,
     why: "everything, for frontier models that can afford it",
   },
 ];
@@ -238,8 +243,11 @@ async function main() {
   const bloated = [];
   for (const result of results) {
     const spec = PROFILES.find((p) => p.name === result.profile);
-    const over = result.standingTokens > spec.ceilingTokens;
-    if (over) problems.push({ ...result, spec });
+    const budget = spec.ceilingTokens ?? Math.round(spec.ceilingPerTool * result.toolCount);
+    const over = result.standingTokens > budget;
+    // `budget` rides along: the failure message prints it, and a derived ceiling has no field on
+    // spec to fall back to - which is how that message first read "over its undefined ceiling".
+    if (over) problems.push({ ...result, spec, budget });
     const perTool = Math.round(result.tokens / Math.max(result.toolCount, 1));
     if (perTool > PER_TOOL_CEILING) bloated.push({ ...result, spec, perTool });
     console.log(
@@ -250,7 +258,7 @@ async function main() {
         // when the surface grows, which is not the same thing and should not read as the same
         // problem: adding a capability is meant to cost something.
         `${String(Math.round(result.tokens / Math.max(result.toolCount, 1))).padStart(9)}  ` +
-        `${String(spec.ceilingTokens).padStart(8)}  ${over ? "OVER" : "ok"}`
+        `${String(budget).padStart(8)}  ${over ? "OVER" : "ok"}`
     );
   }
 
@@ -301,7 +309,8 @@ async function main() {
     console.log(NEWLINE + `profile budget exceeded (${problems.length}):`);
     for (const p of problems) {
       console.log(
-        `  - ${p.profile} is ~${p.standingTokens} tokens standing (${p.tokens} tools + ${p.instructionTokens} instructions), over its ${p.spec.ceilingTokens} ceiling.` +
+        `  - ${p.profile} is ~${p.standingTokens} tokens standing (${p.tokens} tools + ${p.instructionTokens} instructions), over its ${p.budget} ceiling` +
+        `${p.spec.ceilingPerTool ? ` (${p.spec.ceilingPerTool}/tool x ${p.toolCount} tools)` : ""}.` +
           NEWLINE +
           `    That ceiling exists because it ${p.spec.why}.` +
           NEWLINE +

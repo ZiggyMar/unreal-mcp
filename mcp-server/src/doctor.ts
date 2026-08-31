@@ -117,6 +117,9 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     { cmd: "duplicate_asset", feature: "copying an asset" },
     { cmd: "rename_variable", feature: "renaming a variable and rebinding the nodes that read it" },
     { cmd: "remove_variable", feature: "removing a variable" },
+    { cmd: "rename_component", feature: "renaming a component" },
+    { cmd: "remove_component", feature: "removing a component" },
+    { cmd: "remove_function", feature: "removing a function" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 

@@ -1169,6 +1169,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleRemoveVariable(Params);
 	}
+	else if (Cmd == TEXT("rename_component"))
+	{
+		Response = HandleRenameComponent(Params);
+	}
+	else if (Cmd == TEXT("remove_component"))
+	{
+		Response = HandleRemoveComponent(Params);
+	}
+	else if (Cmd == TEXT("remove_function"))
+	{
+		Response = HandleRemoveFunction(Params);
+	}
 	else if (Cmd == TEXT("open_level"))
 	{
 		Response = HandleOpenLevel(Params);

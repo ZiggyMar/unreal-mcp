@@ -112,6 +112,12 @@ private:
 	static TSharedRef<FJsonObject> HandleRenameVariable(const TSharedPtr<FJsonObject>& Params);
 	/** Remove a Blueprint variable, refusing while graph nodes still use it unless forced. */
 	static TSharedRef<FJsonObject> HandleRemoveVariable(const TSharedPtr<FJsonObject>& Params);
+	/** Rename a component through the SCS, so the graphs that reference it follow. */
+	static TSharedRef<FJsonObject> HandleRenameComponent(const TSharedPtr<FJsonObject>& Params);
+	/** Remove a component, promoting its children rather than deleting them silently. */
+	static TSharedRef<FJsonObject> HandleRemoveComponent(const TSharedPtr<FJsonObject>& Params);
+	/** Remove a function graph, refusing while anything still calls it unless forced. */
+	static TSharedRef<FJsonObject> HandleRemoveFunction(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Components and class defaults (challenge tooling, part B) ---
 	static TSharedRef<FJsonObject> HandleAddComponent(const TSharedPtr<FJsonObject>& Params);
