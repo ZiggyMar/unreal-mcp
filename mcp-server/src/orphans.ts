@@ -61,7 +61,16 @@ export interface OrphanReport {
   orphans: Orphan[];
   /** Partners that nothing paired to - the other half of the same mistake. */
   partnersWithNothing: string[];
-  verdict: "clean" | "problems";
+  /**
+   * "clean" means it looked and found nothing wrong. "nothing-to-compare" means it did not look,
+   * because one side of the pairing matched no actor - and those are different answers that used to
+   * share a word.
+   *
+   * The explanation was always in `next`, and a caller reading only the verdict still saw "clean".
+   * The test guarding this case is named "a class name that matches nothing SAYS SO", which is
+   * exactly what the verdict did not do.
+   */
+  verdict: "clean" | "nothing-to-compare" | "problems";
   next: string;
 }
 
@@ -144,7 +153,7 @@ export async function findOrphans(
   if (ofActors.length === 0 || partners.length === 0) {
     return {
       ...base,
-      verdict: "clean",
+      verdict: "nothing-to-compare",
       next:
         `Nothing to compare: found ${ofActors.length} actor(s) matching "${options.of}" and ` +
         `${partners.length} matching "${options.pairedWith}" in the open level. Check the class names, ` +

@@ -45,7 +45,15 @@ export interface DataTableAuditResult {
   /** Tables where every row was empty for some field, so nothing could be concluded. */
   undecidable: Array<{ table: string; field: string; why: string }>;
   unreadable: Array<{ table: string; why: string }>;
-  verdict: "clean" | "problems";
+  /**
+   * "clean" means every row was checkable and every one was fine. "partial" means no problems were
+   * found AND some rows could not be judged - a whole column empty in every row gives nothing to
+   * compare against, so there is no filled row to show whether it should hold an asset reference.
+   *
+   * Those were both "clean", which reads as a guarantee and was not one. The undecidable rows were
+   * always in the reply; the word on the front of it did not admit them.
+   */
+  verdict: "clean" | "partial" | "problems";
   next: string;
 }
 
@@ -158,7 +166,8 @@ export async function auditDataTables(
     }
   }
 
-  const verdict = nullReferences.length > 0 ? "problems" : "clean";
+  const verdict =
+    nullReferences.length > 0 ? "problems" : undecidable.length > 0 ? "partial" : "clean";
   return {
     tablesScanned: tables.length,
     rowsScanned,

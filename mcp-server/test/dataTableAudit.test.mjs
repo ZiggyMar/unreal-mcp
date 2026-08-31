@@ -148,3 +148,21 @@ test("list_assets is called with the parameters the bridge actually takes", asyn
   assert.equal(seen.pathPrefix, "/Game/Data");
   assert.equal("classNames" in seen, false, "the plural form is not a parameter the bridge knows");
 });
+
+test("rows that could not be judged make the verdict partial, not clean", async () => {
+  // "clean" reads as a guarantee. A column empty in every row of a table gives nothing to compare
+  // against - there is no filled row to show whether it should hold an asset reference - so those
+  // rows were not checked, they were skipped. The undecidable list was always in the reply; the word
+  // on the front of it did not admit them.
+  const result = await auditDataTables(
+    fakeBridge({
+      "/Game/DT_Thing.DT_Thing": [
+        { rowName: "A", values: { Icon: "None" } },
+        { rowName: "B", values: { Icon: "None" } },
+      ],
+    })
+  );
+  assert.equal(result.nullReferences.length, 0, "nothing is provably wrong");
+  assert.ok(result.undecidable.length > 0, "but nothing was provably right either");
+  assert.equal(result.verdict, "partial");
+});

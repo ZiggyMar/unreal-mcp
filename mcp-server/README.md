@@ -1623,6 +1623,32 @@ a quarter of the reply, for a string split against text that was being sent rega
 For `list_blueprints`, enumerating a whole project is rarely the question — finding something in it
 is, and `match` answers that for a thirtieth of the cost.
 
+### "Clean" was doing two jobs, and one of them was lying
+
+Having found the doctor giving an all-clear it had not earned, the same question was asked of every
+other verdict in the codebase. Two more were doing it.
+
+**`find_orphans` returned `verdict: "clean"` when nothing matched to compare.** "Clean" means it
+looked and found nothing wrong; this meant it never looked, because one side of the pairing matched
+no actor. The explanation was always in `next`, and a caller reading only the verdict got a guarantee
+out of a search that never ran. The test guarding the case is named *"a class name that matches
+nothing **says so**"* - which is precisely what the verdict did not do. It is now
+`"nothing-to-compare"`.
+
+**`check_data_tables` returned `"clean"` while holding rows it could not judge.** A column empty in
+every row of a table gives nothing to compare against - there is no filled row to show whether it
+should hold an asset reference - so those rows were skipped, not checked. The `undecidable` list was
+always in the reply; the word on the front of it did not admit them. It is now `"partial"` when
+nothing is provably wrong and something was not provably right.
+
+On the real project that distinction is live: `check_data_tables` reports 2 null references **and 5
+undecidable rows**, a number the old binary verdict had nowhere to put.
+
+This is the third instance of one failure: a check that reports success for "I found no problems"
+and for "I could not look" with the same word. The others were `find_broken_names` reporting "0
+broken" out of three literal names while 33 came from variables it never checked, and the doctor's
+"implements every command this server probes for".
+
 ### The doctor said everything was fine while two commands were missing
 
 `unreal_doctor` reported *"The plugin implements every command this server probes for"* against an

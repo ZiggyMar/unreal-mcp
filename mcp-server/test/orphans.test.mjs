@@ -110,7 +110,11 @@ test("pairs sitting exactly on top of each other do not make everything an orpha
 test("a class name that matches nothing says so instead of reporting the whole level", async () => {
   const r = await findOrphans(fakeLevel(motherboardish()), { of: "BP_DoesNotExist", pairedWith: "BP_FireWall_C" });
   assert.equal(r.counted.of, 0);
-  assert.equal(r.verdict, "clean");
+  // Not "clean". "Clean" means it looked and found nothing wrong; this means it did not look,
+  // because one side of the pairing matched no actor. The two used to share a word, and a caller
+  // reading only the verdict got a guarantee out of a search that never ran - which is exactly what
+  // this test's name says it must not do.
+  assert.equal(r.verdict, "nothing-to-compare");
   assert.match(r.next, /Check the class names/);
 });
 
