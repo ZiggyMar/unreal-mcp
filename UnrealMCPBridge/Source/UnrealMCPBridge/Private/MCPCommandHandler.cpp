@@ -2284,10 +2284,23 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	// (EdGraphNode.h:586) during the node's own pin construction. Not in the class pin being set
 	// afterwards, which was guess two, and not in duplicate allocation, which was guess one.
 	//
-	// The engine builds these through FEdGraphSchemaAction_K2NewNode::SpawnNodeFromTemplate rather
-	// than by hand, and that is almost certainly what this needs. It is a real piece of work, not a
-	// missing line, and it belongs in a change that can be tested on its own rather than smuggled in
-	// beside something else.
+	// The first version of this note said the fix was
+	// FEdGraphSchemaAction_K2NewNode::SpawnNodeFromTemplate. That is WRONG, and reading
+	// EdGraphSchema_K2_Actions.cpp settles it. FEdGraphSchemaAction_K2NewNode::CreateNode does:
+	//
+	//     ParentGraph->AddNode(ResultNode, true, bSelectNewNode);
+	//     ResultNode->CreateNewGuid();
+	//     ResultNode->PostPlacedNewNode();
+	//     ResultNode->AllocateDefaultPins();
+	//
+	// The same four calls in the same order as the shared code below. The engine's own path is not
+	// different from this one, so routing through it would crash identically. The single difference
+	// is that CreateNode DUPLICATES a configured template node from the Blueprint Action Database
+	// instead of NewObject-ing a bare one - so whatever this node needs, it needs BEFORE
+	// AllocateDefaultPins runs, and a fresh instance does not have it. That is where the next
+	// attempt should start.
+	//
+	// Recorded at this length because a wrong note is worse than no note, and the wrong one was mine.
 	//
 	// Until then the instructions must not promise it. They did, in four places, for months, which is
 	// how this started.

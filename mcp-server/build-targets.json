@@ -1,5 +1,5 @@
 {
-  "_comment": "Engine and project paths are machine-specific. Edit these for your setup; build-engines.mjs refuses to run without them.",
+  "_comment": "Engine and project paths are machine-specific. Edit these for your setup; build-engines.mjs refuses to run without them. Include the project you ACTUALLY WORK IN: a project that is not a target never receives a plugin improvement, and nothing says so - the editor keeps answering, on whatever binary it was last built with.",
   "targets": [
     {
       "name": "5.6",
@@ -10,6 +10,12 @@
       "name": "5.8",
       "engine": "F:/UE_5.8",
       "project": "A:/UnrealProjects/AVS_ScaleTest/AntiVirusSquadUE58.uproject"
+    },
+    {
+      "_why": "The real game, not a test project. It was missing for a long time, and the cost was invisible: every bridge-side improvement shipped to two scratch projects while the editor doing actual work ran a plugin from days earlier. Server-side changes reach a session on restart; C++ ones only arrive through here.",
+      "name": "game",
+      "engine": "M:/Unreal/UE_5.6",
+      "project": "M:/Unreal Projects/Anti-VirusSquad/AntiVirusSquad.uproject"
     }
   ]
 }

@@ -1669,6 +1669,23 @@ answer given for a wrong pin name and a wrong parameter name, and for the same r
 is not guessable, and silently returning a summary with every group elided looks identical to "your
 check is real and found nothing", which is a different answer.
 
+### The project you actually work in has to be a build target
+
+`build-targets.json` had two entries, both scratch projects, and the editor doing real work was not
+one of them. The cost was invisible for days: every bridge-side improvement installed into two test
+projects while the live game ran a plugin built before any of them. Nothing said so, because nothing
+was broken - the editor kept answering, on whatever binary it was last built with.
+
+The distinction that makes this easy to miss: **server-side changes and bridge-side changes arrive by
+different routes.** Anything in `mcp-server/` is `node dist/index.js` and reaches a session the next
+time it starts. Anything in `UnrealMCPBridge/` is a DLL the editor loaded at launch, and it arrives
+only through `npm run build:engines` - into the projects listed in `build-targets.json`, and nowhere
+else.
+
+`npm run check:fresh` catches the consequence and always did: it refuses to live-verify against a
+plugin older than the source, naming both timestamps. What it could not catch is a project that was
+never a target in the first place.
+
 ### Watching the game run, which is the half nothing here could see
 
 Every other read in this repository answers what a Blueprint **says** it will do. The expensive bugs
