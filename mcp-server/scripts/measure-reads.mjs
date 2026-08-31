@@ -157,6 +157,12 @@ const CASES = [
     mustContain: "text",
   },
   { label: "list_variables", tool: "unreal_list_variables", args: { path: biggest.path }, mustContain: "variables" },
+  // Added after the feature trial showed the two C++ reads were 36% of its whole cost - 1,393 of
+  // 3,900 tokens - while being the only expensive reads not watched here. Exactly the gap that let
+  // find_references sit at 3,736 tokens unnoticed: a guard covering seven of nine reads is watching
+  // the wrong thing on the other two.
+  { label: "find_source (modules)", tool: "unreal_find_source", args: {}, mustContain: "modules" },
+  { label: "find_source (symbol)", tool: "unreal_find_source", args: { symbol: "AActor" }, mustContain: "matches" },
   { label: "list_actors", tool: "unreal_list_actors", args: {}, mustContain: "actors" },
   { label: "project_health", tool: "unreal_project_health", args: {}, mustContain: "{" },
   // Added after it turned out to be the most expensive read in the whole surface and the only one

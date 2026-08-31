@@ -257,3 +257,61 @@ export function searchSource(
     truncated: all.length > kept.length,
   };
 }
+
+/**
+ * The module list as a map from module name to where it lives, relative to the project.
+ *
+ * The rows were `{module, dir, kind}` and all three fields were paying for themselves badly:
+ *
+ *   {"module":"AdvancedSessions",
+ *    "dir":"M:\\Unreal Projects\\Anti-VirusSquad\\Plugins\\AdvancedSessions\\Source\\AdvancedSessions",
+ *    "kind":"plugin"}
+ *
+ * Three problems, in ascending order of cost. `kind` is derivable - a directory under `Plugins/`
+ * belongs to a plugin and one under `Source/` belongs to the project, which is the same rule that
+ * decided it in the first place. The three field names are spelled once per module, which on a
+ * fourteen-module project is 364 characters saying nothing that position does not. And `dir` carries
+ * the absolute project path on every row, escaped, so the same forty characters arrive fourteen times.
+ *
+ * A map fixes all three at once and is the natural shape anyway: the question is "where does module
+ * X live", and a map from name to place answers it without the reader scanning a list. Separators
+ * are normalised to forward slashes, which Unreal accepts everywhere and JSON does not have to
+ * escape - a straight halving of what a path separator costs.
+ *
+ * A module outside the project root keeps its absolute path, because a relative path that escapes
+ * upward would be worse than the thing it replaced.
+ */
+export function modulesByName(roots: SourceRoot[], projectDir: string): Record<string, string> {
+  const prefix = projectDir.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+  const out: Record<string, string> = {};
+  for (const root of roots) {
+    const dir = root.dir.replace(/\\/g, "/");
+    out[root.module] = dir.startsWith(prefix) ? dir.slice(prefix.length) : dir;
+  }
+  return out;
+}
+
+/**
+ * Matches grouped by the file they are in, which is how every code search worth using presents them.
+ *
+ * Measured on this project before changing anything: repeated object keys were 16-22% of the reply
+ * and repeated file paths another 18-40%, so between a third and three fifths of a symbol lookup was
+ * the reply describing its own shape. Searching for a symbol declared and used in one file was the
+ * worst case, which is also the most common one.
+ *
+ * The grouping is not only cheaper, it matches what the caller does next. A model reading this opens
+ * a file - so the file is the key, and the hits inside it are what hangs off it. `path:line` remains
+ * quotable from `"<file>" + ":" + <line>`, which is the form editors and terminals make clickable.
+ *
+ * `kind` is kept on every hit and deliberately not defaulted away. It is the difference between "this
+ * is where the class is declared" and "this file also mentions it", which is the entire ranking this
+ * search exists to provide.
+ */
+export function matchesByFile(matches: SourceMatch[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const match of matches) {
+    const line = `${match.line} ${match.kind}: ${match.text}`;
+    (out[match.file] ??= []).push(line);
+  }
+  return out;
+}

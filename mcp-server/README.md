@@ -1882,6 +1882,61 @@ obvious way to write it.
 Both reasons are recorded next to the code rather than in a commit message, because the ideas look
 good until they are measured and the next person to have them should get the measurement.
 
+### The same gap again, on the two reads the feature trial was paying most for
+
+`npm run trial:feature` walks the whole authoring path - Blueprints, data, C++, components, UI - and
+reports what each step costs. Reading it rather than just watching it pass:
+
+```text
+the C++ surface
+  map the C++ modules                  710 tok
+  locate a symbol in C++               683 tok
+...
+33 calls, ~3900 tokens
+```
+
+**Two calls out of thirty-three were 36% of the total**, and neither was in `measure:reads` - the same
+gap that let `find_references` sit at 3,736 tokens unnoticed. A guard covering nine of eleven
+expensive reads is watching the wrong thing on the other two. Both are measured now, which is again
+the half that keeps paying.
+
+The module list arrived as `{module, dir, kind}` and all three fields were paying badly:
+
+```json
+{"module":"AdvancedSessions",
+ "dir":"M:\Unreal Projects\Anti-VirusSquad\Plugins\AdvancedSessions\Source\AdvancedSessions",
+ "kind":"plugin"}
+```
+
+`kind` is derivable - a directory under `Plugins/` belongs to a plugin, which is the rule that
+assigned it in the first place. The three field names are spelled once per module. And `dir` carries
+the absolute project path on every row, **escaped**, so the same forty characters arrive fourteen
+times. A map from module name to relative directory fixes all three at once and is the natural shape
+anyway, since the question is "where does module X live". Separators become forward slashes, which
+Unreal accepts everywhere and JSON does not have to escape - a straight halving of what a separator
+costs.
+
+For symbol lookups the numbers were measured before anything was changed: repeated object keys were
+16-22% of the reply and repeated file paths another 18-40%. Between a third and three fifths of a
+symbol lookup was the reply describing its own shape, and the worst case - a symbol declared and used
+in one file - is also the most common one. So matches group under the file, which is how every code
+search worth using presents them, and matches what the caller does next: it opens a file.
+
+```text
+find_source (modules)   710 -> 366
+find_source (symbol)    683 -> 446
+trial:feature          3900 -> 3319
+```
+
+`kind` is kept on every hit and deliberately not defaulted away - it is the difference between "this
+is where the class is declared" and "this file also mentions it", which is the entire ranking the
+search exists to produce. `"<file>" + ":" + <line>` is still quotable, which is the form editors and
+terminals make clickable.
+
+One thing the change broke and the trial caught: its own check was `(j.matches || []).length === 0`,
+and `.length` on a map is `undefined`, which compares false against 0. The check would have passed by
+accident rather than by being right.
+
 ### The most expensive read was the one nobody was measuring
 
 `find_references` was **3,736 tokens** on a real Blueprint - larger than `list_blueprints`, larger

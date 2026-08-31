@@ -25,7 +25,7 @@ import { allPolicies, resolveMode, DEFAULT_MODE } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findSourceRoots, searchSource } from "./nativeSource.js";
+import { findSourceRoots, searchSource, modulesByName, matchesByFile } from "./nativeSource.js";
 import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
@@ -3826,7 +3826,8 @@ register(
       return jsonResult({
         project: ping.project,
         projectFile,
-        modules: roots.map((r) => ({ module: r.module, kind: r.kind, dir: r.dir })),
+        root: dirname(projectFile),
+        modules: modulesByName(roots, dirname(projectFile)),
         next:
           "Call again with `symbol` to find where a class, function or property is declared. New " +
           "gameplay code normally belongs in the project module rather than a plugin one.",
@@ -3856,11 +3857,13 @@ register(
       project: ping.project,
       projectFile,
       symbol,
-      matches,
+      // Grouped by file, which is both the cheaper shape and the one that matches what happens next:
+      // the reader opens a file. "<file>:<line>" is still quotable, which is what editors linkify.
+      matches: matchesByFile(matches),
       filesScanned,
-      // Paths are relative to projectFile's directory, so say so once rather than making the caller
-      // work it out from the shape of them.
-      pathsAreRelativeTo: dirname(projectFile),
+      // One field for the prefix every path here is relative to, rather than repeating it on each and
+      // rather than sending projectFile as well - projectFile IS this path plus a filename.
+      root: dirname(projectFile),
       ...(truncated
         ? {
             omitted: totalMatches - matches.length,

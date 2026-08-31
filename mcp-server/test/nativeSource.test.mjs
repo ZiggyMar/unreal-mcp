@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { findSourceRoots, searchSource } from "../dist/nativeSource.js";
+import { findSourceRoots, searchSource, modulesByName, matchesByFile } from "../dist/nativeSource.js";
 
 /**
  * A project tree shaped like a real one: a game module, an editor module, a plugin with its own
@@ -203,4 +203,64 @@ test("bare mentions are sampled, declarations and definitions never are", () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("the module list drops the three things it was spelling on every row", () => {
+  // String.raw, because these are Windows paths. "\P" is not an escape sequence, so a plain string
+  // literal silently drops every separator - and the test would then be measuring nothing.
+  const roots = [
+    { module: "MyGame", dir: String.raw`M:\Projects\MyGame\Source\MyGame`, kind: "project" },
+    { module: "Kronos", dir: String.raw`M:\Projects\MyGame\Plugins\KronosV8\Source\Kronos`, kind: "plugin" },
+  ];
+  const map = modulesByName(roots, String.raw`M:\Projects\MyGame`);
+  assert.deepEqual(map, {
+    MyGame: "Source/MyGame",
+    // The plugin FOLDER is not the module name, which is why the path cannot simply be derived from
+    // the name and has to be carried.
+    Kronos: "Plugins/KronosV8/Source/Kronos",
+  });
+  // kind is gone because the first path segment already says it - the same rule that assigned it.
+  assert.ok(!JSON.stringify(map).includes("plugin"));
+  // fromCharCode(92) is a backslash, written the one way that cannot be mangled by an editor, a
+  // heredoc, or a raw template literal - none of which can end in one.
+  const BACKSLASH = String.fromCharCode(92);
+  assert.ok(
+    !Object.values(map).some((dir) => dir.includes(BACKSLASH)),
+    "separators must be forward slashes, which JSON does not have to escape"
+  );
+});
+
+test("a module outside the project keeps a path that still works", () => {
+  // A relative path that escapes upward would be worse than the absolute one it replaced.
+  const map = modulesByName(
+    [{ module: "Shared", dir: String.raw`D:\Common\Shared`, kind: "plugin" }],
+    String.raw`M:\Projects\MyGame`
+  );
+  assert.equal(map.Shared, "D:/Common/Shared");
+});
+
+test("matches group under the file, and stay quotable as file:line", () => {
+  const grouped = matchesByFile([
+    { file: "Source/MyGame/Foo.h", line: 12, kind: "class", text: "class AFoo : public AActor" },
+    { file: "Source/MyGame/Foo.cpp", line: 40, kind: "definition", text: "void AFoo::Tick()" },
+    { file: "Source/MyGame/Foo.cpp", line: 51, kind: "mention", text: "AFoo* Other = nullptr;" },
+  ]);
+  assert.deepEqual(Object.keys(grouped), ["Source/MyGame/Foo.h", "Source/MyGame/Foo.cpp"]);
+  // The file is written once for both of its hits - that repetition was up to 40% of the reply.
+  assert.equal(grouped["Source/MyGame/Foo.cpp"].length, 2);
+  assert.equal(grouped["Source/MyGame/Foo.cpp"][0], "40 definition: void AFoo::Tick()");
+  // kind survives on every hit. It is the difference between "declared here" and "also mentions it",
+  // which is the entire ranking this search exists to produce.
+  assert.ok(grouped["Source/MyGame/Foo.cpp"][1].startsWith("51 mention:"));
+});
+
+test("ordering within a file is preserved, because rank is the product", () => {
+  const grouped = matchesByFile([
+    { file: "a.h", line: 9, kind: "class", text: "class A" },
+    { file: "b.cpp", line: 1, kind: "mention", text: "A a;" },
+    { file: "a.h", line: 30, kind: "property", text: "int X;" },
+  ]);
+  assert.deepEqual(grouped["a.h"], ["9 class: class A", "30 property: int X;"]);
+  // And the first file is still the highest-ranked one, not whichever sorted first.
+  assert.equal(Object.keys(grouped)[0], "a.h");
 });

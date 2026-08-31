@@ -265,14 +265,17 @@ console.log("the C++ surface");
 const modules = await step("map the C++ modules", "unreal_find_source", {}, (t, j) => {
   if (!j) return "no JSON";
   // A Blueprint-only project is a valid answer, and must say so rather than looking like a failure.
-  if ((j.modules || []).length === 0) return j.note ? null : "no modules and no explanation";
+  // modules is a map from module name to where it lives, not a list - Object.keys, not .length. A
+  // `.length` on a map is undefined, which compares false against 0 and would pass this check by
+  // accident rather than by being right.
+  if (Object.keys(j.modules || {}).length === 0) return j.note ? null : "no modules and no explanation";
   return null;
 });
 
-if (modules.parsed && (modules.parsed.modules || []).length > 0) {
+if (modules.parsed && Object.keys(modules.parsed.modules || {}).length > 0) {
   await step("locate a symbol in C++", "unreal_find_source", { symbol: "AActor" }, (t, j) => {
     if (!j) return "no JSON";
-    if ((j.matches || []).length === 0 && !j.note) return "no matches and no explanation";
+    if (Object.keys(j.matches || {}).length === 0 && !j.note) return "no matches and no explanation";
     return null;
   });
 } else {
