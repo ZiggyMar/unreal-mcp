@@ -35,6 +35,28 @@ real MCP client normally launches this itself over stdio):
 npm start
 ```
 
+## What this costs today
+
+Every other number in this file is history — what something cost before a change and after it, frozen
+at the time. **These are the current ones**, and they are the only numbers here that are checked: the
+row for each profile is verified against a live measurement by `npm run measure:profiles`, so this
+table cannot quietly go stale the way the standing instructions did.
+
+<!-- costs:begin -->
+| profile | standing tokens | what it is |
+|---|---:|---|
+| `search` | 2292 | four tools; hand it a sentence or a preset name |
+| `minimal` | 4014 | ten tools, fixed, for a small local model |
+| `core` | 12434 | the authoring spine |
+| `lazy` | 12448 | `core` plus deferred groups |
+| `full` | 38127 | everything, for a model that can afford it |
+<!-- costs:end -->
+
+The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
+would type — cost **14 calls and about 3,935 tokens of replies** together. `npm run trial:workflows`
+prints that, and it is the number worth watching: it is what the work actually costs, rather than
+what the surface weighs.
+
 ## Tools exposed
 
 ### Read-only (Milestone 1)
@@ -4889,6 +4911,30 @@ string prefix - `/Game/MCPTrialish/` starts with the scratch root and is a diffe
 was caught by a test written to assert the loose behaviour, which is how a test ends up encoding the
 bug it exists to prevent.
 
+### The README had the same disease, one section apart
+
+Having found the instructions quoting numbers that had drifted, the obvious next question was whether
+this file does it too. It did, and the example is almost comic: one section records `search` moving to
+**2,292 tokens**, and a later section says *"`search` is 2,205 and has not moved"*.
+
+The distinction that matters is between two kinds of number, and this file is mostly full of the safe
+kind:
+
+- **History** — "4,480 → 3,858 tokens", "7,562 → 2,726". Frozen at the time of the change, correct
+  forever, and the record of why something was done.
+- **Current state** — "`search` is 2,205". True when written and rotting from that moment.
+
+There is now exactly one current-state claim in this README: the
+[What this costs today](#what-this-costs-today) table. Everything else points at it, and
+`measure:profiles` verifies every row against a live measurement — between HTML markers, so the parse
+cannot drift onto a different table. Verified by putting a wrong number in and watching it report
+*"the cost table says search is 9999 tokens and it measures 2292"*.
+
+That message needed fixing too. A README mismatch has none of the fields a budget overrun has, so the
+first version failed correctly and printed a line of `undefined` — the same defect as the derived
+ceiling a few sections ago, which is a fair sign that failure paths deserve the same care as the
+success ones.
+
 ### Every number in the instructions was wrong
 
 Reading the standing instructions end to end — the text a `full` session holds before every call —
@@ -5079,8 +5125,8 @@ bloat and does not fail when the surface honestly grows.
 
 The profiles that are *meant* to be small keep their absolute ceilings, because those are real
 promises — `search` must cost less than the thing it discovers, `minimal` must fit a small local
-model. **Those are the numbers a frontier model actually pays: `search` is 2,205 and has not moved
-while `full` doubled**, and the three journeys are 3,858.
+model. **Those are the numbers a frontier model actually pays**, they are listed under
+[What this costs today](#what-this-costs-today), and they have barely moved while `full` doubled.
 
 ### You could add a variable but never remove or rename one
 

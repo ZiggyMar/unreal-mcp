@@ -17,7 +17,11 @@
 // test suite while live-verify cannot.
 
 import { startAndInitialize, listTools, estimateTokens } from "./lib/mcpStdio.mjs";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -305,9 +309,55 @@ async function main() {
     process.exit(1);
   }
 
-  if (problems.length > 0) {
+  // The README's "What this costs today" table has to match what was just measured.
+//
+// Every other number in that file is history - what a thing cost before a change and after it,
+// correctly frozen. This one table is current state, and current state rots: the standing
+// instructions carried "4,685 tokens against 292" for weeks after the real figure became 3,237, and
+// the README said `search` costs 2,205 one section after another section recorded it moving to
+// 2,292.
+//
+// So there is exactly one place in the README that claims a live number, everything else points at
+// it, and it is checked here rather than by hand. Between the markers so the parse cannot drift onto
+// a different table.
+const readmePath = join(here, "..", "README.md");
+try {
+  const readme = readFileSync(readmePath, "utf8");
+  const between = /<!-- costs:begin -->([\s\S]*?)<!-- costs:end -->/.exec(readme);
+  if (!between) {
+    problems.push({ profile: "README", detail: "the costs:begin/costs:end markers are gone, so nothing checks the published numbers" });
+  } else {
+    for (const row of between[1].matchAll(/\|\s*`([a-z]+)`\s*\|\s*(\d+)\s*\|/g)) {
+      const [, name, claimed] = row;
+      const measured = results.find((r) => r.profile === name);
+      if (!measured) {
+        problems.push({ profile: "README", detail: `the cost table lists a profile called "${name}" that does not exist` });
+        continue;
+      }
+      if (Number(claimed) !== measured.standingTokens) {
+        problems.push({
+          profile: "README",
+          detail: `the cost table says ${name} is ${claimed} tokens and it measures ${measured.standingTokens}`,
+        });
+      }
+    }
+  }
+} catch (err) {
+  problems.push({ profile: "README", detail: `could not read README.md to check the published costs: ${err.message}` });
+}
+
+if (problems.length > 0) {
     console.log(NEWLINE + `profile budget exceeded (${problems.length}):`);
     for (const p of problems) {
+      // A README mismatch is not a budget overrun and has none of the fields below. Printed on its
+      // own terms rather than through a template that would render most of it as undefined - which
+      // is what the first version did, failing correctly and saying nothing about why.
+      if (p.detail) {
+        console.log(`  - README: ${p.detail}.`);
+        console.log(`    That table is the one place in the README claiming a live number, and it is`);
+        console.log(`    checked here so it cannot go stale the way the standing instructions did.`);
+        continue;
+      }
       console.log(
         `  - ${p.profile} is ~${p.standingTokens} tokens standing (${p.tokens} tools + ${p.instructionTokens} instructions), over its ${p.budget} ceiling` +
         `${p.spec.ceilingPerTool ? ` (${p.spec.ceilingPerTool}/tool x ${p.toolCount} tools)` : ""}.` +
