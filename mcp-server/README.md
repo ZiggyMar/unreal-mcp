@@ -1476,6 +1476,48 @@ already exists, because "make the" reads as a request to create something. Chang
 checked *before* build vocabulary — "make a health upgrade" is building, "make the health upgrade
 cost more" is a change, and only the second half of that sentence says so.
 
+### Six decimal places on every float, and 20% of the biggest read
+
+A measurement pass rather than a hunt. `unreal_list_data_table_rows` is the most expensive read on
+the surface, and on `DT_UniversalActions` — nine rows of nested CommonUI input data — the reason is
+not the rows:
+
+```text
+(Key=None,OverrrideState=Enabled,bActionRequiresHold=False,HoldTime=0.500000,
+ HoldRollbackTime=0.000000,OverrideBrush=(TintColor=(SpecifiedColor=(R=1.000000,
+ G=1.000000,B=1.000000,A=1.000000),...),ImageSize=(X=32.000000,Y=32.000000),...
+```
+
+`ExportTextItem` writes every float with six decimal places. Trimming the padding alone takes that
+read from **7,040 to 5,695 tokens — 19%** — and loses nothing: `0.500000` → `0.5`, `1.000000` → `1`.
+
+`omitZeroDefault` already trimmed trailing zeros, but only for a value that is a plain decimal on its
+own, and its comment said why: *"nothing inside a struct literal or an asset path is touched."* That
+was right at the time — a blind replace over a struct literal can reach into a quoted string. This is
+that decision revisited with the quoting handled rather than avoided:
+
+- **Quoted spans are skipped entirely**, honouring backslash escapes, so a localisation key or
+  display string of `"1.000000"` inside `NSLOCTEXT(...)` survives intact.
+- **A number preceded by a letter, digit or underscore is left alone**, so `v1.000000` and
+  `/Game/Foo1.000000/Bar` are untouched.
+
+The trade only works if a trimmed value can still be written back — a read that cannot round-trip is
+not compaction, it is corruption. Verified against the editor: a row read as
+`{"Where":"(X=1.5,Y=0,Z=32)","Rate":"0.5"}` was handed straight back to `set_data_table_row` and came
+out identical.
+
+### `value` absent meant zero, and only one of the two tools said so
+
+The same measurement found 95 of 167 properties in `read_class_defaults` carrying **no value at
+all** — 29% of a 4,728-token reply. They are not unreadable and not unchanged: the tool layer drops
+a value that is the type's zero, which is a deliberate and well-reasoned compaction.
+
+`unreal_list_variables` states that contract in its description — *"`defaultValue` only when it is
+not the type's zero"* — and `read_class_defaults`, which applies the same rule to a different key,
+**did not**. So `{"name":"SelectedMeshIndex","type":"int32"}` read as "changed to something unknown"
+when it means "changed to zero". Different facts, only one of them true, on most of the reply. One
+sentence, 83 standing tokens, and the two tools now describe one convention the same way.
+
 ### Four ways to write a path that all mean one asset
 
 The same hunt applied to `path`, which nearly every tool here takes. Six forms a caller would

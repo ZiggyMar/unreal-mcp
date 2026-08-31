@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { trimFloatPaddingIn, trimFloatPadding } from "./trimFloats.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
 import { findInDataTables } from "./findInDataTables.js";
 import { matchSymptoms } from "./symptoms.js";
@@ -34,7 +35,7 @@ import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
 import { findOrphans } from "./orphans.js";
 import { capActorList, type ActorListLike } from "./actorList.js";
-import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, omitZeroDefault, omitDefault, pickFields, asCountMap, compactAssetRef, ADVISE_WHEN_ROWS_AT_LEAST } from "./compactRows.js";
+import { compactBlueprintRow, compactVariable, compactStructField, asTypeDescriptor, omitZeroDefault, omitDefault, pickFields, asCountMap, compactAssetRef, ADVISE_WHEN_ROWS_AT_LEAST, type Row } from "./compactRows.js";
 import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_TOKENS } from "./groupCosts.js";
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
@@ -2604,6 +2605,9 @@ register(
       "**Only the properties this Blueprint actually changed are listed** - that is what the question almost always " +
       "means, and a real class inherits most of its 167 editable properties untouched. What was left out is counted; " +
       "`match` overrides it, so asking about a property by name answers whether or not it was overridden.\n\n" +
+      "**`value` appears only when it is not the type's zero** - no `value` means 0, False, \"\", None or () as the " +
+      "type dictates. On a real Blueprint that is most of the reply, and without this sentence each of those reads " +
+      "as \"changed to something unknown\" rather than \"changed to zero\" - different facts, only one of them true.\n\n" +
       "**For an Actor it also hoists `replicates` and `replicatesMovement` to the top level**, because those two " +
       "decide whether a multiplayer finding is a real bug. A server writing an unreplicated variable is only broken " +
       "if the thing it holds does not replicate by itself: a reference to an Actor that replicates is ordinary " +
@@ -2641,7 +2645,15 @@ register(
       const properties = Array.isArray(result.properties)
         ? result.properties.map((row) => {
             const withoutCategory = omitDefault(row, "category", "Default");
-            return targeted ? withoutCategory : omitZeroDefault(withoutCategory, "value");
+            // A class default is as full of exported struct literals as a Data Table row - a single
+            // FSlateBrush or FVector prints every member with six decimal places - so the same float
+            // trim applies. Done for the targeted case too: somebody reading one property to change
+            // it wants 0.5, not 0.500000.
+            const trimmed: Row =
+              "value" in withoutCategory
+                ? { ...withoutCategory, value: trimFloatPadding(withoutCategory.value) }
+                : withoutCategory;
+            return targeted ? trimmed : omitZeroDefault(trimmed, "value");
           })
         : undefined;
       return jsonResult({
@@ -3870,7 +3882,18 @@ register(
         limit: wantedRow ? 5000 : limit,
         offset: wantedRow ? 0 : offset,
         omitDefaults: wantedRow ? false : full !== true,
-      })) as { rows?: Array<{ rowName?: string }>; rowCount?: number };
+      })) as { rows?: Array<{ rowName?: string; values?: Record<string, unknown> }>; rowCount?: number };
+
+      // Unreal writes every float with six decimal places, and a Data Table is where that costs
+      // most: DT_UniversalActions is nine rows of nested CommonUI structs, and the padding alone is
+      // 20% of the reply. Trimmed here rather than in the bridge, because the bridge stays faithful
+      // and the tool layer is where compaction belongs - and because a trimmed value still parses,
+      // so it can be handed straight back to set_data_table_row.
+      if (Array.isArray(table.rows)) {
+        table.rows = table.rows.map((row) =>
+          row && typeof row === "object" && row.values ? { ...row, values: trimFloatPaddingIn(row.values) } : row
+        );
+      }
 
       if (wantedRow) {
         const rows = Array.isArray(table.rows) ? table.rows : [];
