@@ -57,9 +57,11 @@ reliably knows UE's exact node names, pin names, and function signatures.
   tokens on every request; the `search` profile stands four tools at ~1,203 and hands back real typed
   schemas on demand. Worse was hiding in the replies: `read_blueprint_summary` on a real 807-node
   graph returned **126,477 tokens** — 63% of a 200k window in one call, from a project whose premise
-  is that a model never sees a raw engine dump. Now 9,085, with the full graph one parameter away.
-  `list_blueprints` 15,149 → 4,508, `explain_graph` 13,294 → 3,804, `list_tools` 5,523 → 338,
-  `enable_tools` 700 → 71. Four unbounded reads, bounded in four different ways, because the
+  is that a model never sees a raw engine dump. Now **2,121**, and **700** when filtered to what was
+  actually asked for, with the full graph one parameter away.
+  `list_blueprints` 15,149 → 4,508 (472 searching by name), `explain_graph` 13,294 → 3,804,
+  `list_tools` 5,523 → 338, `enable_tools` 700 → 71. Standing cost before a word is typed: 30,111 →
+  **2,373**. Four unbounded reads, bounded in four different ways, because the
   breakdown of each said something different. Guarded by `check:profiles` and `check:replies` in CI,
   and by `measure:reads` against a live editor.
 - **The server tells the model how to work.** MCP's `instructions` field was empty, so call order and
@@ -82,6 +84,37 @@ reliably knows UE's exact node names, pin names, and function signatures.
   from the change journal rather than from memory, and sweeps Data Tables too.
 - **`find_orphans`**: actors that lost the partner they depend on, paired by position rather than by
   the reference — because the reference is the broken thing. Found a real one in a shipped level.
+
+
+## Where the ceiling actually is
+
+Everything above is about reading and writing **assets**. That is now good: a bug described in plain
+text gets found, changed, and re-verified without a human opening the editor, across Blueprints, Data
+Tables, Data Assets and C++.
+
+The remaining gap is a different kind. Ranked by how much each one costs, measured against real
+requests rather than guessed:
+
+1. **Watching the game run.** Written, not yet proven. `watch_runtime` samples variables on live
+   actors during PIE in every world, labelled by net role, and `pie_status` now reports that
+   topology - so "Authority: 0 → 47, Client0: 0 → 0" is a replication bug observed rather than
+   argued. It compiles on 5.8 and **has not yet been run against a live PIE session**, which is the
+   only thing that would make it real. Until then it is a claim, and this file should keep saying so.
+2. **Driving the game.** Sampling state is half of it. Nothing here can press a key, click a widget,
+   or move a character, so any bug that only appears after an interaction still needs a person to
+   reproduce it. This is the single largest remaining item and it is what separates "verifies its own
+   fix" from "gets you to the last step".
+3. **Memory between sessions.** Every session re-derives the project from scratch. Which system is
+   live and which was abandoned, what was decided and why - that currently survives only in documents
+   written by hand and re-read on purpose (`docs/AVS_SKIN_SYSTEM.md` exists because getting this
+   wrong cost a whole iteration of work on a dead system). A lead programmer's real value is
+   accumulated context, and none of it is accumulating.
+4. **Subsystems with no coverage at all:** Gameplay Ability System, State Trees, EQS, AnimGraph
+   *authoring* (state machines can be read, not built), material node graphs beyond parameters, and
+   level geometry.
+
+The honest summary: for "here is a bug, fix it" and "add this to what exists", the loop closes. For
+anything whose answer is "run it and see", it stops one step short.
 
 
 ## M4: finish UE 5.6 support
