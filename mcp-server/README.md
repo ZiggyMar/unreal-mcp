@@ -1924,6 +1924,47 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### "Find every bug" now includes the cutscenes
+
+Reading a Level Sequence was only half of it. `unreal_audit_project` swept Blueprints, Animation
+Blueprints, Niagara and Data Tables - and stopped at the door of the cinematics, which is the same
+gap that was closed for each of those in turn. A sweep that skips a whole asset family answers a
+narrower question than the one it was asked.
+
+Three checks, and they share the property that makes them worth having: **none is an error, none is a
+warning, and the sequence plays perfectly while doing less than it appears to.**
+
+```text
+sequence-track-muted          40   has keys and does not evaluate
+sequence-track-no-sections    35   in the outliner with an empty timeline
+sequence-binding-no-tracks    25   the actor is bound and nothing animates it
+```
+
+The prices are argued next to the numbers rather than assigned by feel, which is the lesson from
+`unhandled-cast-failure` sitting at 90 while firing on ordinary idiom. Muting is *how you audition a
+change* and the state most often left behind afterwards - a real defect, but also a legitimate
+working state, so it sits with `empty-event` rather than above it. A binding with no tracks is the
+residue of deleting tracks: harmless to run, misleading to read, which is where
+`debug-print-left-in` sits.
+
+Two things the tests pin down. A track that is both muted **and** empty is reported by both checks,
+because they are separate facts and fixing one does not fix the other - un-muting an empty track
+still evaluates nothing. And the sequence's **own** tracks are swept, not just the ones under an
+actor: a camera cut track with no sections is the usual reason a cutscene plays from the wrong angle,
+and it belongs to the sequence rather than to any binding, so a check that only walked bindings would
+miss the most consequential case.
+
+Run against the live editor, which has a plugin older than this server, the audit says so rather than
+returning a clean cinematics result:
+
+```json
+{"checksSkipped": [{"name": "cinematics",
+   "why": "unknown_cmd: read_level_sequence - the plugin in this editor is older than this server."}]}
+```
+
+That machinery was built two commits ago for exactly this, and this is the first time it has caught a
+check that was added after it.
+
 ### Failing in one second instead of five minutes
 
 `npm run build:engines` is the one command a user has to run by hand to pick up new bridge commands -

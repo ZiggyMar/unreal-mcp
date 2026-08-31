@@ -33,6 +33,7 @@ import { reviewSessions, type SessionGraph } from "./sessions.js";
 import { findServerSideUi, findEmptyRepNotifies } from "./clientSync.js";
 import { buildCallers, resolveServerAuthority, type AuthorityUnit } from "./authorityMap.js";
 import { findUncalledParentEvents } from "./parentCalls.js";
+import { findSequenceProblems, type SequenceReadReply } from "./sequenceAudit.js";
 import { execTargets, type FlowNode } from "./execFlow.js";
 import { findDeadGraphs, type LivenessGraph } from "./systemLiveness.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
@@ -105,6 +106,16 @@ export const FINDING_COST: Record<string, number> = {
   // was never added here, scoring the fallback in silence.
   "level-sweep-repeated": 20,
   "replicated-set-without-server-event": 50,
+  // A muted track has keys and does not evaluate. Muting is how you audition a change and it is the
+  // state most often left behind afterwards, so this is a real defect rather than a tidy-up - but it
+  // is also a legitimate working state, which is why it sits with empty-event rather than above it.
+  "sequence-track-muted": 40,
+  // In the outliner with an empty timeline. Never evaluates, and a camera cut track in this state is
+  // the usual reason a cutscene plays from the wrong angle.
+  "sequence-track-no-sections": 35,
+  // The actor is bound and nothing animates it. Usually what is left after the tracks were deleted,
+  // harmless to run and misleading to read - which is where debug-print-left-in sits.
+  "sequence-binding-no-tracks": 25,
   "empty-event": 40,
   "dead-node": 30,
   "debug-print-left-in": 25,
@@ -579,6 +590,42 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     // An older bridge has no find_broken_names; the rest of the audit still stands - but skipping a
     // whole check in silence reads as "nothing found", so it is recorded.
     checksSkipped.push({ name: "broken-names", why: reasonFor(err) });
+  }
+
+  // Cinematics. Same reasoning again: a LevelSequence is not a Blueprint, so "find every bug" stopped
+  // at the door of the cutscenes - nine of them on the project this was built against.
+  try {
+    const cine = await bridge.send<{ assets?: Array<{ name: string; path: string }> }>("list_assets", {
+      className: "LevelSequence",
+      maxResults: 200,
+    });
+    for (const asset of cine.assets ?? []) {
+      try {
+        const sequence = await bridge.send<SequenceReadReply>("read_level_sequence", { path: asset.path });
+        for (const finding of findSequenceProblems(sequence)) {
+          findings.push({
+            blueprint: asset.name,
+            path: asset.path,
+            graph: "(sequence)",
+            check: finding.check,
+            severity: finding.severity,
+            message: finding.message,
+            fix: finding.fix,
+            cost: FINDING_COST[finding.check] ?? 1,
+          });
+        }
+      } catch (err) {
+        if (isMissingCommand(err)) {
+          checksSkipped.push({ name: "cinematics", why: reasonFor(err) });
+          break;
+        }
+        unreadable.push({ name: asset.name, error: err instanceof Error ? err.message.slice(0, 140) : String(err) });
+      }
+    }
+  } catch (err) {
+    // An older bridge has no read_level_sequence; the Blueprint half of the audit still stands, and
+    // the caller is told the cinematics half did not happen rather than left to read its silence.
+    checksSkipped.push({ name: "cinematics", why: reasonFor(err) });
   }
 
   // VFX. Same reasoning as the animation pass: a NiagaraSystem is not a Blueprint, so list_blueprints
