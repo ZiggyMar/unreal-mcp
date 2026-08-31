@@ -1924,6 +1924,43 @@ The finding now names the tool instead of describing the procedure, and the grap
 through rather than written twice, so the fix instruction and the report can never disagree about
 which graph they mean.
 
+### "enemie" is not a word, and it was reading the wrong half of the project
+
+Same session, same method, next request: *"make enemies drop loot when they die"*. The concepts
+`plan_feature` examined:
+
+```json
+["enemie", "drop", "loot", "die"]
+```
+
+`enemie` is not a word. The rule dropped a trailing `s`, and on a real project that is not cosmetic -
+the two queries find different systems:
+
+```text
+enemie   BP_WaveSystem, BP_DummyTurret, GM_TutGameplay, BP_BaseCharacter, ...
+enemy    BP_BaseEnemy, BP_EnemyController, BP_FlyingEnemy, BPI_Enemy, BPI_EnemyInteractable
+```
+
+The first list is **spawner bookkeeping** - assets carrying a variable like `RemainingEnemies`. The
+second is the enemy system. For a request whose entire subject is enemies, the plan was reading the
+wrong half of the project, and `BP_FlyingEnemy`, `BPI_Enemy` and `BP_EnemyController` never appeared
+at all.
+
+Three rules now, and deliberately no more: `-ies` to `-y`, `-(s|x|z|ch|sh)es` to the stem, and a bare
+`-s` unless the word ends in `ss`. A real stemmer would turn *"sprinting"* into *"sprint"* and
+*"regenerates"* into *"regener"*, and the second is worse than the word it replaced. This only has to
+undo the plural a person types when they describe a feature.
+
+The threshold moved from five letters to four, because `bars` was being left alone - and a plural
+query only matches names containing "bars", so `WBP_DataBar` was missed by the very request that
+asked for a bar. Four-letter words that genuinely end in `s` are rare and listed; `axis` is on the
+list because Unreal has input axes.
+
+```text
+before: concepts ["enemie", ...]   keyAssets: BP_WaveSystem, BP_DummyTurret, GM_TutGameplay
+after:  concepts ["enemy", ...]    keyAssets: BP_BaseEnemy, BP_EnemyController, BP_FlyingEnemy
+```
+
 ### "bar already exists in this project: BP_DummyTurret"
 
 Same method as the map, applied to the feature leg. `unreal_plan_feature`, asked the way a user

@@ -21,6 +21,45 @@ import { mapSystem, type SystemMap } from "./systemMap.js";
 import type { GetProjectOverviewResult, ListBlueprintsResult } from "./types.js";
 
 /** Words that carry no project meaning, so mapping them wastes a round trip and returns noise. */
+/**
+ * "enemies" -> "enemy", not "enemie".
+ *
+ * The old rule dropped a trailing "s", and the difference is not cosmetic. Asked to "make enemies
+ * drop loot when they die", plan_feature examined the concept **enemie** - and on a real project
+ * that finds a different system entirely:
+ *
+ *   enemie   BP_WaveSystem, BP_DummyTurret, GM_TutGameplay, BP_BaseCharacter, ...
+ *   enemy    BP_BaseEnemy, BP_EnemyController, BP_FlyingEnemy, BPI_Enemy, BPI_EnemyInteractable
+ *
+ * The first list is spawner bookkeeping - assets with a variable called something like
+ * `RemainingEnemies`. The second is the enemy system. For a request whose subject is enemies, the
+ * plan was reading the wrong half of the project, and `BP_FlyingEnemy`, `BPI_Enemy` and
+ * `BP_EnemyController` never appeared at all.
+ *
+ * Deliberately three rules and no more. A real stemmer would turn "sprinting" into "sprint" and
+ * "regenerates" into "regener", and the second is worse than the word it replaced - this only has to
+ * undo the plural a person types when they describe a feature.
+ */
+export function singularise(word: string): string {
+  if (word.length <= 3) return word;
+  // enemies -> enemy, bodies -> body. Not "-ies" on a short word like "ties".
+  if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`;
+  // boxes -> box, matches -> match, meshes -> mesh. The "es" is only a plural after these.
+  if (/(?:s|x|z|ch|sh)es$/.test(word)) return word.slice(0, -2);
+  // bars -> bar, guns -> gun, hits -> hit. The old threshold was five letters, which left "bars"
+  // plural - and a plural query only matches names containing "bars", so WBP_DataBar was missed by
+  // the very request that asked for a bar.
+  //
+  // Four-letter words that genuinely end in s are rare and listed, rather than paid for by leaving
+  // every four-letter plural alone. "axis" matters here because Unreal has input axes; the others
+  // are the only ones likely to appear in a feature request.
+  const NOT_PLURAL = new Set(["axis", "bias", "lens", "iris", "atlas", "focus", "bonus", "status", "radius"]);
+  if (word.endsWith("s") && !word.endsWith("ss") && !NOT_PLURAL.has(word) && word.length > 3) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
 const STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "but", "if", "then", "so", "to", "for", "of", "in", "on", "at",
   "by", "with", "from", "up", "down", "out", "add", "make", "create", "build", "implement", "new",
@@ -76,7 +115,7 @@ export function extractConcepts(request: string, limit = 6): string[] {
   const seen = new Set<string>();
   const concepts: string[] = [];
   for (const word of words) {
-    const singular = word.endsWith("s") && word.length > 4 ? word.slice(0, -1) : word;
+    const singular = singularise(word);
     if (seen.has(singular)) continue;
     seen.add(singular);
     concepts.push(singular);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { planFeature, extractConcepts } from "../dist/planFeature.js";
+import { planFeature, extractConcepts, singularise } from "../dist/planFeature.js";
 
 /** A project that already has a health system and nothing resembling stamina. */
 const HITS = {
@@ -218,4 +218,49 @@ test("a plan that finds nothing existing does not ask", async () => {
     !plan.raiseWithUser.some((r) => /trace_function_calls/.test(r)),
     `nothing exists to be dead, so nothing should be asked: ${JSON.stringify(plan.raiseWithUser).slice(0, 200)}`
   );
+});
+
+test("a plural concept becomes the singular a project actually names things with", () => {
+  // The old rule dropped a trailing "s", and the difference is not cosmetic. Asked to "make enemies
+  // drop loot when they die", plan_feature examined the concept "enemie" - which on the real project
+  // finds a different system entirely:
+  //
+  //   enemie   BP_WaveSystem, BP_DummyTurret, GM_TutGameplay, BP_BaseCharacter, ...
+  //   enemy    BP_BaseEnemy, BP_EnemyController, BP_FlyingEnemy, BPI_Enemy, BPI_EnemyInteractable
+  //
+  // The first is spawner bookkeeping - assets with a variable like RemainingEnemies. The second is
+  // the enemy system. For a request whose subject is enemies, the plan was reading the wrong half of
+  // the project.
+  assert.equal(singularise("enemies"), "enemy");
+  assert.equal(singularise("bodies"), "body");
+  assert.equal(singularise("boxes"), "box");
+  assert.equal(singularise("matches"), "match");
+  assert.equal(singularise("meshes"), "mesh");
+});
+
+test("a four-letter plural is still a plural", () => {
+  // The threshold used to be five letters, which left "bars" alone - and a plural query only matches
+  // names containing "bars", so WBP_DataBar was missed by the very request that asked for a bar.
+  assert.equal(singularise("bars"), "bar");
+  assert.equal(singularise("guns"), "gun");
+  assert.equal(singularise("hits"), "hit");
+});
+
+test("a word that merely ends in s is left alone", () => {
+  // Unreal has input axes, so "axis" has to survive. The others are the ones likely to turn up in a
+  // feature request; the general case is handled by the double-s rule.
+  assert.equal(singularise("axis"), "axis");
+  assert.equal(singularise("bias"), "bias");
+  assert.equal(singularise("status"), "status");
+  assert.equal(singularise("class"), "class");
+  assert.equal(singularise("boss"), "boss");
+});
+
+test("this is not a stemmer, and must not become one", () => {
+  // A real stemmer turns "sprinting" into "sprint" and "regenerates" into "regener" - and the second
+  // is worse than the word it replaced. This only has to undo the plural a person types.
+  assert.equal(singularise("sprinting"), "sprinting");
+  assert.equal(singularise("regenerates"), "regenerate");
+  assert.equal(singularise("die"), "die");
+  assert.equal(singularise("loot"), "loot");
 });
