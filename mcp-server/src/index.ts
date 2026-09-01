@@ -1937,11 +1937,40 @@ register(
     try {
       const result = await bridge.send<SearchProjectResult>("search_project", { query, maxResults });
       const enrichedHits = await enrichSearchHits(result.hits);
-      return jsonResult({
+
+      // A zero here means "not in the Blueprints", which is narrower than the tool's name.
+      //
+      // This searches the Blueprint index: asset names, parent classes, function and custom event
+      // names, variable names. It does not search Data Table rows, the names of non-Blueprint assets,
+      // C++ symbols or actors placed in a level - and it is called search_project, so a bare
+      // `hitCount: 0` reads as "the project does not contain this".
+      //
+      // Traced on a real report. "The machine gun upgrade does nothing" is true, and the cause is a
+      // Data Table row - DT_Upgrades, Weapon_MachineGun, with an empty UpgradeClass. search_project
+      // returns nothing for "machine gun", for "MachineGun", and for every other spelling, because
+      // the answer is not in a Blueprint at all. unreal_find_in_data_tables finds it on the first
+      // call. The route existed; nothing pointed down it.
+      //
+      // Only on a zero, so a search that worked pays nothing for advice it does not need.
+      const nothingFound = (result.hitCount ?? enrichedHits.length) === 0;
+      // Wrapped, because the note above names four tools and on `search` none of them are listed.
+      // withDisabledToolNote says how to reach an unlisted tool - through unreal_call_tool, without
+      // changing the tool list - so advice that would otherwise dead-end stays followable.
+      return jsonResult(withDisabledToolNote({
         ...result,
         hits: enrichedHits,
+        ...(nothingFound
+          ? {
+              next:
+                `Searched Blueprint names, parents, functions, custom events and variables - not Data Table ` +
+                `rows, non-Blueprint asset names, C++ or placed actors. If the thing you are looking for lives ` +
+                `in one of those: unreal_find_in_data_tables for row and cell contents, unreal_list_assets ` +
+                `with \`match\` for assets by name, unreal_find_source for C++, unreal_list_actors for a level. ` +
+                `Names in this project are usually run together, so try "MachineGun" as well as "machine gun".`,
+            }
+          : {}),
         enrichment: isEnrichmentEnabled() ? "local-llm" : "none",
-      });
+      }, isToolEnabled));
     } catch (err) {
       return errorResult(err);
     }

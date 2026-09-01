@@ -8742,3 +8742,50 @@ is ordinary design. Restricted to class references, the noise went and the bug s
 Two guards keep it quiet elsewhere: at least four filled rows, and at least 70% of them carrying a
 value nothing else uses. A column of twelve rows pointing at three classes is a tier system, not
 twelve mistakes, and there is a test for that case as well as for the real one.
+
+### "The machine gun upgrade does nothing" — walking the sentence to the cause
+
+The previous section established something rare: a bug in the project whose root cause is *known*.
+`DT_Upgrades` row `Weapon_MachineGun` has an empty `UpgradeClass`, so that upgrade instantiates
+nothing. That makes it a fair test of the thing this server is for — a symptom in plain English, and
+whether the tools lead anywhere from it.
+
+Three calls, as a model would make them:
+
+```
+search_project      "machine gun"   ->  hitCount 0, blueprintsSearched 339
+map_system          "machine gun"   ->  assetCount 0, with a good note about naming
+find_in_data_tables "MachineGun"    ->  DT_Upgrades, row Weapon_MachineGun     <- found
+```
+
+The route exists and nothing points down it. Worse, `search_project` returns nothing for **every**
+spelling — "MachineGun", "machinegun", "Machine Gun" — because the answer is not in a Blueprint at
+all, and that tool searches the Blueprint index: names, parent classes, functions, custom events,
+variables. It is called `search_project`, so a bare `hitCount: 0` reads as "the project does not
+contain this".
+
+`blueprintsSearched: 339` beside it is honest and, on its own, is a hint a reader has to interpret.
+Now it says the rest out loud, and only on a zero:
+
+```
+Searched Blueprint names, parents, functions, custom events and variables - not Data Table rows,
+non-Blueprint asset names, C++ or placed actors. If the thing you are looking for lives in one of
+those: unreal_find_in_data_tables for row and cell contents, unreal_list_assets with `match` for
+assets by name, unreal_find_source for C++, unreal_list_actors for a level. Names in this project
+are usually run together, so try "MachineGun" as well as "machine gun".
+```
+
+**And the advice is followable on the profile where it matters.** That note names four tools, none of
+which is listed on `search`. Wrapping the reply in `withDisabledToolNote` means it also says:
+
+```
+Not listed this session: unreal_find_in_data_tables, unreal_find_source, unreal_list_actors,
+unreal_list_assets. Reach them with unreal_call_tool; no need to enable.
+```
+
+Which is the fix from two sections earlier, doing its job on advice that did not exist when it was
+written. That is the argument for putting a mechanism in one place rather than writing the sentence
+by hand each time.
+
+Nothing was added to the search itself. The scope was always this; the zero simply never said so,
+and a dead end and an answer look identical until one of them tells you where else to look.
