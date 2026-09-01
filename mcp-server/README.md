@@ -8924,3 +8924,52 @@ Verified against real assets and every one put back as found: the guard refused 
 (`DT_Enemies`, 2 rows) and changed nothing; a rename round-tripped on a struct nothing is typed by; a
 name clash was refused; the enum round-tripped `Xbox` -> `XboxPad` -> `Xbox`. Nothing was written to
 disk.
+
+### Does supporting more cost more? Measured, and mostly no
+
+Two goals sit beside each other in this project and look like they pull apart: support everything a
+person can do in this engine, and cost a model as little as possible. Six tools were added over two
+sections. So what did they cost?
+
+Reading the profile figures back across the last eight commits:
+
+| | then | now |
+|---|---|---|
+| `full` standing | 42,624 | **44,243** |
+| `search` standing | **2,471** | **2,471** |
+
+`search` has not moved by a single token, through six new tools. That is not luck - it advertises
+five, and everything else is registered and switched off, so the catalogue can grow without the
+standing cost following. Breadth is free on the profile `--print-config` writes, and expensive only
+on the one that lists everything.
+
+So the two goals do not pull apart, provided a model uses the dispatcher. That is worth stating
+plainly, because "add fewer tools to save tokens" is the obvious inference and it is wrong.
+
+**Where breadth is not free is discovery.** The standing cost is flat; the call that finds a tool is
+not, because it returns a row per match. `check:responses` had it two tokens under its ceiling:
+
+```
+list_tools match     498    500  ok
+```
+
+That is a guard about to fire for a reason that has nothing to do with a mistake - the catalogue grew.
+And the rows were repeating themselves: ask for "data table" and every one of the seven says
+`"on":false`, because on `search` they all are. 189 characters of 1,991 spent restating what the whole
+result agrees on.
+
+Hoisted, the same way `unreal_list_actors` hoists a shared class:
+
+```
+match "data table"   498 -> 481    (group is mixed, so only `on` lifts)
+match "montage"      ...  -> 159    (both lift)
+match "enum"         ...  -> 239    (both lift)
+```
+
+Only when it is genuinely uniform. The "data table" search spans two groups, so every row keeps its
+own `group` and only `on` moves up - a mixed answer still says which is which, which is the whole
+reason to check rather than assume.
+
+The saving is small in absolute terms and it is the right shape: it grows with the number of matches,
+so it gets larger exactly as the catalogue does. The ceiling stays at 500, now with room under it
+again.

@@ -5721,10 +5721,38 @@ register(
       });
     }
 
+    // Say the things every row agrees on once.
+    //
+    // A narrow search returns rows that usually share both their group and their on/off state - ask
+    // for "data table" and all seven are group "data", and on `search` all seven are off. Repeated
+    // per row that is `"group":"data","on":false` seven times over, which was 189 of 1,991
+    // characters and put this reply two tokens under a 500-token ceiling it is meant to sit well
+    // inside. The ceiling is not the problem; the repetition is, and it grows with every tool added.
+    //
+    // Only hoisted when it is actually uniform, so a mixed result still says which is which per row.
+    // Same shape as `class` on unreal_list_actors and blueprintByClass beside it.
+    const groups = new Set(rows.map((r) => r.group));
+    const states = new Set(rows.map((r) => r.on));
+    const sharedGroup = rows.length > 1 && groups.size === 1 ? [...groups][0] : undefined;
+    const sharedOn = rows.length > 1 && states.size === 1 ? [...states][0] : undefined;
+    const compactRows =
+      sharedGroup === undefined && sharedOn === undefined
+        ? rows
+        : rows.map((r) => {
+            const { group, on, ...rest } = r;
+            return {
+              ...rest,
+              ...(sharedGroup === undefined ? { group } : {}),
+              ...(sharedOn === undefined ? { on } : {}),
+            };
+          });
+
     return jsonResult({
       matched: rows.length,
       of: toolCatalog.size,
-      tools: rows,
+      ...(sharedGroup === undefined ? {} : { group: sharedGroup }),
+      ...(sharedOn === undefined ? {} : { on: sharedOn }),
+      tools: compactRows,
       groupsNotYetOn: off,
       next:
         off.length > 0
