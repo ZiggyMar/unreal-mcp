@@ -16,18 +16,29 @@ import { startAndInitialize } from "./lib/mcpStdio.mjs";
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "node-search-trial");
 
 // Through the dispatcher, so this costs no tool-list change - and exercises that path too.
-const find = async (query, maxResults = 5) => {
+const raw = async (query, maxResults = 5) => {
   const res = await server.request("tools/call", {
     name: "unreal_call_tool",
     arguments: { tool: "unreal_find_node", args: { query, maxResults } },
   });
   const text = res?.result?.content?.[0]?.text ?? "";
   try {
-    const parsed = JSON.parse(text);
-    return (parsed.hits ?? []).map((h) => h.functionName ?? h.name ?? "?");
+    return JSON.parse(text);
   } catch {
-    return [`PARSE_FAIL: ${text.slice(0, 120)}`];
+    return { parseFail: text.slice(0, 120) };
   }
+};
+
+const find = async (query, maxResults = 5) => {
+  const parsed = await raw(query, maxResults);
+  if (parsed.parseFail) return [`PARSE_FAIL: ${parsed.parseFail}`];
+  return (parsed.hits ?? []).map((h) => h.functionName ?? h.name ?? "?");
+};
+
+/** The macro and node-kind names a query turns up, which are NOT in the function catalog. */
+const findKinds = async (query) => {
+  const parsed = await raw(query);
+  return [...(parsed.nodeTypes ?? []), ...(parsed.macros ?? [])].map((h) => h.name);
 };
 
 const results = [];
@@ -80,6 +91,71 @@ for (const [query, expected] of [
   const hits = await find(query);
   check(`"${query}" still resolves`, hits.some((h) => expected.test(h)), hits.slice(0, 3).join(", "));
 }
+
+// Macros and node kinds. build_graph places every one of these, so find_node reporting nothing -
+// or worse, reporting AddBranchNode for "Branch" - was one half of the server calling the other
+// half's work nonexistent.
+for (const [query, expected] of [
+  ["ForEachLoop", "ForEachLoop"],
+  ["For Each Loop", "ForEachLoop"],
+  ["Do Once", "DoOnce"],
+  ["WhileLoop", "WhileLoop"],
+  ["FlipFlop", "FlipFlop"],
+  ["Gate", "Gate"],
+  ["Branch", "Branch"],
+  ["Sequence", "Sequence"],
+]) {
+  const kinds = await findKinds(query);
+  check(`"${query}" finds the ${expected} node`, kinds.includes(expected), kinds.join(", ") || "(none)");
+}
+
+// And it must say how to place them, or naming them only moves the guess one step along.
+const branch = await raw("Branch");
+check(
+  "a node kind comes with how to place it",
+  /nodeType/.test(JSON.stringify(branch.nodeTypes ?? [])),
+  JSON.stringify((branch.nodeTypes ?? [])[0] ?? {})
+);
+const forEach = await raw("ForEachLoop");
+check(
+  "a macro comes with its macroName",
+  /macroName/.test(JSON.stringify(forEach.macros ?? [])),
+  JSON.stringify((forEach.macros ?? [])[0] ?? {})
+);
+
+// An exact node-kind answer must not drag unrelated functions along with it. "Branch" used to send
+// one correct line and then 142 tokens of AddBranchNode, tooltip and all.
+const branchHits = await find("Branch");
+check(
+  "an exact node kind drops the coincidental function hits",
+  !branchHits.some((h) => /AddBranchNode|IsInstancedStructValid/.test(h)),
+  branchHits.join(", ") || "(no function hits, which is right)"
+);
+const seqHits = await find("Sequence");
+check(
+  "\"Sequence\" no longer answers with SequenceEvent",
+  !seqHits.some((h) => /SequenceEvent/.test(h)),
+  seqHits.join(", ") || "(none)"
+);
+
+// ...but the rule must be exactness, not bluntness. IsValid is genuinely BOTH a macro and a
+// function, and dropping either would be a wrong answer of the opposite kind.
+const isValid = await raw("IsValid");
+const isValidKinds = [...(isValid.nodeTypes ?? []), ...(isValid.macros ?? [])].map((h) => h.name);
+const isValidFns = (isValid.hits ?? []).map((h) => h.functionName);
+check(
+  "IsValid keeps both the macro and the real function",
+  isValidKinds.includes("IsValid") && isValidFns.includes("IsValid"),
+  `kinds=[${isValidKinds.join(", ")}] fns=[${isValidFns.join(", ")}]`
+);
+
+// A plain function search must NOT grow a macros/nodeTypes section it does not need.
+const plain = await raw("Print String");
+check(
+  "an ordinary function search stays lean",
+  plain.macros === undefined && plain.nodeTypes === undefined && plain.note === undefined,
+  `macros=${plain.macros !== undefined} nodeTypes=${plain.nodeTypes !== undefined} note=${plain.note !== undefined}`
+);
 
 server.child.kill();
 

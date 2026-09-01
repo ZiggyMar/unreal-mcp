@@ -74,6 +74,25 @@ public:
 	// Returns compact hit objects; never returns the whole catalog.
 	TArray<TSharedPtr<FJsonValue>> Search(const FString& Query, int32 MaxResults) const;
 
+	/**
+	 * Split a name into lowercase words: "Array_Length", "Array Length" and "ArrayLength" all give
+	 * ["array", "length"].
+	 *
+	 * Public because the function catalog is not the only thing that has to match a name the way a
+	 * person types it. find_node also searches the standard macro library and the built-in node
+	 * kinds, and two search surfaces that disagree about what counts as a match is the defect this
+	 * project keeps finding.
+	 */
+	static void TokenizeName(const FString& In, TArray<FString>& Out);
+
+	/**
+	 * Does `Query` name `Candidate`, comparing whole words?
+	 *
+	 * The same rule the function search uses, so "For Each Loop", "ForEachLoop" and "foreach_loop"
+	 * all name the same macro - and "Branch" does not name AddBranchNode.
+	 */
+	static bool NameMatches(const FString& Candidate, const TArray<FString>& QueryWords);
+
 	// Full signature for one function. ClassNameOrPath may be empty to search every class,
 	// in which case the first exact name match wins. Returns null if not found.
 	TSharedPtr<FJsonObject> FindSignature(const FString& FunctionName, const FString& ClassNameOrPath) const;

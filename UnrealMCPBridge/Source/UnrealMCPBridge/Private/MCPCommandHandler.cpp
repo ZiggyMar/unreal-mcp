@@ -3953,8 +3953,113 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindNode(const TSharedPtr<FJso
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("query"), Query);
+
+	// Macros and node kinds first, because they are not in the function catalog at all and the
+	// function search answers for them anyway - wrongly.
+	//
+	// This was the worst kind of gap: build_graph places every one of these perfectly well, so one
+	// half of the server implemented what the other half reported as nonexistent. "ForEachLoop"
+	// returned nothing. Worse, the most common nodes in Blueprint returned confident nonsense -
+	// "Branch" answered AddBranchNode, "Gate" answered Not_PreBool, "Select" answered SelectAll. A
+	// model wires one of those, fails, and pays for the round trip to find out.
+	TArray<FString> QueryWords;
+	FMCPNodeCatalog::TokenizeName(Query, QueryWords);
+
+	TArray<TSharedPtr<FJsonValue>> NodeKinds;
+	// The nodeType values build_graph accepts that are not function calls. Kept here rather than
+	// duplicated as prose: this list and the one add_node validates against are the same question,
+	// and a listing that disagrees with behaviour is the recurring defect in this project.
+	static const TCHAR* const BuiltInNodeKinds[] = {
+		TEXT("Branch"), TEXT("Sequence"), TEXT("Cast"), TEXT("Self"),
+		TEXT("Event"), TEXT("CustomEvent"), TEXT("VariableGet"), TEXT("VariableSet"),
+		TEXT("InputKey"), TEXT("InputAxis"), TEXT("EnhancedInputAction"), TEXT("CallParent"),
+	};
+	// Whether the query names a kind or macro EXACTLY, which is a stronger fact than merely matching
+	// one and is what licenses dropping the function hits below.
+	bool bExactKind = false;
+	const auto IsExact = [&QueryWords](const FString& Candidate)
+	{
+		TArray<FString> CandidateWords;
+		FMCPNodeCatalog::TokenizeName(Candidate, CandidateWords);
+		return CandidateWords == QueryWords;
+	};
+
+	for (const TCHAR* const Kind : BuiltInNodeKinds)
+	{
+		if (FMCPNodeCatalog::NameMatches(Kind, QueryWords))
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Kind);
+			Entry->SetStringField(TEXT("use"), FString::Printf(TEXT("build_graph nodeType \"%s\""), Kind));
+			NodeKinds.Add(MakeShared<FJsonValueObject>(Entry));
+			bExactKind = bExactKind || IsExact(Kind);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Macros;
+	// The same asset the editor's own right-click palette pulls ForEachLoop and friends from. Loaded
+	// on demand: LoadObject caches, so only the first search in a session pays for it.
+	if (UBlueprint* MacroLib = LoadObject<UBlueprint>(nullptr,
+		TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros")))
+	{
+		for (UEdGraph* Candidate : MacroLib->MacroGraphs)
+		{
+			if (!Candidate || !FMCPNodeCatalog::NameMatches(Candidate->GetName(), QueryWords))
+			{
+				continue;
+			}
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Candidate->GetName());
+			Entry->SetStringField(TEXT("use"),
+				FString::Printf(TEXT("build_graph nodeType \"Macro\", macroName \"%s\""), *Candidate->GetName()));
+			Macros.Add(MakeShared<FJsonValueObject>(Entry));
+			bExactKind = bExactKind || IsExact(Candidate->GetName());
+		}
+	}
+
+	// When the query exactly names a node kind or macro, keep only function hits that name it
+	// exactly too.
+	//
+	// "Branch" was answered with one correct line and then 142 tokens of AddBranchNode from
+	// RigVMController, complete with tooltip - and labelling that as a coincidence, which the note
+	// below does, is not the same as not sending it. The exactness test is what makes this safe
+	// rather than blunt: "IsValid" is genuinely both a macro and a function, and both survive,
+	// while AddBranchNode does not name Branch and SequenceEvent does not name Sequence.
+	if (bExactKind)
+	{
+		Hits.RemoveAll([&IsExact](const TSharedPtr<FJsonValue>& Hit)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (!Hit.IsValid() || !Hit->TryGetObject(Obj) || !Obj)
+			{
+				return true;
+			}
+			FString FunctionName, DisplayName;
+			(*Obj)->TryGetStringField(TEXT("functionName"), FunctionName);
+			(*Obj)->TryGetStringField(TEXT("displayName"), DisplayName);
+			return !IsExact(FunctionName) && !IsExact(DisplayName);
+		});
+	}
+
+	if (NodeKinds.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("nodeTypes"), NodeKinds);
+	}
+	if (Macros.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("macros"), Macros);
+	}
+
 	Result->SetArrayField(TEXT("hits"), Hits);
 	Result->SetNumberField(TEXT("hitCount"), Hits.Num());
+	if ((NodeKinds.Num() > 0 || Macros.Num() > 0) && Hits.Num() > 0)
+	{
+		// Only worth saying while function hits remain. On an exact match they have been dropped
+		// rather than disclaimed, and a warning about a list that is not there is just more to read.
+		Result->SetStringField(TEXT("note"),
+			TEXT("The nodeTypes/macros above are not functions - place them with build_graph as shown, "
+				"not as a function call."));
+	}
 	// Reports the catalog size rather than ever returning the catalog itself. It runs to
 	// tens of thousands of entries, so dumping it would defeat the point of this project.
 	Result->SetNumberField(TEXT("catalogSize"), Catalog.GetFunctionCount());

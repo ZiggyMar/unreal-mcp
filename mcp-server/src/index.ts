@@ -2009,8 +2009,8 @@ register(
       "edit. Returns compact entries without full pin lists; follow up with unreal_get_node_signature for exact " +
       "pins. Matched on WORDS, so type what the editor shows: \"Array Length\", \"array_length\" and " +
       "\"ArrayLength\" all find Array_Length.\n\n" +
-      "Macros are NOT here: ForEachLoop, WhileLoop, DoOnce, DoN, Gate, FlipFlop are nodeType \"Macro\" " +
-      "(+macroName) in unreal_build_graph, and Branch/Sequence/Cast/Select are nodeTypes of their own.",
+      "Searches macros and node kinds too. A hit under `macros` or `nodeTypes` is placed by " +
+      "unreal_build_graph with that nodeType (macros also need macroName), not as a function call.",
     inputSchema: {
       query: z
         .string()

@@ -30,7 +30,7 @@ namespace
 	// "Array_Length", "Array Length" and "ArrayLength" all become ["array", "length"], which is the
 	// point: a caller types what the editor shows them, and the editor shows "Array Length" for a
 	// function actually called Array_Length.
-	void TokenizeName(const FString& In, TArray<FString>& Out)
+	void TokenizeNameImpl(const FString& In, TArray<FString>& Out)
 	{
 		FString Current;
 		for (int32 Index = 0; Index < In.Len(); ++Index)
@@ -268,8 +268,8 @@ FMCPCatalogFunction FMCPNodeCatalog::MakeEntry(const UFunction* Func, const UCla
 
 	// Split once here rather than on every search. The catalog holds tens of thousands of entries
 	// and is searched repeatedly in a session, so paying for this at build time is the cheap end.
-	TokenizeName(Entry.Name, Entry.NameWords);
-	TokenizeName(Entry.DisplayName, Entry.DisplayWords);
+	FMCPNodeCatalog::TokenizeName(Entry.Name, Entry.NameWords);
+	FMCPNodeCatalog::TokenizeName(Entry.DisplayName, Entry.DisplayWords);
 
 	// Same reflection walk MCPProjectIndex uses for a Blueprint's own functions, applied
 	// here to every engine and game class instead.
@@ -373,6 +373,24 @@ TSharedRef<FJsonObject> FMCPNodeCatalog::FunctionToJson(const FMCPCatalogFunctio
 	return Obj;
 }
 
+void FMCPNodeCatalog::TokenizeName(const FString& In, TArray<FString>& Out)
+{
+	TokenizeNameImpl(In, Out);
+}
+
+bool FMCPNodeCatalog::NameMatches(const FString& Candidate, const TArray<FString>& QueryWords)
+{
+	if (QueryWords.Num() == 0)
+	{
+		return false;
+	}
+	TArray<FString> CandidateWords;
+	TokenizeNameImpl(Candidate, CandidateWords);
+	// A whole-word run anywhere, with the last query word allowed to be a prefix from three
+	// characters - exactly the rule the function search settled on, for exactly the same reasons.
+	return WordRunIndex(CandidateWords, QueryWords, /*bAllowLastPartial=*/true) != INDEX_NONE;
+}
+
 TArray<TSharedPtr<FJsonValue>> FMCPNodeCatalog::Search(const FString& Query, int32 MaxResults) const
 {
 	const FString LowerQuery = Query.ToLower();
@@ -388,7 +406,7 @@ TArray<TSharedPtr<FJsonValue>> FMCPNodeCatalog::Search(const FString& Query, int
 	// The query, split the same way every catalog name was. Both sides being words is what makes
 	// "Array Length", "array_length" and "ArrayLength" the same search.
 	TArray<FString> QueryWords;
-	TokenizeName(Query, QueryWords);
+	FMCPNodeCatalog::TokenizeName(Query, QueryWords);
 
 	// The last-resort substring tier is for a single half-typed word and nothing else.
 	//

@@ -191,10 +191,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2425 | five tools; hand it a sentence or a preset name |
-| `minimal` | 4227 | ten tools, fixed, for a small local model |
-| `core` | 12994 | the authoring spine |
-| `lazy` | 13255 | `core` plus deferred groups |
-| `full` | 41619 | everything, for a model that can afford it |
+| `minimal` | 4223 | ten tools, fixed, for a small local model |
+| `core` | 12990 | the authoring spine |
+| `lazy` | 13251 | `core` plus deferred groups |
+| `full` | 41615 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6675,8 +6675,40 @@ Typeahead survives deliberately: the *final* query word may still match a prefix
 that breaks the common path is a net loss however good the new cases look, which is why the trial
 asserts the things that already worked still work.
 
-`npm run trial:nodesearch` checks all of it against a live editor, including the `Do N` case
-specifically, because that is the one that would come back silently.
+### Macros and node kinds were the third defect, and the worst
+
+`unreal_build_graph` places `ForEachLoop`, `DoOnce`, `Gate`, `Branch`, `Sequence` and the rest
+perfectly well — via `nodeType: "Macro"` with a `macroName`, or the matching `nodeType` directly.
+`unreal_find_node` searched a catalog of Blueprint-callable *functions*, which contains none of them.
+One half of the server reported the other half's work as nonexistent.
+
+Half of them returned nothing. The other half was worse: these are the most common nodes in
+Blueprint, and the function search answered anyway. `Branch` returned `AddBranchNode` from
+`RigVMController`. `Gate` returned `Not_PreBool`. `Sequence` returned `SequenceEvent`. `Select`
+returned `SelectAll`. Each is a confident, wrong, fully-detailed answer that a model wires up, fails
+on, and pays a round trip to discover.
+
+`find_node` now searches the standard macro library and the built-in node kinds alongside the
+function catalog, using the same word-matching rule, and reports them separately with **how to place
+them** — `{"name":"ForEachLoop","use":"build_graph nodeType \"Macro\", macroName \"ForEachLoop\""}`.
+Naming a node without saying how to place it just moves the guess one step along.
+
+When the query names a kind or macro **exactly**, the coincidental function hits are dropped rather
+than disclaimed. Exactness is what makes that safe instead of blunt: `IsValid` is genuinely both a
+macro and a function and keeps both, while `AddBranchNode` does not name `Branch`.
+
+The result is cheaper *and* more correct, which is the trade this project keeps looking for:
+
+| query | before | after |
+|---|---:|---:|
+| `Branch` | 219 tokens, wrong answer | **33 tokens**, right answer |
+| `Sequence` | 200+ tokens, `SequenceEvent` | **35 tokens** |
+| `Gate` | 200+ tokens, `Not_PreBool` | **36 tokens** |
+| `Print String` | 87 tokens | 87 tokens — unchanged |
+
+`npm run trial:nodesearch` checks all of it against a live editor — 25 assertions, including the
+`Do N` case and the `IsValid` both-answers case specifically, because those are the ones that would
+come back silently.
 
 ## When the host project cannot build, deliver the plugin anyway
 
