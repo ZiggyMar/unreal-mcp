@@ -42,6 +42,8 @@ export interface RuntimeIssue {
   node?: string;
   property?: string;
   fix?: string;
+  /** True when the reference was set and its actor was destroyed, rather than never set. */
+  destroyed?: boolean;
 }
 
 export interface RuntimeLogSummary {
@@ -65,7 +67,20 @@ const LINE = /^\[[\d.\-:]+\]\[\s*\d+\](\w+):\s+(Error|Warning):\s+(.*)$/;
 
 /** A Blueprint runtime error names the exact node. That is the whole reason this is worth parsing. */
 const ACCESSED_NONE =
-  /Accessed None trying to read \((\w+)\) property (\S+) in (\S+)".*?Node:\s+(.*?)\s+Graph:\s+(.*?)\s+Function:.*?Blueprint:\s+(\S+)/;
+  /Accessed None trying to read \((\w+)\) property (\S+) in (.+?)".*?Node:\s+(.*?)\s+Graph:\s+(.*?)\s+Function:.*?Blueprint:\s+(\S+)/;
+
+/**
+ * The other shape: the reference WAS valid and the object behind it has been destroyed.
+ *
+ *   Attempted to access BP_PingActor_C_1 via property VanPing, but BP_PingActor_C_1 is not valid
+ *   (pending kill or garbage). Node: Destroy Actor Graph: EventGraph ... Blueprint: BP_DataDropOffStation
+ *
+ * Unparsed, this arrived as `8x ? ?` - a count with nothing to act on, which is the shape of finding
+ * this project keeps removing. It reads as the same bug as a null property and it is not: nothing
+ * failed to be set, something was destroyed and is still being reached for, so the fix is different.
+ */
+const PENDING_KILL =
+  /Attempted to access (\S+) via property (\S+), but .*?is not valid \(pending kill or garbage\).*?Node:\s+(.*?)\s+Graph:\s+(.*?)\s+Function:.*?Blueprint:\s+(\S+)/;
 
 /**
  * Lines that are true of a working editor and are not this project's problem.
@@ -84,10 +99,23 @@ const normalise = (message: string) =>
   message
     .replace(/0x[0-9a-fA-F]+/g, "0xADDR")
     .replace(/\b\d{4,}\b/g, "N")
+    // Spawned actors are numbered: BP_PingActor_C_1, BP_PingActor_C_2. One bug in one node reported
+    // once per instance reads as several bugs, and the counts that would have made it obvious get
+    // split up - the ping actor arrived as separate 8x and 6x rows for the same Destroy Actor.
+    .replace(/(_C)_\d+\b/g, "$1_N")
     .trim();
 
 /** What to do about the kinds this can recognise. Generic advice would be worse than none. */
 function adviseFor(message: string, parsed: RuntimeIssue): string | undefined {
+  if (parsed.destroyed) {
+    return (
+      `${parsed.property} pointed at an actor that has since been destroyed, and ${parsed.node} in ` +
+      `${parsed.blueprint} still reaches for it. This is NOT the same as a reference that was never ` +
+      `set: something did set it, and then the actor was destroyed while the reference was kept. ` +
+      `Clear the reference where the actor is destroyed, or gate the access on Is Valid - and if the ` +
+      `node is Destroy Actor, check whether it can run twice.`
+    );
+  }
   if (parsed.property) {
     return (
       `${parsed.property} is null when ${parsed.node} runs in ${parsed.blueprint}. Either it is never set on ` +
@@ -176,11 +204,20 @@ export function summariseRuntimeLog(text: string, options: RuntimeLogOptions = {
 
     const issue: RuntimeIssue = { count: 1, severity, category, message };
     const none = ACCESSED_NONE.exec(rawMessage);
+    const destroyed = PENDING_KILL.exec(rawMessage);
     if (none) {
       issue.property = none[2];
       issue.node = none[4];
       issue.graph = none[5];
       issue.blueprint = none[6];
+    } else if (destroyed) {
+      issue.property = destroyed[2];
+      issue.node = destroyed[3];
+      issue.graph = destroyed[4];
+      issue.blueprint = destroyed[5];
+      // Marked so the advice can tell the two apart. Both read as "a reference was no good"; only
+      // one of them is a thing that was never set.
+      issue.destroyed = true;
     }
     issue.fix = adviseFor(rawMessage, issue);
     groups.set(key, issue);

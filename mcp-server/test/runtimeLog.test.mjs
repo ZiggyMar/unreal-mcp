@@ -124,3 +124,89 @@ test("the log path is derived from the .uproject the editor reports", () => {
   const path = logFileFor("A:/UnrealProjects/AVS56_BugHunt/AntiVirusSquad.uproject");
   assert.match(path.replace(/\\/g, "/"), /AVS56_BugHunt\/Saved\/Logs\/AntiVirusSquad\.log$/);
 });
+
+// --- Shapes that arrived as "?" ------------------------------------------------------------------
+//
+// Three of the twelve issues from a real PIE session came back with no blueprint and no node - a
+// count with nothing to act on, which is the shape of finding this project keeps deleting. Two
+// patterns account for all of them.
+
+test("an owner named with spaces still yields the node - \"in not an UClass\"", () => {
+  // (\S+) could not match "not an UClass", so the whole line went unparsed. 35 occurrences in one
+  // session, all reported as "?".
+  const result = summariseRuntimeLog(
+    [
+      "[2026.08.18-23.09.00:000][ 50]LogPlayLevel: PlayLevel",
+      line(
+        "PIE",
+        "Error",
+        'Blueprint Runtime Error: "Accessed None trying to read (real) property CallFunc_Array_Get_Item in not an UClass". ' +
+          "Node:  SetNavLinkStatus Graph:  TakeDamage Function:  Take Damage Blueprint:  BP_FireWall"
+      ),
+    ].join("\n")
+  );
+  assert.equal(result.issues.length, 1);
+  assert.equal(result.issues[0].blueprint, "BP_FireWall");
+  assert.equal(result.issues[0].node, "SetNavLinkStatus");
+  assert.equal(result.issues[0].property, "CallFunc_Array_Get_Item");
+});
+
+test("a destroyed actor is a different bug from one that was never set, and says so", () => {
+  const result = summariseRuntimeLog(
+    [
+      "[2026.08.18-23.09.00:000][ 50]LogPlayLevel: PlayLevel",
+      line(
+        "PIE",
+        "Error",
+        'Blueprint Runtime Error: "Attempted to access BP_PingActor_C_1 via property VanPing, but ' +
+          'BP_PingActor_C_1 is not valid (pending kill or garbage)". Node:  Destroy Actor Graph:  EventGraph ' +
+          "Function:  Execute Ubergraph BP Data Drop Off Station Blueprint:  BP_DataDropOffStation"
+      ),
+    ].join("\n")
+  );
+  assert.equal(result.issues.length, 1);
+  const issue = result.issues[0];
+  assert.equal(issue.blueprint, "BP_DataDropOffStation");
+  assert.equal(issue.node, "Destroy Actor");
+  assert.equal(issue.property, "VanPing");
+  assert.equal(issue.destroyed, true);
+  // The advice has to distinguish the two. "Never set" and "set, then destroyed" have different fixes.
+  assert.match(issue.fix, /destroyed/i);
+  assert.doesNotMatch(issue.fix, /never set on that machine/);
+});
+
+test("one bug across many spawned instances is one issue, not one per instance", () => {
+  // BP_PingActor_C_1 and BP_PingActor_C_2 are the same Destroy Actor in the same graph. Reported
+  // separately they were 8x and 6x - two middling rows instead of one that sorts where it belongs.
+  const pending = (n) =>
+    `Blueprint Runtime Error: "Attempted to access BP_PingActor_C_${n} via property VanPing, but ` +
+    `BP_PingActor_C_${n} is not valid (pending kill or garbage)". Node:  Destroy Actor Graph:  EventGraph ` +
+    `Function:  Execute Ubergraph BP Data Drop Off Station Blueprint:  BP_DataDropOffStation`;
+  const result = summariseRuntimeLog(
+    [
+      "[2026.08.18-23.09.00:000][ 50]LogPlayLevel: PlayLevel",
+      line("PIE", "Error", pending(1)),
+      line("PIE", "Error", pending(2)),
+      line("PIE", "Error", pending(1)),
+    ].join("\n")
+  );
+  assert.equal(result.issues.length, 1);
+  assert.equal(result.issues[0].count, 3);
+});
+
+test("two genuinely different actors are still two issues", () => {
+  // The normalisation collapses the instance NUMBER, not the class. Collapsing further would hide
+  // real distinctions, which is the failure mode of every over-eager dedupe.
+  const pending = (cls) =>
+    `Blueprint Runtime Error: "Attempted to access ${cls}_C_1 via property Ref, but ${cls}_C_1 ` +
+    `is not valid (pending kill or garbage)". Node:  Destroy Actor Graph:  EventGraph ` +
+    `Function:  Execute Ubergraph X Blueprint:  BP_Host`;
+  const result = summariseRuntimeLog(
+    [
+      "[2026.08.18-23.09.00:000][ 50]LogPlayLevel: PlayLevel",
+      line("PIE", "Error", pending("BP_PingActor")),
+      line("PIE", "Error", pending("BP_OtherActor")),
+    ].join("\n")
+  );
+  assert.equal(result.issues.length, 2);
+});
