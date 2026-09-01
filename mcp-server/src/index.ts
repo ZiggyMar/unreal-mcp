@@ -209,6 +209,16 @@ const AUTHORING_TOOLS = [
 /** Sent once per session, with the first enable that switches on something able to author. */
 let groundTruthDelivered = false;
 
+/**
+ * How many times this session has changed the advertised tool list.
+ *
+ * Each one re-reads the whole conversation at full price on the next turn, because the tool list
+ * sits ahead of the system prompt and every message. One is the cost of doing business; a session
+ * that keeps discovering it needs one more tool is paying that bill repeatedly without being told,
+ * and the only moment the advice is useful is the moment it happens again.
+ */
+let toolListChanges = 0;
+
 // These two live here, above buildInstructions, rather than beside the other profile sets.
 //
 // buildInstructions runs at module scope, so anything it reads must already exist. Declared in
@@ -1997,14 +2007,10 @@ register(
       "unreal_add_node whenever you are not certain a function name and its owning class are exactly right**, which " +
       "is most of the time: guessing Unreal's API surface from memory is the single most common cause of a failed " +
       "edit. Returns compact entries without full pin lists; follow up with unreal_get_node_signature for exact " +
-      "pins.\n\n" +
-      "Matching is on WORDS, so type the name the editor shows you: \"Array Length\", \"array_length\" and " +
-      "\"ArrayLength\" are one search, and all three find Array_Length. A half-typed last word still matches, so " +
-      "\"len\" reaches Length.\n\n" +
-      "Not everything in the palette is a function. Flow-control macros - ForEachLoop, WhileLoop, DoOnce, DoN, Gate, " +
-      "FlipFlop - are macro instances, and Branch, Sequence, Cast and Select are node kinds; none live in this " +
-      "catalog. Place them with unreal_build_graph using nodeType \"Macro\" (plus macroName) or the matching " +
-      "nodeType directly.",
+      "pins. Matched on WORDS, so type what the editor shows: \"Array Length\", \"array_length\" and " +
+      "\"ArrayLength\" all find Array_Length.\n\n" +
+      "Macros are NOT here: ForEachLoop, WhileLoop, DoOnce, DoN, Gate, FlipFlop are nodeType \"Macro\" " +
+      "(+macroName) in unreal_build_graph, and Branch/Sequence/Cast/Select are nodeTypes of their own.",
     inputSchema: {
       query: z
         .string()
@@ -5329,6 +5335,11 @@ register(
     }
 
     const enabledCount = [...toolHandles.values()].filter((h) => h.enabled).length;
+    // Only a call that switched something on moves the list. Re-enabling what is already on is a
+    // no-op, and counting it would make the warning cry wolf.
+    if (enabled.length > 0) {
+      toolListChanges += 1;
+    }
     return jsonResult({
       requested: { groups: groups ?? [], tools: tools ?? [] },
       newlyEnabled: enabled,
@@ -5357,6 +5368,18 @@ register(
         enabled.length > 0
           ? "These tools are now available. Your client has been notified that the tool list changed."
           : "Nothing new to enable.",
+      // Said at the moment it becomes true, not in standing context where it would be paid for on
+      // every turn to teach something most sessions never need.
+      ...(enabled.length > 0 && toolListChanges >= 2
+        ? {
+            costNote:
+              `This is tool-list change ${toolListChanges} this session. Each one re-reads the whole ` +
+              `conversation at full price on the next turn, because the tool list sits ahead of everything ` +
+              `else in the request. If the remaining tools are for one or two calls each, ` +
+              `unreal_call_tool({ tool, args }) runs them with no change at all - and ` +
+              `unreal_list_tools({ schema: "<name>" }) gives you their parameters the same way.`,
+          }
+        : {}),
     });
   }
 );

@@ -190,10 +190,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2425 | five tools; hand it a sentence or a preset name |
-| `minimal` | 4156 | ten tools, fixed, for a small local model |
-| `core` | 12923 | the authoring spine |
-| `lazy` | 13184 | `core` plus deferred groups |
-| `full` | 41549 | everything, for a model that can afford it |
+| `minimal` | 4227 | ten tools, fixed, for a small local model |
+| `core` | 12994 | the authoring spine |
+| `lazy` | 13255 | `core` plus deferred groups |
+| `full` | 41619 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
