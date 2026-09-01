@@ -44,6 +44,44 @@ export interface FlowNode {
 
 export const EXEC_INPUT = /^(execute|exec|in|then)$/i;
 
+/**
+ * Exec input pins that are NOT called "execute".
+ *
+ * Four names covered every node anyone had looked at, and a Timeline has none of them: its exec
+ * inputs are Play, PlayFromStart, Stop, Reverse, ReverseFromEnd and SetNewTime. So every execution
+ * wire INTO a timeline was invisible, and the consequences were not cosmetic:
+ *
+ *   - explain_graph reported "VacuumPushedMC [multicast]: nothing wired to it" for an event whose
+ *     `then` goes straight into TL_VacuumPushed.PlayFromStart. Live logic, described as dead.
+ *   - audit.ts builds liveNodeIds from these same chains, so everything downstream of a timeline
+ *     was a dead-node finding.
+ *
+ * That is the failure this file's own traversal comment calls the worst possible one for a tool
+ * whose job is to say what is wrong, arriving by a different door.
+ *
+ * Matched per node TYPE rather than by name alone, because "Play" and "Reset" are perfectly ordinary
+ * names for a bool input on some other node, and a data pin counted as execution would invent a
+ * chain that does not run.
+ */
+const TIMELINE_EXEC_INPUT = /^(play|playfromstart|stop|reverse|reversefromend|setnewtime)$/i;
+
+/** Gate has Enter/Open/Close/Toggle; DoOnce and MultiGate have Reset. All are macro instances. */
+const MACRO_EXEC_INPUT = /^(enter|open|close|toggle|reset)$/i;
+
+/** Types arrive with or without the K2Node_ prefix depending on whether a reply has been compacted. */
+function isType(node: { type?: string } | undefined, bare: string): boolean {
+  const t = node?.type ?? "";
+  return t === bare || t === `K2Node_${bare}`;
+}
+
+/** Does `pinName` name an execution input on `target`? */
+export function isExecInput(target: { type?: string } | undefined, pinName: string): boolean {
+  if (EXEC_INPUT.test(pinName)) return true;
+  if (isType(target, "Timeline")) return TIMELINE_EXEC_INPUT.test(pinName);
+  if (isType(target, "MacroInstance")) return MACRO_EXEC_INPUT.test(pinName);
+  return false;
+}
+
 export const isKnot = (node: FlowNode | undefined): boolean => node?.type === "K2Node_Knot";
 
 /**
@@ -66,7 +104,7 @@ export function execTargets<T extends FlowNode>(node: T, byId: Map<string, T>, s
         out.push(...execTargets(target, byId, seen));
         continue;
       }
-      if (!EXEC_INPUT.test(link.pin)) continue;
+      if (!isExecInput(target, link.pin)) continue;
       out.push(target);
     }
   }
@@ -88,7 +126,7 @@ export function execSources<T extends FlowNode>(
     for (const pin of node.connectedPins ?? []) {
       if (pin.direction !== "out") continue;
       for (const link of pin.linkedTo ?? []) {
-        const direct = link.node === targetId && EXEC_INPUT.test(link.pin);
+        const direct = link.node === targetId && isExecInput(byId.get(link.node), link.pin);
         const viaKnot =
           isKnot(byId.get(link.node)) &&
           execTargets(byId.get(link.node) as T, byId).some((t) => t.id === targetId);

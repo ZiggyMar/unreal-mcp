@@ -6500,9 +6500,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddMontageNotify(const TShared
 
 	FAnimNotifyEvent NewEvent;
 	NewEvent.NotifyName = FName(*Name);
-	// LinkMontage rather than a bare time: a montage notify belongs to a segment, and linking is what
-	// keeps it in the right place when the segment moves.
-	NewEvent.LinkMontage(Montage, static_cast<float>(At));
+	// Link rather than a bare time: a montage notify belongs to a segment, and linking is what keeps
+	// it in the right place when the segment moves.
+	//
+	// Link, not LinkMontage. LinkMontage was deprecated in 5.1 and REMOVED in 5.8, so this compiled
+	// on 5.6 - with a deprecation warning nobody was reading - and failed the 5.8 build outright
+	// with "'LinkMontage': is not a member of 'FAnimNotifyEvent'". Link takes a UAnimSequenceBase,
+	// which a UAnimMontage is, and exists in both engines.
+	NewEvent.Link(Montage, static_cast<float>(At));
 	// The editor sets this so a notify sitting exactly on a frame boundary triggers on the side the
 	// author meant. Omitting it works until it does not, at exactly the times people place notifies.
 	NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(Montage->CalculateOffsetForNotify(static_cast<float>(At)));
