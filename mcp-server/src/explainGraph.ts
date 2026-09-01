@@ -1,4 +1,5 @@
 import { execTargets } from "./execFlow.js";
+import { ENTRY_TYPES } from "./entryTypes.js";
 
 /**
  * Turn a graph into a paragraph.
@@ -74,24 +75,6 @@ export interface GraphExplanation {
  */
 
 
-/** Nodes that begin a chain. Everything else is somewhere in the middle of one. */
-const ENTRY_TYPES = [
-  "K2Node_Event",
-  "K2Node_CustomEvent",
-  "K2Node_InputAxisEvent",
-  "K2Node_InputActionEvent",
-  "K2Node_InputKeyEvent",
-  "K2Node_InputTouchEvent",
-  "K2Node_InputVectorAxisEvent",
-  // A button's On Clicked is a ComponentBoundEvent, and leaving these out described every widget
-  // Blueprint as almost entirely dead: the handlers became "not reached by any event chain", and
-  // the logic hanging off them - the whole menu - went with them. Found by reading a real UI
-  // Blueprint and not believing the answer.
-  "K2Node_ComponentBoundEvent",
-  "K2Node_ActorBoundEvent",
-  "K2Node_FunctionEntry",
-  "K2Node_Timeline",
-];
 
 /** Titles are shown to a reader, so strip the noise the editor adds for its own layout. */
 const clean = (title: string) => title.replace(/\s+/g, " ").trim();

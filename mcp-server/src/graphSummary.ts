@@ -83,7 +83,7 @@ export interface GraphSummaryLike {
 }
 
 /** Nodes a graph is read FROM. Losing these to a cap makes everything else unreadable. */
-const ENTRY_TYPES = ["K2Node_Event", "K2Node_CustomEvent", "K2Node_FunctionEntry", "K2Node_Timeline"];
+import { ENTRY_TYPES } from "./entryTypes.js";
 
 /**
  * Default node cap.

@@ -17,6 +17,7 @@
 #include "EdGraph/EdGraphSchema.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_Event.h"
+#include "K2Node_EventNodeInterface.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
@@ -6536,13 +6537,42 @@ static void DescribeBTNode(const UBTNode* Node, int32 Depth, TArray<TSharedPtr<F
 // is not rare and it is not obviously visible: a system gets replaced, whoever replaced it unplugged
 // the front of the old one, and everything behind it stays on the canvas looking exactly like
 // working code.
+/**
+ * Does execution START here?
+ *
+ * The obvious test - IsA<UK2Node_Event> - misses the single most important node kind in a modern
+ * project. UK2Node_EnhancedInputAction does NOT derive from UK2Node_Event; it derives from UK2Node
+ * and implements IK2Node_EventNodeInterface. So every Enhanced Input node read like ordinary
+ * mid-chain logic, and modern Unreal drives everything through Enhanced Input: movement, jump,
+ * fire, interact.
+ *
+ * What that produced was not a missing feature but a confidently wrong one. explain_graph listed 25
+ * entry points for a real player Blueprint and not one input action, so whole features were absent
+ * from the summary a model reads first. Worse, trace_function_calls declared a live, working ping
+ * system dead - "Every call is dead... Do not fix it; find what took over" - about a chain that
+ * runs every time the player presses the key. A model that believes that deletes working code.
+ *
+ * The interface is the honest test rather than a list of class names, because a list of class names
+ * is the thing that goes stale next time Epic adds a node kind.
+ */
+static bool MCPIsEventNode(const UEdGraphNode* Node)
+{
+	if (!Node)
+	{
+		return false;
+	}
+	return Node->IsA<UK2Node_Event>()
+		|| Node->IsA<UK2Node_CustomEvent>()
+		|| Node->GetClass()->ImplementsInterface(UK2Node_EventNodeInterface::StaticClass());
+}
+
 static bool IsReachableFromEntry(UEdGraphNode* Node, int32 Depth = 0)
 {
 	if (!Node || Depth > 200)
 	{
 		return false;
 	}
-	if (Node->IsA<UK2Node_Event>() || Node->IsA<UK2Node_CustomEvent>() || Node->IsA<UK2Node_FunctionEntry>())
+	if (MCPIsEventNode(Node) || Node->IsA<UK2Node_FunctionEntry>())
 	{
 		return true;
 	}
@@ -6602,7 +6632,7 @@ static void MarkReachableNodes(UEdGraph* Graph, TSet<const UEdGraphNode*>& Out)
 	TArray<UEdGraphNode*> Frontier;
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (Node && (Node->IsA<UK2Node_Event>() || Node->IsA<UK2Node_CustomEvent>() || Node->IsA<UK2Node_FunctionEntry>()))
+		if (MCPIsEventNode(Node) || (Node && Node->IsA<UK2Node_FunctionEntry>()))
 		{
 			Out.Add(Node);
 			Frontier.Add(Node);
@@ -6738,7 +6768,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 			// are named EventGraph, EventGraph_1 and so on, so the node kinds are the honest test.
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (Node && (Node->IsA<UK2Node_Event>() || Node->IsA<UK2Node_CustomEvent>()))
+				if (MCPIsEventNode(Node))
 				{
 					Info.bIsEventGraph = true;
 					break;
