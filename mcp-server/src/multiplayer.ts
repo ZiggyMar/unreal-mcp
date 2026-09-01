@@ -69,7 +69,64 @@ function assignedVariable(node: MpNode): string | undefined {
   return match ? match[1].trim() : undefined;
 }
 
-export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpFinding[] {
+/**
+ * How many nodes each graph holds, so an empty RepNotify can be told from a full one.
+ *
+ * Keyed by graph name. A graph missing from the map was not read rather than empty, and the
+ * difference matters: reporting "does nothing" about a handler nobody looked at would be the
+ * confident wrong answer this project keeps finding.
+ */
+export type GraphSizes = Map<string, number>;
+
+/**
+ * A replicated variable whose RepNotify does nothing, or does not exist.
+ *
+ * This is the quiet half of the replication family. The variable replicates, the notify fires on
+ * every client exactly as designed, and the handler is empty - so the value arrives and nothing
+ * reacts to it. Nothing errors, nothing warns, and the symptom is "the UI does not update" long
+ * after anyone is looking at replication.
+ *
+ * Found by hand in a real project before this existed: OnRep_PlayerWhoPlacedName, an event with
+ * nothing wired to it, on a variable that replicates correctly. The name was arriving and the
+ * nameplate never changed.
+ *
+ * Only for variables the author explicitly gave a RepNotify. Asking for one where none was
+ * requested is a style opinion, and this file is for defects.
+ */
+function reviewRepNotifies(variables: MpVariable[], graphSizes: GraphSizes): MpFinding[] {
+  const findings: MpFinding[] = [];
+  for (const variable of variables) {
+    const handler = (variable.repNotify ?? "").trim();
+    if (!handler) {
+      continue;
+    }
+    if (!graphSizes.has(handler)) {
+      // Not read is not the same as not there. Say nothing.
+      continue;
+    }
+    // One node is the entry alone: the event exists on the canvas with nothing attached.
+    if ((graphSizes.get(handler) ?? 0) > 1) {
+      continue;
+    }
+    findings.push({
+      check: "repnotify-does-nothing",
+      severity: "warning",
+      variable: variable.name,
+      message:
+        `"${variable.name}" replicates with RepNotify "${handler}", and "${handler}" is empty - ` +
+        `the event is on the canvas with nothing wired to it.`,
+      observed: `${handler} has no nodes after its entry.`,
+      fix:
+        `The value arrives on every client and nothing reacts to it. It does not error, does not ` +
+        `warn, and surfaces much later as "the display never updates", by which point nobody is ` +
+        `looking at replication. Either wire ${handler} to whatever should respond to the new ` +
+        `value, or drop the RepNotify and replicate plainly if nothing needs to react.`,
+    });
+  }
+  return findings;
+}
+
+export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[], graphSizes?: GraphSizes): MpFinding[] {
   const findings: MpFinding[] = [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
@@ -80,6 +137,13 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[]): MpF
 
   // Nothing here applies to a single-player Blueprint, and a warning that fires on every one of
   // them would be ignored on all of them.
+  // Before the single-player bail-out on purpose: a variable carrying a RepNotify is networked by
+  // definition, and gating this behind "does the Blueprint have a server event" would silence the
+  // check on exactly the Blueprints that only replicate state - which is most of the UI.
+  if (graphSizes) {
+    findings.push(...reviewRepNotifies(variables, graphSizes));
+  }
+
   const networked =
     serverEvents.length > 0 || multicastEvents.length > 0 || clientEvents.length > 0 || anyReplicated;
   if (!networked) return findings;

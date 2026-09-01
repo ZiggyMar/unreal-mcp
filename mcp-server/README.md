@@ -30,6 +30,7 @@ written down next to the measurement that caused it.
 [Two ways a read-only tool said "there is nothing there"](#two-ways-a-read-only-tool-said-there-is-nothing-there) ·
 [The error on the screen that no tool could see](#the-error-on-the-screen-that-no-tool-could-see) ·
 ["I pressed the key and nothing happened"](#i-pressed-the-key-and-nothing-happened) ·
+[The replication bug that never says anything](#the-replication-bug-that-never-says-anything) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -6900,3 +6901,37 @@ walks again — following the chain instead of the graph, which is both correct 
 
 It runs only on the failure path, where the caller is already stuck. A run where everything moved
 pays nothing for it.
+
+## The replication bug that never says anything
+
+A RepNotify that does nothing is the quiet half of the replication family. The variable replicates,
+the notify fires on every client exactly as designed, and the handler is empty — so the value
+arrives and nothing reacts to it. Nothing errors. Nothing warns. It surfaces much later as "the
+display never updates", by which point nobody is looking at replication.
+
+Found by hand in a real project first: `OnRep_PlayerWhoPlacedName`, an event with nothing wired to
+it, on a variable that replicates perfectly. The name was arriving on every client and the nameplate
+never changed.
+
+`repnotify-does-nothing` now catches it, and on the first real Blueprint it ran against it became the
+top-priority action and found more of the same beside the one that was known.
+
+Three things keep it honest:
+
+- **A handler that was never read is not called empty.** Not-read and not-there are different
+  answers, and reporting the first as the second is the confident wrong answer this project keeps
+  finding. Without graph sizes the check stays silent.
+- **A variable with no RepNotify is left alone.** Asking for one nobody requested is a style
+  opinion; this file is for defects.
+- **It runs before the single-player bail-out.** A variable carrying a RepNotify is networked by
+  definition, and gating it behind "does this Blueprint have a server event" would silence it on
+  exactly the Blueprints that only replicate state — which is most of the UI.
+
+### Where the idea came from
+
+From checking what Epic and others have, which is worth doing periodically. Epic's plugin still
+needs a separate `AllToolsets` plugin to expose anything, and its context strategy — a few meta-tools,
+terse discovery, schemas on demand — is the same conclusion reached here independently. A third-party
+plugin, [monolith](https://github.com/tumourlove/monolith), advertises "unbalanced-handler audits" in
+a network namespace. That phrase was the whole contribution: this project had checks for a server
+writing an unreplicated variable, and none for a handler that exists and does nothing.

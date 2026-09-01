@@ -96,6 +96,7 @@ export async function reviewBlueprint(
 
   const allNodes: Array<{ id: string; type: string; title: string; connectedPins?: unknown[] }> = [];
   const graphNodes: Array<{ graphName: string; nodes: unknown[] }> = [];
+  const graphSizes = new Map<string, number>();
   for (const name of graphNames) {
     const summary = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
       path,
@@ -103,6 +104,10 @@ export async function reviewBlueprint(
     });
     reports.push(reviewGraph(name, summary.nodes ?? [], { isInterface, delegateNames }));
     allNodes.push(...(summary.nodes ?? []));
+    // How big each graph is, so an EMPTY RepNotify can be told from a full one. Recorded for every
+    // graph rather than only the handlers, because which names are handlers is not known until the
+    // variables have been read, and reading the graphs twice to find out would be silly.
+    graphSizes.set(name, (summary.nodes ?? []).length);
     // Handing the raw nodes back on request means a caller that needs them - the whole-project
     // audit - does not read every graph a second time. Off by default: an ordinary review has no
     // use for them and should not pay to carry them.
@@ -122,7 +127,7 @@ export async function reviewBlueprint(
   let mpFindings: MpFinding[] = [];
   try {
     stateFindings = reviewStatePlacement(state.parentClass ?? "", state.variables ?? []);
-    mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? []);
+    mpFindings = reviewMultiplayer(allNodes as never, state.variables ?? [], graphSizes);
     variables = state.variables ?? [];
     parentClass = state.parentClass ?? "";
   } catch {
