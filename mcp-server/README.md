@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12987 | the authoring spine |
 | `lazy` | 13296 | `core` plus deferred groups |
-| `full` | 44243 | everything, for a model that can afford it |
+| `full` | 44626 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -384,6 +384,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
 | `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
 | `unreal_read_timeline` | `read_timeline` | Read a Blueprint Timeline: length, loop/autoplay/**replicated**, and every float, vector, colour and event track with its curve shape. |
+| `unreal_set_niagara_user_parameter` | `set_niagara_user_parameter` | Set a Niagara system's exposed parameter default (float, int, bool). Refuses other types by name rather than writing something you did not mean. |
 | `unreal_add_montage_notify` | `add_montage_notify` | Put an instant notify on a montage at a time, so animation can drive a footstep, a hit window or a sound. Refuses a time outside the montage and a duplicate at the same time. |
 | `unreal_remove_montage_notify` | `remove_montage_notify` | Take notifies off a montage by name, or just the one at a given time. Reports how many went and what is left; removing nothing is not reported as success. |
 | `unreal_map_input_key` | `map_input_key` | Bind a key to an Input Action, with modifiers. Refuses unknown keys and duplicates. |
@@ -8973,3 +8974,56 @@ reason to check rather than assume.
 The saving is small in absolute terms and it is the right shape: it grows with the number of matches,
 so it gets larger exactly as the catalogue does. The ceiling stays at 500, now with room under it
 again.
+
+### A parameter named without its value
+
+Niagara was next on the read/write census - 15 systems, read-only. Looking at what the read returns
+before writing anything:
+
+```json
+"userParameters": [
+  {"parameter": "Bool_Spawn Probability", "type": "NiagaraBool"},
+  {"parameter": "OverlayMaterial",        "type": "MaterialInterface"},
+  {"parameter": "OverlaySpawnProbability","type": "NiagaraFloat"}
+]
+```
+
+Names and types, and not one value. That tells a reader `OverlaySpawnProbability` exists and nothing
+about whether it is wrong - the same shape of answer as a graph chain printed without its branch
+conditions. So the read got fixed before the write got written:
+
+```json
+{"parameter": "Bool_Spawn Probability", "type": "NiagaraBool", "value": true},
+{"parameter": "OverlayMaterial", "type": "MaterialInterface",
+ "value": "/Game/AntiVirusSquad/VFX/Materials/MI_FirewallOverlay.MI_FirewallOverlay"},
+{"parameter": "OverlaySpawnProbability", "type": "NiagaraFloat", "value": 1}
+```
+
+**A Niagara bool is not a C++ bool.** `FNiagaraBool` stores -1 for true and 0 for false, so reading
+one as a `bool` gives nonsense on exactly the case anybody checks. Read through `FNiagaraBool` and
+`GetValue()`. Types that cannot render honestly - structs, data interfaces - get no `value` field at
+all rather than a guess, and the `type` beside them says why.
+
+`unreal_set_niagara_user_parameter` is the write. It sets the system's **default** - what every
+component placed from it starts with - which is a different thing from the Set Niagara Variable
+Blueprint nodes, that change one component at runtime. The reply says which it did, because
+confusing the two produces a change that works in the editor and not in the game.
+
+Float, int and bool only, refused by name and type otherwise:
+
+```
+"OverlayMaterial" is a MaterialInterface. This sets float, int and bool user parameters; a struct,
+an object or a data interface each need a different kind of argument, and guessing one would write
+something you did not mean into an asset that will not complain.
+```
+
+**And a small honesty fix found by using it.** Setting the float to 0.42 read back as
+`0.41999998688697815` - seventeen digits of a float32 that holds about seven. Those extra digits are
+not precision, they are a widening artefact a reader has to know to ignore, and the montage read next
+door already rounds for the same reason. It reads back as `0.42`.
+
+Verified end to end and put back: read the value, set it, read it back, set it to what it was. The
+change was never saved, and an editor restart mid-test confirmed that - the parameter was 1 again on
+its own.
+
+`search` stands at **2,471 tokens**, unchanged, for the seventh tool in a row.

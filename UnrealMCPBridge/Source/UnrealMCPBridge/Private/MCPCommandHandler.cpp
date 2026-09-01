@@ -1327,6 +1327,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleRemoveFunction(Params);
 	}
+	else if (Cmd == TEXT("set_niagara_user_parameter"))
+	{
+		Response = HandleSetNiagaraUserParameter(Params);
+	}
 	else if (Cmd == TEXT("remove_struct_field"))
 	{
 		Response = HandleRemoveStructField(Params);
@@ -6032,6 +6036,121 @@ static UUserDefinedStruct* MCPLoadUserStruct(const FString& Path, FString& OutEr
  * Refuses while a Data Table is built on the struct unless `force` is passed, and names the tables
  * and the rows at stake. That is not a formality: the column and everything in it goes.
  */
+/**
+ * Set a Niagara system's user parameter default.
+ *
+ * The write half of read_niagara_system's `userParameters`, which now reports values and could not
+ * change one. This is the asset default - what the system starts with wherever it is placed - not a
+ * runtime override, which is what the Set Niagara Variable Blueprint nodes do to one component.
+ *
+ * Scalars only, and it says so. A struct, a data interface or an object parameter each need a
+ * different shape of argument, and accepting a number for one of them would write something the
+ * caller did not mean into an asset that will not complain.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetNiagaraUserParameter(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString ParameterName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("parameter"), ParameterName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and parameter are required"));
+	}
+	if (!Params->HasField(TEXT("value")))
+	{
+		return MakeErrorResponse(TEXT("missing_param: value is required"));
+	}
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(StaticLoadObject(UObject::StaticClass(), nullptr, *Path));
+	if (!System)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("niagara_system_not_found: %s. list_assets with className \"NiagaraSystem\" lists them."), *Path));
+	}
+
+	FNiagaraUserRedirectionParameterStore& Store = System->GetExposedParameters();
+	TArray<FNiagaraVariable> UserVars;
+	Store.GetParameters(UserVars);
+
+	// Matched on the bare name, because that is what the read reports and what the Blueprint nodes
+	// take. Niagara stores them prefixed with "User." internally.
+	const FNiagaraVariable* Found = nullptr;
+	TArray<FString> Known;
+	for (const FNiagaraVariable& Var : UserVars)
+	{
+		FString Bare = Var.GetName().ToString();
+		Bare.RemoveFromStart(TEXT("User."));
+		Known.Add(Bare);
+		if (Bare == ParameterName)
+		{
+			Found = &Var;
+		}
+	}
+	if (!Found)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("parameter_not_found: \"%s\" is not a user parameter of this system. It exposes: %s. ")
+			TEXT("These are the names read_niagara_system reports and the Blueprint nodes accept - not the ")
+			TEXT("internal \"User.\" spelling."),
+			*ParameterName, Known.Num() > 0 ? *FString::Join(Known, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetNiagaraUserParam", "MCP: Set Niagara User Parameter"));
+	System->Modify();
+
+	const FNiagaraTypeDefinition& VarType = Found->GetType();
+	if (VarType == FNiagaraTypeDefinition::GetFloatDef())
+	{
+		double Value = 0.0;
+		if (!Params->TryGetNumberField(TEXT("value"), Value))
+		{
+			return MakeErrorResponse(TEXT("wrong_type: this parameter is a float, so `value` must be a number."));
+		}
+		Store.SetParameterValue<float>(static_cast<float>(Value), *Found);
+	}
+	else if (VarType == FNiagaraTypeDefinition::GetIntDef())
+	{
+		double Value = 0.0;
+		if (!Params->TryGetNumberField(TEXT("value"), Value))
+		{
+			return MakeErrorResponse(TEXT("wrong_type: this parameter is an int, so `value` must be a number."));
+		}
+		Store.SetParameterValue<int32>(static_cast<int32>(Value), *Found);
+	}
+	else if (VarType == FNiagaraTypeDefinition::GetBoolDef())
+	{
+		bool Value = false;
+		if (!Params->TryGetBoolField(TEXT("value"), Value))
+		{
+			return MakeErrorResponse(TEXT("wrong_type: this parameter is a bool, so `value` must be true or false."));
+		}
+		FNiagaraBool NiagaraValue;
+		NiagaraValue.SetValue(Value);
+		Store.SetParameterValue<FNiagaraBool>(NiagaraValue, *Found);
+	}
+	else
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("type_not_supported: \"%s\" is a %s. This sets float, int and bool user parameters; a ")
+			TEXT("struct, an object or a data interface each need a different kind of argument, and ")
+			TEXT("guessing one would write something you did not mean into an asset that will not complain. ")
+			TEXT("Set it in the Niagara editor."),
+			*ParameterName, *VarType.GetName()));
+	}
+
+	System->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("parameter"), ParameterName);
+	Result->SetStringField(TEXT("type"), VarType.GetName());
+	Result->SetStringField(TEXT("next"),
+		TEXT("This is the system's DEFAULT, so every component placed from it starts here - it does not "
+			"change a component already in a level, which the Set Niagara Variable nodes do at runtime. "
+			"save_asset writes it."));
+	return MakeOkResponse(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveStructField(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;
@@ -8370,6 +8489,43 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadNiagaraSystem(const TShare
 		Name.RemoveFromStart(TEXT("User."));
 		Entry->SetStringField(TEXT("parameter"), Name);
 		Entry->SetStringField(TEXT("type"), Var.GetType().GetName());
+
+		// The VALUE, not just the name and type.
+		//
+		// This listed what a system exposes and never what any of it was set to, which tells a reader
+		// that "OverlaySpawnProbability" exists and nothing about whether it is wrong. A parameter
+		// named without its value is the same shape of answer as a graph chain printed without its
+		// branch conditions: true, and not the thing anybody opened it for.
+		//
+		// Only the types that render honestly. A struct or a data interface gets no `value` field
+		// rather than a guess at one, and its absence is the answer - the type is there to say why.
+		const FNiagaraParameterStore& Store = System->GetExposedParameters();
+		const FNiagaraTypeDefinition& VarType = Var.GetType();
+		if (VarType == FNiagaraTypeDefinition::GetFloatDef())
+		{
+			// Rounded, because a float32 widened to a double prints its own approximation error: setting
+			// this to 0.42 read back as 0.41999998688697815, seventeen digits of a number that holds
+			// about seven. The extra digits are not precision, they are noise that a reader has to
+			// decide to ignore - and the montage read next door already rounds for the same reason.
+			Entry->SetNumberField(TEXT("value"),
+				FMath::RoundToDouble(static_cast<double>(Store.GetParameterValue<float>(Var)) * 1000000.0) / 1000000.0);
+		}
+		else if (VarType == FNiagaraTypeDefinition::GetIntDef())
+		{
+			Entry->SetNumberField(TEXT("value"), Store.GetParameterValue<int32>(Var));
+		}
+		else if (VarType == FNiagaraTypeDefinition::GetBoolDef())
+		{
+			// A Niagara bool is a 32-bit mask, not a C++ bool: FNiagaraBool stores -1 for true and 0
+			// for false, so reading it as a bool gives nonsense on the true case.
+			Entry->SetBoolField(TEXT("value"), Store.GetParameterValue<FNiagaraBool>(Var).GetValue());
+		}
+		else if (VarType.IsUObject())
+		{
+			const UObject* Object = Store.GetUObject(Var);
+			Entry->SetStringField(TEXT("value"), Object ? Object->GetPathName() : TEXT("None"));
+		}
+
 		Exposed.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 

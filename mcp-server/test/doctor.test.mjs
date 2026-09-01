@@ -30,6 +30,8 @@ const NOT_PROBED = new Set([
   // The struct and enum lifecycle pair: all four WRITE, and a probe sends no parameters. Probing
   // remove_struct_field to learn whether it exists is not a question, it is a deletion.
   "remove_struct_field", "rename_struct_field", "remove_enum_entry", "rename_enum_entry",
+  // Also a write: probing it would set somebody's VFX parameter to find out it exists.
+  "set_niagara_user_parameter",
   "add_component", "add_data_table_row", "add_enum_entry", "add_input_mapping", "add_node", "add_struct_field",
   "add_variable", "add_widget", "asset_status", "build_graph", "compile_blueprint",
   "connect_pins", "create_blueprint", "create_enum", "create_function", "create_level",

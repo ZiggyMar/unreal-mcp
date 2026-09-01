@@ -690,7 +690,8 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ai: ["unreal_read_behavior_tree"],
   // VFX is its own group for the same reason animation and AI are: a project without Niagara should
   // not carry the definition.
-  vfx: ["unreal_read_niagara_system"],
+  vfx: [
+    "unreal_set_niagara_user_parameter","unreal_read_niagara_system"],
   // Enhanced Input is its own group for the same reason animation and AI are. A project on legacy
   // input has three tools here that answer nothing, and one on Enhanced Input - which is most of
   // them - could not answer "what is W bound to" at all before these.
@@ -3419,6 +3420,40 @@ register(
   async ({ path, graphName, functionName, dryRun }) => {
     try {
       return jsonResult(await callParentFirst(bridge, path, graphName, functionName, { dryRun }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_niagara_user_parameter",
+  {
+    title: "Set a Niagara system's exposed parameter",
+    description:
+      "The write half of unreal_read_niagara_system's `userParameters`, which reports each parameter's name, type " +
+      "and now its VALUE - it listed what a system exposes and never what any of it was set to, which tells you " +
+      "\"OverlaySpawnProbability\" exists and nothing about whether it is wrong.\n\n" +
+      "This sets the system's DEFAULT: what every component placed from it starts with. It does not change a " +
+      "component already sitting in a level - that is what the Set Niagara Variable nodes do at runtime, to one " +
+      "component.\n\n" +
+      "Float, int and bool only. A struct, an object or a data interface each need a different kind of argument, " +
+      "and a number accepted for one of them would write something you did not mean into an asset that will not " +
+      "complain - so those are refused by name and type. Parameter names are the bare ones the read reports, not " +
+      "the internal \"User.\" spelling. Changes memory, not disk - unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The Niagara system, e.g. "/Game/VFX/NS_Firewall".'),
+      parameter: z
+        .string()
+        .describe('Parameter name as unreal_read_niagara_system reports it, e.g. "OverlaySpawnProbability".'),
+      value: z
+        .union([z.number(), z.boolean()])
+        .describe("A number for a float or int parameter, true/false for a bool."),
+    },
+  },
+  async ({ path, parameter, value }) => {
+    try {
+      return jsonResult(await bridge.send("set_niagara_user_parameter", { path, parameter, value }));
     } catch (err) {
       return errorResult(err);
     }
