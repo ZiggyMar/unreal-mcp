@@ -26,6 +26,7 @@ written down next to the measurement that caused it.
 [Recommended agent workflow](#recommended-agent-workflow) · [What this costs today](#what-this-costs-today) ·
 [The cost nobody was measuring: switching a tool on](#the-cost-nobody-was-measuring-switching-a-tool-on) ·
 [Searching for a node by the name the editor shows](#searching-for-a-node-by-the-name-the-editor-shows) ·
+[When the host project cannot build, deliver the plugin anyway](#when-the-host-project-cannot-build-deliver-the-plugin-anyway) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -6676,3 +6677,34 @@ asserts the things that already worked still work.
 
 `npm run trial:nodesearch` checks all of it against a live editor, including the `Do N` case
 specifically, because that is the one that would come back silently.
+
+## When the host project cannot build, deliver the plugin anyway
+
+The default build mode syncs the plugin source into each target project and builds that project's
+editor target. That is what actually happens to a user, and it is the only mode that leaves usable
+binaries — so it is the right default. It also depends on the host project building at all.
+
+One did not. The real game project has a second, complete 6.5 GB sample project nested inside it,
+each with its own `.uproject`, so UnrealBuildTool discovers two copies of several plugins —
+`CommonStartupLoadingScreen` gets linked twice — and refuses with `Action graph is invalid` before
+compiling a single file. Nothing there is the plugin's fault, and no amount of fixing the plugin
+changes it.
+
+The consequence was the exact failure `build-targets.json` warns about, arriving by a route nobody
+had considered. Every C++ improvement shipped cleanly to two scratch projects while the editor doing
+real work kept answering on a binary from days earlier. The build said `ok` for the targets it could
+do, the editor kept responding, and nothing anywhere said the change had not arrived.
+
+`--package` is the way through. It compiles the plugin with `RunUAT BuildPlugin`, which does not load
+the host project and therefore cannot be blocked by one, then **installs** the resulting binaries
+into each target. The install is part of the result rather than a follow-up step: a plugin packaged
+to a temp folder and never copied is the same unverified fix this script exists to prevent, so a
+failed copy fails the target.
+
+It is not a replacement for the default. `BuildPlugin` compiles against public engine APIs only,
+which is a narrower check than the editor target, and the closing message says so rather than
+implying an equivalent result. Use it when the full build is unavailable — and fix the host when you
+can.
+
+Measured: the game target went from unbuildable to built and installed in 117 seconds, and
+`npm run trial:nodesearch` then passed 11/11 against that editor.
