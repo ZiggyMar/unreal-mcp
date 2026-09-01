@@ -36,6 +36,8 @@ export interface SummaryNode {
   id: string;
   type: string;
   title: string;
+  /** "server" | "all" | "owningClient"; the bridge emits it only for a replicated custom event. */
+  runsOn?: string;
   connectedPins?: SummaryPin[];
 }
 
@@ -50,6 +52,8 @@ export interface ExplainedChain {
   entry: string;
   /** Its node id, so a caller can ask the editor about that node without matching on the title. */
   entryId: string;
+  /** "server" | "all" | "owningClient" for a replicated event; absent for an ordinary one. */
+  runsOn?: string;
   /** What happens, in execution order. */
   steps: string[];
   /** True when the chain was cut short because it loops or branches beyond the step budget. */
@@ -259,6 +263,7 @@ export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}
     chains.push({
       entry: clean(entry.title),
       entryId: entry.id,
+      ...(entry.runsOn ? { runsOn: entry.runsOn } : {}),
       steps,
       // Now a statement about the rendered line rather than about how far the analysis got.
       truncated: steps.length > maxStepsPerChain,
@@ -303,16 +308,34 @@ export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}
     if (others.length > 0) sharedWith.set(chain.entry, others);
   }
 
+/**
+ * Where a chain RUNS, on the line that says what it does.
+ *
+ * This is the tool a model is told to read first, and it described a Server RPC exactly the way it
+ * described an ordinary event: "StartVaccum -> Branch (Get isAlive) -> ...". Whether that chain is
+ * server-only is not a detail of one node, it is the frame for every node after it - a Multicast
+ * called from it reaches everyone, the same call from a client reaches nobody, and a variable
+ * written on it needs replication to be seen anywhere else.
+ *
+ * Four characters on the chains that have it, nothing on the ones that do not.
+ */
+function runsOnTag(runsOn: string | undefined): string {
+  if (runsOn === "server") return " [server]";
+  if (runsOn === "all") return " [multicast]";
+  if (runsOn === "owningClient") return " [owning client]";
+  return "";
+}
+
   const lines: string[] = [];
   lines.push(`${summary.graphName ?? "Graph"}: ${nodes.length} nodes, ${chains.length} entry point(s).`);
   for (const chain of chains) {
     if (chain.steps.length === 0) {
-      lines.push(`- ${chain.entry}: nothing wired to it.`);
+      lines.push(`- ${chain.entry}${runsOnTag(chain.runsOn)}: nothing wired to it.`);
       continue;
     }
     const shownSteps = chain.steps.slice(0, maxStepsPerChain);
     lines.push(
-      `- ${chain.entry} -> ${shownSteps.join(" -> ")}` +
+      `- ${chain.entry}${runsOnTag(chain.runsOn)} -> ${shownSteps.join(" -> ")}` +
         // Naming the number matters: "...(more)" gave no way to tell a chain two steps too long
         // from one ten times too long, and no way to know what to raise the cap to.
         (chain.steps.length > shownSteps.length

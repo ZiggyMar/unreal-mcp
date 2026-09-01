@@ -28,6 +28,7 @@ export interface SummaryNodeLike {
   type?: string;
   title?: string;
   ghost?: boolean;
+  runsOn?: string;
   connectedPins?: Array<{
     pin?: string;
     direction?: string;
@@ -73,6 +74,18 @@ function compactNode(node: SummaryNodeLike): Record<string, unknown> {
     type: shortType(node.type),
     title: node.title,
     ...(node.ghost ? { ghost: true } : {}),
+    // Where the event RUNS, when the bridge knows. A Server RPC and a Multicast are both a
+    // CustomEvent with an ordinary one-line title, so without this the summary says "StartVaccum"
+    // for an event whose full detail reads "Replicated From Client, Executes On Server" - and
+    // whether a chain is server-only changes what every node after it means.
+    //
+    // The bridge has computed this all along and this function threw it away: compactNode rebuilds
+    // each node from a fixed set of fields, so a field added upstream is silently dropped here. It
+    // cost a real diagnosis - tracing one vacuum bug took eight calls and a detour through
+    // read_node_detail to recover a fact the first reply already had.
+    //
+    // Emitted only for replicated events, so the common case still costs nothing.
+    ...(node.runsOn ? { runsOn: node.runsOn } : {}),
     ...(pins ? { pins } : {}),
   };
 }
@@ -109,7 +122,13 @@ export const DEFAULT_MAX_NODES = 60;
  * at one hop.
  */
 function asNeighbour(node: SummaryNodeLike): Record<string, unknown> {
-  return { id: node.id, type: shortType(node.type), title: node.title, neighbour: true };
+  return {
+    id: node.id,
+    type: shortType(node.type),
+    title: node.title,
+    ...(node.runsOn ? { runsOn: node.runsOn } : {}),
+    neighbour: true,
+  };
 }
 
 /** Every node one link away from a match, in either direction, that is not itself a match. */
