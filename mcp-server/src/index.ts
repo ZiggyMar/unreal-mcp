@@ -6,6 +6,7 @@ import { z } from "zod";
 import { dedupeFixes } from "./dedupeFixes.js";
 import { stripSchemaDeclaration } from "./trimSchemaDeclaration.js";
 import { trimFloatPaddingIn, trimFloatPadding } from "./trimFloats.js";
+import { summariseRuntime } from "./verifyRuntime.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
 import { findInDataTables } from "./findInDataTables.js";
 import { matchSymptoms } from "./symptoms.js";
@@ -554,7 +555,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_verify_runtime", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -4652,6 +4653,56 @@ register(
       if (compile === false) return jsonResult(result);
       const compiled = (await bridge.send("compile_blueprint", { path })) as Record<string, unknown>;
       return jsonResult({ ...result, compiled });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_verify_runtime",
+  {
+    title: "Prove it works by running it",
+    description:
+      "Runs the game, samples the values you name while it plays, and says whether every running world agrees. " +
+      "One call instead of the five it takes to do this by hand - start PIE, start watching, let real time pass, " +
+      "read, stop - which is a sequence easy to skip, and skipping it is how a change gets reported as fixed " +
+      "when it only compiled.\n\n" +
+      "Reach for it after any change to logic that runs: compiling proves the graph is well-formed and nothing " +
+      "else. The verdict names the failure shapes worth knowing - a value that DIFFERS between Authority and a " +
+      "client is a replication bug, and one that NEVER CHANGED for the whole session usually means nothing wrote " +
+      "it, which is what an orphaned event looks like from the outside.\n\n" +
+      "Leaves the editor as it found it: a PIE session you already had open is left running, one this started is " +
+      "stopped again.",
+    inputSchema: {
+      watch: z
+        .array(z.string())
+        .describe('Values to sample, as "ClassName.PropertyName" - e.g. ["BP_Player.PlayerName"]. The class is the Blueprint name without _C, and derived classes match too.'),
+      seconds: z
+        .number()
+        .optional()
+        .describe("How long to let the game run while sampling. Default 20. Sampling happens on the editor tick, so this has to be real time."),
+    },
+  },
+  async ({ watch, seconds }) => {
+    try {
+      const runFor = Math.max(3, Math.min(120, seconds ?? 20));
+      const before = (await bridge.send("pie_status", {})) as { running?: boolean };
+      const startedItHere = before.running !== true;
+      if (startedItHere) {
+        await bridge.send("start_pie", {});
+        // PIE begins on the next editor tick and a big map takes longer than that to be worth
+        // sampling. Waiting here rather than making the caller guess.
+        await new Promise((resolve) => setTimeout(resolve, 12_000));
+      }
+      await bridge.send("watch_runtime", { action: "start", watch, intervalMs: 500, maxSamples: 200 });
+      await new Promise((resolve) => setTimeout(resolve, runFor * 1000));
+      const sampled = (await bridge.send("watch_runtime", { action: "read" })) as { watched?: unknown[] };
+      await bridge.send("watch_runtime", { action: "stop" }).catch(() => {});
+      if (startedItHere) await bridge.send("stop_pie", {}).catch(() => {});
+
+      const rows = Array.isArray(sampled.watched) ? (sampled.watched as never[]) : [];
+      return jsonResult({ ranForSeconds: runFor, startedPie: startedItHere, ...summariseRuntime(rows) });
     } catch (err) {
       return errorResult(err);
     }

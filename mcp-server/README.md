@@ -191,7 +191,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
 | `core` | 12783 | the authoring spine |
 | `lazy` | 12796 | `core` plus deferred groups |
-| `full` | 39697 | everything, for a model that can afford it |
+| `full` | 40061 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -408,6 +408,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
+| `unreal_verify_runtime` | *(composite)* | Run the game, sample the values you name, and say whether every world agrees. Names the two failure shapes: values that differ between roles (a replication bug) and values that never changed (nothing wrote them). |
 | `unreal_set_variable_type` | `set_variable_type` | Retype an existing member variable, rebinding every Get and Set node through the engine. Compiles afterwards and reports what the retype broke. |
 | `unreal_create_asset` | `create_asset` | Create any asset type the editor's New Asset menu can create — InputAction, InputMappingContext, Blackboard, BehaviorTree, SoundCue, CurveFloat, LevelSequence, NiagaraSystem, DataAsset. Refuses the eight types with a dedicated tool, and refuses to overwrite. |
 | `unreal_create_enum` | `create_enum` | Create a user-defined Enum with named entries. |
@@ -6189,6 +6190,37 @@ because that is the direction Blueprint reads, and staggered so siblings do not 
 
 The rule this encodes: **an edit should be as small on the canvas as it is in the graph.** A tool that
 leaves a Blueprint harder to read has not finished the job, however well the logic compiles.
+
+### Proving a change works, in one call
+
+Someone using this server said the quiet part: *"the MCP should add debug lines, make sure its fixes
+worked, and only then delete the debug logs."* They were right, and they were right because I had
+just reported a Blueprint fix as done on the strength of it compiling. Compiling proves a graph is
+well-formed and nothing else.
+
+The pieces to do better already existed — `start_pie`, `watch_runtime` start/read/stop, `stop_pie` —
+and using them meant five calls with real time between them. That is exactly the sequence a model
+skips. So it is one tool now:
+
+```text
+unreal_verify_runtime({ watch: ["BP_Player.PlayerName"], seconds: 18 })
+  -> agreed: true  { "Authority": "Devil", "Client0": "Devil" }
+     every watched value agreed across all running worlds and none looked unwritten.
+```
+
+It starts a session if one is not running, samples, and puts the editor back as it found it. The
+verdict names the two failure shapes worth knowing: a value that **differs between roles** is a
+replication bug, and one that **stayed empty all session** usually means nothing wrote it — which is
+what an orphaned event looks like from outside.
+
+**Both ways it can be wrong were real, and both are tested.** The first version compared the labelled
+strings between roles, and PIE gives the same pawn a different suffix in every world — `C_3` on the
+server is `C_2` on the client — so it reported a replication bug on every multi-actor value, always.
+The second flagged a value that had been correct since the first sample as "never changed", which is
+true and useless. A verification tool that cries wolf is worse than none, because the first thing
+anyone learns is to stop reading it. Names are stripped for the comparison and kept for the report,
+"unwritten" now requires the value to be *empty* as well as stable, and four unit tests hold both
+lines.
 
 ### The numbers a model reads are guarded too
 
