@@ -70,7 +70,24 @@ async function step(label, name, args, check) {
   } catch {
     /* not every reply is JSON */
   }
-  const problem = r.error ? "JSON-RPC error" : check ? check(text, parsed) : null;
+  // A tool that REFUSED did not answer, whatever its own check thinks.
+  //
+  // This used to test `r.error` only, which is the JSON-RPC transport error - a tool-level refusal
+  // arrives as `result.isError` with the reason as ordinary text content. So a step whose check was
+  // "did anything come back" passed on the refusal, because a refusal is words.
+  //
+  // It was not hypothetical. "find orphans project-wide" called unreal_find_orphans with `{}`, which
+  // the schema rejects for missing `of` and `pairedWith`, and this trial reported the whole loop
+  // green - "the defect was planted, found, fixed, and the fix was proved" - with one of the finding
+  // steps having never run. It even costed the error message at 89 tokens.
+  const refused = r.result?.isError === true;
+  const problem = r.error
+    ? "JSON-RPC error"
+    : refused
+      ? "the tool refused the call"
+      : check
+        ? check(text, parsed)
+        : null;
   if (problem) stalls.push({ label, problem, reply: text.slice(0, 240).split(NL).join(" ") });
   console.log(`  ${label.padEnd(38)} ${String(Math.round(text.length / 4)).padStart(5)} tok${problem ? "   <-- STALL" : ""}`);
   return { text, parsed };
@@ -129,8 +146,36 @@ await step("compile, to prove it is not a compile error", "unreal_compile_bluepr
   return (j.errors ?? 0) === 0 ? null : `expected a clean compile, got ${j.errors} error(s)`;
 });
 
-await step("find orphans project-wide", "unreal_find_orphans", {}, (t, j) =>
-  j || t.length > 0 ? null : "no reply at all");
+// A second, independent finder for the same defect.
+//
+// This used to call unreal_find_orphans with `{}`, and it was wrong twice. The schema rejects that
+// for missing `of` and `pairedWith`, so the step never ran - and it passed anyway, because its check
+// was "did anything come back" and a refusal is words. But even with the right arguments it was the
+// wrong tool: find_orphans looks for a LEVEL ACTOR of one class stranded far from its partner class,
+// which is half a deletion in a map, not a node left behind in a graph.
+//
+// explain_graph is the tool that can actually see this. Its `unreachable` list is nodes no event
+// chain reaches, which is exactly what the planted defect is - and it is worth having a second
+// finder that arrives at the answer a different way, because review_blueprint agreeing with itself
+// twice proves less than two tools agreeing once.
+await step(
+  "explain the graph, to reach the orphan another way",
+  "unreal_explain_graph",
+  { path: PATH, graphName: "EventGraph" },
+  (t, j) => {
+    if (!j) return "explain_graph did not come back as JSON";
+    // The prose, not a field. explain_graph deliberately drops the `unreachable` ARRAY from its
+    // reply because the sentence already says the same thing - the array was 110 tokens of restating
+    // it - so the orphan shows up in `text` or nowhere.
+    const text = String(j.text ?? "");
+    if (!/not reached by any event chain/i.test(text)) {
+      return `no unreachable sentence, so the orphan has nowhere to show up: ${text.slice(0, 160)}`;
+    }
+    // The planted node is a PrintString wired to nothing. Naming it is the whole point: a count
+    // would be true and unactionable.
+    return /Print\s*String/i.test(text) ? null : "the unreachable list does not name the stray node";
+  }
+);
 
 // The way a bug report actually arrives: a name, in prose, and nothing else.
 //

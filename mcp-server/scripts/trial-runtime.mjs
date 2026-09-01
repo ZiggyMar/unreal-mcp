@@ -102,7 +102,22 @@ async function step(label, name, args, check) {
     return { text, parsed, unavailable: true };
   }
 
-  const problem = r.error ? `JSON-RPC error: ${JSON.stringify(r.error).slice(0, 160)}` : check ? check(text, parsed) : null;
+  // A tool that REFUSED did not answer, whatever its own check thinks.
+  //
+  // The same hole trial-diagnose had: `r.error` is the JSON-RPC transport error, while a tool-level
+  // refusal arrives as `result.isError` with the reason as ordinary text. A step whose check is "did
+  // something come back" passes on a refusal, because a refusal is words. There it hid a step
+  // calling unreal_find_orphans with arguments the schema rejects - it had never run once.
+  //
+  // Checked AFTER the unknown_cmd branch above, which downgrades a missing plugin command to a
+  // warning on purpose: that is an environment that has not caught up, not a broken claim.
+  const problem = r.error
+    ? `JSON-RPC error: ${JSON.stringify(r.error).slice(0, 160)}`
+    : r.result?.isError === true
+      ? "the tool refused the call"
+      : check
+        ? check(text, parsed)
+        : null;
   if (problem) stalls.push({ label, problem, reply: text.slice(0, 300).split(NL).join(" ") });
   console.log(`  ${label.padEnd(42)} ${String(Math.round(text.length / 4)).padStart(5)} tok${problem ? "   <-- STALL" : ""}`);
   return { text, parsed };
@@ -127,7 +142,11 @@ async function playAndWatch(phase) {
   await step(`${phase}: stop anything already running`, "unreal_stop_pie", {});
   await letItRun(1500);
 
-  await step(`${phase}: play, two players, listen server`, "unreal_start_pie", { numPlayers: 2, listenServer: true },
+  // ignoreCompileErrors: this project carries 15 Blueprints that cannot compile - Lyra sample UI
+  // copied in without the LyraGame C++ module that defines the classes they call. start_pie refuses
+  // by default and is right to, but they have nothing to do with the actor this trial just built,
+  // and without this the two PIE steps are refused and the whole replication claim goes untested.
+  await step(`${phase}: play, two players, listen server`, "unreal_start_pie", { numPlayers: 2, listenServer: true, ignoreCompileErrors: true },
     (t, j) => (j && j.requested ? null : "PIE was not requested"));
 
   // PIE starts on a later tick, and starting two worlds is not instant.
@@ -245,7 +264,7 @@ await step("add the counter variable", "unreal_add_variable", { path: PATH, vari
 // The actor itself has to replicate before a variable on it can. Setting this now means the only
 // thing that changes between the two runs below is the variable's own replication, which is what the
 // trial claims to be measuring.
-await step("make the actor replicate", "unreal_set_class_default", { path: PATH, propertyName: "bReplicates", value: "true" });
+await step("make the actor replicate", "unreal_set_class_default", { path: PATH, property: "bReplicates", value: "true" });
 
 // And make it relevant to everybody.
 //
@@ -255,7 +274,7 @@ await step("make the actor replicate", "unreal_set_class_default", { path: PATH,
 // was dutifully replicating to nobody and the Client column stayed at 0 even AFTER the variable was
 // marked Replicated. Diagnosed from the trial's own output: "already replicated ... changed=false"
 // on the client is a different failure from "not replicated", and only reading both told them apart.
-await step("make it relevant to every client", "unreal_set_class_default", { path: PATH, propertyName: "bAlwaysRelevant", value: "true" });
+await step("make it relevant to every client", "unreal_set_class_default", { path: PATH, property: "bAlwaysRelevant", value: "true" });
 
 await step("count, but only with authority", "unreal_build_graph", {
   path: PATH,

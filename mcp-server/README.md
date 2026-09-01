@@ -7943,3 +7943,86 @@ that answers a specific question for 218 and 126 tokens respectively, advertised
 Recorded because "the biggest number is the best target" is only true when the number is *waste*.
 These three are near their floor for what they are being asked, and the cheap forms beside them are
 accurate and advertised. The next saving is not here.
+
+### Six trial steps that had never run
+
+Building a benchmark for whole-task cost started by measuring nothing at all: every step came back as
+the same validation error, and dispatch mode "won" by 308 tokens because an error is short. Eight
+identical step costs gave it away. The benchmark now refuses to price a call that failed.
+
+That was worth generalising, because the trials have the same shape. `step()` in `trial-diagnose`
+computed its verdict like this:
+
+```js
+const problem = r.error ? "JSON-RPC error" : check ? check(text, parsed) : null;
+```
+
+`r.error` is the JSON-RPC **transport** error. A tool that refuses arrives as `result.isError` with
+the reason as ordinary text content — so a step whose check was "did anything come back" passed on
+the refusal, because a refusal is words. Adding four lines to catch `isError` turned up six steps
+across two trials that had never executed:
+
+| trial | step | why |
+|---|---|---|
+| diagnose | find orphans project-wide | called `find_orphans` with `{}`; schema requires `of` and `pairedWith` |
+| runtime | make the actor replicate | `propertyName` where the schema says `property` |
+| runtime | make it relevant to every client | same |
+| runtime | unreplicated: play, two players | refused by the compile-error guard |
+| runtime | replicated: play, two players | same |
+
+The diagnose one was wrong twice over. Even with the right arguments, `find_orphans` looks for a
+**level actor** of one class stranded far from its partner class — half a deletion in a map, not a
+node left behind in a graph. It could never have found the defect that trial plants. It has been
+replaced with `explain_graph`, whose unreachable list is exactly "nodes no event chain reaches",
+which is what the planted defect *is*; and the check asserts the stray node is **named**, because a
+count would be true and unactionable.
+
+The runtime ones are worse, because of what that trial claims. Its own header says step 4 "is the
+point — every other check in this repository can tell you a change was WRITTEN; this is the only one
+that can tell you it WORKED." Two of its steps set `bReplicates` and `bAlwaysRelevant`, and neither
+had ever taken effect. The two steps that actually play the game were refused by the compile-error
+guard over fifteen unrelated Lyra Blueprints, so the whole replication claim rested on steps that
+never ran. Sixteen calls, four of them refusals, reported green.
+
+With the parameter fixed and `ignoreCompileErrors` passed for the sample content it does not care
+about, it runs twenty-four calls and ends where it always said it would:
+
+```
+  Authority  70 -> 381   changed=true
+  Client      0 -> 381   changed=true
+```
+
+The client counter moving is the replication fix observed on a running game — the thing the trial
+exists to prove, produced for the first time.
+
+**The lesson is narrow and worth stating precisely.** Every one of these was a *strict schema doing
+its job*: the server refused a malformed call and said exactly which parameter was wrong. The refusals
+were correct, informative, and completely invisible, because the harness that received them treated
+"the tool said something" as "the tool worked". A guard that reports beautifully to nobody is not a
+guard.
+
+### What a whole task costs, and where dispatch stops paying
+
+`measure-profiles` guards the standing cost of the tool definitions. `measure-reads` guards what one
+reply costs. Neither answers the question a bill is actually made of, so `measure-task-cost.mjs` runs
+the same eight-step find-and-fix task twice — once with every tool advertised, once with three tools
+and every call through `unreal_call_tool` — and prices both.
+
+|  | full | search |
+|---|---|---|
+| tools advertised | 122 | 5 |
+| standing, paid once then cached | 41,615 | **1,504** |
+| requests sent | 296 | 366 |
+| replies received | 1,125 | 1,555 |
+| **first run of the task** | 43,036 | **3,425** |
+| **each repeat, cache warm** | **1,421** | 1,921 |
+
+So dispatch is not free: it costs about 500 tokens more per run of this task, because the wrapper is
+per call and the guidance the dispatcher attaches on first use is real. Against 40,111 tokens of
+standing cost saved, **it stays ahead for roughly 80 runs of this task — about 640 tool calls** — and
+is dearer after that.
+
+Worth stating plainly, because it is easy to overstate in the other direction: the tool list sits
+before the system prompt and the messages, so with prompt caching it is paid at full price **once**
+and read cheaply afterwards. It is not re-charged per turn. What re-charges it is *changing* the tool
+list, which is the whole reason `unreal_call_tool` exists and `unreal_enable_tools` is expensive.
