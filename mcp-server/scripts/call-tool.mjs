@@ -69,5 +69,8 @@ const res = await send({
 const text = (res.result?.content ?? []).map((c) => c.text ?? "").join("\n");
 console.log("reply ~" + Math.round(text.length / 4) + " tokens");
 console.log("---");
-console.log(text.slice(0, 1200));
+// Truncated by default because most replies are read by eye, but a measurement needs all of it -
+// the first version of this capped at 1,200 chars and silently made a 5,000-token reply look
+// like a 300-token one.
+console.log(process.argv.includes("--full") ? text : text.slice(0, 1200));
 child.kill();

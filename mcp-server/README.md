@@ -7720,3 +7720,78 @@ Three guards caught each other in sequence doing this: `measure:reads` found the
 `check:claims` refused the new figures until they were registered, and `check:profiles` caught the
 README cost table one token out. None of them is clever. Each of them is a number that has to agree
 with another number, which is the only kind of documentation that stays true.
+
+### The same empty brush, exported twenty-eight times
+
+The read census puts `list_data_table_rows` at the top, so that is where the next saving should be.
+Looking at what is actually in it: one row of `DT_UniversalActions` is 816 characters, and the
+information in it is `Key=Gamepad_FaceButton_Bottom`. The rest is an FSlateBrush nobody ever touched —
+`DrawAs=NoDrawType`, `ImageType=NoImage`, `ResourceObject=None`, every margin zero. It draws nothing,
+and it is exported in full for every row of every brush column.
+
+Counted properly, the identical 514-character empty brush appears **28 times in one reply**, which is
+**67% of it**.
+
+Two compactions already existed and neither can touch this. `trimFloats` shortens each number —
+worth 20% here, and already applied. `compactRows` drops a field whose value equals a stated default.
+This is a value that is correct, meaningful, and *repeated*, which is a third thing.
+
+So it is written once:
+
+```json
+{ "rows": [ { "values": { "KeyboardInputTypeInfo": "(Key=None,...,OverrideBrush=@1@)" } } ],
+  "repeated": { "@1@": "(TintColor=(SpecifiedColor=(R=1,G=1,B=1,A=1),...,ResourceName=\"\")" } }
+```
+
+| | tokens |
+|---|---|
+| before | 5,147 |
+| after | **1,723** |
+
+**67% off, losslessly.** That last word is doing real work. This does not summarise the value, or
+assert something about it, or rely on the reader knowing a convention the way `compactRows`' "absent
+means false" does — the exact bytes the engine exported are present, once, and substituting the
+legend reproduces the original character for character. There is a test that does exactly that
+substitution and compares.
+
+**The trap, and why it is closed rather than documented.** A model that reads `@1@` and pastes the
+row back would write the two characters `@1@` into an FSlateBrush column, and the engine would accept
+it. So `unreal_set_data_table_row` refuses a value containing a marker and says what to do instead.
+Confirmed against the live table:
+
+```
+Refusing to write 1 value(s) containing a placeholder from a unreal_list_data_table_rows reply:
+KeyboardInputTypeInfo. Markers like @1@ stand for a repeated struct that was written once in that
+reply's `repeated` legend... Substitute the legend text for the marker and call again.
+```
+
+That guard is the reason this is on by default rather than behind a flag nobody sets.
+
+**Collisions are checked, not assumed.** If `@1@` already appears anywhere in the data the prefix
+grows until it does not, and if no free prefix exists the whole compaction is skipped. A saving that
+corrupts one row in a thousand is not a saving, and a test feeds it a row whose real content is
+literally `"@1@"` to prove the pre-existing text survives.
+
+`list_data_table_rows` is no longer the most expensive read in the surface. The comment that called it
+that has been corrected rather than left to age — as has the pair it quoted, now 1,723 against 150
+with `fields`, caught by `measure:reads` the moment the number moved.
+
+### Four near-misses in one session, all the same mistake
+
+This one nearly became a fifth reimplementation of something that already existed. The pattern is
+worth writing down because it has a single cause.
+
+- Wrote a script to walk exec links backwards — `unreal_explain_graph` does that.
+- Started building a read-cost census — `measure-reads.mjs` exists.
+- Was about to add struct/enum readers — `list_struct_fields` and `list_enum_entries` exist.
+- Measured `list_data_table_rows` at 6,748 tokens full of `0.000000` and started designing a float
+  trimmer — `trimFloats.ts` exists, cites this exact table, and was already applied.
+
+Every one of them came from **measuring through the bridge instead of through the tool**. The bridge
+is deliberately faithful; all the compaction lives in the tool layer, so a bridge reply shows the
+project as it was before any of this work. Reading it and concluding "nothing has been done here" is
+an easy and entirely wrong inference, and it cost four detours before the pattern was obvious.
+
+`scripts/call-tool.mjs` is the fix, and it earned its keep the moment it existed. It also had the same
+disease in miniature: it truncated replies at 1,200 characters, so the first measurement it produced
+reported a 5,000-token reply as 300 tokens. It takes `--full` now.

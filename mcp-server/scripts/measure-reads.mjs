@@ -352,7 +352,7 @@ const CORPUS_CLAIMS = [
 // an inaccuracy in this file. Kept honest and kept separate.
 const COMMENT_QUOTES = [
   { label: "list_variables", quoted: 1732, where: "comments in compactRows.ts and index.ts" },
-  { label: "list_data_table_rows", quoted: 5472, where: "comments in index.ts" },
+  { label: "list_data_table_rows", quoted: 1723, where: "comments in index.ts" },
 ];
 const TOLERANCE = 0.15;
 

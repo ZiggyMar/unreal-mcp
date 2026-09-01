@@ -6,6 +6,7 @@ import { z } from "zod";
 import { dedupeFixes } from "./dedupeFixes.js";
 import { stripSchemaDeclaration } from "./trimSchemaDeclaration.js";
 import { trimFloatPaddingIn, trimFloatPadding } from "./trimFloats.js";
+import { dedupeRepeatedStructs, MARKER_PATTERN } from "./dedupeStructs.js";
 import { summariseRuntime } from "./verifyRuntime.js";
 import { walkChain, describeGates } from "./inputChain.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
@@ -405,7 +406,7 @@ function buildInstructions(profile: string): string {
     // Twenty-five tokens a request against a saving measured in thousands on the first read that
     // would otherwise go unfiltered. Re-measured against the real project, because every one of these
     // numbers had gone stale: read_class_defaults is 1,691 tokens whole and 218 with `match`;
-    // list_variables is 1,732 and 126; list_data_table_rows is 5,472 and 182 with `fields`.
+    // list_variables is 1,732 and 126; list_data_table_rows is 1,723 and 150 with `fields`.
     //
     // They drifted downward, which is the harmless direction and still wrong. The compaction work -
     // compact JSON, float trimming, deduplicated fix text - moved every read, and a `fields` filter
@@ -4528,6 +4529,25 @@ register(
   },
   async ({ path, rowName, values }) => {
     try {
+      // Refuse a marker rather than writing it into the table.
+      //
+      // unreal_list_data_table_rows replaces struct values that repeat across a reply with markers
+      // like `@1@` and gives the text in a `repeated` legend. That is lossless to READ and a trap to
+      // copy: a model that pastes a row back would write the two characters "@1@" into an
+      // FSlateBrush column, and the engine would take it. Cheaper to refuse here, once, and say
+      // exactly what to do, than to leave a corrupted table behind a successful-looking call.
+      const withMarkers = Object.entries(values ?? {}).filter(
+        ([, v]) => typeof v === "string" && MARKER_PATTERN.test(v)
+      );
+      if (withMarkers.length > 0) {
+        throw new Error(
+          `Refusing to write ${withMarkers.length} value(s) containing a placeholder from a ` +
+            `unreal_list_data_table_rows reply: ${withMarkers.map(([k]) => k).join(", ")}. ` +
+            `Markers like @1@ stand for a repeated struct that was written once in that reply's ` +
+            `\`repeated\` legend, to keep the read cheap. Substitute the legend text for the marker ` +
+            `and call again - writing the marker itself would put "@1@" in the column.`
+        );
+      }
       return jsonResult(await bridge.send("set_data_table_row", { path, rowName, values }));
     } catch (err) {
       return errorResult(err);
@@ -4650,15 +4670,44 @@ register(
         return jsonResult({ ...table, rows: found, rowCount: table.rowCount ?? rows.length, matched: wantedRow });
       }
 
-      // The largest read in the whole surface, and the one where row COUNT says nothing about cost.
-      // DT_UniversalActions is nine rows and 5,472 tokens, because a single untouched FSlateBrush
-      // column exports as 900 characters. Every other hint here is keyed on how many rows came back;
-      // this one has to be keyed on how big the reply actually is, or it stays silent on exactly the
-      // table that needed it.
+      // The read where row COUNT says nothing about cost, which is why this hint is keyed on the
+      // size of the reply rather than on how many rows came back like every other hint here.
+      // Otherwise it stays silent on exactly the table that needed it: DT_UniversalActions is nine
+      // rows, and it was the most expensive read in the whole surface at 5,472 tokens because a
+      // single untouched FSlateBrush column exports as 900 characters. It is 1,723 now - the same
+      // brush appeared 28 times and is written once - so it is no longer the largest, but the shape
+      // of the problem has not changed and a table with 900 unique rows would still find it.
       //
       // `limit: 1` is the lever that works today: one row shows every column and its shape for a
       // fraction of the whole table, which is what "what is in this table" usually means.
       const rowCount = Array.isArray(table.rows) ? table.rows.length : 0;
+
+      // Collapse struct values that repeat across the reply. Lossless: each one is written out once
+      // in `repeated` and replaced by a marker, so substituting the legend gives exactly what the
+      // engine exported. On DT_UniversalActions a single empty FSlateBrush appears 28 times and is
+      // 67% of the reply. See dedupeStructs.ts for the marker-collision and round-trip handling.
+      const deduped = dedupeRepeatedStructs(
+        table,
+        (t) =>
+          (t.rows ?? []).flatMap((row) =>
+            Object.values(row.values ?? {}).map((v) => (typeof v === "string" ? v : ""))
+          ),
+        (t, cells) => {
+          let at = 0;
+          const rows = (t.rows ?? []).map((row) => ({
+            ...row,
+            values: Object.fromEntries(
+              Object.entries(row.values ?? {}).map(([k, v]) => [k, typeof v === "string" ? cells[at++] : (at++, v)])
+            ),
+          }));
+          return { ...t, rows };
+        }
+      );
+      Object.assign(table, deduped.rows);
+      const repeatedNote = deduped.repeated
+        ? { repeated: deduped.repeated, repeatedNote: deduped.repeatedNote }
+        : {};
+
       const size = JSON.stringify(table).length;
       const HEAVY_REPLY_CHARS = 8000;
       // A requested column that does not exist must not come back as empty rows. Asking for "Cost" on
@@ -4681,13 +4730,14 @@ register(
           ? {
               ...table,
               ...unknownNote,
+              ...repeatedNote,
               cheaper:
                 `These rows are large (~${Math.round(size / 4)} tokens for ${rowCount} rows). ` +
                 `\`fields: ["ColumnName"]\` answers a question about one column across every row, ` +
                 `\`limit: 1\` shows every column and its shape, and unreal_list_struct_fields on the ` +
                 `row struct lists the columns without any row data.`,
             }
-          : { ...table, ...unknownNote }
+          : { ...table, ...unknownNote, ...repeatedNote }
       );
     } catch (err) {
       return errorResult(err);
