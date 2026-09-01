@@ -5423,6 +5423,36 @@ register(
       );
     }
 
+    // The exact pin names, attached to the first attempt to author anything - whether it worked.
+    //
+    // This was a hole the dispatcher opened. On `search`, GROUND_TRUTH is kept out of standing
+    // context and handed over by unreal_enable_tools the moment an authoring tool switches on. A
+    // caller that dispatches instead never switches anything on, so it would never receive it and
+    // would guess pin names - which costs a failed call each time, the exact expense this tool
+    // exists to avoid.
+    //
+    // Attached on failure too, deliberately: a caller who just got the arguments wrong is precisely
+    // the one who needs the real names, and that is the moment they are worth the most.
+    //
+    // Appended as a SECOND content block rather than merged into the first, because callers parse
+    // content[0] as the tool's own JSON and quietly changing that shape would break them for a
+    // reason they could not see.
+    const withGroundTruth = <T>(result: T): T => {
+      if (PROFILE !== "search" || groundTruthDelivered || !AUTHORING_TOOLS.includes(tool)) {
+        return result;
+      }
+      const shaped = result as { content?: Array<{ type: string; text: string }> };
+      if (!Array.isArray(shaped?.content)) {
+        return result;
+      }
+      groundTruthDelivered = true;
+      shaped.content = [
+        ...shaped.content,
+        { type: "text", text: `Exact names, sent once:\n${GROUND_TRUTH.join("\n")}` },
+      ];
+      return result;
+    };
+
     // The tool's own schema, not a looser copy. `shape` is whatever register() ended up advertising,
     // which for every tool here is the strict object built by strictSchema - so an unknown key or a
     // missing required one produces the same guidance it would through the normal path.
@@ -5433,11 +5463,11 @@ register(
         parsed = schema.parse(args ?? {});
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
-        return errorResult(new Error(`bad_args for ${tool}: ${detail}`));
+        return withGroundTruth(errorResult(new Error(`bad_args for ${tool}: ${detail}`)));
       }
     }
 
-    return (await impl.handler(parsed as never, extra as never)) as never;
+    return withGroundTruth(await impl.handler(parsed as never, extra as never)) as never;
   }
 );
 

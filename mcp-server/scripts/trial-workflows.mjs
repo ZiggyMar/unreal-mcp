@@ -27,13 +27,38 @@ const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "trial
 
 let calls = 0;
 let tokens = 0;
+
+// Tool-list changes are counted separately from reply tokens, because they are a different KIND of
+// cost and much the larger one.
+//
+// The advertised tool list sits ahead of the system prompt and every message, so switching a tool on
+// invalidates the prompt cache for the whole conversation: the next request re-reads the entire
+// history at full price instead of the cached rate. Reporting only reply tokens made
+// unreal_enable_tools look free, and it is not - which is why unreal_call_tool exists.
+//
+// A journey with three enables pays that three times. This is the number to keep down.
+let listChanges = 0;
+let standingAfterEnables = 0;
+
+const measureStanding = async () => {
+  const listed = await server.request("tools/list", {});
+  return Math.round(JSON.stringify(listed?.result?.tools ?? []).length / 4);
+};
+
 const call = async (name, args) => {
   const reply = await server.request("tools/call", { name, arguments: args });
   const body = (reply.result ?? reply).content[0].text;
   calls += 1;
   tokens += Math.round(body.length / 4);
   if ((reply.result ?? reply).isError) throw new Error(body.slice(0, 200));
-  return JSON.parse(body);
+  const parsed = JSON.parse(body);
+  // Only an enable that actually switched something on moves the list. Re-enabling what is already
+  // on is a no-op, and counting it would overstate the cost.
+  if (name === "unreal_enable_tools" && (parsed.newlyEnabled ?? []).length > 0) {
+    listChanges += 1;
+    standingAfterEnables = await measureStanding();
+  }
+  return parsed;
 };
 
 const check = (name, ok, detail) => {
@@ -221,6 +246,13 @@ try {
   // sweep and the teardown - so the headline moved with how much residue happened to be lying around,
   // which is the opposite of a number you can compare between runs.
   console.log(`all three journeys: ${journeyTotals.calls} calls, ~${journeyTotals.tokens} tokens of replies`);
+  console.log(
+    `tool-list changes: ${listChanges}` +
+      (listChanges > 0
+        ? ` (standing ended at ~${standingAfterEnables} tokens; each change re-reads the whole ` +
+          `conversation at full price, so this is the cost that dwarfs the replies above)`
+        : " (nothing switched on - every call went through unreal_call_tool or was already enabled)")
+  );
   console.log(`(setup and teardown, not part of any journey: ${calls - journeyTotals.calls} calls)`);
   console.log("");
   console.log(

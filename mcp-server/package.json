@@ -39,6 +39,7 @@
     "trial:diagnose": "node scripts/trial-diagnose.mjs",
     "trial:runtime": "node scripts/trial-runtime.mjs",
     "trial:dispatch": "node scripts/trial-dispatch.mjs",
+    "trial:nodesearch": "node scripts/trial-node-search.mjs",
     "trial:parent-call": "node scripts/trial-parent-call.mjs",
     "trial:chain": "node scripts/trial-chain.mjs",
     "trial:workflows": "node scripts/trial-workflows.mjs",

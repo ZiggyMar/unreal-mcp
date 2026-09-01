@@ -25,6 +25,7 @@ written down next to the measurement that caused it.
 **Using it well**
 [Recommended agent workflow](#recommended-agent-workflow) · [What this costs today](#what-this-costs-today) ·
 [The cost nobody was measuring: switching a tool on](#the-cost-nobody-was-measuring-switching-a-tool-on) ·
+[Searching for a node by the name the editor shows](#searching-for-a-node-by-the-name-the-editor-shows) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -6633,3 +6634,45 @@ suggestion.
 Arguments are validated against the identical strict schema the tool advertises, captured after the
 `strictSchema` swap in `register`. Two ways to call one tool that disagree about its arguments is
 the defect class this project keeps finding; it is not going to be introduced deliberately.
+
+
+## Searching for a node by the name the editor shows
+
+`unreal_find_node` is how a model checks a function name before writing a call, so what it fails to
+find becomes what the model guesses at. Three defects turned up by simply asking it for things a
+person would actually type.
+
+**"Array Length" returned nothing.** The catalog is keyed on the C++ name, `Array_Length`, and the
+search compared raw strings — so a space was not an underscore and the query missed. Indexing
+`DisplayName` did not save it, because `Array_Length`'s DisplayName is `"Length"`. The editor puts
+"Array Length" on that node; the one spelling a model can see was the one spelling that failed.
+
+**"Do N" returned `GetCustomDoNotImportCurveWithZero`.** An unanchored substring match found those
+characters inside "...Do **N**ot Import...", and ranked it first. This is the defect class that keeps
+recurring here in new clothes: a read-only tool sounding certain about something it cannot see. A
+confident wrong hit is worse than no hit — no hit sends the caller to look elsewhere, a wrong one
+sends them to write a call that fails.
+
+**Macros were invisible.** `ForEachLoop` and `Make Array` returned nothing, while `unreal_build_graph`
+places both perfectly well via `nodeType: "Macro"`. One half of the server implemented what the other
+half reported as nonexistent.
+
+### What changed
+
+Matching happens on **words** now. Underscores, spaces and camelCase humps are all the same kind of
+boundary, so `Array Length`, `array_length` and `ArrayLength` are one question with one answer. The
+words are split once when the catalog is built, not per query — it runs to tens of thousands of
+entries and is searched repeatedly in a session.
+
+Ranking runs exact → prefix → whole-word run → typeahead → metadata → raw substring, and that last
+tier only fires for a query long enough to mean something. Whole words are what removes the noise:
+`["do", "n"]` is not a run inside `["get","custom","do","not","import",...]`, because `n` is not
+`not`.
+
+Typeahead survives deliberately: the *final* query word may still match a prefix, so "len" reaches
+`Length`. Only the final one — allowing it everywhere brings the noise straight back. A search fix
+that breaks the common path is a net loss however good the new cases look, which is why the trial
+asserts the things that already worked still work.
+
+`npm run trial:nodesearch` checks all of it against a live editor, including the `Do N` case
+specifically, because that is the one that would come back silently.

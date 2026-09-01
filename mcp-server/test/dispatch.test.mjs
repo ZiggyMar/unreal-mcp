@@ -127,3 +127,32 @@ test("registration stays the permission boundary on a fixed profile", async () =
     server.child.kill();
   }
 });
+
+test("the first dispatch to an authoring tool still delivers the exact pin names", async () => {
+  // A hole the dispatcher opened. On `search` the pin-name ground truth is kept out of standing
+  // context and handed over by enable_tools when an authoring tool switches on. Dispatching never
+  // switches anything on, so without this the caller would guess pin names - which costs a failed
+  // call each time, and is the exact expense unreal_call_tool exists to avoid.
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  try {
+    const res = await server.request("tools/call", {
+      name: "unreal_call_tool",
+      // build_graph with no arguments fails validation, and that is fine: the ground truth rides on
+      // the reply either way, and asserting it here needs no editor.
+      arguments: { tool: "unreal_build_graph", args: {} },
+    });
+    const blocks = (res?.result?.content ?? []).map((c) => c.text ?? "").join("\n");
+    assert.match(blocks, /Exact names, sent once/);
+    assert.match(blocks, /exec/i, "the ground truth should carry the real pin names");
+
+    // Once, not on every call - it is standing-context-sized and repeating it defeats the purpose.
+    const again = await server.request("tools/call", {
+      name: "unreal_call_tool",
+      arguments: { tool: "unreal_build_graph", args: {} },
+    });
+    const secondBlocks = (again?.result?.content ?? []).map((c) => c.text ?? "").join("\n");
+    assert.doesNotMatch(secondBlocks, /Exact names, sent once/);
+  } finally {
+    server.child.kill();
+  }
+});
