@@ -7404,3 +7404,55 @@ The version that earns its keep asserts its own preconditions — the sockets mu
 the command is still in flight, and the command must actually have succeeded — and reads the bridge's
 own log afterwards rather than trusting its own verdict. The log is what produced the table, and the
 log is what showed that the shipped fix had discarded nothing at all.
+
+### One engine compiled it, and only through a header that no longer exists
+
+`build-engines.mjs` builds the plugin against every engine in `build-targets.json`, and 5.8 had been
+failing. The summary it printed said this:
+
+```
+MCPCommandHandler.cpp(24,1): fatal error C1083: Cannot open include fi
+```
+
+Cut at exactly 160 characters, one short of `le: 'Engine/UserDefinedStruct.h'`. The absolute path —
+the temp build root, the host project, the module, the `Private` directory, none of which the reader
+can act on — had spent the whole budget, and the one word identifying the bug fell off the end. The
+fix is not a bigger budget, because the path grows with wherever the build runs. It is to trim the
+path to `<file>(line,col):` and spend the width on the message. The same line now reads complete in
+130 characters.
+
+The bug it was hiding is more interesting than the truncation. `Engine/UserDefinedStruct.h` does not
+exist in 5.8; the header lives in `CoreUObject/Public/StructUtils/`. But 5.6 has **both** spellings,
+and the old one is a shim:
+
+```cpp
+// 5.6: Engine/Classes/Engine/UserDefinedStruct.h, in full
+#if UE_ENABLE_INCLUDE_ORDER_DEPRECATED_IN_5_5
+#include "StructUtils/UserDefinedStruct.h"
+#endif
+```
+
+So this was never merely "broken on the engine we do not test against". On the engine it *was* tested
+against every day, it compiled only because a deprecated-include-order flag happened to be on, and it
+was one build setting away from failing there too. The 5.8 failure was the first visible symptom of a
+latent break, not a portability problem.
+
+Both engines have the real path, so the fix needed no version guard at all — just the current
+spelling.
+
+**And the sweep, because one instance is not the interesting question.** The same move that hides one
+moved header hides all of them, and finding them one build at a time costs three minutes of compiling
+each. Listing every `.h` under both engines and checking all 166 headers the plugin includes takes one
+pass:
+
+```
+indexed: 5.8 has 137723 include spellings, 5.6 has 133442
+plugin references 166 distinct engine headers
+
+MOVED OR REMOVED IN 5.8: none
+NOT FOUND IN EITHER INDEX (10) - probably plugin/module headers outside Engine/Source:
+  InputAction.h, NiagaraSystem.h, K2Node_EnhancedInputAction.h, ...
+```
+
+Clean, and the ten unfound are Enhanced Input and Niagara, which live under `Engine/Plugins` rather
+than `Engine/Source` — exactly what the script says about them, rather than a result to explain away.
