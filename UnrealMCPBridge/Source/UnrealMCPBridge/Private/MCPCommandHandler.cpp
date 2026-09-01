@@ -7071,11 +7071,53 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceVariable(const TSharedPtr
 				Entry->SetStringField(TEXT("graph"), Graph->GetName());
 				Entry->SetStringField(TEXT("nodeId"), MakeShortNodeId(Node, 8));
 
-				if (Cast<UK2Node_VariableSet>(Node))
+				// A container is written without a Set node.
+				//
+				// Map_Add, Array_Add, Set_Remove and the rest take the container from a GET node and mutate
+				// it in place, so counting only UK2Node_VariableSet reported a map that is added to every
+				// round as "read but never written" - and this tool's verdict for that reads "either a
+				// half-built feature or a replaced one", which sends the reader looking for a bug that is
+				// not there. Found by adding exactly such a write and watching the tracer deny it.
+				//
+				// The getter is still a read as well: the value is genuinely fetched. It is counted as both,
+				// because it genuinely is both, and saying so is what stops the verdict being wrong.
+				bool bMutatesContainer = false;
+				if (Cast<UK2Node_VariableGet>(Node))
+				{
+					for (UEdGraphPin* Pin : Node->Pins)
+					{
+						if (Pin->Direction != EGPD_Output)
+						{
+							continue;
+						}
+						for (UEdGraphPin* Linked : Pin->LinkedTo)
+						{
+							const UK2Node_CallFunction* Call =
+								Linked ? Cast<UK2Node_CallFunction>(Linked->GetOwningNode()) : nullptr;
+							if (!Call)
+							{
+								continue;
+							}
+							const FString Fn = Call->FunctionReference.GetMemberName().ToString();
+							if (Fn.StartsWith(TEXT("Map_")) || Fn.StartsWith(TEXT("Array_")) || Fn.StartsWith(TEXT("Set_")))
+							{
+								// Only the calls that change it. Map_Find and Array_Length read.
+								if (Fn.Contains(TEXT("Add")) || Fn.Contains(TEXT("Remove")) || Fn.Contains(TEXT("Clear")) ||
+									Fn.Contains(TEXT("Insert")) || Fn.Contains(TEXT("Set")) || Fn.Contains(TEXT("Append")))
+								{
+									bMutatesContainer = true;
+									Entry->SetStringField(TEXT("via"), Fn);
+								}
+							}
+						}
+					}
+				}
+
+				if (Cast<UK2Node_VariableSet>(Node) || bMutatesContainer)
 				{
 					Writes.Add(MakeShared<FJsonValueObject>(Entry));
 				}
-				else
+				if (!Cast<UK2Node_VariableSet>(Node))
 				{
 					Reads.Add(MakeShared<FJsonValueObject>(Entry));
 				}
