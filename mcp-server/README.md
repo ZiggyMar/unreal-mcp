@@ -7252,15 +7252,24 @@ Written, correct, and unreachable. Worth remembering when adding either half.
 Both cases now come through, and `compile_cpp` names Live Coding, says *"this is not a problem with
 the file"*, and points at `unreal_hot_reload_cpp`, which drives Live Coding itself.
 
-### What is still not working, stated plainly
+### The symptom that pointed at the wrong thing
 
-Pointing at a tool means checking it works. `unreal_hot_reload_cpp` returns `cancelled` in three
-seconds — twice in a row, and again after a genuine one-line change to a source file, which rules out
-"nothing to compile". Its own advice, *"call this again; something is cancelling it in the editor
-UI"*, does not lead anywhere: nothing in the UI is cancelling it.
+Pointing at a tool means checking it works, so `unreal_hot_reload_cpp` was tried next. It returned
+`cancelled` in three seconds — twice in a row, and again after a genuine one-line change to a source
+file, which ruled out "nothing to compile". Its own advice, *"call this again; something is
+cancelling it in the editor UI"*, led nowhere.
 
-So on this project **C++ cannot currently be compiled by any route here** — `compile_cpp` is blocked
-by Live Coding, `hot_reload_cpp` cancels, and the full editor build fails separately on a duplicate
-plugin. The cause of the Live Coding cancellation is not established, and no fix is claimed for it.
-The improvement is narrower and real: the failure now explains itself instead of blaming a file that
-was never the problem.
+The conclusion written here at the time was that **C++ could not be compiled by any route on this
+project**. That was wrong, and it is worth leaving the reasoning visible rather than quietly
+correcting it, because the mistake was a familiar one: three failures with one shared cause, read as
+three independent facts.
+
+The shared cause was that the project's editor target genuinely could not be built — for two reasons
+that had nothing to do with C++ tooling. See *When the host project cannot build*: a duplicate plugin
+from a nested sample project, fixed with a one-file `.ubtignore`, and an unquoted `-Project` path in
+this repo's own build script that broke on any path containing a space. With both fixed, the target
+builds in nine seconds, and Live Coding compiles rather than cancelling instantly.
+
+What remains true and useful is the narrow part: `compile_cpp` cannot run while Live Coding holds the
+compiler, it now says so instead of blaming the file, and it names `hot_reload_cpp` as the tool that
+works with an editor open. What was wrong was the sweeping conclusion drawn from it.
