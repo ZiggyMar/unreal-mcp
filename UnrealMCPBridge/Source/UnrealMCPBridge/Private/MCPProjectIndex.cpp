@@ -18,6 +18,7 @@
 #include "Serialization/JsonWriter.h"
 #include "K2Node_CustomEvent.h"
 #include "EdGraphSchema_K2.h"
+#include "Engine/TimelineTemplate.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPProjectIndex, Log, All);
 
@@ -26,8 +27,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogMCPProjectIndex, Log, All);
  *
  * Version 2 added Custom Events, which are callable by name and were previously invisible to
  * search_project because the index only walked FunctionGraphs.
+ * Version 3 added Timelines, which live in Blueprint->Timelines and were in no list at all.
  */
-static constexpr int32 MCPIndexSchemaVersion = 2;
+static constexpr int32 MCPIndexSchemaVersion = 3;
 
 FMCPProjectIndex* FMCPProjectIndex::Instance = nullptr;
 
@@ -499,6 +501,26 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 			}
 			Entry.Functions.Add(EventEntry);
 		}
+	}
+
+	// Timelines, which are variables with a graph-shaped life of their own.
+	//
+	// They are in Blueprint->Timelines and nowhere else, so searching for "TL_Aim" - a timeline that
+	// exists, drives aiming, and shows up as an entry point in explain_graph - returned nothing at
+	// all. Indexed as variables because that is what the graph calls them: a timeline IS a variable
+	// of its own type, and a caller looking for one is asking the same question as for any other.
+	for (UTimelineTemplate* Template : Blueprint->Timelines)
+	{
+		if (!Template)
+		{
+			continue;
+		}
+		FMCPIndexVariable TimelineEntry;
+		// The variable name, not the template's object name: the template carries a "_Template"
+		// suffix the editor never shows, and answering with that gives a name usable nowhere.
+		TimelineEntry.Name = Template->GetVariableName().ToString();
+		TimelineEntry.Type = TEXT("Timeline");
+		Entry.Variables.Add(TimelineEntry);
 	}
 
 	Entries.Add(ObjectPath, MoveTemp(Entry));

@@ -70,6 +70,7 @@ const READ_ONLY_COMMANDS = new Set([
   "read_behavior_tree",
   "read_niagara_system",
   "read_level_sequence",
+  "read_timeline",
   "read_input_context",
   "list_input_mappings",
   "list_material_parameters",

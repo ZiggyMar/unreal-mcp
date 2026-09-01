@@ -106,6 +106,7 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     { cmd: "watch_runtime", feature: "watching values change during Play-In-Editor" },
     { cmd: "run_console_command", feature: "the console - ce, Ke, cheats, cvars, stat" },
     { cmd: "read_level_sequence", feature: "reading what a Level Sequence animates" },
+    { cmd: "read_timeline", feature: "reading a Blueprint Timeline's length, tracks and curves" },
   { cmd: "read_input_context", feature: "reading Enhanced Input key bindings" },
     { cmd: "map_input_key", feature: "binding a key to an Input Action" },
     { cmd: "unmap_input_key", feature: "removing a key binding" },

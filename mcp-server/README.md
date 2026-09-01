@@ -195,7 +195,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
 | `lazy` | 13251 | `core` plus deferred groups |
-| `full` | 41615 | everything, for a model that can afford it |
+| `full` | 41966 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -372,6 +372,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
 | `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
+| `unreal_read_timeline` | `read_timeline` | Read a Blueprint Timeline: length, loop/autoplay/**replicated**, and every float, vector, colour and event track with its curve shape. |
 | `unreal_map_input_key` | `map_input_key` | Bind a key to an Input Action, with modifiers. Refuses unknown keys and duplicates. |
 | `unreal_unmap_input_key` | `unmap_input_key` | Remove one key binding, and say so honestly when it was not bound. |
 | `unreal_get_game_settings` | `get_game_settings` | Read the default GameMode and map, plus the open level's override. |

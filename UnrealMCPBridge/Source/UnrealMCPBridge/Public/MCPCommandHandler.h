@@ -75,6 +75,9 @@ private:
 	static TSharedRef<FJsonObject> HandleFindNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleGetNodeSignature(const TSharedPtr<FJsonObject>& Params);
 
+	/** Read a Blueprint's Timelines: length, flags, and each track with its curve shape. */
+	static TSharedRef<FJsonObject> HandleReadTimeline(const TSharedPtr<FJsonObject>& Params);
+
 	/**
 	 * Describe a macro or built-in node kind, for the many names that are real nodes and not
 	 * functions. Returns false if the name is neither, leaving the caller to report not-found.

@@ -654,7 +654,11 @@ const TOOL_GROUPS: Record<string, string[]> = {
   cpp: ["unreal_compile_cpp", "unreal_hot_reload_cpp"],
   // Animation is its own group: 62 of the assets on the project this was measured against, and
   // irrelevant to a project that has none.
-  anim: ["unreal_read_anim_blueprint"],
+  // Timeline reading sits with animation because that is what a Timeline is: a Blueprint animating
+  // something over time. Someone asking "why does aiming feel slow" or "the door closes too fast"
+  // reaches here, not for the cutscene tools. It is deliberately NOT in `core`, which has no room
+  // and is the authoring spine rather than everything a Blueprint can hold.
+  anim: ["unreal_read_anim_blueprint", "unreal_read_timeline"],
   // AI is its own group for the same reason animation is: a project without Behavior Trees should
   // not carry the definition, and a project built around them wants it in the diagnose set.
   ai: ["unreal_read_behavior_tree"],
@@ -3348,6 +3352,39 @@ register(
   async ({ path, graphName, functionName, dryRun }) => {
     try {
       return jsonResult(await callParentFirst(bridge, path, graphName, functionName, { dryRun }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_read_timeline",
+  {
+    title: "Read what a Blueprint Timeline animates",
+    description:
+      "A Timeline is how a Blueprint animates anything over time without an animation asset - aim-down-sights, a " +
+      "door swinging, a fade, a charge meter filling - and nothing else here could see one. Returns each timeline's " +
+      "length, whether it loops, auto-plays and REPLICATES, and every track: float, vector, linear colour and event.\n\n" +
+      "Curves are described rather than dumped: key count, the value range, and where the last key sits. That " +
+      "answers \"what is this and what would I change\" without paying for hundreds of key/value pairs. A track " +
+      "using a shared curve ASSET is named as such, because editing that changes every timeline using it.\n\n" +
+      "`replicated` is reported even when false on purpose: a timeline driving visible movement that does not " +
+      "replicate is a multiplayer bug waiting to happen, and this is the only place that fact is visible.\n\n" +
+      "Timelines are also indexed now, so unreal_search_project finds one by name.",
+    inputSchema: {
+      path: z
+        .string()
+        .describe('Blueprint holding the timeline, e.g. "/Game/Player/BP_Player".'),
+      timelineName: z
+        .string()
+        .optional()
+        .describe('One timeline by name, e.g. "TL_Aim". Omit for all of them, which is how you learn the names.'),
+    },
+  },
+  async ({ path, timelineName }) => {
+    try {
+      return jsonResult(await bridge.send("read_timeline", { path, timelineName }));
     } catch (err) {
       return errorResult(err);
     }
