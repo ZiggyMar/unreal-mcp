@@ -190,9 +190,10 @@ test("UnrealBuildTool's own failure is reported, not swallowed as a compilation 
     `expected the real cause in the reason lines, got: ${JSON.stringify(reason)}`
   );
 
-  // The guidance for this case ALREADY existed and could never fire, because this extractor decides
-  // which lines reach it and that one matched nothing. A guidance branch is only as reachable as
-  // the pattern that feeds it.
+  // Note what this does and does not prove. This guidance was ALREADY reachable through
+  // "Result: Failed (ActionGraphInvalid)", which the original patterns captured - a first pass at
+  // this claimed otherwise and was wrong. What the added pattern buys is the descriptive sentence
+  // in `reason`, which says WHICH conflict rather than only naming the category.
   const guidance = guidanceFor(reason);
   assert.match(guidance, /could not plan the build|two actions wanted to produce the same file/i);
   assert.match(guidance, /second copy of a plugin/i);
@@ -227,4 +228,18 @@ test("Live Coding holding the build is named, and points at the tool that works"
   assert.match(guidance, /unreal_hot_reload_cpp/);
   // The sentence a reader most needs, because the obvious reading is "my file is broken".
   assert.match(guidance, /not a problem with the file/i);
+});
+
+test("a branch keyed on the failure CODE is reachable without extra patterns", () => {
+  // The distinction that matters, and the one a first pass here got wrong. UnrealBuildTool always
+  // emits "Result: Failed (<Code>)" and that line was always captured, so any branch matching a
+  // code has always worked. Only branches keyed on a DESCRIPTIVE line depend on the extractor
+  // passing that line through - which is where advice actually goes to die, and why Live Coding
+  // (whose code is the useless "OtherCompilationError") was the real casualty.
+  const byCodeAlone = guidanceFor(["Result: Failed (ActionGraphInvalid)"]);
+  assert.match(byCodeAlone, /could not plan the build/i);
+
+  // And the counter-case: a code that names nothing routes nowhere on its own.
+  const uselessCode = guidanceFor(["Result: Failed (OtherCompilationError)"]);
+  assert.match(uselessCode, /without a compiler diagnostic/i);
 });

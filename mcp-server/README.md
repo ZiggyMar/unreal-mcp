@@ -7242,12 +7242,24 @@ Live Coding was holding the compiler in the running editor. None of it reached t
 
 ### A guidance branch is only as reachable as the pattern that feeds it
 
-The same run exposed something worth keeping. `guidanceFor` has had a good explanation of
-`Action graph is invalid` since it was written — it even describes diffing the two conflicting action
-JSONs, which is how a real duplicate-plugin problem was diagnosed here by hand. That explanation
-**could never appear**, because the extractor never captured the line that triggers it.
+That is the general lesson, and the first version of this section overstated it. It claimed the
+`Action graph is invalid` guidance "could never appear". Checked afterwards, it appears fine:
+UnrealBuildTool writes `Result: Failed (ActionGraphInvalid)`, the original patterns captured that
+line, and the branch matches the code as well as the sentence. The claim was flattering and wrong,
+and it took one command to settle:
 
-Written, correct, and unreachable. Worth remembering when adding either half.
+```
+guidanceFor(["Result: Failed (ActionGraphInvalid)"])  ->  "UnrealBuildTool could not plan the build..."
+```
+
+What was genuinely unreachable is the Live Coding case, and for a specific reason worth keeping: its
+result code is the useless `OtherCompilationError`, which matches no branch, so the only evidence
+that could have routed it was the descriptive lines — and those were filtered out before any branch
+saw them.
+
+So the rule holds, narrowly: a branch keyed on a **failure code** is reachable because the code is
+always captured; a branch keyed on a **descriptive line** is only reachable if the extractor passes
+that line through. The second kind is where advice goes to die.
 
 Both cases now come through, and `compile_cpp` names Live Coding, says *"this is not a problem with
 the file"*, and points at `unreal_hot_reload_cpp`, which drives Live Coding itself.
