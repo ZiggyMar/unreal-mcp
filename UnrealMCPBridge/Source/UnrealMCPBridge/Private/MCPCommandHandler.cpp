@@ -1327,6 +1327,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleRemoveFunction(Params);
 	}
+	else if (Cmd == TEXT("remove_struct_field"))
+	{
+		Response = HandleRemoveStructField(Params);
+	}
+	else if (Cmd == TEXT("rename_struct_field"))
+	{
+		Response = HandleRenameStructField(Params);
+	}
+	else if (Cmd == TEXT("remove_enum_entry"))
+	{
+		Response = HandleRemoveEnumEntry(Params);
+	}
+	else if (Cmd == TEXT("rename_enum_entry"))
+	{
+		Response = HandleRenameEnumEntry(Params);
+	}
 	else if (Cmd == TEXT("add_montage_notify"))
 	{
 		Response = HandleAddMontageNotify(Params);
@@ -5944,6 +5960,332 @@ static TArray<TSharedPtr<FJsonValue>> MCPNotifyList(const UAnimMontage* Montage)
  * for `lastsFor` is refused by name rather than silently producing an instant notify, because a
  * duration that vanishes is worse than a call that did not run.
  */
+// Defined further down, beside the other struct readers. Declared here because these handlers report
+// the struct's remaining fields in exactly the shape list_struct_fields returns, and one shape read
+// from one function is how the read and the write keep saying the same thing.
+static TArray<TSharedPtr<FJsonValue>> DescribeStructFields(UUserDefinedStruct* Struct);
+
+/**
+ * Which Data Tables are typed by this struct, and how many rows they hold.
+ *
+ * Removing or renaming a struct field rewrites every table built on it - a removed field takes its
+ * column and all the data in that column with it. The tables do not warn and the change is not
+ * undoable from their side, so the only useful moment to say so is before it happens.
+ */
+static TArray<TSharedPtr<FJsonValue>> MCPTablesUsingStruct(const UUserDefinedStruct* Struct, int32& OutRows)
+{
+	OutRows = 0;
+	TArray<TSharedPtr<FJsonValue>> Out;
+
+	FAssetRegistryModule& RegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	FARFilter Filter;
+	Filter.ClassPaths.Add(UDataTable::StaticClass()->GetClassPathName());
+	Filter.bRecursiveClasses = true;
+	Filter.PackagePaths.Add(FName(TEXT("/Game")));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	RegistryModule.Get().GetAssets(Filter, Assets);
+	for (const FAssetData& Asset : Assets)
+	{
+		const UDataTable* Table = Cast<UDataTable>(Asset.GetAsset());
+		if (!Table || Table->GetRowStruct() != Struct)
+		{
+			continue;
+		}
+		const int32 Rows = Table->GetRowNames().Num();
+		OutRows += Rows;
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("table"), Asset.GetObjectPathString());
+		Entry->SetNumberField(TEXT("rows"), Rows);
+		Out.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	return Out;
+}
+
+/** Load a User Defined Struct, or say precisely what was found instead. */
+static UUserDefinedStruct* MCPLoadUserStruct(const FString& Path, FString& OutError)
+{
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	if (!Asset)
+	{
+		OutError = FString::Printf(TEXT("struct_not_found: %s"), *Path);
+		return nullptr;
+	}
+	UUserDefinedStruct* Struct = Cast<UUserDefinedStruct>(Asset);
+	if (!Struct)
+	{
+		OutError = FString::Printf(
+			TEXT("not_a_struct: %s is a %s. list_assets with className \"UserDefinedStruct\" lists the ones this accepts."),
+			*Path, *Asset->GetClass()->GetName());
+	}
+	return Struct;
+}
+
+/**
+ * Remove a field from a User Defined Struct.
+ *
+ * The other half of add_struct_field, which has existed on its own. A struct could gain fields and
+ * never lose one, so "drop that column" - an ordinary change request on a project whose Data Tables
+ * are typed by 17 of these - had no answer here.
+ *
+ * Refuses while a Data Table is built on the struct unless `force` is passed, and names the tables
+ * and the rows at stake. That is not a formality: the column and everything in it goes.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveStructField(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString FieldName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), FieldName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and name are required"));
+	}
+
+	FString Error;
+	UUserDefinedStruct* Struct = MCPLoadUserStruct(Path, Error);
+	if (!Struct)
+	{
+		return MakeErrorResponse(Error);
+	}
+
+	FGuid Found;
+	TArray<FString> Names;
+	for (const FStructVariableDescription& Desc : FStructureEditorUtils::GetVarDesc(Struct))
+	{
+		Names.Add(Desc.FriendlyName);
+		if (Desc.FriendlyName == FieldName)
+		{
+			Found = Desc.VarGuid;
+		}
+	}
+	if (!Found.IsValid())
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("field_not_found: \"%s\" is not a field of this struct. It has: %s. Names are case-sensitive ")
+			TEXT("and are the ones list_struct_fields reports."),
+			*FieldName, Names.Num() > 0 ? *FString::Join(Names, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	int32 RowsAtRisk = 0;
+	TArray<TSharedPtr<FJsonValue>> Tables = MCPTablesUsingStruct(Struct, RowsAtRisk);
+	bool bForce = false;
+	Params->TryGetBoolField(TEXT("force"), bForce);
+	if (Tables.Num() > 0 && !bForce)
+	{
+		TSharedRef<FJsonObject> Refusal = MakeShared<FJsonObject>();
+		Refusal->SetArrayField(TEXT("tablesUsingThisStruct"), Tables);
+		Refusal->SetNumberField(TEXT("rowsAffected"), RowsAtRisk);
+		Refusal->SetStringField(TEXT("next"),
+			TEXT("Pass force:true to remove it anyway. Read what the column holds first - "
+				"list_data_table_rows with `fields` on the tables above shows exactly what is about to go."));
+		return MCPResponse::Fail(Refusal, TEXT("struct_in_use"), FString::Printf(
+			TEXT("%d Data Table(s) are typed by this struct, holding %d row(s). Removing \"%s\" takes that ")
+			TEXT("column and every value in it out of all of them."),
+			Tables.Num(), RowsAtRisk, *FieldName));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveStructField", "MCP: Remove Struct Field"));
+	Struct->Modify();
+	if (!FStructureEditorUtils::RemoveVariable(Struct, Found))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("remove_failed: the editor refused to remove \"%s\". A struct must keep at least one field, ")
+			TEXT("so this fails on the last one."), *FieldName));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("removed"), FieldName);
+	Result->SetNumberField(TEXT("tablesRetyped"), Tables.Num());
+	Result->SetArrayField(TEXT("fields"), DescribeStructFields(Struct));
+	Result->SetStringField(TEXT("next"), TEXT("save_asset writes the struct; the Data Tables built on it are changed too."));
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Rename a field, keeping the data.
+ *
+ * Renaming is what a caller usually wants when they reach for remove - the column keeps its values
+ * and every Data Table follows. Worth having beside remove precisely so the destructive one is not
+ * the only option on the shelf.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameStructField(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString FieldName;
+	FString NewName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), FieldName) ||
+		!Params->TryGetStringField(TEXT("newName"), NewName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, name and newName are required"));
+	}
+
+	FString Error;
+	UUserDefinedStruct* Struct = MCPLoadUserStruct(Path, Error);
+	if (!Struct)
+	{
+		return MakeErrorResponse(Error);
+	}
+
+	TArray<FString> Names;
+	bool bExists = false;
+	for (const FStructVariableDescription& Desc : FStructureEditorUtils::GetVarDesc(Struct))
+	{
+		Names.Add(Desc.FriendlyName);
+		if (Desc.FriendlyName == FieldName)
+		{
+			bExists = true;
+		}
+		if (Desc.FriendlyName == NewName)
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("name_taken: this struct already has a field called \"%s\"."), *NewName));
+		}
+	}
+	if (!bExists)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("field_not_found: \"%s\" is not a field of this struct. It has: %s."),
+			*FieldName, Names.Num() > 0 ? *FString::Join(Names, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRenameStructField", "MCP: Rename Struct Field"));
+	Struct->Modify();
+	if (!FStructureEditorUtils::RenameVariable(Struct, FieldName, NewName))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("rename_failed: the editor refused to rename \"%s\" to \"%s\"."), *FieldName, *NewName));
+	}
+
+	int32 Rows = 0;
+	TArray<TSharedPtr<FJsonValue>> Tables = MCPTablesUsingStruct(Struct, Rows);
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("renamed"), FieldName);
+	Result->SetStringField(TEXT("to"), NewName);
+	Result->SetNumberField(TEXT("tablesRetyped"), Tables.Num());
+	Result->SetArrayField(TEXT("fields"), DescribeStructFields(Struct));
+	return MakeOkResponse(Result);
+}
+
+/** Remove one entry from a User Defined Enum, the other half of add_enum_entry. */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveEnumEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString EntryName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), EntryName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and name are required"));
+	}
+
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(Asset);
+	if (!Enum)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("enum_not_found: %s. list_assets with className \"UserDefinedEnum\" lists the ones this accepts."), *Path));
+	}
+
+	// Matched on the DISPLAY name, because that is what list_enum_entries reports and what a person
+	// sees in the editor. The internal names are NewEnumerator0, NewEnumerator1 and so on, which
+	// identify nothing to a reader - the same asymmetry that cost time on a Data Table cell.
+	int32 Index = INDEX_NONE;
+	TArray<FString> Shown;
+	const int32 Count = Enum->NumEnums() - 1; // the trailing _MAX is bookkeeping
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FString Display = Enum->GetDisplayNameTextByIndex(i).ToString();
+		Shown.Add(Display);
+		if (Display == EntryName)
+		{
+			Index = i;
+		}
+	}
+	if (Index == INDEX_NONE)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("entry_not_found: \"%s\" is not an entry of this enum. It has: %s. These are display names, ")
+			TEXT("which is what list_enum_entries reports - not the internal NewEnumeratorN spelling."),
+			*EntryName, Shown.Num() > 0 ? *FString::Join(Shown, TEXT(", ")) : TEXT("(none)")));
+	}
+	if (Count <= 1)
+	{
+		return MakeErrorResponse(TEXT("last_entry: an enum must keep at least one entry."));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveEnumEntry", "MCP: Remove Enum Entry"));
+	Enum->Modify();
+	FEnumEditorUtils::RemoveEnumeratorFromUserDefinedEnum(Enum, Index);
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("removed"), EntryName);
+	Result->SetStringField(TEXT("next"),
+		TEXT("Anything storing this enum by VALUE keeps its number, so a variable or Data Table cell that held "
+			"the removed entry now reads as whatever took its index. save_asset writes the enum."));
+	return MakeOkResponse(Result);
+}
+
+/** Rename one entry's display name. */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameEnumEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString EntryName;
+	FString NewName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), EntryName) ||
+		!Params->TryGetStringField(TEXT("newName"), NewName))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, name and newName are required"));
+	}
+
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(Asset);
+	if (!Enum)
+	{
+		return MakeErrorResponse(FString::Printf(TEXT("enum_not_found: %s"), *Path));
+	}
+
+	int32 Index = INDEX_NONE;
+	TArray<FString> Shown;
+	const int32 Count = Enum->NumEnums() - 1;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FString Display = Enum->GetDisplayNameTextByIndex(i).ToString();
+		Shown.Add(Display);
+		if (Display == EntryName)
+		{
+			Index = i;
+		}
+	}
+	if (Index == INDEX_NONE)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("entry_not_found: \"%s\" is not an entry of this enum. It has: %s."),
+			*EntryName, Shown.Num() > 0 ? *FString::Join(Shown, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRenameEnumEntry", "MCP: Rename Enum Entry"));
+	Enum->Modify();
+	if (!FEnumEditorUtils::SetEnumeratorDisplayName(Enum, Index, FText::FromString(NewName)))
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("rename_failed: the editor refused \"%s\", usually because another entry already uses it."), *NewName));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("renamed"), EntryName);
+	Result->SetStringField(TEXT("to"), NewName);
+	Result->SetStringField(TEXT("next"),
+		TEXT("Display names are what Blueprints and Data Tables show; the stored value is unchanged, so nothing "
+			"using this enum breaks. save_asset writes it."));
+	return MakeOkResponse(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddMontageNotify(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;

@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12987 | the authoring spine |
 | `lazy` | 13296 | `core` plus deferred groups |
-| `full` | 43263 | everything, for a model that can afford it |
+| `full` | 44243 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -425,6 +425,10 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_find_in_data_tables` | *(composed: `list_assets` + `list_data_table_rows`)* | The only tool that looks **inside** Data Table contents: searches every row name and cell value and returns table, row and field — not the rows. `unreal_search_project` does not index them. |
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
+| `unreal_remove_struct_field` | `remove_struct_field` | Take a field off a Struct. Refuses while a Data Table is typed by it unless forced, naming the tables and rows whose column would go. |
+| `unreal_rename_struct_field` | `rename_struct_field` | Rename a Struct field, keeping the data; every Data Table typed by the Struct follows. |
+| `unreal_remove_enum_entry` | `remove_enum_entry` | Remove an enum entry by display name. Says what happens to values that stored it by number. |
+| `unreal_rename_enum_entry` | `rename_enum_entry` | Rename an enum entry's display name; the stored value is unchanged, so nothing using it breaks. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
 | `unreal_pie_actors` | `pie_actors` | Where matching actors are in every running world, with facing, net role, and whether each is locally controlled. |
 | `unreal_teleport_actor` | `teleport_actor` | Move an actor while the game runs, optionally aiming it. Sets the control rotation on a possessed pawn, so aimed abilities actually point where you sent them. |
@@ -8854,3 +8858,69 @@ that reason.
 
 The test montage was left exactly as found — one `PlayMontageNotify` at 1.499 — and nothing was
 written to disk.
+
+### Pairing every read with the write that edits the same thing
+
+The montage fix closed one asymmetry by hand. The question it raised is how many others there are, so
+each read tool was paired against the writes that edit its subject:
+
+```
+list_variables            add / remove / rename / set_type / set_replication
+list_components           add / remove / rename / set_property
+list_data_table_rows      add / set / remove
+list_struct_fields        create_struct, add_struct_field            <- no remove, no rename
+list_enum_entries         create_enum, add_enum_entry                <- no remove, no rename
+read_anim_blueprint       *** NONE ***
+read_behavior_tree        *** NONE ***
+read_level_sequence       *** NONE ***
+read_niagara_system       *** NONE ***
+read_timeline             *** NONE ***
+```
+
+The first pass at this reported **zero** gaps, because it matched read and write subjects by substring
+and "struct" matches "struct_field" matches everything. A sloppy matcher answering "nothing to do" is
+the same failure as a search that only looked at half a project - which is why it was rewritten to a
+hand-declared pairing that can be read and disagreed with.
+
+Ranked by what the project actually holds: 17 User Defined Structs, 9 User Defined Enums, 15 Niagara
+systems, 9 Level Sequences, 6 Anim Blueprints, 2 Behavior Trees. The struct and enum gap wins twice
+over - the largest counts, and **11 of the project's 20 Data Tables are typed by a User Defined
+struct**, so "rename that column" and "drop that field" are ordinary change requests with no answer.
+
+Four commands close it: `remove_struct_field`, `rename_struct_field`, `remove_enum_entry`,
+`rename_enum_entry`.
+
+**Removing a struct field is destructive in a way nothing announces.** The field takes its column and
+every value in it out of every table built on the struct, and the tables do not warn. So the removal
+refuses while any table is typed by the struct, and says what is at stake:
+
+```
+struct_in_use: 1 Data Table(s) are typed by this struct, holding 2 row(s). Removing "Ratio" takes
+that column and every value in it out of all of them.
+  tablesUsingThisStruct: [{ table: "DT_Enemies", rows: 2 }]
+  next: Pass force:true to remove it anyway. Read what the column holds first - list_data_table_rows
+        with `fields` on the tables above shows exactly what is about to go.
+```
+
+Rename is beside it deliberately, because it is usually what the caller actually wanted: the column
+keeps its values and every table follows. A destructive tool should not be the only one on the shelf.
+
+Enum entries match on the **display name** - what `list_enum_entries` reports and what a person sees -
+not the internal `NewEnumerator0` spelling, which is the same asymmetry that once cost an afternoon on
+a Data Table cell. And removal says the thing that is easy to miss: anything storing the enum by value
+keeps its number, so a cell holding the removed entry afterwards reads as whichever entry took its
+index.
+
+**The guards caught two things, and one of them was mine.** `check:docs` wanted the four tools in this
+file, and `doctor.test` wanted a recorded decision about probing them - a probe sends no parameters,
+so probing `remove_struct_field` to learn whether it exists is not a question, it is a deletion.
+
+The second was worse and was caught by using the tool rather than by a guard. Restoring a field after
+a live test, `unreal_add_struct_field` refused: it takes `name`, and all four new commands had been
+written with `fieldName` and `entryName`. Four tools disagreeing with the one they pair with, in a
+repository with a section about exactly that. Renamed before commit; `check:params` passes.
+
+Verified against real assets and every one put back as found: the guard refused on `S_EnemyType`
+(`DT_Enemies`, 2 rows) and changed nothing; a rename round-tripped on a struct nothing is typed by; a
+name clash was refused; the enum round-tripped `Xbox` -> `XboxPad` -> `Xbox`. Nothing was written to
+disk.

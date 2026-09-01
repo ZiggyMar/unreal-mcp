@@ -105,6 +105,14 @@ private:
 
 	// --- Level editing: open, populate, save ---
 	/** Add an instant notify to a montage. The write half of the notify list read_asset_properties reports. */
+	/** Remove a field from a User Defined Struct; refuses while a Data Table is typed by it unless forced. */
+	static TSharedRef<FJsonObject> HandleRemoveStructField(const TSharedPtr<FJsonObject>& Params);
+	/** Rename a struct field, keeping the data and retyping the tables built on it. */
+	static TSharedRef<FJsonObject> HandleRenameStructField(const TSharedPtr<FJsonObject>& Params);
+	/** Remove one entry from a User Defined Enum, matched on its display name. */
+	static TSharedRef<FJsonObject> HandleRemoveEnumEntry(const TSharedPtr<FJsonObject>& Params);
+	/** Rename one enum entry's display name; the stored value is unchanged. */
+	static TSharedRef<FJsonObject> HandleRenameEnumEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleAddMontageNotify(const TSharedPtr<FJsonObject>& Params);
 	/** Remove notifies from a montage by name, optionally only the one at a given time. */
 	static TSharedRef<FJsonObject> HandleRemoveMontageNotify(const TSharedPtr<FJsonObject>& Params);

@@ -27,6 +27,9 @@ const NOT_PROBED = new Set([
   // freshness check covers them - it compares the plugin binary's build time against the C++ source,
   // so a plugin missing either is caught, just without naming which.
   "add_montage_notify", "remove_montage_notify",
+  // The struct and enum lifecycle pair: all four WRITE, and a probe sends no parameters. Probing
+  // remove_struct_field to learn whether it exists is not a question, it is a deletion.
+  "remove_struct_field", "rename_struct_field", "remove_enum_entry", "rename_enum_entry",
   "add_component", "add_data_table_row", "add_enum_entry", "add_input_mapping", "add_node", "add_struct_field",
   "add_variable", "add_widget", "asset_status", "build_graph", "compile_blueprint",
   "connect_pins", "create_blueprint", "create_enum", "create_function", "create_level",

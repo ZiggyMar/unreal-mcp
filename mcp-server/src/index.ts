@@ -619,6 +619,10 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_list_material_parameters",
   ],
   data: [
+    "unreal_remove_struct_field",
+    "unreal_rename_struct_field",
+    "unreal_remove_enum_entry",
+    "unreal_rename_enum_entry",
     "unreal_save_asset",
     "unreal_read_asset_properties",
     "unreal_set_asset_property",
@@ -3415,6 +3419,110 @@ register(
   async ({ path, graphName, functionName, dryRun }) => {
     try {
       return jsonResult(await callParentFirst(bridge, path, graphName, functionName, { dryRun }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_struct_field",
+  {
+    title: "Take a field off a struct",
+    description:
+      "The other half of unreal_add_struct_field, which existed on its own: a struct could gain fields and never " +
+      "lose one, so \"drop that column\" had no answer here.\n\n" +
+      "**Refuses while a Data Table is typed by the struct**, unless `force` is passed, and names the tables and " +
+      "the row count at stake first. That is not a formality - removing a field takes its column and every value " +
+      "in it out of every table built on the struct, and the tables do not warn. Read what is there with " +
+      "unreal_list_data_table_rows and `fields` before forcing.\n\n" +
+      "Names are the ones unreal_list_struct_fields reports, and a name that does not match is refused with the " +
+      "list of the ones that do. Changes memory, not disk - unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The struct, e.g. "/Game/Data/S_Upgrade".'),
+      name: z.string().describe("Field to remove, as unreal_list_struct_fields spells it. Case-sensitive."),
+      force: z
+        .boolean()
+        .optional()
+        .describe("Remove it even though Data Tables are typed by this struct, losing that column's data."),
+    },
+  },
+  async ({ path, name, force }) => {
+    try {
+      return jsonResult(await bridge.send("remove_struct_field", { path, name, ...(force ? { force } : {}) }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_rename_struct_field",
+  {
+    title: "Rename a struct field, keeping the data",
+    description:
+      "What a caller usually wants when they reach for remove: the column keeps its values and every Data Table " +
+      "typed by the struct follows. Worth having beside remove precisely so the destructive one is not the only " +
+      "option on the shelf.\n\n" +
+      "Refuses a name another field already uses, and a field name that does not exist, listing the ones that do. " +
+      "Changes memory, not disk - unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The struct, e.g. "/Game/Data/S_Upgrade".'),
+      name: z.string().describe("Field to rename, as unreal_list_struct_fields spells it."),
+      newName: z.string().describe("The new name."),
+    },
+  },
+  async ({ path, name, newName }) => {
+    try {
+      return jsonResult(await bridge.send("rename_struct_field", { path, name, newName }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_enum_entry",
+  {
+    title: "Take an entry off an enum",
+    description:
+      "The other half of unreal_add_enum_entry. Matched on the DISPLAY name - what unreal_list_enum_entries " +
+      "reports and what a person sees in the editor - because the internal spelling is NewEnumerator0, " +
+      "NewEnumerator1 and so on, which identifies nothing to a reader.\n\n" +
+      "**Anything storing this enum by value keeps its number**, so a variable or Data Table cell holding the " +
+      "removed entry afterwards reads as whichever entry took its index. The reply says so. Refuses to remove the " +
+      "last entry. Changes memory, not disk - unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The enum, e.g. "/Game/Data/E_UpgradeKind".'),
+      name: z.string().describe("Entry to remove, by display name as unreal_list_enum_entries reports it."),
+    },
+  },
+  async ({ path, name }) => {
+    try {
+      return jsonResult(await bridge.send("remove_enum_entry", { path, name }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_rename_enum_entry",
+  {
+    title: "Rename an enum entry",
+    description:
+      "Changes the display name, which is what Blueprints and Data Tables show. The stored value is unchanged, so " +
+      "nothing using the enum breaks - which makes this the safe half of the pair and usually the one you want. " +
+      "Refuses a name another entry already uses. Changes memory, not disk - unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The enum, e.g. "/Game/Data/E_UpgradeKind".'),
+      name: z.string().describe("Entry to rename, by display name."),
+      newName: z.string().describe("The new display name."),
+    },
+  },
+  async ({ path, name, newName }) => {
+    try {
+      return jsonResult(await bridge.send("rename_enum_entry", { path, name, newName }));
     } catch (err) {
       return errorResult(err);
     }
