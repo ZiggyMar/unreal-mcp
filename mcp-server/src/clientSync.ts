@@ -33,6 +33,14 @@ export interface SyncFinding {
   severity: string;
   message: string;
   fix: string;
+  /**
+   * The variable this is about, when it is about one.
+   *
+   * Lets the audit recognise this as the same defect another check also found, without matching on
+   * prose. repnotify-does-nothing has two producers that ask different questions about the same
+   * handler, and both are worth running.
+   */
+  variable?: string;
 }
 
 export interface SyncChain {
@@ -140,6 +148,10 @@ export function findEmptyRepNotifies(
     findings.push({
       check: "repnotify-does-nothing",
       severity: "warning",
+      // Named so the audit can tell this from the tiered version of the same finding, which
+      // reviewRepNotifies produces for the same variable with more to say. Matching on the message
+      // would be matching on prose.
+      variable: variable.name,
       message:
         `${variable.name} is replicated with RepNotify, but ${notify} is empty. The value is sent to every ` +
         `client on every change and nothing reacts to it when it arrives.`,

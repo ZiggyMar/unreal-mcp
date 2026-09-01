@@ -166,9 +166,27 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[], grap
   const findings: MpFinding[] = [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
-  const serverEvents = nodes.filter((node) => isCustomEvent(node) && SERVER_EVENT.test(node.title ?? ""));
-  const multicastEvents = nodes.filter((node) => isCustomEvent(node) && MULTICAST_EVENT.test(node.title ?? ""));
-  const clientEvents = nodes.filter((node) => isCustomEvent(node) && CLIENT_EVENT.test(node.title ?? ""));
+  // `runsOn` first, the name second.
+  //
+  // These three lists decide two things: whether this Blueprint is networked at all - and a "no"
+  // skips every multiplayer check below it - and which events to walk forward from looking for a
+  // server writing unreplicated state or touching a widget. Both were decided by whether the author
+  // happened to put "Server" or "Multicast" in the event's name.
+  //
+  // They frequently do not. BP_Player alone has FireWeapon, HealthRegen, EnergyRegen and
+  // TraceInteract, all reported by the engine as Executes On Server and none of them saying so.
+  // Every one was invisible to the walk, so anything they wrote unreplicated or touched on a widget
+  // was never looked for. Unlike the cast fix, which removed a false positive, this direction adds
+  // the findings that were missing.
+  //
+  // The name test stays as the fallback: a plugin binary older than the runsOn field sends no field,
+  // and a guess from the name beats no check at all.
+  const runsOnOr = (node: MpNode, mode: MpNode["runsOn"], byName: RegExp) =>
+    isCustomEvent(node) && (node.runsOn ? node.runsOn === mode : byName.test(node.title ?? ""));
+
+  const serverEvents = nodes.filter((node) => runsOnOr(node, "server", SERVER_EVENT));
+  const multicastEvents = nodes.filter((node) => runsOnOr(node, "all", MULTICAST_EVENT));
+  const clientEvents = nodes.filter((node) => runsOnOr(node, "owningClient", CLIENT_EVENT));
   const anyReplicated = variables.some((variable) => variable.replicated);
 
   // Nothing here applies to a single-player Blueprint, and a warning that fires on every one of

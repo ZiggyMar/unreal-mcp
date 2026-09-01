@@ -83,6 +83,14 @@ const WHY_IT_COSTS: Record<string, string> = {
 };
 
 export interface AuditFinding {
+  /**
+   * The variable this finding is about, when it is about one.
+   *
+   * Carried through from the check that produced it so two checks seeing the same defect can be
+   * recognised as one. It existed on the producers and was dropped on the way in, which is why the
+   * same RepNotify was reported twice.
+   */
+  variable?: string;
   blueprint: string;
   path: string;
   graph: string;
@@ -321,7 +329,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             severity: finding.severity,
             message: finding.message,
             fix: finding.fix,
-            cost: FINDING_COST[finding.check] ?? 1,
+            ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
+          cost: FINDING_COST[finding.check] ?? 1,
           });
         }
       }
@@ -334,19 +343,6 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       // across all of them reported none - and replication is the most expensive class of bug in
       // the set. A whole-project audit that silently omits a whole family is worse than one that
       // omits nothing, because the silence reads as "clean".
-      for (const finding of review.blueprint ?? []) {
-        findings.push({
-          blueprint: bp.name,
-          path: bp.path,
-          // Not a graph, and saying so beats filing it under an arbitrary one.
-          graph: "variables",
-          check: finding.check,
-          severity: finding.severity,
-          message: finding.message,
-          fix: finding.fix,
-          cost: FINDING_COST[finding.check] ?? 1,
-        });
-      }
 
       // Event dispatcher signatures are not graphs anyone calls.
       //
@@ -404,7 +400,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             severity: finding.severity,
             message: finding.message,
             fix: finding.fix,
-            cost: FINDING_COST[finding.check] ?? 1,
+            ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
+          cost: FINDING_COST[finding.check] ?? 1,
           });
         }
       }
@@ -456,6 +453,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
           severity: finding.severity,
           message: finding.message,
           fix: finding.fix,
+          ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
           cost: FINDING_COST[finding.check] ?? 1,
         });
       }
@@ -505,16 +503,28 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         }
       }
 
+      // Blueprint-level findings: replication, and whether what the server writes reaches a client.
+      //
+      // review computes these per Blueprint and this loop is the only thing that keeps them. Once it
+      // was not: this exact loop existed TWICE, a few hundred lines apart, one filing under
+      // `graph: "variables"` and one under `graph: "(whole asset)"`, both walking `review.blueprint`.
+      // Every finding in the most expensive class in the set was therefore counted twice - the
+      // per-check totals, the per-Blueprint costs, and the worstBlueprints ranking built on them.
+      //
+      // It showed up as a repeat in an examples list. BP_Player reports four of these; the audit
+      // said eight, in two labelled pairs, and the label was the only thing that differed.
       for (const finding of review.blueprint ?? []) {
         findings.push({
           blueprint: bp.name,
           path: bp.path,
+          // Not a graph, and saying so beats filing it under an arbitrary one.
           graph: "(whole asset)",
           check: finding.check,
           severity: finding.severity,
           message: finding.message,
           ...((finding as { observed?: string }).observed ? { observed: (finding as { observed?: string }).observed } : {}),
           fix: finding.fix,
+          ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
           cost: FINDING_COST[finding.check] ?? 1,
         });
       }
@@ -545,7 +555,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             message: finding.message,
             ...(finding.observed ? { observed: finding.observed } : {}),
             fix: finding.fix,
-            cost: FINDING_COST[finding.check] ?? 1,
+            ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
+          cost: FINDING_COST[finding.check] ?? 1,
           });
         }
       } catch (err) {
@@ -623,7 +634,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             severity: finding.severity,
             message: finding.message,
             fix: finding.fix,
-            cost: FINDING_COST[finding.check] ?? 1,
+            ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
+          cost: FINDING_COST[finding.check] ?? 1,
           });
         }
       } catch (err) {
@@ -660,7 +672,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
             message: finding.message,
             ...(finding.observed ? { observed: finding.observed } : {}),
             fix: finding.fix,
-            cost: FINDING_COST[finding.check] ?? 1,
+            ...((finding as { variable?: string }).variable ? { variable: (finding as { variable?: string }).variable } : {}),
+          cost: FINDING_COST[finding.check] ?? 1,
           });
         }
       } catch (err) {
@@ -793,6 +806,39 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
 
   // Grouped by kind, because "seventeen Blueprints have the same problem" is one decision to make,
   // not seventeen.
+  // One defect, one finding, even when two checks can both see it.
+  //
+  // repnotify-does-nothing has two producers and they are not redundant: findEmptyRepNotifies asks
+  // whether the handler's entry node goes anywhere, reviewRepNotifies asks how many nodes it has and
+  // additionally tiers the result - "and nothing in this Blueprint reads or writes the variable at
+  // all" is the difference between a missing handler and dead state. Deleting either loses coverage,
+  // so both run and the richer message wins.
+  //
+  // Left alone the audit reported the same variable twice, with the per-Blueprint costs and the
+  // worstBlueprints ranking inflated to match.
+  const bySubject = new Map<string, AuditFinding>();
+  const deduped: AuditFinding[] = [];
+  for (const finding of findings) {
+    const subject = (finding as { variable?: string }).variable;
+    if (!subject) {
+      deduped.push(finding);
+      continue;
+    }
+    const key = `${finding.blueprint}|${finding.check}|${subject}`;
+    const seen = bySubject.get(key);
+    if (!seen) {
+      bySubject.set(key, finding);
+      deduped.push(finding);
+      continue;
+    }
+    if (finding.message.length > seen.message.length) {
+      deduped[deduped.indexOf(seen)] = finding;
+      bySubject.set(key, finding);
+    }
+  }
+  findings.length = 0;
+  findings.push(...deduped);
+
   const byCheck = new Map<string, AuditFinding[]>();
   for (const finding of findings) {
     const list = byCheck.get(finding.check) ?? [];

@@ -36,7 +36,15 @@ export interface BlueprintReview {
    * without appearing anywhere a caller could read them, which made the score unexplainable - a
    * number nobody can trace back to a reason is worse than no number at all.
    */
-  blueprint: Array<{ check: string; severity: "warning" | "info"; message: string; fix: string; observed?: string }>;
+  blueprint: Array<{
+    check: string;
+    severity: "warning" | "info";
+    message: string;
+    fix: string;
+    observed?: string;
+    /** The variable this is about, so the audit can tell two checks seeing one defect apart. */
+    variable?: string;
+  }>;
   /** Raw graph nodes, only when asked for. See reviewBlueprint's includeGraphNodes. */
   graphNodes?: Array<{ graphName: string; nodes: unknown[] }>;
   /** Which listed graphs the engine says are dispatcher signatures, when the plugin reports it. */
@@ -161,6 +169,15 @@ export async function reviewBlueprint(
           severity: finding.severity as "warning" | "info",
           message: finding.message,
           fix: finding.fix,
+          // The subject travels with the finding.
+          //
+          // This rebuild listed the fields it wanted and `variable` was not among them, so a finding
+          // that knew which variable it was about arrived at the audit not knowing. The audit uses it
+          // to recognise the same defect found by two different checks, and without it reported the
+          // same RepNotify twice - once plainly and once with the tier attached.
+          ...((finding as { variable?: string }).variable
+            ? { variable: (finding as { variable?: string }).variable }
+            : {}),
           nodeIds: [] as string[],
         },
         graph: "variables",
@@ -214,6 +231,12 @@ export async function reviewBlueprint(
       message,
       fix,
       ...("observed" in rest && rest.observed ? { observed: rest.observed as string } : {}),
+      // And the subject, for the same reason `observed` is here: this rebuild lists the fields it
+      // wants, so anything not named is silently dropped. The audit uses `variable` to recognise the
+      // same defect found by two different checks; without it, repnotify-does-nothing arrived twice
+      // for one variable - once plainly, once with the dead-state tier attached - and both were
+      // counted, in the totals and in the worstBlueprints ranking built on them.
+      ...("variable" in rest && rest.variable ? { variable: rest.variable as string } : {}),
     })),
     nextAction,
   };

@@ -8579,3 +8579,64 @@ So: 8%, not 31%, and the difference is entirely that I counted the wrong unit be
 fix is still right — `BP_Player` is the project's most-used Blueprint and was carrying a 100-point
 finding for correct code, which inflated its rank in `worstBlueprints` as well as its score. But the
 number I would have reported without re-measuring would have been four times the truth.
+
+### The same defect, counted twice, in the class that costs most
+
+`runsOn` was added for the cast check, but three name-guesses were using the same missing data:
+
+```ts
+const SERVER_EVENT = /(^|_)(server|sv)[_\s]/i;
+```
+
+Those three lists decide whether a Blueprint is networked **at all** — a "no" skips every multiplayer
+check under it — and which events to walk forward from. `BP_Player` alone has `FireWeapon`,
+`HealthRegen`, `EnergyRegen` and `TraceInteract`, every one reported by the engine as *Executes On
+Server* and not one of them saying so in its name. All were invisible to the walk, so anything they
+wrote unreplicated was never looked for.
+
+Unlike the cast fix, which removed a false positive, this direction **adds** findings: 858 → 904.
+
+Then the verification, which is where it got interesting. Four examples of
+`server-writes-unreplicated` in `BP_Player`, each naming a variable — `CanRegenHealth`,
+`CanRegenEnergy`, `VaccumTimer`, `TeamHealSpeed`. All four confirmed `replicated: false`, so the
+findings are real. But the examples list showed each of them **twice**, and running the check
+directly on the Blueprint returns four, not eight.
+
+**Two loops over one source.** `audit.ts` walked `review.blueprint` in two places a few hundred lines
+apart, filing under `graph: "variables"` and `graph: "(whole asset)"`. Every Blueprint-level
+finding — the most expensive class in the set — was counted twice, in the group totals, the
+per-Blueprint costs, and the `worstBlueprints` ranking built on them.
+
+**And a second duplication underneath it.** `repnotify-does-nothing` has two producers that are not
+redundant: `findEmptyRepNotifies` asks whether the handler's entry node goes anywhere,
+`reviewRepNotifies` asks how many nodes it has *and* tiers the answer — "and nothing in this
+Blueprint reads or writes the variable at all" is the difference between a missing handler and dead
+state. Deleting either loses coverage, so both run and the richer message wins, deduped on
+`blueprint | check | variable`.
+
+Making that work took four edits, because `variable` existed on both producers and reached nothing:
+
+| dropped at | why |
+|---|---|
+| `SyncFinding` | the interface had no such field |
+| `review.ts` → `blueprint:` | a rebuild that lists the fields it wants |
+| `review.ts` → `extraFindings` | the same rebuild, again |
+| `audit.ts` push sites | seven of them, each naming its fields |
+
+Four rebuilds between the check that knows and the code that needs to know, each one silently
+dropping what it was not told to keep. The debug line that found it printed one key and one
+`undefined`.
+
+Where it landed on the real project:
+
+| | findings | note |
+|---|---|---|
+| before this iteration | 858 | |
+| after `runsOn` | 904 | +46 genuinely found |
+| after removing the duplicate loop | 844 | −60 duplicates |
+| after deduping the two producers | **818** | −26 duplicates |
+
+The totals barely moved and the ranking did. `PC_Gameplay` fell from cost 1935 to 1335 and
+`BP_Player` rose to first — which is the point, because the whole purpose of `worstBlueprints` is to
+answer "where should I start", and it had been answering with a number that counted some Blueprints
+twice.

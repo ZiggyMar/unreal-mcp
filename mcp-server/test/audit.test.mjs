@@ -427,6 +427,19 @@ test("the project audit reports Blueprint-level findings, not only graph ones", 
     `expected the RepNotify finding in the project audit, got: ${(result.groups ?? []).map((g) => g.check).join(", ") || "(nothing)"}`
   );
   assert.equal(group.examples[0].blueprint, "BP_Messy");
-  // Filed as "variables" rather than under an arbitrary graph, because it is not about a graph.
-  assert.equal(group.examples[0].graph, "variables");
+  // Filed under "(whole asset)" rather than an arbitrary graph, because it is not about a graph.
+  // It read "variables" until the two loops producing these findings were found to be duplicates of
+  // each other; the surviving one uses this label and also carries `observed`.
+  assert.equal(group.examples[0].graph, "(whole asset)");
+
+  // Once, not twice - the property the duplicate loops broke and nothing asserted.
+  //
+  // Two loops walked review.blueprint a few hundred lines apart, filing the same finding under two
+  // different labels, so every Blueprint-level finding was double-counted: the group totals, the
+  // per-Blueprint costs, and the worstBlueprints ranking built from them. On a real project
+  // BP_Player reported eight server-writes-unreplicated findings where the check itself produces
+  // four. Nothing here noticed, because both copies were present and the assertion only read [0].
+  console.log("DEBUG group:", JSON.stringify(group).slice(0, 700));
+  assert.equal(group.count, 1, "a Blueprint-level finding must be counted once");
+  assert.equal(group.examples.length, 1, "and appear once in the examples");
 });
