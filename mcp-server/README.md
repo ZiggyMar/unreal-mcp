@@ -6277,9 +6277,22 @@ That second half nearly shipped broken. `VaccumDragStrength` defaults to `0.0` a
 so a correctly-gated client would have multiplied the force by zero and the drag would have stopped
 working altogether — worse than the bug. Both it and `LocationDragged` replicate now.
 
-**It is a check.** `authority-gated-character-movement` walks the arm of an authority branch that
-runs when the check passes, and reports character movement found there. Priced at 85: the game still
-works, it just feels broken to everyone except the person most likely to be testing it.
+**The fix was wrong, and testing it in play is how that was found.** Moving the gate to
+`Is Locally Controlled` made the symptom *worse*: the character juddered in place, "like dragging a
+kid who keeps pushing back", and the editor then crashed. The cause is ownership. Those values are
+computed on whichever machine runs the ability, and making them replicated hands the client the
+server's copy — which stomps the local one every update, so the force flickers between its real
+value and `0`. It was reverted the same session.
+
+The honest lesson is about method, not networking: I could not drive input in PIE, said so out loud,
+and shipped a networking change I had no way to exercise. Verifying the *plumbing* — both roles
+agreeing at their defaults — proved nothing about the case that mattered.
+
+**It is still a check**, because the smell is real: `authority-gated-character-movement` walks the arm
+of an authority branch that runs when the check passes and reports character movement found there.
+But its advice now says what was learned — that moving the gate is not a safe one-line change, what
+to check first, and to test it in play, because a listen-server host cannot see this bug at all.
+Priced at 85.
 
 Four tests hold the edges, because a check that fires on the wrong things is worse than none:
 moving a plain replicated actor from the server is *correct* and must not fire; the `else` arm is the

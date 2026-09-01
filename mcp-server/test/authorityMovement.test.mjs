@@ -28,10 +28,13 @@ test("a character force behind Has Authority is reported", () => {
   assert.ok(hit, `expected the rubber-band finding, got: ${(report.findings ?? []).map((f) => f.check).join(", ")}`);
   assert.deepEqual(hit.nodeIds, ["force"]);
   assert.match(hit.fix, /Is Locally Controlled/);
-  // The second half of the fix matters as much as the first: gating correctly while leaving the
-  // inputs unreplicated makes the client compute a different force from stale defaults, which is
-  // how the first attempt at this fix would have shipped the drag silently doing nothing.
-  assert.match(hit.fix, /replicate every variable/i);
+  // The advice must NOT read as a safe one-liner. Moving the gate was tried on the graph this check
+  // was written from and made the symptom worse: the values the force reads were written locally, so
+  // replicating them handed the client the server's copy, the force flickered against its default,
+  // and the character juddered in place instead of being pulled. A check that prescribes a fix which
+  // can make things worse is worse than a check that describes the smell honestly.
+  assert.match(hit.fix, /not a safe/i);
+  assert.match(hit.fix, /TEST IT IN PLAY/);
 });
 
 test("moving a plain actor from the server is not reported", () => {

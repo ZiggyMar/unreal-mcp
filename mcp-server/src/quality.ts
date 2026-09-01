@@ -234,11 +234,16 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[], context: 
           `client-controlled character the client predicts its own movement, so a force the server ` +
           `applies alone is a correction waiting to happen - the player sees rubber-banding.`,
         fix:
-          "Gate on Is Locally Controlled instead of Has Authority, so the machine that predicts the " +
-          "pawn is the one that moves it - true on the owning client, and true on the server for " +
-          "anything the server controls itself. Then replicate every variable the force calculation " +
-          "reads, or the client will compute a different force from stale defaults. A listen-server " +
-          "host never sees this bug, because the host is the authority.",
+          "Moving the gate to Is Locally Controlled is the usual answer, and it is NOT a safe " +
+          "one-line change - it was tried on the graph this check was written from and made the " +
+          "symptom worse. Before moving it, find out where the values the force reads are written. " +
+          "If they are computed locally on whichever machine runs the ability, replicating them to " +
+          "hand the client the server's copy will stomp the local one and the force will flicker " +
+          "between its real value and the default; the pawn then judders in place instead of " +
+          "moving, which looks like the character refusing to be pulled. The other direction - " +
+          "sending the impulse to the owning client through a Client RPC and letting it predict - " +
+          "avoids that, because nothing changes ownership. Either way, TEST IT IN PLAY: a " +
+          "listen-server host never sees this bug at all, because the host is the authority.",
         nodeIds: serverMoves.map((node) => node.id),
       });
     }

@@ -6392,6 +6392,8 @@ struct FMCPCallSite
 	FString Blueprint;
 	FString Graph;
 	FString Called;
+	/** The class that declares the function being called - two classes can share a name. */
+	FString CalledOn;
 	FString NodeId;
 	bool bReachableInGraph = false;
 	/** "BP.Graph" - the graph this call sits in, used to look its liveness up. */
@@ -6575,6 +6577,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 					Site.Blueprint = Blueprint->GetName();
 					Site.Graph = Graph->GetName();
 					Site.Called = Called;
+					// Which class the called function belongs to.
+					//
+					// The match is on NAME, so "who calls AddPlayer" answered with a HUD widget's AddPlayer
+					// alongside the vacuum component's - same word, unrelated function, no way to tell them
+					// apart in the reply. That sent a real investigation down the wrong path for several
+					// calls. Narrowing the match instead would be worse: a caller usually knows only the
+					// name, and a substring search that quietly drops the one they meant is the failure this
+					// tool exists to avoid. So it still finds them all, and says which is which.
+					if (const UClass* Owner = CallNode->FunctionReference.GetMemberParentClass())
+					{
+						Site.CalledOn = Owner->GetName();
+					}
 					Site.NodeId = MakeShortNodeId(Node, 8);
 					Site.bReachableInGraph = bReachable;
 					Site.GraphKey = GraphKey;
@@ -6655,6 +6669,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 		Entry->SetStringField(TEXT("blueprint"), Site.Blueprint);
 		Entry->SetStringField(TEXT("graph"), Site.Graph);
 		Entry->SetStringField(TEXT("calls"), Site.Called);
+		if (!Site.CalledOn.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("callsOn"), Site.CalledOn);
+		}
 		Entry->SetStringField(TEXT("nodeId"), Site.NodeId);
 
 		const bool bGraphRuns = LiveGraphs.Contains(Site.GraphKey);
