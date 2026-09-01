@@ -159,6 +159,15 @@ export interface AuditResult {
    * review already refuses to tell.
    */
   dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
+  /**
+   * Rows sharing a CLASS reference in a column where almost every other row has its own.
+   *
+   * Two rows pointing at one Blueprint means they do the same thing while claiming to be different
+   * upgrades, weapons or abilities. Found on a real project and missed by every other check, because
+   * the field is filled in and the value is a valid asset - nothing is null, nothing is broken, and
+   * one row simply does someone else's job.
+   */
+  dataTableDuplicateClasses: Array<{ table: string; field: string; value: string; rows: string[] }>;
   truncated: boolean;
   /**
    * How many Blueprints the project has, against how many were looked at.
@@ -900,10 +909,14 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   // class reference cleared to None, resolved to null by the engine and silently ignored by the
   // thing that consumed it. An audit that reads only Blueprints looks straight past it.
   const dataTableNulls: AuditResult["dataTableNulls"] = [];
+  const dataTableDuplicateClasses: AuditResult["dataTableDuplicateClasses"] = [];
   try {
     const tables = await auditDataTables(bridge, { pathPrefix: options.pathPrefix });
     for (const n of tables.nullReferences) {
       dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field });
+    }
+    for (const d of tables.duplicateReferences ?? []) {
+      dataTableDuplicateClasses.push({ table: d.table, field: d.field, value: d.value, rows: d.rows });
     }
   } catch (err) {
     /* a bridge too old to read Data Tables must not lose the Blueprint half of the audit */
@@ -1009,6 +1022,7 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
     worstBlueprints,
     unreadable,
     dataTableNulls,
+    dataTableDuplicateClasses,
     truncated: all.length > blueprints.length,
     nextAction,
   };

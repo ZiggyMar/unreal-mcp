@@ -8688,3 +8688,57 @@ setting `bVacuumOn` with nothing reading it, then asserted the replication wordi
 fired and it failed. The fix was to add the read, not to relax the assertion: the test describes the
 replication case and its fixture did not contain one. A test that only passed because a distinction
 did not exist yet is not evidence the distinction is wrong.
+
+### Following the audit's own advice, and finding what it could not see
+
+The audit nominates a next action. Taking it literally is the fairest test of whether it is any good:
+
+> Start with 2 empty Data Table reference(s), beginning with `DT_Upgrades` row `"Weapon_MachineGun"`
+> (UpgradeClass). The engine resolves an empty reference to null and whatever consumes it silently
+> does nothing.
+
+True, and reading the column turns up more than it claimed. Nine rows, seven filled:
+
+```
+Weapon_MachineGun        ""
+Vacuum_VirusController   ""
+Survival_MobileAgent     BP_BulletSize_C      <-
+Stat_BulletSize          BP_BulletSize_C      <-
+Stat_BulletDamage        BP_DamageUpgrade_C
+Stat_VacuumSpeed         BP_VacuumSpeedUpgrade_C
+Stat_VacuumPush          BP_VacuumPushUpgrade_C
+Stat_HealSpeed           BP_HealSpeedUpgrade_C
+Stat_HealthNum           BP_HealthUpgrade_C
+```
+
+Two separate things here, and the audit could see neither properly.
+
+**The empty rows are not a wiring mistake.** No `BP_MachineGun` or `BP_VirusController` upgrade
+Blueprint exists anywhere in the project. The class those rows want was never built, so
+`unreal_set_data_table_row` has nothing to point them at. That is an unfinished feature, and the fix
+the audit suggests cannot be carried out — worth knowing before trying.
+
+**And `Survival_MobileAgent` runs the bullet-size upgrade.** Every row has its own class except that
+one, which shares `Stat_BulletSize`'s. Nothing is null, nothing is broken, the asset resolves: one row
+simply does another's job while claiming to be a survival upgrade. Every existing check walked past it,
+because they all ask whether a value is *missing*.
+
+So there is a new one. In a column where nearly every row has its own asset, a shared one is worth
+mentioning:
+
+```
+dataTableDuplicateClasses: [{
+  table: "DT_Upgrades", field: "UpgradeClass",
+  value: "BP_BulletSize.BP_BulletSize_C",
+  rows: ["Survival_MobileAgent", "Stat_BulletSize"]
+}]
+```
+
+**Its first run is why it is narrow.** It reported two duplicates: that one, and two health upgrades
+in an old table sharing a heart icon — which is exactly what icons are for. A shared **class** means
+two rows *behave* identically while claiming to differ; a shared texture means they look alike, which
+is ordinary design. Restricted to class references, the noise went and the bug stayed.
+
+Two guards keep it quiet elsewhere: at least four filled rows, and at least 70% of them carrying a
+value nothing else uses. A column of twelve rows pointing at three classes is a tier system, not
+twelve mistakes, and there is a test for that case as well as for the real one.

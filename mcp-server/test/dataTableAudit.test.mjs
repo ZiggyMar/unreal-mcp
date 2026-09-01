@@ -227,3 +227,54 @@ test("a clean table pays nothing for that warning", async () => {
   assert.equal(result.nullReferences.length, 0);
   assert.ok(!/not the answer for this row/.test(result.next), "the clean reply does not carry the warning");
 });
+
+test("two rows sharing a class reference are reported; two sharing an icon are not", async () => {
+  // Found on a real project: DT_Upgrades has nine rows whose UpgradeClass is a distinct Blueprint
+  // each, except "Survival_MobileAgent", which points at BP_BulletSize_C - the same class as
+  // "Stat_BulletSize". Nothing was null and nothing was broken; one row simply did another's job,
+  // so every existing check walked past it.
+  //
+  // The same run also flagged two health upgrades sharing a heart icon, which is what icons are for.
+  // A shared CLASS means two rows behave identically while claiming to differ; a shared texture
+  // means they look alike. Only the first is a defect.
+  const rows = [
+    { rowName: "Stat_BulletSize", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/Game/U/BP_BulletSize.BP_BulletSize_C'", Icon: "/Script/Engine.Texture2D'/Game/T/heart.heart'" } },
+    { rowName: "Survival_MobileAgent", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/Game/U/BP_BulletSize.BP_BulletSize_C'", Icon: "/Script/Engine.Texture2D'/Game/T/heart.heart'" } },
+    { rowName: "Stat_HealthNum", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/Game/U/BP_Health.BP_Health_C'", Icon: "/Script/Engine.Texture2D'/Game/T/a.a'" } },
+    { rowName: "Stat_HealSpeed", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/Game/U/BP_Heal.BP_Heal_C'", Icon: "/Script/Engine.Texture2D'/Game/T/b.b'" } },
+    { rowName: "Stat_VacuumPush", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/Game/U/BP_Push.BP_Push_C'", Icon: "/Script/Engine.Texture2D'/Game/T/c.c'" } },
+  ];
+
+  const result = await auditDataTables(
+    {
+      send: async (cmd) =>
+        cmd === "list_assets"
+          ? { assets: [{ path: "/Game/DT_Upgrades.DT_Upgrades" }] }
+          : { rows },
+    },
+    {}
+  );
+
+  assert.equal(result.duplicateReferences.length, 1, "the class duplicate, and only that");
+  assert.equal(result.duplicateReferences[0].field, "UpgradeClass");
+  assert.deepEqual(result.duplicateReferences[0].rows.sort(), ["Stat_BulletSize", "Survival_MobileAgent"]);
+});
+
+test("a column where sharing is the norm is left alone", async () => {
+  // Twenty rows pointing at three classes is a design - a tier system, a category - not twenty
+  // mistakes. The check only speaks where one-asset-per-row is plainly the intent.
+  const rows = Array.from({ length: 12 }, (_, i) => ({
+    rowName: `Row${i}`,
+    values: { UpgradeClass: `/Script/Engine.BlueprintGeneratedClass'/Game/U/BP_${i % 3}.BP_${i % 3}_C'` },
+  }));
+
+  const result = await auditDataTables(
+    {
+      send: async (cmd) =>
+        cmd === "list_assets" ? { assets: [{ path: "/Game/DT.DT" }] } : { rows },
+    },
+    {}
+  );
+
+  assert.deepEqual(result.duplicateReferences, []);
+});

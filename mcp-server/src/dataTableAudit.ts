@@ -42,6 +42,17 @@ export interface DataTableAuditResult {
   tablesScanned: number;
   rowsScanned: number;
   nullReferences: NullReference[];
+  /**
+   * Rows sharing an asset reference in a column where almost every other row has its own.
+   *
+   * A smell rather than a certainty - two rows legitimately pointing at one asset is a real thing -
+   * so it reports what it saw and leaves the judgement to the reader. Found on a real project:
+   * DT_Upgrades has nine rows whose UpgradeClass is a distinct Blueprint each, except
+   * "Survival_MobileAgent", which points at BP_BulletSize_C - the same class as "Stat_BulletSize",
+   * and nothing to do with survival or mobile agents. The empty-reference check walked straight past
+   * it, because the field is filled in.
+   */
+  duplicateReferences: Array<{ table: string; field: string; value: string; rows: string[]; ofFilled: number }>;
   /** Tables where every row was empty for some field, so nothing could be concluded. */
   undecidable: Array<{ table: string; field: string; why: string }>;
   unreadable: Array<{ table: string; why: string }>;
@@ -99,6 +110,7 @@ export async function auditDataTables(
   tables = tables.slice(0, limit);
 
   const nullReferences: NullReference[] = [];
+  const duplicateReferences: DataTableAuditResult["duplicateReferences"] = [];
   const undecidable: DataTableAuditResult["undecidable"] = [];
   const unreadable: DataTableAuditResult["unreadable"] = [];
   let rowsScanned = 0;
@@ -128,17 +140,48 @@ export async function auditDataTables(
     // Which fields are object references, and a filled-in example of each.
     const referenceFields = new Map<string, { row: string; value: string }>();
     const emptyByField = new Map<string, string[]>();
+    /** Every filled value in a reference column, and which rows carry it. */
+    const rowsByValue = new Map<string, Map<string, string[]>>();
 
     for (const row of rows) {
       for (const [field, raw] of Object.entries(row.values ?? {})) {
         const value = String(raw);
         if (looksLikeAssetPath(value)) {
           if (!referenceFields.has(field)) referenceFields.set(field, { row: row.rowName, value });
+          const seen = rowsByValue.get(field) ?? new Map<string, string[]>();
+          seen.set(value, [...(seen.get(value) ?? []), row.rowName]);
+          rowsByValue.set(field, seen);
         } else if (isEmptyReference(value)) {
           const list = emptyByField.get(field) ?? [];
           list.push(row.rowName);
           emptyByField.set(field, list);
         }
+      }
+    }
+
+    // A shared reference is only worth mentioning where it is the exception.
+    //
+    // Plenty of columns share on purpose - a dozen rows pointing at one default icon is a design, not
+    // a defect - and flagging those would make this noise. So it reports only when the column is
+    // overwhelmingly one-asset-per-row and something breaks the pattern: at least four filled rows,
+    // and at least 70% of them carrying a value nothing else uses. DT_Upgrades scores 6 distinct of 7.
+    for (const [field, byValue] of rowsByValue) {
+      const filled = [...byValue.values()].reduce((n, list) => n + list.length, 0);
+      if (filled < 4) continue;
+      if (byValue.size / filled < 0.7) continue;
+      for (const [value, rowNames] of byValue) {
+        if (rowNames.length < 2) continue;
+        // CLASS references only, and the first run of this is the argument for it.
+        //
+        // It reported two duplicates on a real project. One is a bug: two upgrades whose UpgradeClass
+        // is the same Blueprint, so "Survival_MobileAgent" instantiates the bullet-size upgrade. The
+        // other is a design: two health upgrades sharing a heart icon, which is what icons are for.
+        //
+        // A shared class means two rows DO the same thing while claiming to be different. A shared
+        // texture, material or sound means two rows look or sound alike, which is ordinary. Keeping
+        // both would have made this check noise on its first outing.
+        if (!/BlueprintGeneratedClass|\.Class'/.test(value)) continue;
+        duplicateReferences.push({ table, field, value, rows: rowNames, ofFilled: filled });
       }
     }
 
@@ -172,6 +215,7 @@ export async function auditDataTables(
     tablesScanned: tables.length,
     rowsScanned,
     nullReferences,
+    duplicateReferences,
     undecidable,
     unreadable,
     verdict,
