@@ -30,6 +30,13 @@ export interface MpNode {
   id: string;
   type: string;
   title: string;
+  /**
+   * Where a replicated custom event actually runs, straight from its function flags.
+   *
+   * Absent for an ordinary custom event, and absent from every reply produced by a plugin binary
+   * older than this field - which is why the naming heuristics below are kept rather than replaced.
+   */
+  runsOn?: "server" | "all" | "owningClient";
   connectedPins?: Array<{
     pin: string;
     direction: string;
@@ -424,9 +431,17 @@ export function findServerOnlyCasts(
   // check people act on and one they learn to ignore.
   //
   //   1. Downstream of the Authority branch of a Switch Has Authority.
-  //   2. Downstream of a custom event named as a server RPC. A real project had
-  //      CE_Server_FinishedCutscene casting to its GameMode, which is entirely correct and was
-  //      reported as a bug until this existed.
+  //   2. Downstream of a custom event the engine says executes on the server - `runsOn: "server"`,
+  //      read from the event's own function flags.
+  //   3. Downstream of a custom event NAMED as a server RPC, which is what (2) used to be on its
+  //      own. Kept, because a plugin binary older than the runsOn field emits no such field and
+  //      falling back to the name is better than falling back to nothing.
+  //
+  // (2) exists because (3) only ever caught events whose authors happened to say "Server" in the
+  // name. Measured on a real project: of thirteen flagged cast sites, four were on chains rooted at
+  // KillPlayer, SpawnPlayer, AddPlayerToList and CE_Server_RequestPurchase - all four "Executes On
+  // Server", and only the last one spelled it. The other three were reported as the audit's most
+  // expensive defect, at 100 points each, for code that is correct.
   const serverGuarded = new Set<string>();
   const markDownstream = (start: MpNode, pin?: RegExp) => {
     const queue = execTargets(start, pin);
@@ -440,7 +455,7 @@ export function findServerOnlyCasts(
   for (const node of nodes) {
     if (/Switch Has Authority|SwitchHasAuthority/i.test(node.title ?? "")) {
       markDownstream(node, /^authority$/i);
-    } else if (isCustomEvent(node) && SERVER_EVENT.test(node.title ?? "")) {
+    } else if (isCustomEvent(node) && (node.runsOn === "server" || SERVER_EVENT.test(node.title ?? ""))) {
       markDownstream(node);
     }
   }

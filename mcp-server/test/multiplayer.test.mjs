@@ -449,3 +449,69 @@ test("every file that reads a cast title uses the one parser", async () => {
     );
   }
 });
+
+test("a cast under a server-only custom event is not a finding, whatever the event is called", () => {
+  // The naming heuristic only ever caught events whose author wrote "Server" in the name. Measured
+  // on a real project, four of thirteen flagged cast sites were rooted at KillPlayer, SpawnPlayer,
+  // AddPlayerToList and CE_Server_RequestPurchase - all four "Executes On Server", and only the last
+  // spelled it. The other three were reported as the audit's most expensive defect for correct code.
+  const nodes = [
+    {
+      id: "ev",
+      type: "K2Node_CustomEvent",
+      title: "KillPlayer",
+      runsOn: "server",
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "cast", pin: "execute" }] }],
+    },
+    {
+      id: "cast",
+      type: "K2Node_DynamicCast",
+      title: "Cast To GM_Gameplay",
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] }],
+    },
+  ];
+
+  const found = findServerOnlyCasts(nodes, (name) => name === "GM_Gameplay", false);
+  assert.deepEqual(found, [], "a server-only chain cannot fail a GameMode cast");
+});
+
+test("the same cast under a multicast event IS a finding", () => {
+  // Executes On All means every client runs it, and on every client the GameMode is null.
+  const nodes = [
+    {
+      id: "ev",
+      type: "K2Node_CustomEvent",
+      title: "KillPlayerMC",
+      runsOn: "all",
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "cast", pin: "execute" }] }],
+    },
+    {
+      id: "cast",
+      type: "K2Node_DynamicCast",
+      title: "Cast To GM_Gameplay",
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] }],
+    },
+  ];
+
+  const found = findServerOnlyCasts(nodes, (name) => name === "GM_Gameplay", false);
+  assert.equal(found.length, 1, "a chain that runs on clients still fails there");
+});
+
+test("an older plugin sends no runsOn, and the name heuristic still carries it", () => {
+  const nodes = [
+    {
+      id: "ev",
+      type: "K2Node_CustomEvent",
+      title: "CE_Server_RequestPurchase",
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "cast", pin: "execute" }] }],
+    },
+    {
+      id: "cast",
+      type: "K2Node_DynamicCast",
+      title: "Cast To GM_Gameplay",
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] }],
+    },
+  ];
+
+  assert.deepEqual(findServerOnlyCasts(nodes, (n) => n === "GM_Gameplay", false), []);
+});

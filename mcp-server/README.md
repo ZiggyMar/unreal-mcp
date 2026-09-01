@@ -8522,3 +8522,60 @@ still truncates, and now says so with a denominator.
 Three sections in a row on the same shape: a count with no denominator. `blueprintsScanned: 182` in a
 project of 339, `hitCount: 0` with no breadth, and now `blueprintsScanned: 150` of 339. Each one read
 as an answer and was a fraction of one.
+
+### The most expensive check could not tell a Server RPC from a name
+
+With the audit finally covering the whole project, the obvious next question is whether its findings
+are *right*. Start where it costs most: `cast-to-server-only-class`, 100 points each, twelve of them.
+
+The finding is sound in principle — a GameMode is null on clients, so a cast to one fails there and
+every node after it never runs. It is only a defect if the cast is **reached** on a client, and the
+first one checked is not. `BP_Player`:
+
+```
+KillPlayer -> Do Once -> KillPlayerMC -> ... -> KillPlayerClient -> Cast To GM_Gameplay -> SpawnSpectator
+KillPlayerMC -> Set isAlive -> Set isDead -> Set Simulate Physics -> Set Collision Enabled
+```
+
+Two chains. The one carrying the cast starts at `KillPlayer`, whose full node detail reads
+**"RELIABLE Replicated From Client, Executes On Server"** — a Server RPC, running only where the
+GameMode exists. The multicast beside it, `KillPlayerMC`, *"Executes On All"*, carries no cast at all.
+Correct code, scored as the worst defect in the audit.
+
+The check already tried to catch this. It looks for two server guards — downstream of a
+`Switch Has Authority`, and downstream of *"a custom event named as a server RPC"* — and the second
+one is the problem, because it keys on the **name**:
+
+```ts
+const SERVER_EVENT = /(^|_)(server|sv)[_\s]/i;
+```
+
+`KillPlayer`, `SpawnPlayer` and `AddPlayerToList` are all Server RPCs. None of them says so in its
+name. A heuristic that only catches authors who wrote "Server" in the title is a heuristic that
+misses the ones who did not.
+
+The engine knows without being asked. `UK2Node_CustomEvent::FunctionFlags` carries `FUNC_NetServer`,
+`FUNC_NetMulticast` and `FUNC_NetClient`, so the graph summary now emits `runsOn` for replicated
+events — and only for those, so an ordinary custom event costs nothing. The check prefers it and
+keeps the name heuristic underneath, because a plugin binary older than the field sends no field and
+falling back to a name beats falling back to nothing.
+
+**And the correction, which is the part worth reading.** From counting cast *sites* — four of thirteen
+on server-only chains — I expected roughly 31% of this check to be noise. Measured, it removed **one
+finding of twelve**:
+
+| | before | after |
+|---|---|---|
+| `cast-to-server-only-class` | 12 | **11** |
+| project findings | 859 | **858** |
+| `BP_Player` cost | 1060 | **960** |
+
+The audit reports one finding per Blueprint, not per cast node. `PC_Gameplay` has five cast sites,
+three of them server-rooted, and it stays on the list — correctly, because the other two are not.
+`BP_Player` was the only Blueprint whose casts were *all* on server-only chains, and it is the only
+one that left.
+
+So: 8%, not 31%, and the difference is entirely that I counted the wrong unit before measuring. The
+fix is still right — `BP_Player` is the project's most-used Blueprint and was carrying a 100-point
+finding for correct code, which inflated its rank in `worstBlueprints` as well as its score. But the
+number I would have reported without re-measuring would have been four times the truth.

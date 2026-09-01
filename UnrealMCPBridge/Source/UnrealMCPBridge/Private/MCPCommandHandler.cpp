@@ -1732,6 +1732,39 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		NodeEntry->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 		NodeEntry->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
 
+		// Where a custom event actually RUNS, on the one node kind where it is not guessable.
+		//
+		// A Server RPC and a Multicast are both K2Node_CustomEvent with an ordinary title - the
+		// summary said "KillPlayer" for an event whose full detail reads "Replicated From Client,
+		// Executes On Server". Nothing downstream could tell the two apart, and one of them changes
+		// what every node after it means.
+		//
+		// It cost real accuracy. The audit's most expensive check, cast-to-server-only-class at 100
+		// points each, flags a cast to a GameMode because a GameMode is null on clients. That is only
+		// a defect if the cast is REACHED on a client, and a chain rooted at a server-only event
+		// never is. Measured across the flagged sites on a real project, four of thirteen were on
+		// exactly such a chain: correct code, scored as the worst defect in the audit, dragging its
+		// Blueprint up the worstBlueprints ranking with it.
+		//
+		// Emitted only when the event is actually replicated, so an ordinary custom event - the
+		// common case - costs nothing.
+		if (const UK2Node_CustomEvent* CustomEvent = Cast<UK2Node_CustomEvent>(Node))
+		{
+			const uint32 Flags = CustomEvent->FunctionFlags;
+			if (Flags & FUNC_NetServer)
+			{
+				NodeEntry->SetStringField(TEXT("runsOn"), TEXT("server"));
+			}
+			else if (Flags & FUNC_NetMulticast)
+			{
+				NodeEntry->SetStringField(TEXT("runsOn"), TEXT("all"));
+			}
+			else if (Flags & FUNC_NetClient)
+			{
+				NodeEntry->SetStringField(TEXT("runsOn"), TEXT("owningClient"));
+			}
+		}
+
 		// Compact pin connection summary: for each pin, who it connects to (node index + pin name).
 		TArray<TSharedPtr<FJsonValue>> PinArray;
 		for (UEdGraphPin* Pin : Node->Pins)
