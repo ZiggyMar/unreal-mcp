@@ -6918,6 +6918,17 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	FARFilter Filter;
 	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	// bRecursiveClasses, or this scan is blind to a third of the project.
+	//
+	// A Widget Blueprint is a UWidgetBlueprint and an Animation Blueprint is a UAnimBlueprint - both
+	// SUBCLASSES of UBlueprint. Without this the filter matches only assets whose class is exactly
+	// UBlueprint, so every widget and every anim graph in the project is silently absent from the
+	// search. On a real project that was 182 Blueprints scanned out of 339, and the reply said
+	// "Declared and never used at all" about a variable it had not looked for in 88 UI Blueprints.
+	//
+	// The index and list_blueprints already set this. Three whole-project scans did not, which is why
+	// they disagreed with the tool everybody checks against.
+	Filter.bRecursiveClasses = true;
 	Filter.PackagePaths.Add(FName(*PathPrefix));
 	Filter.bRecursivePaths = true;
 
@@ -7274,6 +7285,17 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindBrokenNames(const TSharedP
 	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	FARFilter Filter;
 	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	// bRecursiveClasses, or this scan is blind to a third of the project.
+	//
+	// A Widget Blueprint is a UWidgetBlueprint and an Animation Blueprint is a UAnimBlueprint - both
+	// SUBCLASSES of UBlueprint. Without this the filter matches only assets whose class is exactly
+	// UBlueprint, so every widget and every anim graph in the project is silently absent from the
+	// search. On a real project that was 182 Blueprints scanned out of 339, and the reply said
+	// "Declared and never used at all" about a variable it had not looked for in 88 UI Blueprints.
+	//
+	// The index and list_blueprints already set this. Three whole-project scans did not, which is why
+	// they disagreed with the tool everybody checks against.
+	Filter.bRecursiveClasses = true;
 	Filter.PackagePaths.Add(FName(*PathPrefix));
 	Filter.bRecursivePaths = true;
 
@@ -7496,6 +7518,17 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceVariable(const TSharedPtr
 	FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	FARFilter Filter;
 	Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	// bRecursiveClasses, or this scan is blind to a third of the project.
+	//
+	// A Widget Blueprint is a UWidgetBlueprint and an Animation Blueprint is a UAnimBlueprint - both
+	// SUBCLASSES of UBlueprint. Without this the filter matches only assets whose class is exactly
+	// UBlueprint, so every widget and every anim graph in the project is silently absent from the
+	// search. On a real project that was 182 Blueprints scanned out of 339, and the reply said
+	// "Declared and never used at all" about a variable it had not looked for in 88 UI Blueprints.
+	//
+	// The index and list_blueprints already set this. Three whole-project scans did not, which is why
+	// they disagreed with the tool everybody checks against.
+	Filter.bRecursiveClasses = true;
 	Filter.PackagePaths.Add(FName(*PathPrefix));
 	Filter.bRecursivePaths = true;
 

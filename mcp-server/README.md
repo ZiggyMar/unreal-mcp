@@ -8361,3 +8361,59 @@ The ten phantoms went with it, and the log line explaining why fired exactly onc
 index then reported the asset as present, which is what a working index would do for an asset that
 was genuinely still there. Each defect made the other look like correct behaviour, and the only thing
 that separated them was counting the actual assets in the actual project.
+
+### Three project-wide searches were blind to a third of the project
+
+A throwaway check of whether the index tracks content edits — add a variable, then trace it —
+answered yes, and printed a number beside it that did not belong:
+
+```
+trace_variable: { "blueprintsScanned": 182, ... "verdict": "Declared and never used at all" }
+```
+
+182, in a project with **339** Blueprints. A whole-project search that looked at half the project and
+then delivered a verdict about the other half.
+
+The cause is one missing line, and the diff against the code that gets it right makes it obvious:
+
+```cpp
+// MCPProjectIndex.cpp, and list_blueprints - correct
+Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+Filter.bRecursiveClasses = true;
+
+// trace_variable, trace_function_calls, find_broken_names - not
+Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+Filter.bRecursivePaths = true;
+```
+
+A Widget Blueprint is a `UWidgetBlueprint` and an Animation Blueprint is a `UAnimBlueprint`, both
+**subclasses** of `UBlueprint`. Without `bRecursiveClasses` the filter matches only assets whose class
+is exactly `UBlueprint`, so every widget and every anim graph is absent from the search. This project
+keeps 88 Blueprints under `/UI` alone.
+
+So the three tools a model reaches for to answer *"where is this used"*, *"who calls this"* and
+*"what is broken"* had never once looked at the user interface. And none of them said so — the reply
+carried a scanned count and a confident verdict, and the count was the only clue.
+
+Fixed, on the same project:
+
+| | before | after |
+|---|---|---|
+| `trace_variable` scanned | 182 | **340** |
+| `trace_function_calls` scanned | 182 | **340** |
+
+The count is the cheap proof. This is the one that matters — a variable declared in a Widget
+Blueprint, asked for by name:
+
+```
+declaredIn: BP_DamagingArea, BP_HealingArea, WB_SpectatorHUD
+```
+
+`WB_SpectatorHUD` is a `UserWidget`. Before the fix it was not merely missing from that list; it was
+never a candidate, and the answer looked complete.
+
+**Worth noting how it was found.** Not by an audit of the filters, and not by anyone reporting a wrong
+answer — a variable reported as unused looks exactly like a variable that is unused. It came out of a
+number printed next to an answer nobody was checking, in a probe written to test something else
+entirely. `blueprintsScanned` exists so a caller can tell breadth from emptiness, and it earned its
+place here by contradicting the tool beside it.
