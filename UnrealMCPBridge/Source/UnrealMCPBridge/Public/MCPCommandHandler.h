@@ -115,6 +115,7 @@ private:
 	/** Rename a component through the SCS, so the graphs that reference it follow. */
 	static TSharedRef<FJsonObject> HandleRenameComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateAsset(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleSetVariableType(const TSharedPtr<FJsonObject>& Params);
 	/** Remove a component, promoting its children rather than deleting them silently. */
 	static TSharedRef<FJsonObject> HandleRemoveComponent(const TSharedPtr<FJsonObject>& Params);
 	/** Remove a function graph, refusing while anything still calls it unless forced. */

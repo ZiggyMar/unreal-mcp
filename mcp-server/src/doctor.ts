@@ -124,6 +124,9 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     // `assetClass` before it looks for a factory, so the reply tells "this command does not exist"
     // apart from "you did not give it a class".
     { cmd: "create_asset", feature: "creating any asset the New Asset menu can create" },
+    // Safe to probe: it refuses a request with no path/variableName/type before it touches the
+    // Blueprint, so the reply separates "this command does not exist" from "you gave it nothing".
+    { cmd: "set_variable_type", feature: "changing a variable's type without losing the nodes that use it" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 

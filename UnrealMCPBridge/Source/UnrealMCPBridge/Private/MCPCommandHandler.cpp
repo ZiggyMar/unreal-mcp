@@ -1247,6 +1247,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleCreateAsset(Params);
 	}
+	else if (Cmd == TEXT("set_variable_type"))
+	{
+		Response = HandleSetVariableType(Params);
+	}
 	else if (Cmd == TEXT("remove_component"))
 	{
 		Response = HandleRemoveComponent(Params);
@@ -1734,6 +1738,15 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintNodeDetail(const 
 	Result->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 	Result->SetStringField(TEXT("comment"), Node->NodeComment);
 	Result->SetBoolField(TEXT("enabled"), Node->IsNodeEnabled());
+	// Where the node actually sits.
+	//
+	// Position was invisible to every read in this bridge, and that is not cosmetic: a caller adding a
+	// node to an existing graph had no way to find out where the nodes it connects to are, so new
+	// nodes landed at the origin and their wires crossed the entire canvas. On an 809-node graph that
+	// turns someone's tidy Blueprint into spaghetti, which is a real cost paid by the person who has
+	// to read it afterwards - reported by exactly that happening.
+	Result->SetNumberField(TEXT("x"), Node->NodePosX);
+	Result->SetNumberField(TEXT("y"), Node->NodePosY);
 
 	TArray<TSharedPtr<FJsonValue>> PinArray;
 	for (UEdGraphPin* Pin : Node->Pins)
@@ -4303,6 +4316,12 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 	// orphaned an existing chain is telling the truth and hiding the important half.
 	TArray<FString> DisplacedReports;
 	int32 ConnectionsMade = 0;
+
+	// Nodes the caller did not position, so they can be placed next to what they connect to once the
+	// connections exist. Without this they are all created at the graph origin, which on a large
+	// existing graph means every new wire crosses the whole canvas - reported by someone opening their
+	// Blueprint and finding spaghetti where a tidy graph had been.
+	TArray<UEdGraphNode*> UnplacedNodes;
 	// Near-miss pin names that were accepted, so the caller learns the real ones instead of being
 	// quietly carried. Silent forgiveness teaches a model nothing and hides real mistakes.
 	TArray<FString> PinCorrections;
@@ -4411,6 +4430,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 					return MakeErrorResponse(FString::Printf(TEXT("internal: created node not found for ref '%s'"), *Ref));
 				}
 				RefMap.Add(Ref, Node);
+				if (!(*SpecObj)->HasField(TEXT("x")) && !(*SpecObj)->HasField(TEXT("y")))
+				{
+					UnplacedNodes.Add(Node);
+				}
 				NodesOut->SetObjectField(Ref, NodeResult);
 			}
 		}
@@ -4597,6 +4620,43 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetObjectField(TEXT("nodes"), NodesOut);
+	// Put the new nodes where their wires are.
+	//
+	// Averaging the neighbours rather than picking one: a node feeding a Set and reading a Get belongs
+	// between them. The offset pushes a pure data node left of the thing it feeds, which is the
+	// direction Blueprint reads, and staggers siblings so they do not stack on one another.
+	int32 Staggered = 0;
+	for (UEdGraphNode* Node : UnplacedNodes)
+	{
+		if (!Node)
+		{
+			continue;
+		}
+		int64 SumX = 0;
+		int64 SumY = 0;
+		int32 Neighbours = 0;
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				if (Linked && Linked->GetOwningNode() && !UnplacedNodes.Contains(Linked->GetOwningNode()))
+				{
+					SumX += Linked->GetOwningNode()->NodePosX;
+					SumY += Linked->GetOwningNode()->NodePosY;
+					++Neighbours;
+				}
+			}
+		}
+		if (Neighbours == 0)
+		{
+			continue;
+		}
+		Node->NodePosX = static_cast<int32>(SumX / Neighbours) - 320;
+		Node->NodePosY = static_cast<int32>(SumY / Neighbours) + Staggered * 90;
+		++Staggered;
+	}
+	Result->SetNumberField(TEXT("nodesPlacedNearTheirConnections"), Staggered);
+
 	Result->SetNumberField(TEXT("connectionsMade"), ConnectionsMade);
 	if (DisplacedReports.Num() > 0)
 	{

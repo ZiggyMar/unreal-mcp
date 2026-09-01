@@ -114,6 +114,74 @@ namespace
 	}
 }
 
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetVariableType(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Path, Name, NewType;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("variableName"), Name) || Name.IsEmpty() ||
+		!Params->TryGetStringField(TEXT("type"), NewType) || NewType.IsEmpty())
+	{
+		return FailVar(Result, TEXT("missing_param"), TEXT("path, variableName and type are all required."));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return FailVar(Result, TEXT("blueprint_not_found"), LoadError);
+	}
+
+	if (!DeclaresVariable(Blueprint, FName(*Name)))
+	{
+		return FailVar(Result, TEXT("variable_not_found"),
+			FString::Printf(TEXT("This Blueprint declares no variable called \"%s\". Inherited variables cannot be ")
+				TEXT("retyped here - retype them where they are declared."), *Name));
+	}
+
+	FEdGraphPinType NewPinType;
+	FString TypeError;
+	if (!ResolvePinType(NewType, NewPinType, TypeError))
+	{
+		return FailVar(Result, TEXT("bad_type"), TypeError);
+	}
+
+	// What it was, so the reply can say what changed rather than just that something did.
+	FString OldType;
+	for (const FBPVariableDescription& Desc : Blueprint->NewVariables)
+	{
+		if (Desc.VarName == FName(*Name))
+		{
+			OldType = Desc.VarType.PinCategory.ToString();
+			if (Desc.VarType.ContainerType != EPinContainerType::None)
+			{
+				OldType += TEXT(" (container)");
+			}
+			break;
+		}
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPSetVariableType", "MCP: Change Variable Type"));
+	Blueprint->Modify();
+
+	// The engine does the work, including breaking pin links that no longer make sense. Doing it by
+	// hand on NewVariables would change the descriptor and leave every Get and Set node still typed
+	// the old way - the same half-rename this file's rename command exists to avoid.
+	FBlueprintEditorUtils::ChangeMemberVariableType(Blueprint, FName(*Name), NewPinType);
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	Result->SetStringField(TEXT("variable"), Name);
+	Result->SetStringField(TEXT("from"), OldType);
+	Result->SetStringField(TEXT("to"), NewType);
+	// Said plainly because it is the whole risk of this command: a retype can leave nodes that were
+	// valid before wired to a pin that no longer accepts them, and the compiler is what reports it.
+	Result->SetStringField(TEXT("next"),
+		TEXT("Compile this Blueprint and check the result. Changing a type breaks connections that no ")
+		TEXT("longer typecheck, and those breaks are reported by the compiler rather than by this call."));
+	return MCPResponse::Ok(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameVariable(const TSharedPtr<FJsonObject>& Params)
 {
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();

@@ -554,7 +554,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -4611,6 +4611,47 @@ register(
         // through is correct. See the note on read_class_defaults.
         ...(Array.isArray(result.fields) ? { fields: result.fields.map(compactStructField) } : {}),
       });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_set_variable_type",
+  {
+    title: "Change a variable's type",
+    description:
+      "Retypes an existing member variable, rebinding it through the engine so every Get and Set node moves with " +
+      "it. Something a person does constantly in the editor and this server could not do at all: the only way to " +
+      "change a type was to remove the variable and add it back, which breaks every node that read it.\n\n" +
+      "Reach for it when a variable is the wrong type rather than the wrong name - a map with no value type, an " +
+      "int that should be a float, a string that should be an enum. Takes the same type descriptors as " +
+      "unreal_add_variable, containers included.\n\n" +
+      "A retype BREAKS connections that no longer typecheck, and the engine reports those from the compiler " +
+      "rather than from this call, so it compiles for you and returns what the compiler said. Inherited variables " +
+      "are refused: retype them where they are declared.",
+    inputSchema: {
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
+      variableName: z.string().describe("The variable to retype. Must be declared on this Blueprint, not inherited."),
+      type: z
+        .string()
+        .describe('The new type, same descriptors as unreal_add_variable: "float", "object:Actor", "name[]", "map<string,int>".'),
+      compile: z.boolean().optional().describe("Compile afterwards and report what broke. Default true."),
+    },
+  },
+  async ({ path, variableName, type, compile }) => {
+    try {
+      const result = (await bridge.send("set_variable_type", {
+        path,
+        variableName,
+        type: normaliseEngineType(type),
+      })) as Record<string, unknown>;
+      // Compiled here rather than left to the caller, because a retype's damage shows up only at
+      // compile time: pins that no longer typecheck are silently broken until something asks.
+      if (compile === false) return jsonResult(result);
+      const compiled = (await bridge.send("compile_blueprint", { path })) as Record<string, unknown>;
+      return jsonResult({ ...result, compiled });
     } catch (err) {
       return errorResult(err);
     }

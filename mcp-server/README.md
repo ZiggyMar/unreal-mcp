@@ -187,11 +187,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2008 | four tools; hand it a sentence or a preset name |
+| `search` | 2009 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
-| `core` | 12782 | the authoring spine |
-| `lazy` | 12795 | `core` plus deferred groups |
-| `full` | 39307 | everything, for a model that can afford it |
+| `core` | 12783 | the authoring spine |
+| `lazy` | 12796 | `core` plus deferred groups |
+| `full` | 39697 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -408,6 +408,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
+| `unreal_set_variable_type` | `set_variable_type` | Retype an existing member variable, rebinding every Get and Set node through the engine. Compiles afterwards and reports what the retype broke. |
 | `unreal_create_asset` | `create_asset` | Create any asset type the editor's New Asset menu can create — InputAction, InputMappingContext, Blackboard, BehaviorTree, SoundCue, CurveFloat, LevelSequence, NiagaraSystem, DataAsset. Refuses the eight types with a dedicated tool, and refuses to overwrite. |
 | `unreal_create_enum` | `create_enum` | Create a user-defined Enum with named entries. |
 | `unreal_list_enum_entries` | `list_enum_entries` | Read an Enum's entries. Works on engine enums too, for looking up exact value spellings. |
@@ -6165,6 +6166,29 @@ function catalogue, so `"Array Length"` returns zero hits and `"DoN"` returns un
 array and macro nodes are not functions. A model looking for the Length node has no way to find it
 from here. Recorded rather than fixed: the catalogue is the right place for the fix, and it is a
 larger change than this section's other findings.
+
+### Nodes that land where their wires are
+
+Someone opened `BP_Player` after this server edited it and found spaghetti: wires crossing the whole
+canvas. That was real, and it was this tool's fault twice over.
+
+`unreal_build_graph` deliberately skips auto-layout on a large existing graph — rearranging someone's
+Blueprint because you added three nodes to it is worse than the mess it prevents. But it then created
+those nodes at the **graph origin**. `Set PlayerName` was at `(960, -3024)`; the nodes feeding it were
+at `(0, 0)`.
+
+The reason it could not do better is the second half: **node position was invisible to every read in
+this bridge.** `read_node_detail` returned id, type, title, comment, pins — and no `x`/`y`. A caller
+could not find out where the nodes it was connecting to were, so it could not place anything sensibly,
+and neither could a model driving it.
+
+Both halves are fixed. Reads report position, and `build_graph` places any node the caller did not
+position next to the ones it ends up connected to — averaged over its neighbours, offset to the left
+because that is the direction Blueprint reads, and staggered so siblings do not stack. It reports
+`nodesPlacedNearTheirConnections` so the caller can see it happened.
+
+The rule this encodes: **an edit should be as small on the canvas as it is in the graph.** A tool that
+leaves a Blueprint harder to read has not finished the job, however well the logic compiles.
 
 ### The numbers a model reads are guarded too
 
