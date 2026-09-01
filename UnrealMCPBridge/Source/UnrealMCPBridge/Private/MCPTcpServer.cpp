@@ -399,9 +399,43 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 	// Clients while this loop was iterating and removing from it. That is a plain data race on a
 	// TArray: a reallocation on the listener thread while the game thread holds an element reference
 	// is a crash, and an intermittent one, which is the worst kind to be handed by a bug report.
+	//
+	// Reap before adopting, and never give a slot to a corpse.
+	//
+	// Every reaping rule below - dead socket, peer closed, idle too long - is correct, and none of
+	// them can run while the game thread is blocked, because they all live in Tick and Tick is
+	// exactly what a modal dialog stops. So an open dialog does not merely pause the bridge. Each
+	// client retry is still accepted on the listener thread and parked in PendingClients, and on the
+	// first tick after the block this queue drains OLDEST FIRST: the slots go to sockets whose
+	// clients gave up minutes ago, and the caller actually waiting is told "too_many_connections".
+	// That is a second failure wearing a cause unrelated to the first, and it is the one the reader
+	// sees, because the real cause has already been dismissed by then.
+	//
+	// Seen end to end once, which was enough. An editor sat on a "Restore Packages" prompt while a
+	// client retried every five seconds for seven minutes; closing the prompt unblocked the game
+	// thread, and the very next call was refused for too many connections. One tick later the reap
+	// loop had cleared all of them and the bridge was fine - so nothing here was wrong except when
+	// it ran.
+	//
+	// Arriving first does not entitle a connection to a slot. It has to still be there.
+	for (int32 i = Clients.Num() - 1; i >= 0; --i)
+	{
+		if (!Clients[i]->IsConnected())
+		{
+			Clients.RemoveAt(i);
+		}
+	}
+
 	TSharedPtr<FMCPClientConnection> Adopted;
+	int32 AbandonedPending = 0;
 	while (PendingClients.Dequeue(Adopted))
 	{
+		if (!Adopted->IsConnected())
+		{
+			++AbandonedPending;
+			continue;
+		}
+
 		if (Clients.Num() >= MCPMaxClients)
 		{
 			// Say why, rather than dropping the socket and letting the client guess. A bare close
@@ -419,6 +453,16 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 		Clients.Add(Adopted);
 	}
 	Adopted.Reset();
+
+	if (AbandonedPending > 0)
+	{
+		// Worth a line: it is the only visible trace that the editor was blocked long enough for
+		// clients to give up, and it explains a gap in the command log that otherwise looks like
+		// the bridge lost messages.
+		UE_LOG(LogMCPBridge, Verbose,
+			TEXT("UnrealMCPBridge: discarded %d queued connection(s) whose clients had already gone away."),
+			AbandonedPending);
+	}
 
 	const double Now = FPlatformTime::Seconds();
 

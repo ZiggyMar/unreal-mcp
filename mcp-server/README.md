@@ -7285,3 +7285,81 @@ builds in nine seconds, and Live Coding compiles rather than cancelling instantl
 What remains true and useful is the narrow part: `compile_cpp` cannot run while Live Coding holds the
 compiler, it now says so instead of blaming the file, and it names `hot_reload_cpp` as the tool that
 works with an editor open. What was wrong was the sweeping conclusion drawn from it.
+
+### The dialog that blocks the bridge before it ever answers
+
+An editor was restarted and then answered nothing for twelve minutes. The log ended cleanly on
+`LogInit: Display: Engine is initialized`, the plugin had logged `listening on 127.0.0.1:8765`, and
+the socket connected. Every visible sign said the bridge was up.
+
+It was up. The game thread was blocked by **"Restore Packages"** — the crash-recovery prompt, which
+appears at startup after any unclean shutdown. For an editor an agent drives, that means after every
+kill, which is to say routinely. It blocks before the first command is served, so the bridge does not
+look blocked; it looks dead.
+
+The existing detector named it correctly on the first try. The message it produced was right and I
+misread my own truncated copy of it, which is worth recording because the tool was not the problem
+twice over — it also cost the time spent looking for a second cause.
+
+Two things came out of it.
+
+**The engine already has a switch for this.** `FPackageAutoSaver` reads
+`-AutoDeclinePackageRecovery` into `bAutoDeclineRecovery` and treats it as the user declining:
+
+```cpp
+// PackageAutoSaver.cpp
+, bAutoDeclineRecovery(FParse::Param(FCommandLine::Get(), TEXT("AutoDeclinePackageRecovery")))
+...
+if (HasPackagesToRestore() && !bAutoDeclineRecovery && !FApp::IsUnattended())
+```
+
+So nothing needs suppressing that the engine did not already offer to suppress — the same shape as
+`.ubtignore` for UnrealBuildTool and `GIsRunningUnattendedScript` for the Blueprint error dialog.
+Launch an agent-driven editor with it. `verify-restart.mjs` now passes it and had the strongest claim
+on it of anything here: that script kills the editor and starts it again, so it *creates* the unclean
+shutdown, and was liable to fail its own verification on a dialog it had caused.
+
+The classifier tells this prompt apart from any other dialog for one reason: every other blocking
+dialog needs a human to click it, and this one needs a command-line flag once. Advice that ends in
+"someone has to dismiss this" is a dead end for a model working alone, and this case has an exit.
+
+### Reaping that only runs after the thing it was written to survive
+
+Dismissing the prompt unblocked the editor, and the very next call was refused:
+
+```
+too_many_connections — the bridge is already holding its maximum concurrent connections
+```
+
+Nothing had leaked. One tick later the bridge was fine. The refusal was a *second* failure, produced
+by the first, arriving after the first was already fixed — which is the version that misleads,
+because the cause is gone by the time you read the effect.
+
+`Tick` did two things in an order that only mattered here: adopt queued connections, then reap dead
+ones. Both live on the game thread, so a modal stops both. Meanwhile the listener thread keeps
+accepting — that is its job, and it is on its own thread precisely so a busy game thread cannot
+refuse connections. Seven minutes of a client retrying every five seconds parked eighty-odd sockets
+in the queue. On the first tick after the block, the queue drained **oldest first**, all thirty-two
+slots went to sockets whose clients had given up minutes earlier, and the one caller actually waiting
+was refused.
+
+Every reaping rule was correct. Dead socket, peer closed, orderly close, idle too long — all of them
+right, all of them downstream of the block. Which is the same shape as the guidance branch two
+sections up: good logic sitting behind the thing that is broken, and therefore not running when it is
+the only thing that would have helped.
+
+The fix is ordering, not policy. Reap before adopting, and never spend a slot on a connection that is
+already dead:
+
+```cpp
+if (!Adopted->IsConnected()) { ++AbandonedPending; continue; }
+if (Clients.Num() >= MCPMaxClients) { /* refuse */ }
+```
+
+Arriving first does not entitle a connection to a slot. It has to still be there.
+
+Worth stating what settled it, because the wrong fix was available and plausible. The first guess was
+that dead sockets are simply undetectable and the queue needed an age limit — which would have meant
+picking a timeout, and picking it wrong for any client more patient than the default. One retry of
+the same ping, nine milliseconds, showed the reap loop clearing all thirty-two on its own on the very
+next tick. `IsConnected()` works. The bug was never detection.

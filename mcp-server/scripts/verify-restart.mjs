@@ -57,7 +57,22 @@ function killEditor() {
 }
 
 function startEditor() {
-  const child = spawn(editorPath, [projectPath, "-log"], { detached: true, stdio: "ignore" });
+  // -AutoDeclinePackageRecovery is not optional here, and the reason is specific to this script.
+  //
+  // It kills the editor and starts it again, which is by definition an unclean shutdown, so the
+  // next startup offers to restore the packages that were dirty at the time. That prompt is modal:
+  // it blocks the game thread BEFORE the bridge serves its first command, so this script sits
+  // waiting for a connection that will never be answered and reports the restart as failed. The
+  // verification would fail on a dialog it opened itself.
+  //
+  // The switch is the engine's own - FPackageAutoSaver reads it as bAutoDeclineRecovery and treats
+  // it as the user declining - so nothing is being suppressed that the engine did not offer to
+  // suppress. Declining is also the right answer here: the packages this script is about to discard
+  // are ones it just killed the editor to discard.
+  const child = spawn(editorPath, [projectPath, "-log", "-AutoDeclinePackageRecovery"], {
+    detached: true,
+    stdio: "ignore",
+  });
   child.unref();
 }
 

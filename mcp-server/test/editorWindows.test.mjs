@@ -32,3 +32,26 @@ test("a PIE window wins over a dialog title in the same list", () => {
   const found = classifyEditorWindows(["Some Window", "AVS Preview [NetMode: Standalone]"]);
   assert.equal(found.kind, "pie");
 });
+
+test("the crash-recovery prompt is told apart from any other dialog", () => {
+  // Observed exactly as written: an editor killed mid-session came back with only this window
+  // enabled, the bridge listening and answering nothing, and the log ending cleanly at
+  // "Engine is initialized". It reads as a dead bridge and is a blocked one.
+  const found = classifyEditorWindows(["Restore Packages"]);
+  assert.equal(found.kind, "recovery");
+  assert.equal(found.title, "Restore Packages");
+});
+
+test("a genuine dialog is still a dialog, and PIE still outranks both", () => {
+  assert.equal(classifyEditorWindows(["Message"]).kind, "dialog");
+  assert.equal(classifyEditorWindows(["Blueprint Compilation Errors"]).kind, "dialog");
+  // A recovery prompt behind a running game is not what stopped the game thread; the game is.
+  assert.equal(
+    classifyEditorWindows(["Restore Packages", "AVS Preview [NetMode: Client 1]"]).kind,
+    "pie"
+  );
+});
+
+test("the ordinary editor window alone means nothing is in the way", () => {
+  assert.equal(classifyEditorWindows(["AntiVirusSquad - Unreal Editor"]), null);
+});

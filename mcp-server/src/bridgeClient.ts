@@ -230,7 +230,7 @@ export function expandPathParams(params: Record<string, unknown> | undefined): R
  */
 /** What has the editor's window, when it is not the editor itself. */
 export interface ForegroundWindow {
-  kind: "pie" | "dialog";
+  kind: "pie" | "dialog" | "recovery";
   title: string;
 }
 
@@ -253,6 +253,14 @@ export function classifyEditorWindows(titles: string[]): ForegroundWindow | null
   const pie = foreign.find((t) => /\[NetMode:|\bPreview\b/.test(t));
   if (pie) {
     return { kind: "pie", title: pie };
+  }
+  // The crash-recovery prompt, separated from "some dialog" because it is the one blocking dialog
+  // with a permanent fix rather than a click. It appears at startup after any unclean shutdown -
+  // which for an agent-driven editor means after every kill - and it blocks the game thread before
+  // the first command is ever served, so the bridge looks dead rather than blocked.
+  const recovery = foreign.find((t) => /^Restore Packages$/i.test(t));
+  if (recovery) {
+    return { kind: "recovery", title: recovery };
   }
   return foreign.length > 0 ? { kind: "dialog", title: foreign[0] } : null;
 }
@@ -394,10 +402,16 @@ export class UnrealBridgeClient {
                   `running it, and a heavy read can exceed this timeout. Nothing is blocked and nothing needs ` +
                   `clicking. The runtime tools - pie_actors, watch_runtime, press_input, verify_runtime - are ` +
                   `built to work during PIE; heavy whole-Blueprint reads are better done after unreal_stop_pie.\n`
-                : dialogTitle
-                  ? `  - A modal dialog titled "${dialogTitle.title}" IS OPEN in the editor right now. That is almost ` +
-                    `certainly the whole answer: it halts the game thread until a human clicks it.\n`
-                  : `  - A modal dialog open in the editor, which halts the game thread until a human clicks it.\n`) +
+                : dialogTitle?.kind === "recovery"
+                  ? `  - THE CRASH-RECOVERY PROMPT ("Restore Packages") IS OPEN. That is the whole answer. It ` +
+                    `appears at startup after any unclean shutdown, and it blocks the game thread before the first ` +
+                    `command is served, so the bridge looks dead rather than blocked. Someone has to dismiss this ` +
+                    `one, but it never needs to happen again: launch the editor with -AutoDeclinePackageRecovery, ` +
+                    `the engine's own switch for exactly this, and it is declined automatically from then on.\n`
+                  : dialogTitle
+                    ? `  - A modal dialog titled "${dialogTitle.title}" IS OPEN in the editor right now. That is almost ` +
+                      `certainly the whole answer: it halts the game thread until a human clicks it.\n`
+                    : `  - A modal dialog open in the editor, which halts the game thread until a human clicks it.\n`) +
               `  - The editor mid-PIE-transition. Call unreal_pie_status once the editor is responsive again.\n` +
               `IMPORTANT: a timeout is not a rollback. The operation may have completed, so read the current state ` +
               `(unreal_read_blueprint_summary, unreal_list_components, ...) before retrying a write, or you may apply it twice.`
