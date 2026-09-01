@@ -6408,6 +6408,45 @@ reproducible on demand rather than by asking someone to go and play.
 moving only the server's leaves the client's behind — which looks exactly like the desync you were
 investigating, except self-inflicted.
 
+### The first time the tooling caught its own bad fix
+
+The rubber-band fix was attempted a second time, properly this time: replicate the *inputs* to the
+drag — the list of who is vacuuming, which changes rarely — and let every machine compute the
+per-frame pull from those actors' live positions. That avoids what broke the first attempt, where a
+per-frame vector arrived at the network rate and the force flickered.
+
+The replication worked. Measured mid-drag, the client's own pawn now had the list:
+
+```text
+VacuumingPlayers  Authority  changed=true   BP_Player_C_3=("/Game/AntiViru...
+VacuumingPlayers  Client0    changed=true   BP_Player_C_2=("/Game/AntiViru...
+```
+
+Then the position check, which is the one that matters:
+
+```text
+before  srv target -4551 | cli target -4551
+during  srv target -4551 | cli target -4551
+```
+
+Nothing moved, on either side. The drag had stopped working altogether — worse than the bug. Some
+other condition on that chain is not true on a client, and the coupling is deeper than the graph
+shows.
+
+It was reverted in the same session and the revert was **verified the same way**: with the original
+wiring back, the target moves `-5427 → -5659` under a six-second pull. The drag works again, proven,
+not assumed.
+
+**That is the whole point of the last several commits.** The first attempt at this fix shipped, broke
+the game, crashed the editor, and was found by the person playing it. The second was caught by the
+tooling in about four minutes, before it left the machine. Nothing about the second attempt was
+smarter — the difference is that `pie_actors`, `teleport_actor` and `press_input` can now stage the
+interaction and watch what happens, so "did this work" is a measurement rather than an argument.
+
+The honest state of that bug: **still unfixed**, twice attempted, mechanism understood and
+reproducible on demand. Two plausible fixes are ruled out by evidence rather than opinion, which is
+worth more than a third guess.
+
 ### The numbers a model reads are guarded too
 
 Three token figures in tool descriptions have gone stale and been caught **by accident** — each one
