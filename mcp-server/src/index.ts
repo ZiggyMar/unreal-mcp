@@ -404,7 +404,7 @@ function buildInstructions(profile: string): string {
     "   not rebuilt: match what is there.",
     // Twenty-five tokens a request against a saving measured in thousands on the first read that
     // would otherwise go unfiltered. Re-measured against the real project, because every one of these
-    // numbers had gone stale: read_class_defaults is 3,237 tokens whole and 218 with `match`;
+    // numbers had gone stale: read_class_defaults is 1,691 tokens whole and 218 with `match`;
     // list_variables is 1,732 and 126; list_data_table_rows is 5,472 and 182 with `fields`.
     //
     // They drifted downward, which is the harmless direction and still wrong. The compaction work -
@@ -414,7 +414,7 @@ function buildInstructions(profile: string): string {
     // Every reply now says so after the fact, which is free but one read too late - this is the only
     // line in the standing text that pays for itself several times over on a single call.
     "   Every large read takes a filter (match, fields, replicatedOnly, direction, limit). Use it:",
-    "   the difference is 3,237 tokens against 218, not a trim.",
+    "   the difference is 1,691 tokens against 218, not a trim.",
     "   Not everything is a Blueprint. If a parentClass is not itself a Blueprint it is native C++,",
     "   and unreal_find_source locates the file and line that declares it - then read and edit it",
     "   with your own file tools. Call unreal_find_source with no symbol to see whether the project",
@@ -1333,7 +1333,7 @@ register(
       "**Read this before reading a graph node by node.** Every entry point and the ordered chain of what it does, " +
       "with each Branch labelled by what it tests - `Branch (Has Authority)`, `Branch (Get Health < Get MaxHealth)`. " +
       "So it is also the first call for \"why did nothing happen\": the first gate that is false is the answer. " +
-      "A 59-node EventGraph costs 2,328 tokens as a node-and-pin structure and 323 here, a seventh; " +
+      "A 56-node EventGraph costs 1,996 tokens as a node-and-pin structure and 337 here, a sixth; " +
       "unreal_read_blueprint_summary caps at 60 nodes, this explains all 809. " +
       "Deliberately lossy - no exact pins or node ids. For those, call " +
       "unreal_read_blueprint_summary on the one chain you are changing.",
@@ -3036,8 +3036,12 @@ register(
         // through leaves the uncompacted original in place.
         ...(properties ? { properties } : {}),
         // The largest saving in the whole surface, and the reply never mentioned it. Measured on
-        // BP_Player: the full read is 3,237 tokens and `match` answers a specific question for 218 -
-        // 93% less. A model asking "does this replicate movement" was paying for 167 properties.
+        // BP_Player: the full read is 1,691 tokens and `match` answers a specific question for 218 -
+        // 87% less. A model asking "does this replicate movement" was paying for 167 properties.
+        //
+        // Only the WHOLE figure moved, from 3,237. The filtered one did not shift by a token, which
+        // is what a compaction across 167 properties does and is a useful check that the drift was
+        // real rather than a measurement taken differently.
         //
         // Only when the reply is actually large and no filter was given, so a targeted call and a
         // small class pay nothing. Same shape as the hint on list_blueprints.

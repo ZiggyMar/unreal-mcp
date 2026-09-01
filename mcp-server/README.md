@@ -204,7 +204,7 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2471 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
-| `core` | 12969 | the authoring spine |
+| `core` | 12968 | the authoring spine |
 | `lazy` | 13276 | `core` plus deferred groups |
 | `full` | 42624 | everything, for a model that can afford it |
 <!-- costs:end -->
@@ -7651,3 +7651,72 @@ reached for, because this session was driving the bridge commands directly rathe
 tools. Bypassing the layer that adds the summaries costs exactly what the summaries were worth. That
 is a hazard for anything driving this from a script, and the reason `unreal_explain_graph`'s
 description now opens by naming the debugging question it answers rather than only its token count.
+
+### The guard that kept its own copy of the number it guarded
+
+`measure:reads` exists to stop quoted token figures going stale, and it opens with a comment
+explaining that the standing instructions once carried numbers that were 30% out. Running it found
+another: `read_class_defaults` is quoted at 3,237 tokens and measures **1,691** — 48% out, in the one
+text a model cannot skip.
+
+Correcting the sentence did not make the guard pass. It kept failing, against its own hardcoded copy:
+
+```js
+const QUOTED = [
+  { label: "read_class_defaults", quoted: 3237, where: "the HOW TO WORK instructions" },
+```
+
+Which is the same defect the guard exists to catch — two places describing one thing, free to drift —
+committed by the guard itself. A check that complains about a number somebody has already fixed is
+worse than no check, because it teaches people to ignore it.
+
+It now reads the figure **out of the server's own text**: the `instructions` from `initialize` plus
+every tool description, the exact bytes a client receives. A pattern that stops matching is also a
+failure, because a reworded sentence is a sentence whose number is no longer checked, and passing
+silently would make the whole thing vacuous.
+
+The same pass corrected a second inaccuracy in that file. It claimed all three of its figures
+appeared "in the standing instructions and tool descriptions". Only one did — `list_variables` and
+`list_data_table_rows` live in source comments. Worth measuring, since a comment that lies costs the
+next reader an afternoon, but they are not what a model reads, and the two are now listed separately
+and truthfully.
+
+### A pair that could only be compared below the cap
+
+Asking the server what it actually advertises turned up four sentences quoting a measured number, and
+one of them was mine from the previous section:
+
+```
+A 59-node EventGraph costs 2,328 tokens as a node-and-pin structure and 323 here, a seventh
+```
+
+Adding branch conditions to `explain_graph` should have moved that. Measured on `BP_Projectile`,
+which at exactly 59 nodes is plainly the graph it was written about: the structure is still **2,328**
+— the quote is exact — and the explanation is **268**, not 323. It got *cheaper* while gaining the
+conditions, because dropping the false "dead logic" list saved more than the conditions cost.
+
+Pointing the guard at that claim then exposed something better. It reported `explain_graph` as **740%
+over**, because it measures against the biggest graph in the project and the claim is about a small
+one. And the comparison is not merely mismatched, it is meaningless above 60 nodes:
+`read_blueprint_summary` **caps at 60**, so on an 819-node graph it returns 60 nodes while
+`explain_graph` returns all 819. Comparing those two numbers rewards the read that answered a
+fraction of the question.
+
+So the guard now picks a second graph — the largest one *under* the cap, deterministically — and
+measures both reads on it, checking both halves of the sentence:
+
+```
+worst graph found: EventGraph, 819 nodes
+comparable graph (under the 60-node structural cap): BP_FlyingEnemy EventGraph, 56 nodes
+  structure (comparable)         1996
+  explain_graph (comparable)      337
+```
+
+And the claim was restated on the graph the guard actually measures, so it stays self-checking rather
+than being a number from a graph nobody will look at again. It reads *a sixth* now instead of *a
+seventh*, which is a smaller boast and a true one.
+
+Three guards caught each other in sequence doing this: `measure:reads` found the stale figure,
+`check:claims` refused the new figures until they were registered, and `check:profiles` caught the
+README cost table one token out. None of them is clever. Each of them is a number that has to agree
+with another number, which is the only kind of documentation that stays true.

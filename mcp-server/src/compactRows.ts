@@ -30,7 +30,7 @@
  * of the cost, and none of their replies mentioned it. Measured on a real Blueprint:
  *
  *   list_variables       1,732 whole     508 replicatedOnly     126 with a match
- *   read_class_defaults  3,237 whole                            218 with a match
+ *   read_class_defaults  1,691 whole                            218 with a match
  *   list_blueprints      2,669 whole   1,932 fields:["path"]
  *
  * One constant rather than three literals, because it is one idea: below this the advice costs more

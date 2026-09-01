@@ -20,6 +20,9 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+// For reading the server's OWN advertised text, so the numbers it quotes are checked against
+// the sentences a model actually receives rather than against a copy kept in this file.
+import { startAndInitialize, listTools } from "./lib/mcpStdio.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const serverPath = join(here, "..", "dist", "index.js");
@@ -123,12 +126,32 @@ const graphCounts = await session(
   blueprints.slice(0, 40).map((b) => ({ tool: "unreal_list_blueprint_graphs", args: { path: b.path } }))
 );
 let biggest = { path: blueprints[0].path, graphName: "EventGraph", nodes: 0 };
+
+// A second, SMALLER graph, and the reason is that one claim cannot be checked without it.
+//
+// unreal_explain_graph's description compares itself against the structural read: "a 59-node
+// EventGraph costs 2,328 tokens as a node-and-pin structure and 268 here". That comparison is only
+// honest below the structural read's 60-node cap. Above it, read_blueprint_summary returns 60 nodes
+// of 819 while explain_graph returns all 819, so the "cheaper" read is the one that answered a
+// fraction of the question - and checking the claim against the biggest graph in the project
+// reported explain_graph as 740% over its quote, comparing a whole-graph explanation with a
+// truncated structure.
+//
+// So the largest graph that still fits under the cap: big enough to be worth measuring, small
+// enough that both reads describe the same thing.
+const STRUCTURAL_NODE_CAP = 60;
+let comparable = null;
+
 for (const r of graphCounts) {
   try {
     const parsed = JSON.parse(r.text);
     for (const g of parsed.graphs ?? []) {
-      if ((g.nodeCount ?? 0) > biggest.nodes) {
-        biggest = { path: parsed.path, graphName: g.name, nodes: g.nodeCount };
+      const nodes = g.nodeCount ?? 0;
+      if (nodes > biggest.nodes) {
+        biggest = { path: parsed.path, graphName: g.name, nodes };
+      }
+      if (nodes <= STRUCTURAL_NODE_CAP && nodes > (comparable?.nodes ?? 0)) {
+        comparable = { path: parsed.path, graphName: g.name, nodes };
       }
     }
   } catch {
@@ -163,6 +186,12 @@ try {
 
 console.log(`measuring reads against ${biggest.path}`);
 console.log(`worst graph found: ${biggest.graphName}, ${biggest.nodes} nodes`);
+if (comparable) {
+  console.log(
+    `comparable graph (under the ${STRUCTURAL_NODE_CAP}-node structural cap): ` +
+      `${comparable.path.split("/").pop()} ${comparable.graphName}, ${comparable.nodes} nodes`
+  );
+}
 console.log("");
 
 // The largest Data Asset in the project, picked the same way the Data Table is: measuring the
@@ -184,6 +213,23 @@ try {
 } catch (err) {
   console.error(`could not pick a Data Asset to measure: ${err.message}`);
 }
+
+const COMPARABLE_CASES = comparable
+  ? [
+      {
+        label: "structure (comparable)",
+        tool: "unreal_read_blueprint_summary",
+        args: { path: comparable.path, graphName: comparable.graphName },
+        mustContain: "nodes",
+      },
+      {
+        label: "explain_graph (comparable)",
+        tool: "unreal_explain_graph",
+        args: { path: comparable.path, graphName: comparable.graphName },
+        mustContain: "text",
+      },
+    ]
+  : [];
 
 const CASES = [
   { label: "get_project_overview", tool: "unreal_get_project_overview", args: {}, mustContain: "{" },
@@ -267,14 +313,50 @@ const CASES = [
 //
 // So the quotes are checked against this run. The tolerance is wide - these are illustrations, not
 // contracts, and a project's own content moves them - but 30% drift fails.
-const QUOTED = [
-  { label: "read_class_defaults", quoted: 3237, where: "the HOW TO WORK instructions and the read_class_defaults hint" },
-  { label: "list_variables", quoted: 1732, where: "the list_variables hint and compactRows.ts" },
-  { label: "list_data_table_rows", quoted: 5472, where: "the list_data_table_rows hint" },
+//
+// The quotes are READ OUT OF THE SERVER'S OWN TEXT, not copied here.
+//
+// This table used to hold its own numbers, and that is the same defect it exists to catch: two
+// places describing one thing, free to drift apart. It did. `read_class_defaults` was corrected in
+// the standing instructions and this table kept failing the run against its stale copy - the guard
+// complaining about a number that had already been fixed, which is the failure mode that teaches
+// people to ignore a guard.
+//
+// So each entry carries a PATTERN instead of a number, matched against the text the server actually
+// advertises: the `instructions` from initialize, plus every tool description. If the pattern stops
+// matching, that is a failure too - a sentence that has been reworded is a sentence whose number is
+// no longer being checked, and silently passing would make this vacuous.
+const CORPUS_CLAIMS = [
+  {
+    label: "read_class_defaults",
+    // "the difference is 1,691 tokens against 218, not a trim."
+    pattern: /the difference is ([\d,]+) tokens against ([\d,]+)/,
+    where: "the HOW TO WORK instructions",
+  },
+  {
+    // Measured on the comparable graph, not the biggest one - see STRUCTURAL_NODE_CAP above.
+    // The sentence quotes a PAIR, so both halves are checked: a structural cost that drifts while
+    // the explanation holds still would leave the ratio - which is the actual claim - wrong.
+    label: "explain_graph (comparable)",
+    alsoLabel: "structure (comparable)",
+    // "A 59-node EventGraph costs 2,328 tokens as a node-and-pin structure and 268 here"
+    pattern: /costs ([\d,]+) tokens as a node-and-pin structure and ([\d,]+) here/,
+    where: "the unreal_explain_graph description",
+    capture: 2,
+    alsoCapture: 1,
+  },
+];
+
+// Numbers that live only in source comments. Still worth measuring - a comment that lies costs the
+// next reader an afternoon - but they are NOT what a model reads, and saying they were was itself
+// an inaccuracy in this file. Kept honest and kept separate.
+const COMMENT_QUOTES = [
+  { label: "list_variables", quoted: 1732, where: "comments in compactRows.ts and index.ts" },
+  { label: "list_data_table_rows", quoted: 5472, where: "comments in index.ts" },
 ];
 const TOLERANCE = 0.15;
 
-const results = (await session(CASES)).map((r) => ({ ...r, tokens: tokensOf(r.text) }));
+const results = (await session([...CASES, ...COMPARABLE_CASES])).map((r) => ({ ...r, tokens: tokensOf(r.text) }));
 
 // A reply that is an error is not a cheap reply, it is a broken measurement. This check exists
 // because the sibling script once reported two cases comfortably under budget at eleven tokens,
@@ -315,27 +397,63 @@ if (absurd.length > 0) {
 console.log("");
 // Compared after the table, so the measured numbers are on screen next to any complaint.
 const drifted = [];
-for (const q of QUOTED) {
+
+const check = (label, where, quoted, measuredTokens) => {
+  const off = Math.abs(measuredTokens - quoted) / Math.max(quoted, 1);
+  if (off > TOLERANCE) {
+    drifted.push(
+      `${label} is quoted as ~${quoted} tokens in ${where}, and measures ${measuredTokens} ` +
+        `(${Math.round(off * 100)}% out). Update the quote, or explain why the project moved.`
+    );
+  }
+};
+
+// What the server tells a model, fetched the way a client gets it.
+const corpusServer = await startAndInitialize({ MCP_PROFILE: "full" }, "measure-reads-corpus");
+const { tools: corpusTools } = await listTools(corpusServer);
+const corpus = `${corpusServer.instructions ?? ""}\n${corpusTools.map((t) => t.description ?? "").join("\n")}`;
+
+for (const claim of CORPUS_CLAIMS) {
+  const measured = results.find((r) => r.label === claim.label);
+  if (!measured) {
+    drifted.push(`${claim.label} is quoted in ${claim.where} but is not measured here any more`);
+    continue;
+  }
+  const found = claim.pattern.exec(corpus);
+  if (!found) {
+    drifted.push(
+      `${claim.label}: the sentence in ${claim.where} no longer matches the pattern this guards, so ` +
+        `its number is not being checked at all. Re-point the pattern at the reworded sentence.`
+    );
+    continue;
+  }
+  const quoted = Number(found[claim.capture ?? 1].replace(/,/g, ""));
+  check(claim.label, claim.where, quoted, measured.tokens);
+
+  if (claim.alsoLabel) {
+    const other = results.find((r) => r.label === claim.alsoLabel);
+    const otherQuoted = Number(found[claim.alsoCapture ?? 1].replace(/,/g, ""));
+    if (other) check(claim.alsoLabel, claim.where, otherQuoted, other.tokens);
+  }
+}
+corpusServer.child.kill();
+
+for (const q of COMMENT_QUOTES) {
   const measured = results.find((r) => r.label === q.label);
   if (!measured) {
     drifted.push(`${q.label} is quoted in ${q.where} but is not measured here any more`);
     continue;
   }
-  const off = Math.abs(measured.tokens - q.quoted) / Math.max(q.quoted, 1);
-  if (off > TOLERANCE) {
-    drifted.push(
-      `${q.label} is quoted as ~${q.quoted} tokens in ${q.where}, and measures ${measured.tokens} ` +
-        `(${Math.round(off * 100)}% out). Update the quote, or explain why the project moved.`
-    );
-  }
+  check(q.label, q.where, q.quoted, measured.tokens);
 }
 if (drifted.length > 0) {
   console.error("");
   console.error("quoted numbers have drifted from what this run measured:");
   for (const line of drifted) console.error(`  - ${line}`);
   console.error("");
-  console.error("These appear in the standing instructions and tool descriptions, which is the one text");
-  console.error("a model cannot skip. A number that is wrong there undermines every number beside it.");
+  console.error("The first group appears in the standing instructions and tool descriptions, which is the");
+  console.error("one text a model cannot skip. A number that is wrong there undermines every number beside");
+  console.error("it. The second group is source comments, which cost the next reader rather than the model.");
   process.exitCode = 1;
 }
 

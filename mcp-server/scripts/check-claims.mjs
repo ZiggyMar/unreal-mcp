@@ -46,14 +46,25 @@ const CLAIMS = [
     verifiedBy: "not watched live - re-measured by hand 2026-08-31, exact",
   },
   {
-    figure: "3,237",
+    figure: "1,691",
     what: "read_class_defaults, in the HOW TO WORK instructions",
-    verifiedBy: "measure:reads (fails at 30% drift)",
+    // measure:reads no longer keeps its own copy of this number - it reads it back out of the
+    // server's own instructions and compares that to what it measures, so the sentence and the
+    // check cannot drift apart. They had: the sentence was corrected to 1,691 and the guard kept
+    // failing against its stale 3,237, which is how a guard teaches people to ignore it.
+    verifiedBy: "measure:reads (extracts the figure from the live instructions, fails at 15% drift)",
   },
   {
-    figure: "2,328",
-    what: "read_blueprint_summary on a 59-node graph, in the explain_graph description",
-    verifiedBy: "not watched live - re-measured by hand 2026-08-31, exact",
+    figure: "1,996",
+    what: "read_blueprint_summary on a 56-node graph, in the explain_graph description",
+    // Was 2,328 on a 59-node graph and unwatched. Now measured on the largest graph UNDER the
+    // structural read's 60-node cap, which measure:reads picks deterministically - above the cap
+    // the pair is not comparable at all, because the structure returns 60 nodes of 819 while the
+    // explanation returns all of them.
+    // Its partner in the same sentence, 337, is deliberately not registered here: this script scans
+    // for comma-formatted figures, so a three-digit number is invisible to it. measure:reads checks
+    // that half of the pair instead, which is the guard that can actually see it.
+    verifiedBy: "measure:reads (comparable-graph pair, fails at 15% drift)",
   },
   {
     figure: "540",
