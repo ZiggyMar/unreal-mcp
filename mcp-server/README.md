@@ -8250,3 +8250,53 @@ reply, which is information rather than overhead. That is the floor.
 
 Saying a thing once is the difference between advice and nagging, and the standing instructions are
 the right place to say it once.
+
+### `force: true` skipped our check and then didn't force
+
+`get_project_overview` on the real project listed a folder nobody had made on purpose:
+`__MCPRuntimeTrial`, **10 Blueprints**. One per run of the replication trial, left in a project with
+no version control, going back as far as the trial did.
+
+The trial names its asset uniquely per run on purpose, and says why in a comment: a trial that
+depends on its own cleanup having worked fails for reasons that are not about what it tests. Fair.
+But every one of those runs had *called* `delete_asset`, and every call had reported success:
+
+```json
+{"ok": true, "result": {"requested": 1, "deleted": 0, "forced": true}}
+```
+
+`find_references` on one of them returns `referencedByCount: 0`. Nothing was holding it. So why did
+a forced delete of an unreferenced asset delete nothing?
+
+Because `force` did half the job. It skipped the referencer scan **in our handler**, and then called
+the same non-forcing `ObjectTools::DeleteAssets`, which refuses whenever the object is still
+referenced **in memory** — a state the asset registry knows nothing about and `find_references` cannot
+see. The parameter was named after the engine's concept and did not use it.
+
+`ObjectTools::ForceDeleteObjects` is the engine's own answer: it severs the remaining references and
+deletes. It takes loaded `UObject*` rather than `FAssetData`, which is exactly the point — the
+references it has to sever are the loaded ones.
+
+Verified on the ten that had refused for weeks:
+
+```
+leftovers before: 10
+deleted 10  failed 0
+leftovers after: 0
+```
+
+**And deleting nothing no longer reads as success.** The counts were always in the reply and always
+honest; what was missing was that a caller checking `ok` saw a tick. When `deleted < requested` the
+reply now says which case it is and what to do — sever with `force`, or close the editor tab holding
+it open. Ten assets accumulated precisely because nothing in the reply objected.
+
+The trial now also sweeps what earlier runs left, before adding to it. That keeps both properties the
+unique naming was protecting: the run still does not depend on its own teardown, and the litter stays
+bounded at one instead of growing forever. As it happens the teardown works now too, since it goes
+through the same `force` that has started forcing — but a trial should not need that to be true.
+
+**Worth saying plainly: this was my mess, in the user's project.** The tool wrote ten assets into a
+real game that has no version control and reported success ten times. The bug is fixed and the
+folder is empty, but the lesson is about which direction a silent no-op fails in — a delete that
+quietly does nothing looks identical to a delete that worked, and only a census of the project ever
+finds out.

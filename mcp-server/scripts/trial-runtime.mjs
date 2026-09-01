@@ -68,6 +68,37 @@ const LABEL = `MCPRuntimeSpawner_${RUN}`;
 
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "trial-runtime");
 
+// Sweep what earlier runs left behind, before adding to it.
+//
+// This trial names its asset uniquely per run on purpose - see RUN above - because a trial that
+// depends on its own cleanup having worked fails for reasons that are not about what it tests. The
+// cost of that choice is one asset per run left in a real project, and ten of them had accumulated
+// before anybody looked. Every delete had reported success while deleting nothing, which is a
+// separate bug now fixed in the plugin: `force` skipped the referencer check and then called the
+// non-forcing DeleteAssets, so an asset still loaded in memory survived a forced delete.
+//
+// Sweeping at the START keeps both properties: the run still does not depend on its own teardown,
+// and the litter stays bounded at one rather than growing forever. Failures here are ignored - this
+// is housekeeping, and a trial that cannot start because it could not tidy up is the thing the
+// unique naming was avoiding.
+const stale = await server.request("tools/call", {
+  name: "unreal_list_blueprints",
+  arguments: { match: "BP_RuntimeTrial_" },
+});
+try {
+  const listed = JSON.parse((stale?.result?.content ?? [])[0]?.text ?? "{}");
+  const paths = (listed.blueprints ?? []).map((b) => b.path).filter(Boolean);
+  if (paths.length > 0) {
+    await server.request("tools/call", {
+      name: "unreal_delete_asset",
+      arguments: { paths, force: true },
+    });
+    console.log(`swept ${paths.length} asset(s) left by earlier runs`);
+  }
+} catch {
+  /* housekeeping only */
+}
+
 /** Bridge commands this server sends that the installed plugin does not have. */
 const unavailable = [];
 

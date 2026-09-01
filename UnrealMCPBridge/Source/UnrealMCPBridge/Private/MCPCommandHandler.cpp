@@ -5769,7 +5769,34 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 		return Blocked;
 	}
 
-	const int32 Deleted = ObjectTools::DeleteAssets(ToDelete, /*bShowConfirmation=*/false);
+	// `force` has to force the ENGINE, not just skip our own check.
+	//
+	// It used to do half the job: it skipped the referencer scan above and then called the same
+	// non-forcing DeleteAssets, which refuses whenever the object is still referenced IN MEMORY -
+	// a state the asset registry knows nothing about. So an asset the registry reports as having
+	// zero referencers came back {"requested":1,"deleted":0,"forced":true} inside an ok response.
+	// Ten of them accumulated in a real project from trial runs, every delete reporting success.
+	//
+	// ForceDeleteObjects is the engine's own answer: it severs the remaining references and deletes.
+	// It takes loaded UObjects rather than FAssetData, which is the whole point - the objects it has
+	// to sever are the loaded ones.
+	int32 Deleted = 0;
+	if (bForce)
+	{
+		TArray<UObject*> Objects;
+		for (const FAssetData& Candidate : ToDelete)
+		{
+			if (UObject* Loaded = Candidate.GetAsset())
+			{
+				Objects.Add(Loaded);
+			}
+		}
+		Deleted = Objects.Num() > 0 ? ObjectTools::ForceDeleteObjects(Objects, /*ShowConfirmation=*/false) : 0;
+	}
+	else
+	{
+		Deleted = ObjectTools::DeleteAssets(ToDelete, /*bShowConfirmation=*/false);
+	}
 
 	// Collect garbage so the names are actually free again.
 	//
@@ -5787,6 +5814,24 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 	Result->SetNumberField(TEXT("requested"), Paths.Num());
 	Result->SetNumberField(TEXT("deleted"), Deleted);
 	Result->SetBoolField(TEXT("forced"), bForce);
+
+	// Deleting nothing is not success, and must not read like it.
+	//
+	// The counts were always in the reply and always honest; what was missing is that a caller
+	// reading `ok` saw a tick. "requested 1, deleted 0" inside an ok response is the same shape as
+	// the delete-that-deleted-nothing this project has already had to fix once, and the reason it
+	// went unnoticed for ten assets is that nothing in the reply objected.
+	if (Deleted < Paths.Num())
+	{
+		Result->SetStringField(TEXT("next"),
+			bForce
+				? TEXT("Nothing was deleted even with force. The asset is open in an editor tab, or the "
+					"engine refused it - close any tab showing it and try again. Its referencers, if any, "
+					"are listed under blockers.")
+				: TEXT("Nothing was deleted. Something still references it, or it is loaded in memory - "
+					"pass force:true to sever those references and delete anyway."));
+	}
+
 	return MakeOkResponse(Result);
 }
 
