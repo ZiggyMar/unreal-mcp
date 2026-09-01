@@ -162,6 +162,9 @@ private:
 	static TSharedRef<FJsonObject> HandleAddStructField(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListStructFields(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateEnum(const TSharedPtr<FJsonObject>& Params);
+
+	/** Add one entry to an existing user-defined enum. */
+	static TSharedRef<FJsonObject> HandleAddEnumEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListEnumEntries(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateMaterialInstance(const TSharedPtr<FJsonObject>& Params);

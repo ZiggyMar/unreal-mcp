@@ -618,6 +618,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_add_struct_field",
     "unreal_list_struct_fields",
     "unreal_create_enum",
+    "unreal_add_enum_entry",
     "unreal_list_enum_entries",
     "unreal_list_assets",
   ],
@@ -5153,6 +5154,33 @@ register(
         }
       }
       return jsonResult({ ...result, saved, ...(saveError ? { saveError } : {}) });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_add_enum_entry",
+  {
+    title: "Add one entry to an existing enum",
+    description:
+      "Adds a single entry to a user-defined enum, in place. Structs could already gain a field with " +
+      "unreal_add_struct_field and enums could only be created whole, so \"add a new upgrade type\" - one entry " +
+      "on an existing enum, then a Data Table row - could not be done at all: the only route was recreating the " +
+      "enum, which breaks every asset already referring to it.\n\n" +
+      "Refuses a duplicate label. Unreal permits two entries showing the same name, and the result is a dropdown " +
+      "with two options nobody can tell apart, forever, with nothing reporting a problem.\n\n" +
+      "Leaves the asset dirty - unreal_save_asset writes it. Anything switching on the enum keeps compiling, so " +
+      "check Switch nodes that now need a case: a new entry is UNHANDLED rather than broken, which is quieter.",
+    inputSchema: {
+      path: z.string().describe('Enum asset, e.g. "/Game/Data/E_UpgradeType". List them with unreal_list_assets className=UserDefinedEnum.'),
+      name: z.string().describe('The new entry as a person reads it, e.g. "Shield".'),
+    },
+  },
+  async ({ path, name }) => {
+    try {
+      return jsonResult(await bridge.send("add_enum_entry", { path, name }));
     } catch (err) {
       return errorResult(err);
     }

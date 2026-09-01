@@ -35,7 +35,8 @@ written down next to the measurement that caused it.
 [The whole-project audit was missing a whole family](#the-whole-project-audit-was-missing-a-whole-family) ·
 [The Level Blueprint was in no list at all](#the-level-blueprint-was-in-no-list-at-all) ·
 [A montage without its notifies is blend settings and nothing else](#a-montage-without-its-notifies-is-blend-settings-and-nothing-else) ·
-[A struct is its fields, and the reply had none of them](#a-struct-is-its-fields-and-the-reply-had-none-of-them) ·
+[A struct is its fields, and the generic reader had none of them](#a-struct-is-its-fields-and-the-generic-reader-had-none-of-them) ·
+[Enums could be created and never extended](#enums-could-be-created-and-never-extended) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -203,7 +204,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
 | `lazy` | 13297 | `core` plus deferred groups |
-| `full` | 42335 | everything, for a model that can afford it |
+| `full` | 42645 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -428,6 +429,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_set_variable_type` | `set_variable_type` | Retype an existing member variable, rebinding every Get and Set node through the engine. Compiles afterwards and reports what the retype broke. |
 | `unreal_create_asset` | `create_asset` | Create any asset type the editor's New Asset menu can create — InputAction, InputMappingContext, Blackboard, BehaviorTree, SoundCue, CurveFloat, LevelSequence, NiagaraSystem, DataAsset. Refuses the eight types with a dedicated tool, and refuses to overwrite. |
 | `unreal_create_enum` | `create_enum` | Create a user-defined Enum with named entries. |
+| `unreal_add_enum_entry` | `add_enum_entry` | Add one entry to an **existing** Enum, refusing a duplicate label. |
 | `unreal_list_enum_entries` | `list_enum_entries` | Read an Enum's entries. Works on engine enums too, for looking up exact value spellings. |
 
 Six variables called `ItemName`, `ItemIcon`, `ItemCount`, `ItemWeight`, `ItemStackable`,
@@ -7106,18 +7108,22 @@ here can read:
 Checking rather than assuming mattered: the blackboard pairing looked like the obvious gap and turned
 out to be complete.
 
-## A struct is its fields, and the reply had none of them
+## A struct is its fields, and the generic reader had none of them
 
-Reading a User Defined Struct returned `"properties": []`. A struct **is** its fields, so that reply
-contained none of the asset. Reading a User Defined Enum returned one entry called
-`EnumDescription` and not a single enumerator.
+Reading a User Defined Struct with `unreal_read_asset_properties` returned `"properties": []`. A
+struct **is** its fields, so that reply contained none of the asset. An enum returned one entry
+called `EnumDescription` and not a single enumerator.
 
-Between them that blocks the most ordinary data work there is. A Data Table is *typed by* a struct,
-so writing a row without knowing its columns and their types is guesswork — and "add a new upgrade
-type" cannot be answered without seeing the enum entries that already exist.
+**The first fix here was wrong, and the correction is the more useful record.** The fields and
+entries were listed inline — which duplicated `unreal_list_struct_fields` and
+`unreal_list_enum_entries`, tools that already existed and already answered it. Worse, the two
+copies disagreed: the new one reported `FName` and `int32` where the dedicated tool reports `name`
+and `int`. That is not a stylistic difference. The short spelling is what `unreal_add_struct_field`
+*accepts*, so the C++ vocabulary was the less useful of the two, and two tools describing one thing
+differently is the defect this project keeps finding.
 
-Both fold into `unreal_read_asset_properties`, like montage sections and widget animations before
-them. No new tool, no extra standing context.
+So the generic reader points instead of answering: a struct or enum comes back with a `next` naming
+the tool that has the content. Cheaper than a second copy, and it cannot drift.
 
 ### Names a person can actually use
 
@@ -7139,3 +7145,28 @@ E_UpgradeCategoryold  ->  its valid values
 
 Table, to columns, to the legal values for an enum column — the whole path a change request to a
 Data Table needs, and none of it was reachable before.
+
+## Enums could be created and never extended
+
+`unreal_add_struct_field` could add a field to an existing struct. Enums had only `create_enum`,
+which makes a new one whole. So *"add a new upgrade type"* — one entry on an existing enum, then a
+Data Table row — could not be done at all: the only route was recreating the enum, which breaks every
+asset already referring to it. An asymmetry rather than a decision.
+
+`unreal_add_enum_entry` closes it. Two things it does deliberately:
+
+**It refuses a duplicate label.** Unreal permits two entries showing the same name — the internal
+names differ — and the result is a dropdown with two options nobody can tell apart, forever, with
+nothing reporting a problem. Matching is case-insensitive, because `gamma` and `Gamma` are the same
+option to the person reading the list.
+
+**It reads the result back rather than echoing the request.** An echo reports success even when
+nothing was written, which is exactly how an earlier bug in `create_enum` stayed invisible: naming an
+index that did not exist yet did nothing, silently, and left every entry called `NewEnumeratorN`.
+Add first, then name — the same order that path had to learn.
+
+The reply also says what a new entry does *not* break: anything switching on the enum keeps
+compiling, so a new case is **unhandled** rather than broken, which is quieter and worth pointing at.
+
+Verified on a scratch asset — created with two entries, added a third, refused `gamma` against
+`Gamma`, read back `Alpha, Beta, Gamma`, deleted.

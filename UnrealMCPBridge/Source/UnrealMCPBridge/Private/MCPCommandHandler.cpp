@@ -1450,6 +1450,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleCreateEnum(Params);
 	}
+	else if (Cmd == TEXT("add_enum_entry"))
+	{
+		Response = HandleAddEnumEntry(Params);
+	}
 	else if (Cmd == TEXT("list_enum_entries"))
 	{
 		Response = HandleListEnumEntries(Params);
@@ -8642,58 +8646,31 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSha
 		Result->SetNumberField(TEXT("totalProperties"), Total);
 	}
 
-	// A STRUCT's fields and an ENUM's entries, which the property walk returns nothing for.
+	// A struct or enum: say where the answer is, do not answer twice.
 	//
-	// Reading a User Defined Struct gave `"properties": []` - a struct IS its fields, so that reply
-	// contained none of the asset. Reading a User Defined Enum gave one entry called
-	// EnumDescription and not a single enumerator.
+	// The property walk genuinely returns nothing for these - a struct IS its fields and an enum IS
+	// its entries, and neither is a UPROPERTY - so a bare `"properties": []` is a dead end.
 	//
-	// That blocks the most ordinary data work there is. A Data Table is TYPED by a struct, so
-	// writing a row without its field names and types is guesswork, and "add a new upgrade type"
-	// cannot be answered without the enum entries that already exist.
+	// The first fix here was to list the fields and entries inline, which was wrong twice over.
+	// unreal_list_struct_fields and unreal_list_enum_entries already existed and already answered
+	// it, so it was duplicate capability; and the two copies disagreed, this one reporting FName
+	// and int32 against the dedicated tool's "name" and "int". That second spelling is not a
+	// stylistic preference - it is what add_struct_field ACCEPTS, so the C++ vocabulary was the
+	// less useful of the two and there is no version of this where two answers is better than one.
 	//
-	// Names are the AUTHORED ones. Unreal stores a user struct's fields internally as
-	// "Count_5_9B3F..." with a GUID appended, and that spelling appears nowhere a person types -
-	// handing it back would be a name the caller cannot use in a Data Table row or anywhere else.
-	if (const UUserDefinedStruct* Struct = Cast<UUserDefinedStruct>(Asset))
+	// Two tools describing one thing differently is the defect this project keeps finding. Pointing
+	// is cheaper than answering, and it cannot drift.
+	if (Asset->IsA<UUserDefinedStruct>())
 	{
-		TArray<TSharedPtr<FJsonValue>> Fields;
-		for (TFieldIterator<FProperty> It(Struct); It; ++It)
-		{
-			FProperty* Field = *It;
-			if (!Field)
-			{
-				continue;
-			}
-			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
-			Entry->SetStringField(TEXT("name"), Field->GetAuthoredName());
-			Entry->SetStringField(TEXT("type"), Field->GetCPPType());
-			Fields.Add(MakeShared<FJsonValueObject>(Entry));
-		}
-		Result->SetArrayField(TEXT("fields"), Fields);
-		Result->SetNumberField(TEXT("fieldCount"), Fields.Num());
-		Result->SetStringField(TEXT("fieldsNote"),
-			TEXT("These are the row columns of any Data Table using this struct, in this order, by the name "
-				"you write."));
+		Result->SetStringField(TEXT("next"),
+			TEXT("A struct's content is its fields, which are not properties and are not listed above. "
+				"unreal_list_struct_fields has them, with the type names unreal_add_struct_field accepts."));
 	}
-
-	if (const UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(Asset))
+	else if (Asset->IsA<UUserDefinedEnum>())
 	{
-		TArray<TSharedPtr<FJsonValue>> Entries;
-		// NumEnums() includes the trailing _MAX sentinel, which is engine bookkeeping and not a
-		// value anyone selects. Reporting it would invite a caller to use it.
-		const int32 Count = FMath::Max(0, Enum->NumEnums() - 1);
-		for (int32 Index = 0; Index < Count; ++Index)
-		{
-			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
-			// The display name is what the editor shows and what a Data Table cell contains; the
-			// raw name is "E_Thing::NewEnumerator0", which is not what anybody types.
-			Entry->SetStringField(TEXT("name"), Enum->GetDisplayNameTextByIndex(Index).ToString());
-			Entry->SetNumberField(TEXT("value"), Enum->GetValueByIndex(Index));
-			Entries.Add(MakeShared<FJsonValueObject>(Entry));
-		}
-		Result->SetArrayField(TEXT("entries"), Entries);
-		Result->SetNumberField(TEXT("entryCount"), Entries.Num());
+		Result->SetStringField(TEXT("next"),
+			TEXT("An enum's content is its entries, which are not properties and are not listed above. "
+				"unreal_list_enum_entries has them."));
 	}
 
 	// A montage's SECTIONS and NOTIFIES, which the property walk cannot see.
@@ -9695,6 +9672,83 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateEnum(const TSharedPtr<FJ
 	}
 	Result->SetStringField(TEXT("useAs"), FString::Printf(TEXT("enum:%s"), *AssetName));
 	return MakeOkResponse(Result);
+}
+
+/**
+ * Add an entry to an enum that already exists.
+ *
+ * Structs could gain a field - add_struct_field - and enums could only be created whole. So "add a
+ * new upgrade type", which is one entry on an existing enum and then a Data Table row, could not be
+ * done at all: the only route was to recreate the enum, which breaks every asset already referring
+ * to it. An asymmetry rather than a decision.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddEnumEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Path, EntryName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), EntryName) || EntryName.IsEmpty())
+	{
+		return MCPResponse::Fail(Result, TEXT("missing_param"),
+			TEXT("path and name are both required, e.g. path \"/Game/Data/E_UpgradeType\", name \"Shield\"."));
+	}
+
+	UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(StaticLoadObject(UUserDefinedEnum::StaticClass(), nullptr, *Path));
+	if (!Enum)
+	{
+		return MCPResponse::Fail(Result, TEXT("enum_not_found"),
+			FString::Printf(TEXT("No user-defined enum at \"%s\". An enum path repeats the name, as in ")
+				TEXT("/Game/Data/E_Thing.E_Thing, and list_assets className=UserDefinedEnum shows the real ones. ")
+				TEXT("Native C++ enums cannot be edited here."), *Path));
+	}
+
+	// Refuse a duplicate rather than making a second entry with the same label.
+	//
+	// Unreal permits it - the internal names differ - and the result is an enum with two entries a
+	// person cannot tell apart, in a dropdown, forever. Nothing errors, and the asset is wrong.
+	const int32 Existing = Enum->NumEnums() > 0 ? Enum->NumEnums() - 1 : 0;
+	for (int32 Index = 0; Index < Existing; ++Index)
+	{
+		if (Enum->GetDisplayNameTextByIndex(Index).ToString().Equals(EntryName, ESearchCase::IgnoreCase))
+		{
+			Result->SetStringField(TEXT("existingEntry"), EntryName);
+			Result->SetNumberField(TEXT("atIndex"), Index);
+			return MCPResponse::Fail(Result, TEXT("entry_already_exists"),
+				FString::Printf(TEXT("\"%s\" is already entry %d of this enum. Two entries with one label are ")
+					TEXT("indistinguishable in every dropdown that shows them."), *EntryName, Index));
+		}
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("MCP", "MCPAddEnumEntry", "Add Enum Entry"));
+
+	// Add first, then name. The same order the creation path had to learn: naming an index that
+	// does not exist yet does nothing, silently, and leaves the entry called NewEnumeratorN.
+	FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
+	FEnumEditorUtils::SetEnumeratorDisplayName(Enum, Existing, FText::FromString(EntryName));
+
+	Enum->MarkPackageDirty();
+
+	// Read back rather than echo. An echo reports success even when nothing was written, which is
+	// exactly how the creation bug above stayed invisible.
+	const int32 NowHas = Enum->NumEnums() > 0 ? Enum->NumEnums() - 1 : 0;
+	const FString Written = NowHas > Existing ? Enum->GetDisplayNameTextByIndex(Existing).ToString() : FString();
+	if (NowHas != Existing + 1 || !Written.Equals(EntryName))
+	{
+		Result->SetNumberField(TEXT("entryCount"), NowHas);
+		return MCPResponse::Fail(Result, TEXT("entry_not_added"),
+			FString::Printf(TEXT("The enum has %d entries and index %d reads \"%s\", not \"%s\"."),
+				NowHas, Existing, *Written, *EntryName));
+	}
+
+	Result->SetStringField(TEXT("path"), Enum->GetPathName());
+	Result->SetStringField(TEXT("added"), EntryName);
+	Result->SetNumberField(TEXT("atIndex"), Existing);
+	Result->SetNumberField(TEXT("entryCount"), NowHas);
+	Result->SetStringField(TEXT("next"),
+		TEXT("Dirty, not saved - save_asset writes it. Anything switching on this enum keeps compiling: "
+			"a new entry is unhandled rather than broken, so check Switch nodes that need a case for it."));
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleListEnumEntries(const TSharedPtr<FJsonObject>& Params)

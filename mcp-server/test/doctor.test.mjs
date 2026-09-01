@@ -22,7 +22,7 @@ const NOT_PROBED = new Set([
   // The point of this set is not its contents. It is that adding a bridge command from now on fails
   // this test until somebody decides which side it belongs on - because the alternative, twice
   // already, was a doctor confidently reporting "missing 2" when it was missing eight.
-  "add_component", "add_data_table_row", "add_input_mapping", "add_node", "add_struct_field",
+  "add_component", "add_data_table_row", "add_enum_entry", "add_input_mapping", "add_node", "add_struct_field",
   "add_variable", "add_widget", "asset_status", "build_graph", "compile_blueprint",
   "connect_pins", "create_blueprint", "create_enum", "create_function", "create_level",
   "create_material", "create_material_instance", "create_struct", "create_widget_blueprint", "delete_actor",
