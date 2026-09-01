@@ -85,10 +85,15 @@ namespace
 			{
 				const FString& Want = Needle[Offset];
 				const FString& Have = Hay[Start + Offset];
-				// The final word may be a prefix, so someone typing "len" still finds Length. Only
-				// the final one: allowing it everywhere brings the noise straight back.
+				// The final word may be a prefix, so someone typing "Array Leng" still finds
+				// Array_Length. Only the final one, and only from three characters: allowing it
+				// everywhere, or for one or two letters, brings the noise straight back. Measured -
+				// with no length floor, "Do N" still answered GetCustomDoNotImportCurveWithZero,
+				// because "n" is a prefix of "not". Three characters is where a prefix starts
+				// meaning something.
 				const bool bLast = (Offset == Needle.Num() - 1);
-				if (Have == Want || (bLast && bAllowLastPartial && Have.StartsWith(Want)))
+				const bool bPartialAllowed = bLast && bAllowLastPartial && Want.Len() >= 3;
+				if (Have == Want || (bPartialAllowed && Have.StartsWith(Want)))
 				{
 					continue;
 				}

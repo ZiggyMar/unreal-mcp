@@ -55,9 +55,19 @@ check(
   doN.length === 0 ? "(no hits, which is the honest answer)" : doN.join(", ")
 );
 
-// Typeahead must survive: someone half-typing a word should still land.
-const len = await find("len");
-check("\"len\" still reaches Length-style names", len.some((h) => /Length/i.test(h)), len.join(", "));
+// Typeahead must survive: someone half-typing the LAST word should still land. Asserted with a
+// query that has no exact match, because "len" is the name of a real function and an exact hit
+// outranking a prefix hit is correct behaviour, not a miss.
+const partial = await find("Array Leng");
+check("a half-typed last word still lands", partial[0] === "Array_Length", partial.join(", "));
+
+// ...but not from one or two letters, which is where the noise lives.
+const oneLetter = await find("Get N");
+check(
+  "a single-letter last word does not match anything it likes",
+  !oneLetter.some((h) => /DoNotImport|NotImport/i.test(h)),
+  oneLetter.slice(0, 3).join(", ") || "(no hits)"
+);
 
 // Things that already worked must keep working - a search fix that breaks the common path is a
 // net loss no matter how good the new cases look.

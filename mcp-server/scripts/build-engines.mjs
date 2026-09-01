@@ -33,11 +33,54 @@ const here = dirname(fileURLToPath(import.meta.url));
 const CONFIG = join(here, "..", "build-targets.json");
 const PLUGIN_SOURCE = join(here, "..", "..", "UnrealMCPBridge", "Source");
 
+/** Where BuildPlugin drops its output for a target. */
+const packageDir = (target) => join(tmpdir(), `mcp-plugin-${target.name}`);
+
+/**
+ * Copy a packaged plugin's binaries into the target project.
+ *
+ * Binaries only, deliberately. The source is already synced into the project by the step above, and
+ * copying the packaged Source over it would replace files with BuildPlugin's own staged copies -
+ * which are the same content today and are not guaranteed to be. What the editor loads is the DLL.
+ */
+function installPackagedPlugin(target) {
+  const from = join(packageDir(target), "Binaries", "Win64");
+  if (!existsSync(from)) {
+    throw new Error(`BuildPlugin reported success but wrote no binaries to ${from}`);
+  }
+  const projectDir = dirname(target.project);
+  const to = join(projectDir, "Plugins", "UnrealMCPBridge", "Binaries", "Win64");
+  mkdirSync(to, { recursive: true });
+  let copied = 0;
+  for (const name of readdirSync(from)) {
+    // The .dll is what loads; the .pdb is what makes a crash readable. Everything else is staging.
+    if (!name.endsWith(".dll") && !name.endsWith(".pdb") && !name.endsWith(".modules")) continue;
+    cpSync(join(from, name), join(to, name));
+    copied += 1;
+  }
+  if (copied === 0) {
+    throw new Error(`nothing to copy from ${from}`);
+  }
+}
+
 const valueOf = (flag) => {
   const i = process.argv.indexOf(flag);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
 const only = valueOf("--only");
+// --package: compile the plugin on its own and INSTALL the result into each target project.
+//
+// The reason this exists is a real project that cannot build its editor target at all. The game
+// here has a second, complete sample project nested inside it, so UnrealBuildTool discovers two
+// copies of several plugins and refuses with "Action graph is invalid" before compiling anything.
+// The plugin was fine; the host was not. Default mode therefore delivered nothing to the one editor
+// doing actual work, and every C++ improvement stopped at two scratch projects - which is exactly
+// the invisible failure build-targets.json warns about, arriving by a route nobody had considered.
+//
+// BuildPlugin does not load the host project, so a broken host cannot block it. It compiles against
+// public engine APIs only, which is a narrower check than the editor target - so this is the
+// delivery route when the full build is unavailable, not a replacement for it.
+const packageMode = process.argv.includes("--package");
 const isolated = process.argv.includes("--isolated");
 
 /** Engines are not in the same place on any two machines, so --isolated can find them itself. */
@@ -249,13 +292,13 @@ for (const target of chosen) {
   // shell: true is required for both, not stylistic: Node refuses to exec a .bat directly, and
   // without it this throws EINVAL before UnrealBuildTool ever starts - which reads exactly like a
   // compile failure on every engine at once.
-  const run = isolated
+  const run = isolated || packageMode
     ? spawnSync(
         join(target.engine, "Engine", "Build", "BatchFiles", "RunUAT.bat"),
         [
           "BuildPlugin",
           `"-Plugin=${join(PLUGIN_SOURCE, "..", "UnrealMCPBridge.uplugin")}"`,
-          `"-Package=${join(tmpdir(), `mcp-plugin-${target.name}`)}"`,
+          `"-Package=${packageDir(target)}"`,
           "-TargetPlatforms=Win64",
         ],
         { encoding: "utf8", shell: true, maxBuffer: 64 * 1024 * 1024 }
@@ -278,8 +321,22 @@ for (const target of chosen) {
   // Each tool announces success in its own words. Trusting the exit code alone has bitten people
   // before, so both are required.
   const output = `${run.stdout ?? ""}${run.stderr ?? ""}`;
-  const claim = isolated ? /BUILD SUCCESSFUL/i : /Result:\s*Succeeded/i;
-  const succeeded = run.status === 0 && claim.test(output);
+  const claim = isolated || packageMode ? /BUILD SUCCESSFUL/i : /Result:\s*Succeeded/i;
+  let succeeded = run.status === 0 && claim.test(output);
+
+  // Compiling is not delivering. A plugin packaged to a temp folder and never copied is the same
+  // "verified fix that never shipped" this script was written to stop, so the copy is part of the
+  // result: if it fails, the target failed.
+  if (succeeded && packageMode) {
+    try {
+      installPackagedPlugin(target);
+    } catch (err) {
+      succeeded = false;
+      console.log(`FAILED to install (${seconds}s): ${err instanceof Error ? err.message : err}`);
+      results.push({ target, ok: false, why: "install failed" });
+      continue;
+    }
+  }
   console.log(succeeded ? `ok (${seconds}s)` : `FAILED (${seconds}s)`);
 
   if (!succeeded) {
@@ -307,7 +364,10 @@ if (failed.length > 0) {
 // precisely what was built, because --isolated installs nothing and telling someone to restart
 // their editor to pick up binaries that were never copied is how a "verified" fix stays unverified.
 console.log(
-  isolated
+  packageMode
+    ? `
+all ${results.length} target(s) built and INSTALLED via BuildPlugin. Compiled against public engine APIs only, which is narrower than the editor target - restart the editor to load them.`
+    : isolated
     ? `\nall ${results.length} engine(s) compile this plugin against public APIs. NO binaries were ` +
         `installed - run without --isolated to sync the source and build into the target projects.`
     : `\nall ${results.length} target(s) built. Restart any editor that was running before testing.`
