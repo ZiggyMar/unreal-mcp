@@ -29,9 +29,23 @@ const NL = String.fromCharCode(10);
 const problems = [];
 const note = (message) => problems.push(message);
 
+/**
+ * A port nothing is listening on, so "the bridge is unreachable" is a fact rather than a hope.
+ *
+ * This check asserts what a tool does when its bridge is DOWN. It used to just run against the
+ * default port and assume no editor was open - so with an editor running it tested the opposite
+ * situation, and with an editor still LOADING it got the worst of both: the port accepts the
+ * connection, nothing answers, every call sits until the timeout, and the guard reported two
+ * protocol defects that did not exist.
+ *
+ * A guard that cries wolf gets ignored, which costs more than the guard is worth. Pointing it at a
+ * dead port makes the premise true on any machine, editor or no editor.
+ */
+const DEAD_PORT = "8799";
+
 function startServer(profile = "full") {
   const child = spawn(process.execPath, [serverPath], {
-    env: { ...process.env, UNREAL_MCP_PROFILE: profile },
+    env: { ...process.env, UNREAL_MCP_PROFILE: profile, UNREAL_MCP_BRIDGE_PORT: DEAD_PORT },
     stdio: ["pipe", "pipe", "pipe"],
   });
   let buffer = "";

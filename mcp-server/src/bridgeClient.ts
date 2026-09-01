@@ -228,7 +228,36 @@ export function expandPathParams(params: Record<string, unknown> | undefined): R
  * timeout so the cost of spawning a shell does not matter, and every failure returns null rather
  * than turning a diagnosable timeout into an undiagnosable crash.
  */
-function blockingDialogTitle(): string | null {
+/** What has the editor's window, when it is not the editor itself. */
+export interface ForegroundWindow {
+  kind: "pie" | "dialog";
+  title: string;
+}
+
+/**
+ * Decide what a non-editor window is, from its title.
+ *
+ * Separated out and exported because this is where the bug was, and shelling out to PowerShell to
+ * test a string comparison would be silly.
+ *
+ * The rule used to be "the ordinary editor window ends in Unreal Editor; anything else is a dialog",
+ * which is wrong about the single most common other window: the Play-In-Editor game. It produced
+ * "a modal dialog titled \"AVS Preview [NetMode: Client 1]\" IS OPEN... it halts the game thread
+ * until a human clicks it" while nothing was blocked and the game was simply running. A reader
+ * following that hunts for a dialog that does not exist, or asks someone to dismiss their own game.
+ */
+export function classifyEditorWindows(titles: string[]): ForegroundWindow | null {
+  const foreign = titles.filter((t) => !/Unreal Editor$/.test(t));
+  // A PIE window carries its net mode, or is the standalone "<Project> Preview". Checked before
+  // the dialog case so the running game is never mistaken for something to click.
+  const pie = foreign.find((t) => /\[NetMode:|\bPreview\b/.test(t));
+  if (pie) {
+    return { kind: "pie", title: pie };
+  }
+  return foreign.length > 0 ? { kind: "dialog", title: foreign[0] } : null;
+}
+
+function blockingDialogTitle(): ForegroundWindow | null {
   if (process.platform !== "win32") return null;
   try {
     const out = execFileSync(
@@ -240,15 +269,19 @@ function blockingDialogTitle(): string | null {
         "Get-Process -Name UnrealEditor -ErrorAction SilentlyContinue | " +
           "Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle }",
       ],
-      { timeout: 5000, encoding: "utf8", windowsHide: true }
+      // Short on purpose. This is a HINT appended to an error the caller is already waiting on, and
+      // it runs after a timeout has just elapsed. Five seconds of PowerShell to improve the wording
+      // of a failure is five seconds the caller spends learning nothing - and on a loaded machine it
+      // pushed the whole reply past a client's own 15s budget, turning a clean tool error into a
+      // protocol-level timeout. Better to lose the hint than the error.
+      { timeout: 1500, encoding: "utf8", windowsHide: true }
     );
-    const titles = String(out)
-      .split(/\r?\n/)
-      .map((t) => t.trim())
-      .filter(Boolean);
-    // The ordinary editor window ends in "Unreal Editor". Anything else with a window is a dialog.
-    const dialog = titles.find((t) => !/Unreal Editor$/.test(t));
-    return dialog ?? null;
+    return classifyEditorWindows(
+      String(out)
+        .split(/\r?\n/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+    );
   } catch {
     return null;
   }
@@ -356,10 +389,15 @@ export class UnrealBridgeClient {
               `Usually one of:\n` +
               `  - A long operation genuinely still running (a big compile, the first project-index build, a level load). ` +
               `Wait and retry the same call rather than assuming it failed.\n` +
-              (dialogTitle
-                ? `  - A modal dialog titled "${dialogTitle}" IS OPEN in the editor right now. That is almost ` +
-                  `certainly the whole answer: it halts the game thread until a human clicks it.\n`
-                : `  - A modal dialog open in the editor, which halts the game thread until a human clicks it.\n`) +
+              (dialogTitle?.kind === "pie"
+                ? `  - THE GAME IS RUNNING in Play-In-Editor ("${dialogTitle.title}"). The game thread is busy ` +
+                  `running it, and a heavy read can exceed this timeout. Nothing is blocked and nothing needs ` +
+                  `clicking. The runtime tools - pie_actors, watch_runtime, press_input, verify_runtime - are ` +
+                  `built to work during PIE; heavy whole-Blueprint reads are better done after unreal_stop_pie.\n`
+                : dialogTitle
+                  ? `  - A modal dialog titled "${dialogTitle.title}" IS OPEN in the editor right now. That is almost ` +
+                    `certainly the whole answer: it halts the game thread until a human clicks it.\n`
+                  : `  - A modal dialog open in the editor, which halts the game thread until a human clicks it.\n`) +
               `  - The editor mid-PIE-transition. Call unreal_pie_status once the editor is responsive again.\n` +
               `IMPORTANT: a timeout is not a rollback. The operation may have completed, so read the current state ` +
               `(unreal_read_blueprint_summary, unreal_list_components, ...) before retrying a write, or you may apply it twice.`
