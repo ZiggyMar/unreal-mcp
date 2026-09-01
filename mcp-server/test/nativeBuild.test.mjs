@@ -170,3 +170,61 @@ test("paths are shortened the same way whatever machine this runs on", () => {
   const engine = parseBuildOutput(`M:${B}Unreal${B}UE_5.6${B}Engine${B}X.h${tail}`, `M:${B}Proj`);
   assert.match(engine.errors[0].file, /^M:\/Unreal\/UE_5\.6\//);
 });
+
+test("UnrealBuildTool's own failure is reported, not swallowed as a compilation error", () => {
+  // The build never reached the compiler. Without this the reply was
+  // "Result: Failed (OtherCompilationError)" and nothing else - the category, not the problem -
+  // while the actionable sentence sat in the output unread. A real project could not compile a
+  // single file because two copies of a plugin produced the same DLL.
+  const output = [
+    "Building AntiVirusSquadEditor...",
+    "  First Action json written to 'F:\temp\B73507C0.json'",
+    "Action graph is invalid; unable to continue. See log for additional details.",
+    "",
+    "Result: Failed (OtherCompilationError)",
+  ].join("\n");
+
+  const reason = extractFailureReason(output);
+  assert.ok(
+    reason.some((line) => /Action graph is invalid/i.test(line)),
+    `expected the real cause in the reason lines, got: ${JSON.stringify(reason)}`
+  );
+
+  // The guidance for this case ALREADY existed and could never fire, because this extractor decides
+  // which lines reach it and that one matched nothing. A guidance branch is only as reachable as
+  // the pattern that feeds it.
+  const guidance = guidanceFor(reason);
+  assert.match(guidance, /could not plan the build|two actions wanted to produce the same file/i);
+  assert.match(guidance, /second copy of a plugin/i);
+});
+
+test("an ordinary compile failure keeps its ordinary guidance", () => {
+  // The new branch must not swallow the common case.
+  const reason = extractFailureReason("Result: Failed (Errors)");
+  assert.doesNotMatch(guidanceFor(reason), /Action graph|module twice/i);
+});
+
+test("Live Coding holding the build is named, and points at the tool that works", () => {
+  // The failure that actually stopped a real project. compile_cpp on an untouched, known-good file
+  // failed in three seconds with "Result: Failed (OtherCompilationError)" and no diagnostics, which
+  // reads like a broken file. UnrealBuildTool had said exactly what was wrong; none of it was
+  // captured, so the reply blamed the file.
+  const output = [
+    "@progress 'Generating code...' 100%",
+    "Live coding session active. Actions will be limited to compilation of specified files.",
+    "Unable to perform hot reload with multiple targets.",
+    "Result: Failed (OtherCompilationError)",
+  ].join("\n");
+
+  const reason = extractFailureReason(output);
+  assert.ok(
+    reason.some((line) => /Unable to perform hot reload|Live coding session active/i.test(line)),
+    `expected the real cause, got: ${JSON.stringify(reason)}`
+  );
+
+  const guidance = guidanceFor(reason);
+  assert.match(guidance, /Live Coding is active/i);
+  assert.match(guidance, /unreal_hot_reload_cpp/);
+  // The sentence a reader most needs, because the obvious reading is "my file is broken".
+  assert.match(guidance, /not a problem with the file/i);
+});

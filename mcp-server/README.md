@@ -38,6 +38,7 @@ written down next to the measurement that caused it.
 [A struct is its fields, and the generic reader had none of them](#a-struct-is-its-fields-and-the-generic-reader-had-none-of-them) ·
 [Enums could be created and never extended](#enums-could-be-created-and-never-extended) ·
 ["Add a new upgrade type", walked end to end](#add-a-new-upgrade-type-walked-end-to-end) ·
+[A build that blamed the file](#a-build-that-blamed-the-file) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -7206,3 +7207,51 @@ table into one that means nothing to a reader and cannot be written back.
 
 Confirmed on the project's own tables afterwards: `Category` reads `VacuumStorage`, and no
 `NewEnumerator` survives anywhere in the reply.
+
+## A build that blamed the file
+
+`unreal_compile_cpp` on an **untouched, known-good** source file failed in three seconds:
+
+```
+{"succeeded": false, "errors": [], "totalErrors": 0,
+ "reason": ["Result: Failed (OtherCompilationError)"],
+ "next": "The build failed without a compiler diagnostic."}
+```
+
+No errors, no warnings, and a category instead of a cause. The obvious reading is *"my file is
+broken"*, and it was not — nothing about that reply points anywhere useful.
+
+UnrealBuildTool had said exactly what was wrong:
+
+```
+Live coding session active. Actions will be limited to compilation of specified files.
+Unable to perform hot reload with multiple targets.
+```
+
+Live Coding was holding the compiler in the running editor. None of it reached the caller, because
+`extractFailureReason` decides which lines get through and matched none of them.
+
+### A guidance branch is only as reachable as the pattern that feeds it
+
+The same run exposed something worth keeping. `guidanceFor` has had a good explanation of
+`Action graph is invalid` since it was written — it even describes diffing the two conflicting action
+JSONs, which is how a real duplicate-plugin problem was diagnosed here by hand. That explanation
+**could never appear**, because the extractor never captured the line that triggers it.
+
+Written, correct, and unreachable. Worth remembering when adding either half.
+
+Both cases now come through, and `compile_cpp` names Live Coding, says *"this is not a problem with
+the file"*, and points at `unreal_hot_reload_cpp`, which drives Live Coding itself.
+
+### What is still not working, stated plainly
+
+Pointing at a tool means checking it works. `unreal_hot_reload_cpp` returns `cancelled` in three
+seconds — twice in a row, and again after a genuine one-line change to a source file, which rules out
+"nothing to compile". Its own advice, *"call this again; something is cancelling it in the editor
+UI"*, does not lead anywhere: nothing in the UI is cancelling it.
+
+So on this project **C++ cannot currently be compiled by any route here** — `compile_cpp` is blocked
+by Live Coding, `hot_reload_cpp` cancels, and the full editor build fails separately on a duplicate
+plugin. The cause of the Live Coding cancellation is not established, and no fix is claimed for it.
+The improvement is narrower and real: the failure now explains itself instead of blaming a file that
+was never the problem.

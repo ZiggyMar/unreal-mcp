@@ -159,6 +159,27 @@ const FAILURE_LINES = [
   /fatal error/i,
   /Unable to find/i,
   /is not a valid/i,
+
+  // UnrealBuildTool's OWN failures, which happen before a compiler ever runs.
+  //
+  // guidanceFor has explained the action-graph case since it was written, and that explanation
+  // could never appear: this extractor decides which lines reach it, and "Action graph is invalid"
+  // matched nothing here. So the reply was "Result: Failed (OtherCompilationError)" and nothing
+  // else - the category rather than the problem - while a good answer sat in the code, unreachable,
+  // on a project where not one C++ file could be compiled.
+  //
+  // A guidance branch is only as reachable as the pattern that feeds it. Worth remembering when
+  // adding either.
+  /Action graph is invalid/i,
+  /produced by multiple actions/i,
+  /Circular dependency/i,
+
+  // Live Coding holding the build. This is the one that actually stopped a real project, and it
+  // was invisible: compile_cpp on an untouched, known-good file failed in three seconds with
+  // "Result: Failed (OtherCompilationError)" and no diagnostics, which reads like a broken file.
+  // UnrealBuildTool had said exactly what was wrong and none of it was captured.
+  /Unable to perform hot reload/i,
+  /Live coding session active/i,
 ];
 
 export function extractFailureReason(output: string): string[] {
@@ -218,6 +239,17 @@ export function guidanceFor(reason: string[]): string {
       "be compiled until it is fixed or that plugin is disabled in the .uproject."
     );
   }
+  // Checked before the action-graph case: both can appear in one output, and this one is the reason
+  // the build stopped while that one is often just noise from the same run.
+  if (/Unable to perform hot reload|Live coding session active/i.test(text)) {
+    return (
+      "Live Coding is active in the running editor, so UnrealBuildTool refused the build - this is " +
+      "not a problem with the file. Use unreal_hot_reload_cpp instead, which drives Live Coding " +
+      "itself and is what you want while the editor is open. For a full rebuild, close the editor " +
+      "first: the two cannot both hold the compiler."
+    );
+  }
+
   if (/ActionGraphInvalid|Action graph is invalid/i.test(text)) {
     return (
       "UnrealBuildTool could not plan the build: two actions wanted to produce the same file. The " +
