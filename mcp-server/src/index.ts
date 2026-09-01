@@ -3236,12 +3236,21 @@ register(
       "that proves it works.",
     inputSchema: {
       numPlayers: z.number().optional().describe("Number of PIE clients. Defaults to 1. Use 2 or more to test replication."),
+      ignoreCompileErrors: z
+        .boolean()
+        .optional()
+        .describe(
+          "Start even though some Blueprints fail to compile. Without it this refuses and names them, because " +
+            "the editor stops on a modal nothing here can dismiss - so PIE would silently never start. Pass true " +
+            "when the broken ones are unrelated to what you are testing; the reply then names them, since " +
+            "anything they own will not work in that session."
+        ),
       listenServer: z.boolean().optional().describe("Run the first client as a listen server, the usual multiplayer setup. Defaults to false."),
     },
   },
-  async ({ numPlayers, listenServer }) => {
+  async ({ numPlayers, listenServer, ignoreCompileErrors }) => {
     try {
-      const result = await bridge.send("start_pie", { numPlayers, listenServer });
+      const result = await bridge.send("start_pie", { numPlayers, listenServer, ignoreCompileErrors });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

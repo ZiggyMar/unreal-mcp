@@ -196,7 +196,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
 | `lazy` | 13251 | `core` plus deferred groups |
-| `full` | 42065 | everything, for a model that can afford it |
+| `full` | 42165 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6831,3 +6831,32 @@ the modal it existed to prevent.
 The index is the right source precisely because building it loads every Blueprint under `/Game`,
 which is the same set the editor's own dialog complains about. Verified against the real project: the
 refusal lists the same fifteen names that were on the screen.
+
+### Refusing is not enough — a person can click through, so the tool must be able to
+
+Naming the problem still left the tool unable to do what the person does: press *Play in Editor*
+anyway. So `unreal_start_pie` takes `ignoreCompileErrors: true`, and it is not a trick — it is the
+engine's own path:
+
+```cpp
+static bool ShowBlueprintErrorDialog( TArray<UBlueprint*> ErroredBlueprints )
+{
+    if (FApp::IsUnattended() || GIsRunningUnattendedScript)
+    {
+        // App is running in unattended mode, so we should avoid modal dialogs and proceed
+        return true;
+    }
+```
+
+A bridge driving the editor from another process *is* a running unattended script. The flag is set
+only around the start and restored once PIE is up, or after thirty seconds if it never comes: left
+on, it would silently answer every other modal too — save prompts, overwrite confirmations — for the
+person sitting in front of the editor, who did not ask for that.
+
+The reply then names the Blueprints it started in spite of, because a degraded session must never
+look like a clean one. Anything odd in that run should be weighed against the fifteen broken assets
+before it is treated as a finding.
+
+In the project this was found in, all fifteen turned out to be Lyra and SuperGrid sample content —
+verified with `find_references`, which showed every referencer was either inside the broken set or
+other sample content, and **zero** references from the game's own folder.

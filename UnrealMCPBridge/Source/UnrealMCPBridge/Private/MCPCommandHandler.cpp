@@ -5376,26 +5376,64 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleStartPie(const TSharedPtr<FJso
 	// broken Blueprints in a project with fifteen and let PIE start straight into the modal it
 	// exists to prevent. The index loads every Blueprint under /Game, which is the set the editor's
 	// own dialog complains about.
+	TArray<FString> StartedDespiteErrors;
 	{
 		FMCPProjectIndex& Index = FMCPProjectIndex::Get();
 		Index.EnsureBuilt();
 		const TArray<FString> Broken = Index.GetBlueprintsWithErrors(20);
 		if (Broken.Num() > 0)
 		{
-			TSharedRef<FJsonObject> Refusal = MakeShared<FJsonObject>();
-			TArray<TSharedPtr<FJsonValue>> Names;
-			for (const FString& Name : Broken)
+			bool bIgnoreCompileErrors = false;
+			if (Params.IsValid())
 			{
-				Names.Add(MakeShared<FJsonValueString>(Name));
+				Params->TryGetBoolField(TEXT("ignoreCompileErrors"), bIgnoreCompileErrors);
 			}
-			Refusal->SetArrayField(TEXT("blueprintsWithErrors"), Names);
-			Refusal->SetStringField(TEXT("next"),
-				TEXT("Fix or delete these, or press Play once by hand and accept the dialog. compile_blueprint on "
-					"one of them reports the actual errors; project_health lists them all under doesNotCompile."));
-			return MCPResponse::Fail(Refusal, TEXT("blueprints_do_not_compile"),
-				FString::Printf(TEXT("%d Blueprint(s) have compiler errors, so Play In Editor stops on a modal "
-					"that nothing here can dismiss. Starting anyway would report success and do nothing."),
-					Broken.Num()));
+
+			if (!bIgnoreCompileErrors)
+			{
+				TSharedRef<FJsonObject> Refusal = MakeShared<FJsonObject>();
+				TArray<TSharedPtr<FJsonValue>> Names;
+				for (const FString& Name : Broken)
+				{
+					Names.Add(MakeShared<FJsonValueString>(Name));
+				}
+				Refusal->SetArrayField(TEXT("blueprintsWithErrors"), Names);
+				Refusal->SetStringField(TEXT("next"),
+					TEXT("Pass ignoreCompileErrors:true to start anyway - that is the same choice the dialog "
+						"offers a person, and it is right when the broken Blueprints are unrelated to what you are "
+						"testing. compile_blueprint on one reports the actual errors; project_health lists them "
+						"all under doesNotCompile."));
+				return MCPResponse::Fail(Refusal, TEXT("blueprints_do_not_compile"),
+					FString::Printf(TEXT("%d Blueprint(s) have compiler errors, so Play In Editor stops on a modal "
+						"that nothing here can dismiss. Starting anyway would report success and do nothing."),
+						Broken.Num()));
+			}
+
+			// Say yes to the dialog, the way the engine intends a script to.
+			//
+			// ShowBlueprintErrorDialog's first line is: if (FApp::IsUnattended() ||
+			// GIsRunningUnattendedScript) return true - "avoid modal dialogs and proceed". A bridge
+			// driving the editor from another process IS a running unattended script, so this is the
+			// documented path rather than a trick, and it is exactly the button a person clicks.
+			//
+			// Set only around the start and put back afterwards. Left on, it would silently answer
+			// every OTHER modal too - save prompts, overwrite confirmations - for the person sitting
+			// in front of the editor, who did not ask for that.
+			GIsRunningUnattendedScript = true;
+			const double RestoreDeadline = FPlatformTime::Seconds() + 30.0;
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([RestoreDeadline](float) -> bool
+			{
+				// Once PIE is up the dialog is behind us; the deadline covers a start that never
+				// happens, so the flag cannot be left on by a failure.
+				if ((GEditor && GEditor->PlayWorld) || FPlatformTime::Seconds() >= RestoreDeadline)
+				{
+					GIsRunningUnattendedScript = false;
+					return false;
+				}
+				return true;
+			}), 0.25f);
+
+			StartedDespiteErrors = Broken;
 		}
 	}
 
@@ -5421,6 +5459,21 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleStartPie(const TSharedPtr<FJso
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("requested"), true);
+	// Never let a degraded run look like a clean one. If the session only started because the
+	// caller waved past broken Blueprints, the reply says so and names them - anything odd in that
+	// session should be weighed against this before it is treated as a finding.
+	if (StartedDespiteErrors.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> Names;
+		for (const FString& Name : StartedDespiteErrors)
+		{
+			Names.Add(MakeShared<FJsonValueString>(Name));
+		}
+		Result->SetArrayField(TEXT("startedDespiteBrokenBlueprints"), Names);
+		Result->SetStringField(TEXT("degradedNote"),
+			TEXT("Started with these still failing to compile, so anything they own does not work in this "
+				"session. Fine when they are unrelated to what you are testing; misleading if they are not."));
+	}
 	Result->SetNumberField(TEXT("numPlayers"), NumPlayers);
 	Result->SetBoolField(TEXT("listenServer"), bListenServer);
 	Result->SetStringField(TEXT("note"), TEXT("PIE starts on the next editor tick; poll pie_status and read the editor log for runtime errors"));
