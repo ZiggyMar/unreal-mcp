@@ -20,6 +20,20 @@ const valueOf = (flag, fallback) => {
 };
 const SECONDS = Number(valueOf("--seconds", "8"));
 const LABEL = valueOf("--label", "run");
+// Milliseconds of one-way packet lag to simulate. Zero reproduces nothing; see below.
+const LAG = Number(valueOf("--lag", "120"));
+// How far apart to stand them.
+//
+// The first version used 300uu and measured almost nothing: the target arrived in 700ms and the
+// drag was over before anything could go wrong. A pull bug needs a pull long enough to watch, so
+// the default is far enough that the drag lasts seconds rather than a moment.
+const GAP = Number(valueOf("--gap", "600"));
+// Fire the throw partway through the drag.
+//
+// The person reporting this said the pull only misbehaves one way round, but the THROW misbehaves
+// both ways - so the throw is a separate code path and has to be measured separately. It is also
+// the path whose handler, VacuumPushed on BP_BaseCharacter, has nothing wired to it at all.
+const THROW_AT = Number(valueOf("--throw-at", "0"));
 
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "rubberband");
 const call = async (tool, args) => {
@@ -63,13 +77,29 @@ if (!host || !other) {
 }
 // Host looks along -X; put the target 300uu in front of it.
 await call("unreal_teleport_actor", { actorClass: "BP_Player", name: host.name, x: host.x, y: host.y, z: host.z, yaw: 180, pitch: 0 });
-await call("unreal_teleport_actor", { actorClass: "BP_Player", name: other.name, x: host.x - 300, y: host.y, z: host.z, yaw: 0 });
+await call("unreal_teleport_actor", { actorClass: "BP_Player", name: other.name, x: host.x - GAP, y: host.y, z: host.z, yaw: 0 });
 await sleep(1200);
 
-// 3. Hold the vacuum and sample both worlds' idea of where the dragged pawn is.
+// 3. Give the network a latency to be wrong about.
+//
+// This is the whole reason the first measurement of this bug read "mean 1uu, no disagreement" while
+// the person playing saw the character snapping back. PIE runs both worlds in one process with no
+// lag, so the server's correction arrives in the same frame the client predicted - there is nothing
+// to see. Prediction bugs are invisible at zero latency, which makes zero latency the worst place
+// to test them and the default place everyone does.
+if (LAG > 0) {
+  await call("unreal_run_console_command", { command: `Net PktLag=${LAG}`, world: "pie" });
+}
+// The engine's own report of the thing being measured: it prints a line every time the server tells
+// the client it was in the wrong place.
+await call("unreal_run_console_command", { command: "p.NetShowCorrections 1", world: "pie" });
+await sleep(500);
+
+// 4. Hold the vacuum and sample both worlds' idea of where the dragged pawn is.
 await call("unreal_press_input", { inputAction: "IA_Vacuum", seconds: SECONDS, world: "Authority" });
 
 const samples = [];
+let thrown = false;
 const started = Date.now();
 while ((Date.now() - started) / 1000 < SECONDS) {
   const now = await call("unreal_pie_actors", { actorClass: "BP_Player" });
@@ -89,10 +119,19 @@ while ((Date.now() - started) / 1000 < SECONDS) {
       clientX: onClient.x,
     });
   }
-  await sleep(250);
+  if (THROW_AT > 0 && !thrown && (Date.now() - started) / 1000 >= THROW_AT) {
+    thrown = true;
+    await call("unreal_press_input", { inputAction: "IA_Shoot", seconds: 0.2, world: "Authority" });
+  }
+  await sleep(100);
 }
 
 await call("unreal_press_input", { action: "stop" });
+
+// The engine's own count of corrections, which is the definitive signal - a position disagreement
+// can be sampling noise, a correction cannot.
+const errors = await call("unreal_read_runtime_errors", {});
+const corrections = (JSON.stringify(errors).match(/Client:\s*Error at/gi) ?? []).length;
 
 if (samples.length === 0) {
   console.error("no samples - both worlds must have the dragged pawn");
@@ -109,7 +148,12 @@ const travelled = Math.round(Math.abs(samples[samples.length - 1].serverX - samp
 console.log(`\n[${LABEL}] ${samples.length} samples over ${SECONDS}s`);
 console.log(`  server/client disagreement:  mean ${mean}uu   max ${max}uu`);
 console.log(`  distance the pawn was pulled: ${travelled}uu on the server`);
-console.log(`  trace: ${samples.map((s) => s.disagreement).join(" ")}`);
+console.log(`  server corrections logged:    ${corrections}${LAG > 0 ? ` (at ${LAG}ms simulated lag)` : " (no lag simulated)"}`);
+console.log(`  gap trace:    ${samples.map((s) => s.disagreement).join(" ")}`);
+// The positions themselves, because "the gap went to zero" has two readings - they agreed, or the
+// pull stopped and there was nothing left to disagree about - and only the profile tells them apart.
+console.log(`  server X:     ${samples.map((s) => Math.round(s.serverX)).join(" ")}`);
+console.log(`  client X:     ${samples.map((s) => Math.round(s.clientX)).join(" ")}`);
 console.log(
   `\n  A fix must lower the disagreement AND keep the pull. Disagreement near zero with ` +
     `travelled near zero means the drag stopped working, not that it was fixed.`

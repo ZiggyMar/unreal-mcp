@@ -42,6 +42,7 @@
     "measure:groups": "node scripts/measure-groups.mjs",
     "trial:diagnose": "node scripts/trial-diagnose.mjs",
     "trial:runtime": "node scripts/trial-runtime.mjs",
+    "measure:rubberband": "node scripts/measure-rubberband.mjs",
     "trial:dispatch": "node scripts/trial-dispatch.mjs",
     "trial:nodesearch": "node scripts/trial-node-search.mjs",
     "trial:parent-call": "node scripts/trial-parent-call.mjs",
