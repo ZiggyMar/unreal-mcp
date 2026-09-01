@@ -3191,6 +3191,7 @@ static void MCPSampleWatches()
 
 			int32 Found = 0;
 			FString Value;
+			TArray<FString> DistinctThisPass;
 			for (TActorIterator<AActor> It(World); It; ++It)
 			{
 				AActor* Actor = *It;
@@ -3204,12 +3205,22 @@ static void MCPSampleWatches()
 					continue;
 				}
 				++Found;
-				// With several matching actors the first one read is the sample. Reporting every
-				// actor separately would turn one question into fifty answers; the count is carried
-				// instead, so a caller can see there were fifty and ask about one.
-				if (Found == 1)
+				// Every DISTINCT value across the matching actors, not the first one the iterator
+				// happened to reach.
+				//
+				// Sampling only the first was silently wrong in the case this tool exists for. In a
+				// two-player session BP_Player.PlayerName was reported as "None" while the Blueprint
+				// was provably setting it to "Bunny" - the iterator reached an actor whose copy was
+				// still unset, and that one value was returned as though it were the answer. It nearly
+				// cost a correct fix, because the tool said the fix had not worked.
+				//
+				// The original reasoning was that fifty turrets should not become fifty answers, and
+				// that still holds: identical values collapse to one, exactly as before. Only actual
+				// disagreement widens the reply - and disagreement between actors is the whole point of
+				// watching a replicated value.
+				if (!DistinctThisPass.Contains(ThisValue))
 				{
-					Value = ThisValue;
+					DistinctThisPass.Add(ThisValue);
 				}
 			}
 
@@ -3217,6 +3228,18 @@ static void MCPSampleWatches()
 			if (Found == 0)
 			{
 				continue;
+			}
+
+			// One value when they agree, which is the ordinary case and reads exactly as it used to.
+			// When they do not, say so rather than picking one and sounding certain.
+			if (DistinctThisPass.Num() == 1)
+			{
+				Value = DistinctThisPass[0];
+			}
+			else
+			{
+				DistinctThisPass.Sort();
+				Value = FString::Printf(TEXT("%d actors differ: %s"), Found, *FString::Join(DistinctThisPass, TEXT(" | ")));
 			}
 
 			++Series.Samples;
