@@ -846,6 +846,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   // worstBlueprints ranking inflated to match.
   const bySubject = new Map<string, AuditFinding>();
   const deduped: AuditFinding[] = [];
+  // Every graph a collapsed subject appeared in, so the survivor can name the ones it replaced.
+  const graphsFor = new Map<string, Set<string>>();
   for (const finding of findings) {
     const subject = (finding as { variable?: string }).variable;
     if (!subject) {
@@ -853,6 +855,11 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       continue;
     }
     const key = `${finding.blueprint}|${finding.check}|${subject}`;
+    if (finding.graph) {
+      const set = graphsFor.get(key) ?? new Set<string>();
+      set.add(finding.graph);
+      graphsFor.set(key, set);
+    }
     const seen = bySubject.get(key);
     if (!seen) {
       bySubject.set(key, finding);
@@ -864,6 +871,26 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
       bySubject.set(key, finding);
     }
   }
+
+  // The survivor names the other graphs, because collapsing was hiding the one that matters.
+  //
+  // One finding per variable is right: three Gets of the same null reference is one bug. Keeping
+  // only one GRAPH NAME was not. The winner is chosen by message length, which has nothing to do
+  // with where the problem shows up - so the reader is pointed at whichever site happened to
+  // produce more words.
+  //
+  // Measured against a real PIE log: GM_Gameplay in PC_Gameplay collapsed to AttemptBuyUpgrade, and
+  // the graph the game actually faults in twice a session - CreateWaveEndWBP - was the one dropped.
+  // The audit pointed at a graph that works and said nothing about the graph that does not.
+  for (const [key, graphs] of graphsFor) {
+    if (graphs.size < 2) continue;
+    const kept = bySubject.get(key);
+    if (!kept) continue;
+    const others = [...graphs].filter((g) => g !== kept.graph).sort();
+    if (others.length === 0) continue;
+    kept.message += ` The same variable is read the same way in ${others.join(", ")}.`;
+  }
+
   findings.length = 0;
   findings.push(...deduped);
 
