@@ -152,6 +152,21 @@ export interface AuditResult {
    */
   dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
   truncated: boolean;
+  /**
+   * How many Blueprints the project has, against how many were looked at.
+   *
+   * `blueprintsScanned` on its own has no denominator, and this audit stops at 150 by default. On a
+   * 339-Blueprint project that reads as "scanned 150" with no hint that 189 were never opened - and
+   * `truncated: true` beside it is ambiguous, because the same reply truncates finding DETAIL as
+   * well and explains that at length in `detailNote`. A reader has every reason to attach the flag
+   * to the thing the note describes.
+   *
+   * The distinction is the same one blueprintsSearched and blueprintsScanned exist for elsewhere: a
+   * count of what was found means nothing without a count of what was examined.
+   */
+  blueprintsInProject: number;
+  /** Says which truncation happened and what to do, when the scan itself was cut short. */
+  scopeNote?: string;
   nextAction: string;
 }
 
@@ -205,7 +220,21 @@ export interface AuditOptions {
 
 export async function auditProject(bridge: BridgeLike, options: AuditOptions = {}): Promise<AuditResult> {
   const pathPrefix = options.pathPrefix ?? "/Game";
-  const limit = Math.max(1, Math.min(options.limit ?? 150, 2000));
+  // 500, not 150, and the reason is that the old default was buying almost nothing.
+  //
+  // Measured on a 339-Blueprint project: at 150 the audit reports 468 findings; at full coverage it
+  // reports 859 across 259 Blueprints instead of 112. The default was hiding 46% of what the project
+  // actually contains - and the reply grew by 84 tokens, because this reply is grouped and its
+  // detail is elided by `detailedGroups`, so its size is governed by how much is SAID per finding
+  // rather than by how many there are. The cap was protecting a budget that was not under threat.
+  //
+  // What it does cost is time: 12s at 150, 25s at 339. 500 keeps the worst case near 40 seconds,
+  // which is the reason this is not simply the 2000 maximum - audit_project is a composite that
+  // issues many bridge calls, and the binding constraint is the MCP client's own timeout, which
+  // this server does not control. A partial audit that returns beats a complete one that is killed.
+  //
+  // Above 500 the scan still truncates, and now says so with a denominator and what to pass.
+  const limit = Math.max(1, Math.min(options.limit ?? 500, 2000));
   const examplesPerGroup = Math.max(1, Math.min(options.examplesPerGroup ?? 3, 10));
   const detailedGroups = Math.max(1, Math.min(options.detailedGroups ?? 4, 30));
   const wantedCheck = (options.check ?? "").trim().toLowerCase();
@@ -916,6 +945,18 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         }
       : {}),
     blueprintsScanned: blueprints.length,
+    blueprintsInProject: all.length,
+    ...(all.length > blueprints.length
+      ? {
+          scopeNote:
+            `Scanned ${blueprints.length} of ${all.length} Blueprints - the first ${blueprints.length} the ` +
+            `project lists, not the most important ones. The other ${all.length - blueprints.length} were not ` +
+            `opened, so any finding in them is absent rather than absent-because-clean. Raise \`limit\` ` +
+            `(up to 2000) to cover them, or pass \`pathPrefix\` to audit one area properly. This is a ` +
+            `different truncation from the one \`detailNote\` describes, which is about how much is said ` +
+            `per finding.`,
+        }
+      : {}),
     blueprintsWithFindings: costByBlueprint.size,
     findingCount: findings.length,
     groups,

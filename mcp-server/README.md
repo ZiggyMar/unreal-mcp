@@ -8464,3 +8464,61 @@ from "this tool could not see it", and those need opposite responses from a call
 Eight tokens on every search, buying the one signal that made a whole class of blindness visible. The
 previous bug went unnoticed for an unknown length of time; the figure that ended it cost about the
 same as this.
+
+### The audit reported 468 findings and had not opened half the project
+
+Using the widened `find_broken_names` on the real project turned up five findings, all of them in
+`/Game/ThirdParty/SuperGrid/TutorialLevel/` — vendored sample content. Worth saying plainly, since the
+previous section fixed that tool: **widening it found nothing new here.** The UI happens to be clean
+of that particular check. A fix can be correct and important and still not pay out on the project you
+happen to be holding.
+
+What it did turn up was in the reply beside it. `audit_project`:
+
+```
+blueprintsScanned: 150
+findingCount: 468
+truncated: true
+```
+
+The project has **339** Blueprints. The audit stops at 150 by default, takes `all.slice(0, limit)` —
+the first 150 in registry order, not the most important ones — and never says what it skipped.
+
+`truncated: true` is technically honest and practically useless here, because the same reply
+truncates something else and explains *that* at length:
+
+> `detailNote`: 17 further finding kind(s) are listed with counts only and marked detailElided...
+
+A reader has every reason to attach the flag to the truncation the note describes. Two truncations,
+one flag, and the expensive one was the silent one.
+
+So the reply now carries a denominator and says which is which:
+
+```
+Scanned 150 of 339 Blueprints - the first 150 the project lists, not the most important ones.
+The other 189 were not opened, so any finding in them is absent rather than absent-because-clean.
+Raise `limit` (up to 2000) to cover them, or pass `pathPrefix` to audit one area properly. This is
+a different truncation from the one `detailNote` describes.
+```
+
+**And then the number that made the cap indefensible.** Running the same audit with the limit raised:
+
+| | scanned | findings | Blueprints with findings | reply |
+|---|---|---|---|---|
+| `limit: 150` (old default) | 150 | 468 | 112 | ~2,681 tokens |
+| full coverage | 339 | **859** | **259** | ~2,765 tokens |
+
+The default was hiding **46% of the project's findings** — and saving **84 tokens**. It reads as a
+token cap and is not one: this reply is grouped, and `detailedGroups` governs how much is *said* per
+finding, so its size barely moves with how many there are. The cap was protecting a budget that was
+never under threat.
+
+What it does cost is time — 12s at 150, 25s at 339 — so the new default is **500** rather than the
+2000 maximum. `audit_project` is a composite issuing many bridge calls, and the binding constraint is
+the MCP client's own timeout, which this server does not control. A partial audit that returns beats a
+complete one that gets killed. On this project that is full coverage in 24 seconds; above 500 the scan
+still truncates, and now says so with a denominator.
+
+Three sections in a row on the same shape: a count with no denominator. `blueprintsScanned: 182` in a
+project of 339, `hitCount: 0` with no breadth, and now `blueprintsScanned: 150` of 339. Each one read
+as an answer and was a fraction of one.
