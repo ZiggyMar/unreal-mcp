@@ -51,6 +51,16 @@ struct FMCPIndexBlueprint
 	TArray<FMCPIndexFunction> Functions;
 	TArray<FMCPIndexVariable> Variables;
 	TArray<FMCPIndexGraph> Graphs;
+
+	/**
+	 * "error", "warning", "dirty" or "upToDate" - EBlueprintStatus in words.
+	 *
+	 * Recorded here because the index already loads every Blueprint, so asking costs nothing, and
+	 * because project_health described itself as answering "what does not compile" while reporting
+	 * only graph sizes. Fifteen broken Blueprints were invisible to every tool here and perfectly
+	 * visible to the person, who got a dialog listing them the moment they pressed Play.
+	 */
+	FString CompileStatus;
 };
 
 /**
@@ -96,6 +106,17 @@ public:
 	// make a project unmaintainable. Reads the histograms the index already keeps, so it costs
 	// nothing beyond what a rebuild already paid for.
 	TSharedRef<FJsonObject> GetHealthReport(int32 MaxPerCategory) const;
+
+	/**
+	 * Names of Blueprints whose last compile failed, capped.
+	 *
+	 * Answered from the index rather than TObjectIterator because that iterator only sees LOADED
+	 * objects, and on a freshly started editor almost nothing is loaded - so the first version of
+	 * this check found zero broken Blueprints in a project with fifteen, and was reliable-looking
+	 * and useless. The index loads every Blueprint under /Game by construction, which is exactly the
+	 * set the editor's own Play dialog complains about.
+	 */
+	TArray<FString> GetBlueprintsWithErrors(int32 Max) const;
 
 	int32 GetIndexedBlueprintCount() const { return Entries.Num(); }
 

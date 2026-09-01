@@ -3825,12 +3825,16 @@ register(
 register(
   "unreal_list_widgets",
   {
-    title: "Read a Widget Blueprint's widget tree",
+    title: "Read a Widget Blueprint's widget tree and animations",
     description:
       "Returns the whole widget hierarchy in depth-first order: each widget's name, class, parent, depth, slot " +
       "class, and whether it can hold children. Call this before unreal_add_widget (to pick a valid parent) or " +
       "unreal_set_widget_property (to get an exact name), instead of guessing. The slot class on each entry tells " +
-      "you which layout properties that widget actually has, which differs per parent panel type.",
+      "you which layout properties that widget actually has, which differs per parent panel type.\n\n" +
+      "Also lists the widget's ANIMATIONS with their duration and how many widgets each one drives - the fades, " +
+      "pulses and slides that make a menu move, which nothing could see before. An animation bound to no widgets " +
+      "is called out: it plays perfectly and animates nothing, and that is invisible in the editor without opening " +
+      "it. The field is absent when the widget has no animations.",
     inputSchema: {
       path: z.string().describe('Widget Blueprint path, e.g. "/Game/UI/W_HealthBar.W_HealthBar".'),
     },

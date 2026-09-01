@@ -28,6 +28,7 @@ written down next to the measurement that caused it.
 [Searching for a node by the name the editor shows](#searching-for-a-node-by-the-name-the-editor-shows) ·
 [When the host project cannot build, deliver the plugin anyway](#when-the-host-project-cannot-build-deliver-the-plugin-anyway) ·
 [Two ways a read-only tool said "there is nothing there"](#two-ways-a-read-only-tool-said-there-is-nothing-there) ·
+[The error on the screen that no tool could see](#the-error-on-the-screen-that-no-tool-could-see) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -195,7 +196,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
 | `lazy` | 13251 | `core` plus deferred groups |
-| `full` | 41966 | everything, for a model that can afford it |
+| `full` | 42065 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6786,3 +6787,47 @@ LogMCPProjectIndex: project index cache is version 1, this build writes 2 - rebu
 `npm run trial:findtruth` asserts all of it against the real Blueprints each tool was wrong about —
 including that a name which genuinely exists nowhere is *still* reported as nowhere, because
 replacing one wrong answer with its opposite is not a fix.
+
+## The error on the screen that no tool could see
+
+Play In Editor kept not starting. `start_pie` answered `{"requested": true}`, every runtime tool
+then reported "no game is running", and measurement runs sat waiting for players that never arrived.
+The reason was a modal dialog: *"The following blueprints have unresolved compiler errors. Are you
+sure you want to Play in Editor?"*, listing fifteen of them, waiting for a human to click.
+
+Nothing here can see a modal or dismiss one. So the editor was sitting on an answerable question and
+this server was reporting success and waiting — the single most expensive kind of wrong answer,
+because it looks exactly like slowness.
+
+Worse, `project_health` was described as reporting "what does not compile" and reported nothing of
+the sort. Its findings were `oversizedGraphs`, `oversizedBlueprints` and `castHeavy` — three ways of
+saying a graph is big, and no way of saying a graph is broken. Fifteen Blueprints were failing to
+compile, invisible to every tool here and perfectly visible to the person, who got a list of them the
+moment they pressed Play.
+
+### What changed
+
+The index records each Blueprint's `EBlueprintStatus` — it already loads every Blueprint, so asking
+costs nothing — and `project_health` reports `doesNotCompile` **first**, because nothing else in that
+reply matters while one of them is broken: a broken parent takes its children with it, and PIE will
+not start at all.
+
+`unreal_start_pie` now refuses rather than starting something a dialog will stop, and names the
+offenders:
+
+```
+blueprints_do_not_compile: 15 Blueprint(s) have compiler errors, so Play In Editor stops on a
+modal that nothing here can dismiss. Starting anyway would report success and do nothing.
+  ["B_LoadRandomLobbyBackground", "BP_FirstPersonCharacter", "W_Healthbar", ...]
+```
+
+### The check that was reliable-looking and useless
+
+The first version asked `TObjectIterator<UBlueprint>` and found **zero** broken Blueprints in a
+project with fifteen — because that iterator only sees *loaded* objects, and on a freshly started
+editor almost nothing is loaded. It compiled, ran, reported all clear, and let PIE walk straight into
+the modal it existed to prevent.
+
+The index is the right source precisely because building it loads every Blueprint under `/Game`,
+which is the same set the editor's own dialog complains about. Verified against the real project: the
+refusal lists the same fifteen names that were on the screen.

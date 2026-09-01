@@ -19,6 +19,7 @@
 #include "K2Node_Event.h"
 #include "K2Node_EventNodeInterface.h"
 #include "K2Node_ConstructObjectFromClass.h"
+#include "Animation/WidgetAnimation.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
@@ -128,6 +129,8 @@
 // unreal_compile_cpp does by default - failed on it. The file has to build on its own.
 #include "Misc/FileHelper.h"
 #include "Misc/EngineVersion.h"
+#include "MCPResponse.h"
+#include "UObject/UObjectIterator.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPCommandHandler, Log, All);
 
@@ -5359,6 +5362,43 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleStartPie(const TSharedPtr<FJso
 		return MakeErrorResponse(TEXT("pie_already_running: call stop_pie first"));
 	}
 
+	// Refuse rather than start something a dialog will stop.
+	//
+	// A Blueprint with compiler errors makes the editor put up a modal - "the following blueprints
+	// have unresolved compiler errors, are you sure you want to Play in Editor?" - and wait for a
+	// human. Nothing here can see a modal or dismiss one, so RequestPlaySession returned happily,
+	// this command answered "requested: true", and PIE never started. Every runtime tool downstream
+	// then reported "no game is running", which is true and completely unhelpful, and the reason was
+	// on the person's screen the whole time.
+	//
+	// Asked of the index, not of TObjectIterator. The iterator sees only LOADED objects, and on a
+	// freshly started editor almost nothing is loaded - the first version of this check found zero
+	// broken Blueprints in a project with fifteen and let PIE start straight into the modal it
+	// exists to prevent. The index loads every Blueprint under /Game, which is the set the editor's
+	// own dialog complains about.
+	{
+		FMCPProjectIndex& Index = FMCPProjectIndex::Get();
+		Index.EnsureBuilt();
+		const TArray<FString> Broken = Index.GetBlueprintsWithErrors(20);
+		if (Broken.Num() > 0)
+		{
+			TSharedRef<FJsonObject> Refusal = MakeShared<FJsonObject>();
+			TArray<TSharedPtr<FJsonValue>> Names;
+			for (const FString& Name : Broken)
+			{
+				Names.Add(MakeShared<FJsonValueString>(Name));
+			}
+			Refusal->SetArrayField(TEXT("blueprintsWithErrors"), Names);
+			Refusal->SetStringField(TEXT("next"),
+				TEXT("Fix or delete these, or press Play once by hand and accept the dialog. compile_blueprint on "
+					"one of them reports the actual errors; project_health lists them all under doesNotCompile."));
+			return MCPResponse::Fail(Refusal, TEXT("blueprints_do_not_compile"),
+				FString::Printf(TEXT("%d Blueprint(s) have compiler errors, so Play In Editor stops on a modal "
+					"that nothing here can dismiss. Starting anyway would report success and do nothing."),
+					Broken.Num()));
+		}
+	}
+
 	int32 NumPlayers = 2;
 	bool bListenServer = true;
 	double NumRaw = 0.0;
@@ -8126,6 +8166,45 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListWidgets(const TSharedPtr<F
 	Visit(Tree->RootWidget, FString(), 0);
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	// The animations, which were in UWidgetBlueprint::Animations and read by nothing.
+	//
+	// A widget animation is how every menu fades in, every button pulses and every HUD element
+	// slides. They were invisible here: the tree was reported and the things that move it were not,
+	// so "make the menu fade faster" or "the health flash is not playing" had no way in.
+	//
+	// Reported inside list_widgets rather than as a separate tool on purpose. A caller reading a
+	// widget wants to know what animates in it, and one reply costs a caller far less than a second
+	// tool definition standing in context forever.
+	TArray<TSharedPtr<FJsonValue>> Animations;
+	for (UWidgetAnimation* Animation : Blueprint->Animations)
+	{
+		if (!Animation)
+		{
+			continue;
+		}
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		// The display label is what the editor's Animations panel shows and what a person will say.
+		// The object name carries a suffix they have never seen.
+		const FString Label = Animation->GetDisplayLabel();
+		Entry->SetStringField(TEXT("name"), Label.IsEmpty() ? Animation->GetName() : Label);
+		const float Start = Animation->GetStartTime();
+		const float End = Animation->GetEndTime();
+		Entry->SetNumberField(TEXT("durationSeconds"), FMath::RoundToDouble((End - Start) * 1000.0) / 1000.0);
+		// How many widgets it actually drives. An animation bound to nothing plays perfectly and
+		// animates nothing, which is invisible in the editor except by opening it and looking.
+		Entry->SetNumberField(TEXT("boundWidgets"), Animation->AnimationBindings.Num());
+		if (Animation->AnimationBindings.Num() == 0)
+		{
+			Entry->SetStringField(TEXT("warning"),
+				TEXT("Bound to no widgets - it plays and animates nothing."));
+		}
+		Animations.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	if (Animations.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("animations"), Animations);
+	}
+
 	Result->SetStringField(TEXT("path"), Path);
 	Result->SetStringField(TEXT("root"), Tree->RootWidget ? Tree->RootWidget->GetName() : TEXT(""));
 	Result->SetArrayField(TEXT("widgets"), Entries);

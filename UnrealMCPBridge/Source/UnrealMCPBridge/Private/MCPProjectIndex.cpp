@@ -28,8 +28,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogMCPProjectIndex, Log, All);
  * Version 2 added Custom Events, which are callable by name and were previously invisible to
  * search_project because the index only walked FunctionGraphs.
  * Version 3 added Timelines, which live in Blueprint->Timelines and were in no list at all.
+ * Version 4 added compile status, so project_health can answer the question it always claimed to.
  */
-static constexpr int32 MCPIndexSchemaVersion = 3;
+static constexpr int32 MCPIndexSchemaVersion = 4;
 
 FMCPProjectIndex* FMCPProjectIndex::Instance = nullptr;
 
@@ -206,6 +207,12 @@ namespace
 			FunctionsArr.Add(MakeShared<FJsonValueObject>(FunctionToJson(F)));
 		}
 		O->SetArrayField(TEXT("functions"), FunctionsArr);
+	if (!BP.CompileStatus.IsEmpty() && BP.CompileStatus != TEXT("upToDate"))
+	{
+		// Only when it is not the boring answer: writing "upToDate" for hundreds of Blueprints would
+		// be most of the cache file and say nothing.
+		O->SetStringField(TEXT("compileStatus"), BP.CompileStatus);
+	}
 
 		TArray<TSharedPtr<FJsonValue>> VariablesArr;
 		for (const FMCPIndexVariable& V : BP.Variables)
@@ -234,6 +241,10 @@ namespace
 		O->TryGetStringField(TEXT("path"), BP.Path);
 		O->TryGetStringField(TEXT("name"), BP.Name);
 		O->TryGetStringField(TEXT("parentClass"), BP.ParentClass);
+		if (!O->TryGetStringField(TEXT("compileStatus"), BP.CompileStatus))
+		{
+			BP.CompileStatus = TEXT("upToDate");
+		}
 
 		const TArray<TSharedPtr<FJsonValue>>* InterfacesArr = nullptr;
 		if (O->TryGetArrayField(TEXT("interfaces"), InterfacesArr) && InterfacesArr)
@@ -503,6 +514,30 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		}
 	}
 
+	// Does it compile? EBlueprintStatus, in the words the editor uses.
+	//
+	// BS_Error is the one that matters: a Blueprint in that state blocks Play In Editor behind a
+	// modal listing every offender, which no tool here could see - so start_pie reported success and
+	// then nothing happened, over and over, and the reason was on screen the whole time.
+	switch (Blueprint->Status)
+	{
+	case BS_Error:
+		Entry.CompileStatus = TEXT("error");
+		break;
+	case BS_UpToDateWithWarnings:
+		Entry.CompileStatus = TEXT("warning");
+		break;
+	case BS_Dirty:
+		Entry.CompileStatus = TEXT("dirty");
+		break;
+	case BS_UpToDate:
+		Entry.CompileStatus = TEXT("upToDate");
+		break;
+	default:
+		Entry.CompileStatus = TEXT("unknown");
+		break;
+	}
+
 	// Timelines, which are variables with a graph-shaped life of their own.
 	//
 	// They are in Blueprint->Timelines and nowhere else, so searching for "TL_Aim" - a timeline that
@@ -770,6 +805,24 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetOverview() const
  * Every threshold below is a judgement, so each finding says what it measured. A number without
  * its reason is something a reader either obeys blindly or ignores entirely.
  */
+TArray<FString> FMCPProjectIndex::GetBlueprintsWithErrors(int32 Max) const
+{
+	TArray<FString> Broken;
+	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
+	{
+		if (Pair.Value.CompileStatus == TEXT("error"))
+		{
+			Broken.Add(Pair.Value.Name);
+			if (Max > 0 && Broken.Num() >= Max)
+			{
+				break;
+			}
+		}
+	}
+	Broken.Sort();
+	return Broken;
+}
+
 TSharedRef<FJsonObject> FMCPProjectIndex::GetHealthReport(int32 MaxPerCategory) const
 {
 	const int32 Cap = FMath::Clamp(MaxPerCategory, 1, 100);
@@ -858,6 +911,32 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetHealthReport(int32 MaxPerCategory) 
 	Result->SetNumberField(TEXT("totalNodes"), TotalNodes);
 
 	TSharedRef<FJsonObject> Findings = MakeShared<FJsonObject>();
+	// Blueprints that do not compile, first, because nothing else in this reply matters while one of
+	// these is broken: Play In Editor stops behind a modal listing them, and a broken parent takes
+	// its children down with it.
+	{
+		TArray<TSharedPtr<FJsonValue>> Broken;
+		for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
+		{
+			if (Pair.Value.CompileStatus != TEXT("error"))
+			{
+				continue;
+			}
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Pair.Value.Name);
+			Entry->SetStringField(TEXT("path"), Pair.Value.Path);
+			Broken.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		if (Broken.Num() > 0)
+		{
+			Findings->SetArrayField(TEXT("doesNotCompile"), Broken);
+			Findings->SetStringField(TEXT("doesNotCompileNote"),
+				FString::Printf(TEXT("%d Blueprint(s) have compiler errors. Play In Editor will stop on a modal ")
+					TEXT("listing them, which no tool can dismiss - so start_pie will appear to do nothing. Open ")
+					TEXT("one with review_blueprint, or compile_blueprint for the errors."), Broken.Num()));
+		}
+	}
+
 	Findings->SetArrayField(TEXT("oversizedGraphs"), SortAndEmit(LargeGraphs));
 	Findings->SetArrayField(TEXT("oversizedBlueprints"), SortAndEmit(LargeBlueprints));
 	Findings->SetArrayField(TEXT("castHeavy"), SortAndEmit(ManyCasts));
