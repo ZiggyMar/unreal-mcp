@@ -204,9 +204,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2471 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
-| `core` | 12990 | the authoring spine |
-| `lazy` | 13297 | `core` plus deferred groups |
-| `full` | 42645 | everything, for a model that can afford it |
+| `core` | 12969 | the authoring spine |
+| `lazy` | 13276 | `core` plus deferred groups |
+| `full` | 42624 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -7581,3 +7581,73 @@ vacuum source to the pulled client, and calling it on both the server and that c
 surgery on a project with no version control, whose final check still needs two humans in a session.
 The tool's job was to make the correct fix available and say exactly what it costs. That part is
 done and verified; the wiring is a decision, not a mechanism.
+
+### The cheap read left out the only thing worth reading
+
+Finding the rubber-band gate took a dozen calls and a hand-written script to walk exec links
+backwards. Afterwards, the obvious question: why was that necessary, when `unreal_explain_graph`
+exists and its own description says *"read this before reading a graph node by node"*?
+
+Because on that function it produced this:
+
+```
+DraggedByVacuum: 18 nodes, 1 entry point(s).
+- DraggedByVacuum -> Branch -> Branch -> Add Force
+Not reached by any event chain (data nodes or dead logic): CheckGameplayTag, AND Boolean,
+NOT Boolean, Get isDead, Has Authority, ...
+```
+
+Two things wrong, and the second is worse than the first.
+
+**`Branch -> Branch -> Add Force` is true of a thousand graphs.** It names the shape of the logic and
+none of its content. The entire diagnosis — that the second branch tests `Has Authority`, so the
+force never runs on a client — is absent. A model reading the cheap summary has to go and pay for the
+expensive one, which is the single outcome the tool exists to prevent.
+
+**And `Has Authority` was filed under "dead logic".** Along with the AND, the NOT, and `Get isDead` —
+the three nodes that decide everything the function does. A reader takes that as permission to ignore
+them. It is not merely unhelpful, it points the opposite way, which is the failure mode this project
+keeps finding: a read-only tool sounding certain about something it has mis-modelled.
+
+Both come from the same root. The walker follows execution links, and a branch condition arrives on a
+data link, so conditions were invisible to the chain and indistinguishable from orphans to the
+leftovers list.
+
+Now:
+
+```
+- DraggedByVacuum -> Branch (CheckGameplayTag AND NOT Get isDead) -> Branch (Has Authority) -> Add Force
+```
+
+One line, containing the whole answer that previously took a dozen calls. Four rules produce it, and
+each was added because the version without it said something useless:
+
+| without | with |
+|---|---|
+| `Branch` | `Branch (Has Authority)` — the condition's source node |
+| `Branch (AND Boolean)` | `Branch (CheckGameplayTag AND NOT Get isDead)` — resolved two levels |
+| `Branch (float < float)` | `Branch (Get Health < Get MaxHealth)` — comparisons name operands |
+| `Branch (Reroute Node)` | `Branch (Has Authority)` — a knot is a wire, not a value |
+
+A comparison against a typed-in number resolves to `Get Health >= literal`, because a literal has no
+link and so is not in `connectedPins` at all. Naming the half that is a variable is the half a reader
+can act on; inventing the other half would be worse than admitting it.
+
+The cost, on the largest graph in the project — `BP_Player`'s 819-node EventGraph:
+
+| | tokens |
+|---|---|
+| `read_blueprint_graph_summary` (structure) | ~53,300 |
+| `explain_graph`, before | ~7,684 |
+| `explain_graph`, after | ~7,734 |
+
+**38 branches gained their conditions for 50 tokens** — six tenths of one percent — and the
+explanation stays seven times cheaper than the structure it replaces. That is the shape of token
+saving worth having: not a smaller answer, a sufficient one. The expensive read is now avoidable for
+the question it was most often being bought to answer.
+
+**The discoverability half is worth admitting too.** The tool was there the whole time and was not
+reached for, because this session was driving the bridge commands directly rather than the server
+tools. Bypassing the layer that adds the summaries costs exactly what the summaries were worth. That
+is a hazard for anything driving this from a script, and the reason `unreal_explain_graph`'s
+description now opens by naming the debugging question it answers rather than only its token count.

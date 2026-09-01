@@ -103,6 +103,121 @@ export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}
   const entries = behavioural.filter((node) => ENTRY_TYPES.includes(node.type));
   const visited = new Set<string>();
 
+  /**
+   * Resolve a boolean expression to something readable, one or two levels deep.
+   *
+   * Stopping at the immediate source gives "Branch (AND Boolean)", which says a conjunction decides
+   * this and not what it conjoins - true of every AND in every graph ever written. Two levels turn
+   * that into "CheckGameplayTag AND NOT Get isDead", which is the actual rule. Depth is capped hard
+   * because this is a cheap summary: a deeply nested expression collapses back to its operator name
+   * rather than unrolling into something longer than the node dump it replaced.
+   */
+  const describeBool = (
+    node: SummaryNode | undefined,
+    depth: number,
+    viaPin?: string
+  ): string | undefined => {
+    if (!node) return undefined;
+
+    // A condition wired from the function's own entry node is a PARAMETER, and the parameter's name
+    // is the whole answer. Reporting the entry's title instead gives "Branch (SetGameplayTagMC)",
+    // which names the function you are already reading rather than the argument it branches on.
+    if (ENTRY_TYPES.includes(node.type) && viaPin) {
+      return viaPin;
+    }
+
+    // A knot is a wire somebody bent around a comment box, not a value. execTargets already steps
+    // over them for execution; not doing the same for data produced "Branch (Reroute Node)", which
+    // reports the tidying rather than the condition. Stepping through costs no depth, because a
+    // reroute is not a level of logic.
+    if (node.type === "K2Node_Knot") {
+      const through = (node.connectedPins ?? []).find(
+        (p) => p.direction === "in" && (p.linkedTo ?? []).length > 0
+      )?.linkedTo?.[0];
+      return through ? describeBool(byId.get(through.node), depth, through.pin) : undefined;
+    }
+
+    const title = clean(node.title);
+    if (depth <= 0) return title;
+
+    const operand = (pinName: string): string | undefined => {
+      const pin = (node.connectedPins ?? []).find((p) => p.pin === pinName && p.direction === "in");
+      const link = pin?.linkedTo?.[0];
+      return link ? describeBool(byId.get(link.node), depth - 1, link.pin) : undefined;
+    };
+
+    if (/^NOT\b/i.test(title)) {
+      const a = operand("A");
+      return a ? `NOT ${a}` : title;
+    }
+    const infix = /^(AND|OR)\b/i.exec(title);
+    if (infix) {
+      const a = operand("A");
+      const b = operand("B");
+      return a && b ? `${a} ${infix[1].toUpperCase()} ${b}` : title;
+    }
+
+    // Comparisons title themselves by their operand TYPES - "float < float", "int >= int" - which
+    // says a number decides this and not which number. Every gate in a health, timer or ammo check
+    // reads that way, so a chain full of them carries no information at all.
+    //
+    // One side is often a literal typed into the pin, and a literal has no link, so it is not in
+    // connectedPins and cannot be recovered here. Naming the side that IS a variable is still most
+    // of the answer: "Get Health < literal" tells a reader what to go and watch.
+    const compare = /^\s*\S+\s*(<=|>=|==|!=|<|>)\s*\S+\s*$/.exec(title);
+    if (compare) {
+      const a = operand("A");
+      const b = operand("B");
+      if (a && b) return `${a} ${compare[1]} ${b}`;
+      if (a) return `${a} ${compare[1]} literal`;
+      if (b) return `literal ${compare[1]} ${b}`;
+    }
+    return title;
+  };
+
+  /**
+   * What a Branch tests, in the graph's own words.
+   *
+   * Without this a chain reads "Branch -> Branch -> Add Force", which names the shape of the logic
+   * and none of its content. That cost a real debugging session: the vacuum drag in a shipped
+   * project applies its force behind a second Branch whose condition is `Has Authority`, so it never
+   * runs on a client - and this explanation, the cheap read models are told to prefer, did not
+   * contain the word "authority" anywhere in the chain. The expensive node-and-pin read had to be
+   * done anyway, which is the one outcome this tool exists to avoid.
+   */
+  const conditionOf = (node: SummaryNode): string | undefined => {
+    if (node.type !== "K2Node_IfThenElse") return undefined;
+    const condition = (node.connectedPins ?? []).find(
+      (p) => p.pin === "Condition" && p.direction === "in"
+    );
+    const source = condition?.linkedTo?.[0];
+    if (!source) return undefined;
+    return describeBool(byId.get(source.node), 2, source.pin) ?? source.pin;
+  };
+
+  /**
+   * Every node feeding a pin of `target`, transitively - the data behind one step.
+   *
+   * Used to tell a step's inputs apart from dead logic. They look identical to a walker that only
+   * follows exec links, and calling them the same thing is actively misleading: the old output
+   * listed `Has Authority`, `AND Boolean` and `Get isDead` under "not reached by any event chain
+   * (data nodes or dead logic)" for a function whose entire behaviour those three decide. A reader
+   * takes that as permission to ignore them.
+   */
+  const collectDataInputs = (target: SummaryNode, into: Set<string>): void => {
+    for (const pin of target.connectedPins ?? []) {
+      if (pin.direction !== "in") continue;
+      for (const link of pin.linkedTo ?? []) {
+        if (into.has(link.node)) continue;
+        const source = byId.get(link.node);
+        if (!source) continue;
+        into.add(link.node);
+        collectDataInputs(source, into);
+      }
+    }
+  };
+  const feedsSomethingReached = new Set<string>();
+
   // Reroute nodes are stepped over by execTargets: they are wires, not behaviour, and treating them
   // as nodes truncated every chain drawn by somebody who tidies their graphs.
   const nextFrom = (node: SummaryNode): SummaryNode[] =>
@@ -133,7 +248,9 @@ export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}
         if (seenInChain.has(node.id)) continue;
         seenInChain.add(node.id);
         visited.add(node.id);
-        steps.push(clean(node.title));
+        const condition = conditionOf(node);
+        steps.push(condition ? `${clean(node.title)} (${condition})` : clean(node.title));
+        collectDataInputs(node, feedsSomethingReached);
         next.push(...nextFrom(node));
       }
       frontier = next;
@@ -149,11 +266,13 @@ export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}
     });
   }
 
-  // Anything never reached is either dead logic or a pure data node feeding something else. Both
-  // are worth mentioning once, by name, rather than listing every instance.
+  // Only what is genuinely unreached. A node that feeds a pin of something on a chain is that
+  // step's input, not dead logic, and lumping the two together inverted the meaning of the most
+  // important nodes in a graph: the conditions. Those are now named in the chain itself, and
+  // excluded from this list, so what remains is what the list always claimed to be.
   const unreachableCounts = new Map<string, number>();
   for (const node of behavioural) {
-    if (visited.has(node.id)) continue;
+    if (visited.has(node.id) || feedsSomethingReached.has(node.id)) continue;
     const title = clean(node.title);
     unreachableCounts.set(title, (unreachableCounts.get(title) ?? 0) + 1);
   }

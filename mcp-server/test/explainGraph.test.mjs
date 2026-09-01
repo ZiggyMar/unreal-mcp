@@ -225,3 +225,156 @@ test("the printed line is still capped, and says how much it left out", () => {
   assert.doesNotMatch(full.text, /more steps/);
   assert.equal(full.chains[0].truncated, false);
 });
+
+/** A node with arbitrary pins, for the data-side wiring a Branch condition needs. */
+const wired = (id, type, title, pins) => ({ id, type, title, connectedPins: pins });
+
+test("a Branch names what it tests, so the chain carries the decision", () => {
+  // The case this was written for. "Branch -> Branch -> Add Force" is true of a thousand graphs and
+  // useless in all of them; the second condition being Has Authority is the entire reason a shipped
+  // vacuum never ran on a client.
+  const result = explainGraph(
+    graph([
+      wired("1", "K2Node_FunctionEntry", "DraggedByVacuum", [
+        { pin: "then", direction: "out", linkedTo: [{ node: "2", pin: "execute" }] },
+      ]),
+      wired("2", "K2Node_IfThenElse", "Branch", [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "1", pin: "then" }] },
+        { pin: "Condition", direction: "in", linkedTo: [{ node: "cond", pin: "ReturnValue" }] },
+        { pin: "then", direction: "out", linkedTo: [{ node: "3", pin: "execute" }] },
+      ]),
+      wired("cond", "K2Node_CallFunction", "Has Authority", [
+        { pin: "ReturnValue", direction: "out", linkedTo: [{ node: "2", pin: "Condition" }] },
+      ]),
+      wired("3", "K2Node_CallFunction", "Add Force", [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "2", pin: "then" }] },
+      ]),
+    ])
+  );
+
+  assert.deepEqual(result.chains[0].steps, ["Branch (Has Authority)", "Add Force"]);
+  assert.match(result.text, /Branch \(Has Authority\)/);
+});
+
+test("a boolean expression is resolved past the operator that joins it", () => {
+  // "Branch (AND Boolean)" says a conjunction decides this, which is true of every AND ever written.
+  const result = explainGraph(
+    graph([
+      wired("1", "K2Node_Event", "Event Tick", [
+        { pin: "then", direction: "out", linkedTo: [{ node: "2", pin: "execute" }] },
+      ]),
+      wired("2", "K2Node_IfThenElse", "Branch", [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "1", pin: "then" }] },
+        { pin: "Condition", direction: "in", linkedTo: [{ node: "and", pin: "ReturnValue" }] },
+      ]),
+      wired("and", "K2Node_CommutativeAssociativeBinaryOperator", "AND Boolean", [
+        { pin: "A", direction: "in", linkedTo: [{ node: "tag", pin: "ReturnValue" }] },
+        { pin: "B", direction: "in", linkedTo: [{ node: "not", pin: "ReturnValue" }] },
+      ]),
+      wired("tag", "K2Node_CallFunction", "CheckGameplayTag", []),
+      wired("not", "K2Node_CallFunction", "NOT Boolean", [
+        { pin: "A", direction: "in", linkedTo: [{ node: "dead", pin: "ReturnValue" }] },
+      ]),
+      wired("dead", "K2Node_VariableGet", "Get isDead", []),
+    ])
+  );
+
+  assert.deepEqual(result.chains[0].steps, ["Branch (CheckGameplayTag AND NOT Get isDead)"]);
+});
+
+test("a condition routed through a reroute reports the value, not the wire", () => {
+  // A knot is somebody tidying their graph. Reporting it gives "Branch (Reroute Node)".
+  const result = explainGraph(
+    graph([
+      wired("1", "K2Node_Event", "Event Tick", [
+        { pin: "then", direction: "out", linkedTo: [{ node: "2", pin: "execute" }] },
+      ]),
+      wired("2", "K2Node_IfThenElse", "Branch", [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "1", pin: "then" }] },
+        { pin: "Condition", direction: "in", linkedTo: [{ node: "knot", pin: "OutputPin" }] },
+      ]),
+      wired("knot", "K2Node_Knot", "Reroute Node", [
+        { pin: "InputPin", direction: "in", linkedTo: [{ node: "auth", pin: "ReturnValue" }] },
+      ]),
+      wired("auth", "K2Node_CallFunction", "Has Authority", []),
+    ])
+  );
+
+  assert.deepEqual(result.chains[0].steps, ["Branch (Has Authority)"]);
+});
+
+test("a condition coming from the entry node is named by its parameter", () => {
+  const result = explainGraph(
+    graph([
+      wired("1", "K2Node_FunctionEntry", "SetGameplayTagMC", [
+        { pin: "then", direction: "out", linkedTo: [{ node: "2", pin: "execute" }] },
+        { pin: "isAdding", direction: "out", linkedTo: [{ node: "2", pin: "Condition" }] },
+      ]),
+      wired("2", "K2Node_IfThenElse", "Branch", [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "1", pin: "then" }] },
+        { pin: "Condition", direction: "in", linkedTo: [{ node: "1", pin: "isAdding" }] },
+      ]),
+    ])
+  );
+
+  assert.deepEqual(result.chains[0].steps, ["Branch (isAdding)"]);
+});
+
+test("nodes feeding a reached step are inputs, not dead logic", () => {
+  // The inverted claim this replaced: Has Authority, the AND and Get isDead were all listed under
+  // "not reached by any event chain (data nodes or dead logic)" for a function they entirely decide.
+  const result = explainGraph(
+    graph([
+      wired("1", "K2Node_Event", "Event Tick", [
+        { pin: "then", direction: "out", linkedTo: [{ node: "2", pin: "execute" }] },
+      ]),
+      wired("2", "K2Node_IfThenElse", "Branch", [
+        { pin: "execute", direction: "in", linkedTo: [{ node: "1", pin: "then" }] },
+        { pin: "Condition", direction: "in", linkedTo: [{ node: "auth", pin: "ReturnValue" }] },
+      ]),
+      wired("auth", "K2Node_CallFunction", "Has Authority", []),
+      // Genuinely orphaned: wired to nothing at all.
+      wired("orphan", "K2Node_CallFunction", "Print String", []),
+    ])
+  );
+
+  assert.ok(!result.unreachable.includes("Has Authority"), "a branch condition is not dead logic");
+  assert.deepEqual(result.unreachable, ["Print String"]);
+});
+
+test("a comparison names its operands, and says so when one is a literal", () => {
+  // "float < float" is how every numeric gate in every project titles itself.
+  const cmp = (title, links) =>
+    explainGraph(
+      graph([
+        wired("1", "K2Node_Event", "Event Tick", [
+          { pin: "then", direction: "out", linkedTo: [{ node: "2", pin: "execute" }] },
+        ]),
+        wired("2", "K2Node_IfThenElse", "Branch", [
+          { pin: "execute", direction: "in", linkedTo: [{ node: "1", pin: "then" }] },
+          { pin: "Condition", direction: "in", linkedTo: [{ node: "op", pin: "ReturnValue" }] },
+        ]),
+        wired("op", "K2Node_PromotableOperator", title, links),
+        wired("hp", "K2Node_VariableGet", "Get Health", []),
+        wired("max", "K2Node_VariableGet", "Get MaxHealth", []),
+      ])
+    ).chains[0].steps[0];
+
+  assert.equal(
+    cmp("float < float", [
+      { pin: "A", direction: "in", linkedTo: [{ node: "hp", pin: "ReturnValue" }] },
+      { pin: "B", direction: "in", linkedTo: [{ node: "max", pin: "ReturnValue" }] },
+    ]),
+    "Branch (Get Health < Get MaxHealth)"
+  );
+
+  // A literal typed into the pin has no link, so it is not in connectedPins at all. Naming the side
+  // that is a variable is still the half a reader can act on.
+  assert.equal(
+    cmp("float >= float", [{ pin: "A", direction: "in", linkedTo: [{ node: "hp", pin: "ReturnValue" }] }]),
+    "Branch (Get Health >= literal)"
+  );
+
+  // Nothing resolvable at all falls back rather than inventing structure.
+  assert.equal(cmp("float > float", []), "Branch (float > float)");
+});

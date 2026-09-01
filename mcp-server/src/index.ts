@@ -1330,14 +1330,13 @@ register(
   {
     title: "What does this graph actually do?",
     description:
-      "**Read this before reading a graph node by node.** Returns each entry point and the ordered chain of things " +
-      "it does, in plain text. " +
-      "A 59-node EventGraph costs 2,328 tokens as a node-and-pin structure and 323 as an explanation - a seventh - " +
-      "so this is usually the only read you need, and on a small model it is the difference between " +
-      "the graph fitting in context and not. On a graph too big to return whole it is the difference between " +
-      "all of it and part: unreal_read_blueprint_summary caps at 60 nodes and says so, this explains all 809. " +
-      "Deliberately lossy: it names what happens, not exact pins or node ids. When you need those, call " +
-      "unreal_read_blueprint_summary for the one chain you are changing.",
+      "**Read this before reading a graph node by node.** Every entry point and the ordered chain of what it does, " +
+      "with each Branch labelled by what it tests - `Branch (Has Authority)`, `Branch (Get Health < Get MaxHealth)`. " +
+      "So it is also the first call for \"why did nothing happen\": the first gate that is false is the answer. " +
+      "A 59-node EventGraph costs 2,328 tokens as a node-and-pin structure and 323 here, a seventh; " +
+      "unreal_read_blueprint_summary caps at 60 nodes, this explains all 809. " +
+      "Deliberately lossy - no exact pins or node ids. For those, call " +
+      "unreal_read_blueprint_summary on the one chain you are changing.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe('Graph to explain. Defaults to "EventGraph".'),
