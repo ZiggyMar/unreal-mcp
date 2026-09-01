@@ -82,12 +82,28 @@ export interface DisabledToolNote {
 export function disabledToolNote(reply: unknown, isEnabled: IsEnabled): DisabledToolNote | undefined {
   const off = toolsNamedInAdvice(reply).filter((name) => isEnabled(name) === false);
   if (off.length === 0) return undefined;
+
+  // When the dispatcher is standing, say so instead of sending the caller to enable things.
+  //
+  // On `search` and `lazy`, unreal_call_tool is listed and runs any registered tool WITHOUT touching
+  // the tool list. unreal_enable_tools does touch it, and changing the tool list re-charges the whole
+  // cached prefix - the one genuinely expensive thing a model can do to its own context. So this note
+  // was recommending the costly route on exactly the profiles that have the cheap one, and calling
+  // tools "switched off" when they were one wrapper away.
+  //
+  // Asked of `isEnabled` rather than plumbed through from the profile, because it is the same
+  // question - is the dispatcher callable right now - and a second source for it is a second thing to
+  // keep in step.
+  const canDispatch = isEnabled("unreal_call_tool") === true;
   return {
     toolsNotEnabled: off,
-    toolsNotEnabledNote:
-      `${off.length} tool(s) named above are switched off in this session: ${off.join(", ")}. ` +
-      `unreal_enable_tools({ tools: [${off.map((n) => `"${n}"`).join(", ")}] }) turns on exactly those, ` +
-      `which costs far less than a whole group.`,
+    toolsNotEnabledNote: canDispatch
+      ? `${off.length} tool(s) named above are not in this session's tool list: ${off.join(", ")}. ` +
+        `unreal_call_tool({ tool: "${off[0]}", args: {...} }) runs one straight away and leaves the ` +
+        `list alone; enabling them instead re-charges your whole cached prefix.`
+      : `${off.length} tool(s) named above are switched off in this session: ${off.join(", ")}. ` +
+        `unreal_enable_tools({ tools: [${off.map((n) => `"${n}"`).join(", ")}] }) turns on exactly those, ` +
+        `which costs far less than a whole group.`,
   };
 }
 

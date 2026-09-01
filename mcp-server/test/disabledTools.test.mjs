@@ -4,7 +4,16 @@ import assert from "node:assert/strict";
 import { toolsNamedInAdvice, disabledToolNote, withDisabledToolNote } from "../dist/disabledTools.js";
 
 /** Everything on except the ones named. */
-const allOnExcept = (...off) => (name) => (off.includes(name) ? false : true);
+// Everything on except the named ones - AND the dispatcher off, which is what "everything on"
+// actually means in this server. `full` disables unreal_call_tool on purpose, because every tool is
+// already listed and dispatching would add a hop and a schema. A fixture that left it on would model
+// a profile that does not exist, and the note reads differently when the dispatcher is standing:
+// there, enabling is the expensive route and there is a cheaper one to name.
+const allOnExcept = (...off) => (name) =>
+  name === "unreal_call_tool" ? false : off.includes(name) ? false : true;
+
+/** Everything on INCLUDING the dispatcher, which is `search` and `lazy`. */
+const withDispatcher = (...off) => (name) => (off.includes(name) ? false : true);
 
 test("only the advice fields are scanned, not the whole reply", () => {
   // Scanning everything would be simpler and wrong. unreal_list_tools names dozens of deliberately
@@ -72,4 +81,32 @@ test("an empty or absent reply is not an error", () => {
   assert.deepEqual(toolsNamedInAdvice({}), []);
   assert.deepEqual(toolsNamedInAdvice(null), []);
   assert.deepEqual(toolsNamedInAdvice("unreal_remove_node"), [], "a bare string is not an advice field");
+});
+
+test("with the dispatcher standing, the note points at it rather than at enabling", () => {
+  // On `search` and `lazy`, unreal_call_tool is listed and runs any registered tool without touching
+  // the tool list. unreal_enable_tools changes the list, and changing the list re-charges the whole
+  // cached prefix - so the old note recommended the expensive route on exactly the profiles that
+  // have the cheap one.
+  const enabled = withDispatcher("unreal_auto_layout_graph");
+  const note = disabledToolNote({ fix: "Run unreal_auto_layout_graph." }, enabled);
+
+  assert.deepEqual(note.toolsNotEnabled, ["unreal_auto_layout_graph"]);
+  assert.match(note.toolsNotEnabledNote, /unreal_call_tool/);
+  assert.doesNotMatch(
+    note.toolsNotEnabledNote,
+    /unreal_enable_tools\(/,
+    "must not steer to the call that invalidates the cache when a wrapper would do"
+  );
+  assert.doesNotMatch(note.toolsNotEnabledNote, /switched off/, "they are unlisted, not unreachable");
+});
+
+test("without it, the advice is still to enable, because that is the only route", () => {
+  // `full` disables the dispatcher on purpose - everything is already listed - and `core` never had
+  // it. There, enabling really is what a caller has to do.
+  const enabled = allOnExcept("unreal_auto_layout_graph");
+  const note = disabledToolNote({ fix: "Run unreal_auto_layout_graph." }, enabled);
+
+  assert.match(note.toolsNotEnabledNote, /unreal_enable_tools\(/);
+  assert.doesNotMatch(note.toolsNotEnabledNote, /unreal_call_tool\(/);
 });

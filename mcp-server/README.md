@@ -8147,3 +8147,47 @@ Which is the whole theme of this pass. None of these were broken tools. They wer
 than the claim above them** — "reports its entries" satisfied by a generated name, "the whole path
 works" satisfied by a refusal, "the fix, observed" satisfied by never setting the flag. A test suite
 drifts this way quietly, because every one of those still prints in green.
+
+### The note that recommended the expensive route on the cheap profile
+
+Pricing the same task in both modes left one number unexplained: `review_blueprint` cost 87 more
+tokens through the dispatcher than called directly, twice. A wrapper should not change what a tool
+returns, so it was worth finding out what did.
+
+It was not the wrapper. The reply itself differs, because on `search` most tools are not listed and
+the review names one in its advice:
+
+```json
+"toolsNotEnabled": ["unreal_auto_layout_graph"],
+"toolsNotEnabledNote": "1 tool(s) named above are switched off in this session:
+   unreal_auto_layout_graph. unreal_enable_tools({ tools: [\"unreal_auto_layout_graph\"] })
+   turns on exactly those, which costs far less than a whole group."
+```
+
+Two things wrong with that, and the second is not about tokens.
+
+They are **not switched off**. On `search` and `lazy` the dispatcher is standing, and
+`unreal_call_tool` runs any registered tool immediately. Calling them unreachable is false about the
+one profile where the note fires most.
+
+And the advice is backwards. `unreal_enable_tools` changes the tool list, and changing the tool list
+re-charges the entire cached prefix — the single most expensive thing a model can do to its own
+context, and the thing the standing instructions were corrected two commits ago to warn about. The
+note was sending callers to that, on the profiles that have the cheap alternative, in a reply that
+arrives dozens of times a session.
+
+It now asks `isEnabled("unreal_call_tool")` — the same question, from the source already passed in,
+rather than a second copy of the profile to keep in step — and says:
+
+```
+1 tool(s) named above are not in this session's tool list: unreal_auto_layout_graph.
+unreal_call_tool({ tool: "unreal_auto_layout_graph", args: {...} }) runs one straight away and
+leaves the list alone; enabling them instead re-charges your whole cached prefix.
+```
+
+**The test fixture was the interesting part.** The existing tests used `allOnExcept(...)`, meaning
+"everything on except these" — which reported `unreal_call_tool` as enabled, and so modelled a
+profile that does not exist. `full` disables the dispatcher deliberately, because every tool is
+already listed and a hop would only add a schema. The fixture now says so, and a second one models
+`search` where the dispatcher stands. One of them had to break for this change to be visible, and the
+one that broke was the one describing a session nobody runs.
