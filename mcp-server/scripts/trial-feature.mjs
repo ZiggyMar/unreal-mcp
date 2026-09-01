@@ -82,7 +82,15 @@ async function step(label, name, args, check) {
   tokens += Math.round(text.length / 4);
   let parsed = null;
   try { parsed = JSON.parse(text); } catch { /* not every reply is JSON */ }
-  const problem = r.error ? "JSON-RPC error" : check ? check(text, parsed) : null;
+  // A tool that REFUSED did not answer, whatever its own check thinks. Same hole trial-diagnose and
+  // trial-runtime had, which between them hid six steps that had never executed.
+  const problem = r.error
+    ? "JSON-RPC error"
+    : r.result?.isError === true
+      ? "the tool refused the call"
+      : check
+        ? check(text, parsed)
+        : null;
   if (problem) stalls.push({ label, problem, reply: text.slice(0, 240).split(NL).join(" ") });
   console.log(`  ${label.padEnd(34)} ${String(Math.round(text.length / 4)).padStart(5)} tok${problem ? "   <-- STALL" : ""}`);
   return { text, parsed };

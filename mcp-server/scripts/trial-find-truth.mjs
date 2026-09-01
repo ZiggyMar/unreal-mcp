@@ -129,16 +129,33 @@ const structPath = (structs.assets ?? []).map((a) => (typeof a === "string" ? a 
 if (structPath) {
   // `match` filters the ordinary property walk down to nothing, so this asserts the struct fields
   // specifically rather than passing on unrelated properties.
+  // Two halves, because the answer arrives in two calls on purpose.
+  //
+  // read_asset_properties used to inline a struct's fields, and this trial asserted that. The reply
+  // now returns an empty `properties` and a `next` pointer naming unreal_list_struct_fields instead,
+  // which is the better design - a struct's fields are not properties, and duplicating them in two
+  // tools is how the two drift apart. The trial was not updated with it, so it sat at 11/13 asserting
+  // a shape nothing produces any more. A stale check fails exactly like a broken tool, which is why
+  // it went unread.
+  //
+  // So: the pointer has to NAME the tool that has the answer, and that tool has to have it.
   const st = await call("unreal_read_asset_properties", { path: structPath, match: "zzz-no-such-property" });
   check(
-    "a struct reports its fields",
-    Array.isArray(st.fields) && st.fields.length > 0,
-    `${structPath.split("/").pop()} -> ${(st.fields ?? []).map((f) => `${f.name}:${f.type}`).join(", ").slice(0, 90)}`
+    "reading a struct points at the tool that has its fields",
+    typeof st.next === "string" && /unreal_list_struct_fields/.test(st.next),
+    `${structPath.split("/").pop()} -> ${String(st.next ?? "(no pointer)").slice(0, 90)}`
+  );
+
+  const fields = await call("unreal_list_struct_fields", { path: structPath });
+  check(
+    "and that tool reports them",
+    Array.isArray(fields.fields) && fields.fields.length > 0,
+    `${structPath.split("/").pop()} -> ${(fields.fields ?? []).map((f) => `${f.name}:${f.type}`).join(", ").slice(0, 90)}`
   );
   check(
-    "and by the name a person writes, not the GUID-suffixed internal one",
-    (st.fields ?? []).every((f) => !/_\d+_[0-9A-F]{16,}/i.test(f.name ?? "")),
-    (st.fields ?? []).map((f) => f.name).join(", ").slice(0, 80)
+    "by the name a person writes, not the GUID-suffixed internal one",
+    (fields.fields ?? []).every((f) => !/_\d+_[0-9A-F]{16,}/i.test(f.name ?? "")),
+    (fields.fields ?? []).map((f) => f.name).join(", ").slice(0, 80)
   );
 }
 
@@ -147,14 +164,28 @@ const enumPath = (enums.assets ?? []).map((a) => (typeof a === "string" ? a : a.
 if (enumPath) {
   const en = await call("unreal_read_asset_properties", { path: enumPath, match: "zzz-no-such-property" });
   check(
-    "an enum reports its entries",
-    Array.isArray(en.entries) && en.entries.length > 0,
-    `${enumPath.split("/").pop()} -> ${(en.entries ?? []).map((e) => `${e.name}=${e.value}`).join(", ").slice(0, 90)}`
+    "reading an enum points at the tool that has its entries",
+    typeof en.next === "string" && /unreal_list_enum_entries/.test(en.next),
+    `${enumPath.split("/").pop()} -> ${String(en.next ?? "(no pointer)").slice(0, 90)}`
+  );
+
+  const entries = await call("unreal_list_enum_entries", { path: enumPath });
+  // displayName, not name. Unreal stores a User Defined Enum's entries as NewEnumerator0,
+  // NewEnumerator1, ... and keeps what the author typed separately. Reporting only the internal name
+  // is true and useless - "NewEnumerator2" tells a reader nothing, and this trial printed exactly
+  // that for three entries while claiming the tool "reports them". The tool had the display names all
+  // along; the check was reading past them.
+  check(
+    "and that tool reports them, by the name the author typed",
+    Array.isArray(entries.entries) &&
+      entries.entries.length > 0 &&
+      entries.entries.every((e) => typeof e.displayName === "string" && e.displayName.length > 0),
+    `${enumPath.split("/").pop()} -> ${(entries.entries ?? []).map((e) => `${e.displayName}=${e.value}`).join(", ").slice(0, 90)}`
   );
   check(
-    "and not the _MAX sentinel, which is bookkeeping nobody selects",
-    (en.entries ?? []).every((e) => !/_MAX$/i.test(e.name ?? "")),
-    (en.entries ?? []).map((e) => e.name).join(", ").slice(0, 80)
+    "without the _MAX sentinel, which is bookkeeping nobody selects",
+    (entries.entries ?? []).every((e) => !/_MAX$/i.test(e.name ?? "")),
+    (entries.entries ?? []).map((e) => e.name).join(", ").slice(0, 80)
   );
 }
 

@@ -8075,3 +8075,75 @@ claimed in its own header. It says both now.
 Worth separating the two failures, because they are different sizes. Missing the fix half is a bug in
 a test. Announcing a conclusion the run did not reach is the thing this repo keeps having to correct
 in itself, and it is the one that costs a reader their trust in every other line beside it.
+
+### Running all of them, which nobody had done at once
+
+Two trials turned out to be reporting green over steps that never ran, so the obvious next question
+is how many others were. Every trial, run against a live editor in one pass:
+
+| trial | result |
+|---|---|
+| diagnose | 9 calls, green |
+| runtime | 24 calls, green, both halves |
+| feature | 33 calls, green — and could not have seen a refusal |
+| find-truth | **11/13** |
+| node-search | 29/29 |
+| parent-call, chain, lifecycle, data-feature, workflows | green |
+
+`trial-feature` had the same blind spot as the other two — `r.error` only, so a tool refusal would
+have read as an answer. It happened to have nothing hidden behind it, which is worth stating plainly:
+the check was added and *found nothing*, and that is a result rather than a disappointment. It cannot
+develop one now.
+
+`trial-find-truth` was the one actually failing, at 11/13, and it had been for some time.
+
+### A stale check fails exactly like a broken tool
+
+The two failures read as capability gaps:
+
+```
+FAIL  a struct reports its fields - S_UpgradeCount.S_UpgradeCount ->
+FAIL  an enum reports its entries - E_InputDevice.E_InputDevice ->
+```
+
+Nothing was broken. `unreal_read_asset_properties` used to inline a struct's fields, and was changed
+to return an empty `properties` and a pointer instead:
+
+```json
+{ "class": "UserDefinedStruct", "properties": [],
+  "next": "A struct's content is its fields, which are not properties and are not listed above.
+           unreal_list_struct_fields has them, with the type names unreal_add_struct_field accepts." }
+```
+
+That is the better design — a struct's fields are not properties, and holding them in two tools is
+how the two drift apart. The trial was not updated with it, so it went on asserting a shape nothing
+produces. And a stale check fails in exactly the way a broken tool does, which is why two red lines
+sat in the output unread.
+
+It now tests the path a model actually walks: the pointer has to **name** the tool that has the
+answer, and that tool has to have it. Three checks instead of two, and 15/15.
+
+### "NewEnumerator2" is true and useless
+
+Repairing the enum half surfaced something the old check had been printing for as long as it existed:
+
+```
+E_InputDevice -> NewEnumerator0=0, NewEnumerator1=1, NewEnumerator2=2
+```
+
+Unreal stores a User Defined Enum's entries under generated names and keeps what the author typed
+separately. `unreal_list_enum_entries` returns both — the trial was reading past `displayName` and
+asserting on the internal one, so it passed while displaying three names nobody could act on. The
+same asymmetry cost real time earlier in this project, when a Data Table cell read `NewEnumerator2`
+while the editor showed "Shield Booster".
+
+The check now requires a display name on every entry, and prints them:
+
+```
+E_InputDevice -> KeyboardAndMouse=0, Xbox=1, PlayStation=2
+```
+
+Which is the whole theme of this pass. None of these were broken tools. They were **assertions weaker
+than the claim above them** — "reports its entries" satisfied by a generated name, "the whole path
+works" satisfied by a refusal, "the fix, observed" satisfied by never setting the flag. A test suite
+drifts this way quietly, because every one of those still prints in green.
