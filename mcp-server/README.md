@@ -8640,3 +8640,51 @@ The totals barely moved and the ranking did. `PC_Gameplay` fell from cost 1935 t
 `BP_Player` rose to first — which is the point, because the whole purpose of `worstBlueprints` is to
 answer "where should I start", and it had been answering with a number that counted some Blueprints
 twice.
+
+### Two defects wearing one shape, with opposite remedies
+
+Several iterations went into making the audit's findings *accurate*. The next question is whether
+they are *actionable*, and the way to find out is to take the top-ranked one and try to act on it.
+
+`BP_Player` leads `worstBlueprints`, and four of its findings say a server event writes a variable
+that is not replicated. All four variables confirmed `replicated: false`, so the findings are true.
+Asking the newly-widened `trace_variable` who reads them:
+
+```
+CanRegenHealth   scanned 339 | reads: none
+CanRegenEnergy   scanned 339 | reads: BP_Player:RegenerateEnergy
+VaccumTimer      scanned 339 | reads: BP_Player:EventGraph
+TeamHealSpeed    scanned 339 | reads: BP_Player:EventGraph
+```
+
+`CanRegenHealth` is written twice by server events and **read nowhere** — not in that Blueprint, not
+in the other 338. The finding said *"no client will ever see it"* and advised
+`set_variable_replication`. Both are true and the advice is wrong: replicating a variable nothing
+reads pays network for a value nobody looks at. It is not a replication bug, it is a dead variable,
+and the two need opposite actions.
+
+`repnotify-does-nothing` already tiers exactly this way — "and nothing in this Blueprint reads or
+writes the variable at all" is the difference between a missing handler and dead state. The same
+distinction now applies here:
+
+```
+"HealthRegen" runs on the server and sets "CanRegenHealth", which is not replicated - and nothing
+in this Blueprint reads it either.
+  fix: Check first whether anything reads it at all: unreal_trace_variable on "CanRegenHealth"
+       covers the whole project, and this check can only see one Blueprint. If nothing reads it,
+       the variable is dead - remove it, or wire up the read that was meant to exist.
+```
+
+Deliberately hedged to "in this Blueprint", because those nodes are all the check can see and a
+widget in another asset reading the variable would be invisible to it. Naming the open question and
+the call that settles it beats guessing at the answer. On the real project the tiering agrees with
+`trace_variable` exactly — the one it calls dead is the one with zero reads across 339 Blueprints.
+
+Roughly **four in ten** of this finding class turn out to be the dead-state kind, which is four in
+ten pointed at the wrong remedy. The count does not move; what moves is what a model does next.
+
+**One test had to change, and it is worth saying why.** The existing case built a server event
+setting `bVacuumOn` with nothing reading it, then asserted the replication wording — so the new tier
+fired and it failed. The fix was to add the read, not to relax the assertion: the test describes the
+replication case and its fixture did not contain one. A test that only passed because a distinction
+did not exist yet is not evidence the distinction is wrong.

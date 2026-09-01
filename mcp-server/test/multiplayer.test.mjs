@@ -21,6 +21,11 @@ test("a server event setting an unreplicated variable is flagged", () => {
     [
       node("e", "K2Node_CustomEvent", "Server_VacuumPressed", ["s"]),
       node("s", "K2Node_VariableSet", "SET bVacuumOn", []),
+      // Something reads it, which is what makes replication the right answer. Without this read the
+      // check now reaches its other conclusion - the variable is dead and replicating it would pay
+      // network for a value nobody looks at - and this test asserts the replication wording, so the
+      // fixture has to be the case it describes.
+      node("g", "K2Node_VariableGet", "Get bVacuumOn", []),
     ],
     [{ name: "bVacuumOn", replicated: false }]
   );
@@ -514,4 +519,61 @@ test("an older plugin sends no runsOn, and the name heuristic still carries it",
   ];
 
   assert.deepEqual(findServerOnlyCasts(nodes, (n) => n === "GM_Gameplay", false), []);
+});
+
+test("a server write nobody reads is dead state, not a replication bug", () => {
+  // Found on a real project: BP_Player's CanRegenHealth is written twice by server events and read
+  // nowhere - not in the Blueprint and not in the other 338. Reported as a replication bug it
+  // invites exactly the wrong fix, because replicating it pays network for a value nobody looks at.
+  const nodes = [
+    {
+      id: "ev",
+      type: "K2Node_CustomEvent",
+      title: "HealthRegen",
+      runsOn: "server",
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "set", pin: "execute" }] }],
+    },
+    {
+      id: "set",
+      type: "K2Node_VariableSet",
+      title: "Set CanRegenHealth",
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] }],
+    },
+  ];
+  const variables = [{ name: "CanRegenHealth", type: "bool", replicated: false }];
+
+  const found = reviewMultiplayer(nodes, variables, new Map()).filter(
+    (f) => f.check === "server-writes-unreplicated"
+  );
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /nothing in this Blueprint reads it either/);
+  assert.match(found[0].fix, /unreal_trace_variable/, "it must say how to settle the open question");
+  assert.doesNotMatch(found[0].fix, /^unreal_set_variable_replication/, "and not lead with the wrong remedy");
+});
+
+test("a server write something does read keeps the replication remedy", () => {
+  const nodes = [
+    {
+      id: "ev",
+      type: "K2Node_CustomEvent",
+      title: "EnergyRegen",
+      runsOn: "server",
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "set", pin: "execute" }] }],
+    },
+    {
+      id: "set",
+      type: "K2Node_VariableSet",
+      title: "Set CanRegenEnergy",
+      connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "ev", pin: "then" }] }],
+    },
+    { id: "get", type: "K2Node_VariableGet", title: "Get CanRegenEnergy", connectedPins: [] },
+  ];
+  const variables = [{ name: "CanRegenEnergy", type: "bool", replicated: false }];
+
+  const found = reviewMultiplayer(nodes, variables, new Map()).filter(
+    (f) => f.check === "server-writes-unreplicated"
+  );
+  assert.equal(found.length, 1);
+  assert.match(found[0].fix, /set_variable_replication/);
+  assert.doesNotMatch(found[0].message, /reads it either/);
 });

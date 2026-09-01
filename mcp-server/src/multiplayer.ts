@@ -202,6 +202,18 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[], grap
     serverEvents.length > 0 || multicastEvents.length > 0 || clientEvents.length > 0 || anyReplicated;
   if (!networked) return findings;
 
+  // Which variables this Blueprint READS, as opposed to merely writing.
+  //
+  // Needed to tell two different defects apart below. Kept separate from reviewRepNotifies' `touched`
+  // set, which deliberately mixes Get and Set - that check asks whether a variable is used at all,
+  // this one asks whether anything looks at what the server writes.
+  const readVariables = new Set<string>();
+  for (const node of nodes) {
+    if (!/K2Node_VariableGet/.test(node.type ?? "")) continue;
+    const name = (node.title ?? "").replace(/^Get\s+/i, "").split("\n")[0].trim();
+    if (name) readVariables.add(name.toLowerCase());
+  }
+
   // Walk execution forward from each server event and collect what it writes.
   const execTargets = (node: MpNode): MpNode[] => {
     const out: MpNode[] = [];
@@ -336,17 +348,37 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[], grap
       continue;
     }
 
+    // Two defects wear this shape, and they have opposite remedies.
+    //
+    // If something reads the variable, the server's write never reaches it and the answer is to
+    // replicate. If NOTHING reads it, replicating would pay network for a value nobody looks at -
+    // the variable is dead, and the answer is to delete it or find the read that was meant to exist.
+    // Found on this project: BP_Player's CanRegenHealth is written twice by server events and read
+    // nowhere, in the Blueprint or in the other 338. Reported as a replication bug it invites
+    // exactly the wrong fix.
+    //
+    // Hedged to this Blueprint on purpose - these nodes are all this check can see, and a widget in
+    // another asset reading the variable would be invisible here. Saying which question is still
+    // open beats guessing at its answer.
+    const neverRead = !readVariables.has(variable.toLowerCase());
     findings.push({
       check: "server-writes-unreplicated",
       severity: "warning",
       variable,
-      message:
-        `"${event}" runs on the server and sets "${variable}", which is not replicated. ` +
-        `The server will change its own copy and no client will ever see it.`,
+      message: neverRead
+        ? `"${event}" runs on the server and sets "${variable}", which is not replicated - and nothing ` +
+          `in this Blueprint reads it either. The server changes a value no client receives and no ` +
+          `graph here looks at.`
+        : `"${event}" runs on the server and sets "${variable}", which is not replicated. ` +
+          `The server will change its own copy and no client will ever see it.`,
       observed,
-      fix:
-        `unreal_set_variable_replication on "${variable}" with mode "replicated" - or "repnotify" if clients need to react to the change rather than just read it. ` +
-        `Until then this works for whoever is hosting and silently does nothing for everyone else.`,
+      fix: neverRead
+        ? `Check first whether anything reads it at all: unreal_trace_variable on "${variable}" covers ` +
+          `the whole project, and this check can only see one Blueprint. If nothing reads it, the ` +
+          `variable is dead - remove it with unreal_remove_variable, or wire up the read that was ` +
+          `meant to exist. Replicating it would pay network for a value nobody looks at.`
+        : `unreal_set_variable_replication on "${variable}" with mode "replicated" - or "repnotify" if clients need to react to the change rather than just read it. ` +
+          `Until then this works for whoever is hosting and silently does nothing for everyone else.`,
     });
   }
 
