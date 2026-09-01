@@ -34,6 +34,8 @@
 #include "MovieSceneTrack.h"
 #include "UObject/Package.h"
 
+#include "MCPResponse.h"
+
 namespace
 {
 /** Accept a short asset name or a full path, like every other path parameter in this bridge. */
@@ -80,7 +82,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadLevelSequence(const TShare
 		Result->SetStringField(TEXT("error"), TEXT("missing_param"));
 		Result->SetStringField(TEXT("detail"),
 			TEXT("Pass `path`: a Level Sequence, e.g. \"/Game/Cinematics/LS_Intro\". List them with list_assets className=LevelSequence."));
-		return Result;
+		return MCPResponse::Fail(Result, TEXT("missing_param"), FString());
 	}
 
 	ULevelSequence* Sequence = ResolveSequence(Path);
@@ -91,7 +93,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadLevelSequence(const TShare
 			FString::Printf(
 				TEXT("No Level Sequence at \"%s\". Pass a full path like /Game/Cinematics/LS_Intro; list them with list_assets className=LevelSequence."),
 				*Path));
-		return Result;
+		return MCPResponse::Fail(Result, TEXT("sequence_not_found"), FString());
 	}
 
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
@@ -99,7 +101,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadLevelSequence(const TShare
 	{
 		Result->SetStringField(TEXT("error"), TEXT("no_movie_scene"));
 		Result->SetStringField(TEXT("detail"), TEXT("This Level Sequence has no MovieScene, which means it is empty or corrupt."));
-		return Result;
+		return MCPResponse::Fail(Result, TEXT("no_movie_scene"), FString());
 	}
 
 	Result->SetStringField(TEXT("sequence"), Sequence->GetName());
@@ -213,5 +215,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadLevelSequence(const TShare
 			TEXT("Something here is in the sequence and does nothing. A binding with no tracks, a track with no sections, and a muted track all play perfectly and animate nothing - none of them is an error, and in the editor each is visible only by scrolling to it and noticing an absence."));
 	}
 
-	return Result;
+	return MCPResponse::Ok(Result);
 }

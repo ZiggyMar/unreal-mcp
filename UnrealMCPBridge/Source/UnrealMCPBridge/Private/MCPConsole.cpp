@@ -43,6 +43,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 
+#include "MCPResponse.h"
+
 namespace
 {
 /**
@@ -142,7 +144,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunConsoleCommand(const TShare
 	{
 		Result->SetStringField(TEXT("error"), TEXT("missing_command"));
 		Result->SetStringField(TEXT("detail"), TEXT("Pass `command`, the console line to run - e.g. \"stat fps\"."));
-		return Result;
+		return MCPResponse::Fail(Result, TEXT("missing_command"), FString());
 	}
 	Command = Command.TrimStartAndEnd();
 
@@ -151,7 +153,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunConsoleCommand(const TShare
 	{
 		Result->SetStringField(TEXT("error"), TEXT("refused"));
 		Result->SetStringField(TEXT("detail"), Why);
-		return Result;
+		return MCPResponse::Fail(Result, TEXT("refused"), FString());
 	}
 
 	FString Requested = TEXT("auto");
@@ -167,7 +169,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunConsoleCommand(const TShare
 			Requested == TEXT("pie")
 				? TEXT("No game is running. Start one with start_pie, or leave `world` unset to run against the editor.")
 				: TEXT("No world is loaded. Open a level first."));
-		return Result;
+		return MCPResponse::Fail(Result, TEXT("no_world"), FString());
 	}
 
 	Result->SetStringField(TEXT("world"), bIsPie ? TEXT("pie") : TEXT("editor"));
@@ -230,5 +232,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunConsoleCommand(const TShare
 		// the second one. Saying which is which is the difference between a summary and a lie.
 		Result->SetNumberField(TEXT("logLinesTotal"), TotalLines);
 	}
-	return Result;
+	return MCPResponse::Ok(Result);
 }

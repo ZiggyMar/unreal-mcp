@@ -35,6 +35,8 @@
 
 #if WITH_LIVE_CODING
 #include "ILiveCodingModule.h"
+
+#include "MCPResponse.h"
 #endif
 
 namespace
@@ -114,7 +116,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingStatus(const TShared
 	Result->SetBoolField(TEXT("available"), false);
 	Result->SetStringField(TEXT("why"),
 		TEXT("This engine build was compiled without live coding (WITH_LIVE_CODING=0). C++ changes need a full rebuild with the editor closed."));
-	return Result;
+	return MCPResponse::Ok(Result);
 #else
 	ILiveCodingModule* LiveCoding = GetLiveCoding();
 	if (!LiveCoding)
@@ -122,7 +124,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingStatus(const TShared
 		Result->SetBoolField(TEXT("available"), false);
 		Result->SetStringField(TEXT("why"),
 			TEXT("The LiveCoding module is not loaded in this editor. C++ changes need a full rebuild with the editor closed."));
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	const bool bCompiling = LiveCoding->IsCompiling();
@@ -145,7 +147,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingStatus(const TShared
 	{
 		// Still going. Do not take the lines yet; they are what the finished reply is made of.
 		Result->SetBoolField(TEXT("done"), false);
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	// Not compiling. If a compile was outstanding, this is the edge where it finished: pull the log
@@ -160,7 +162,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingStatus(const TShared
 
 	Result->SetBoolField(TEXT("done"), true);
 	AddLogField(Result, LastCompileLines);
-	return Result;
+	return MCPResponse::Ok(Result);
 #endif
 }
 
@@ -172,14 +174,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingCompile(const TShare
 	Result->SetBoolField(TEXT("started"), false);
 	Result->SetStringField(TEXT("why"),
 		TEXT("This engine build was compiled without live coding (WITH_LIVE_CODING=0)."));
-	return Result;
+	return MCPResponse::Ok(Result);
 #else
 	ILiveCodingModule* LiveCoding = GetLiveCoding();
 	if (!LiveCoding)
 	{
 		Result->SetBoolField(TEXT("started"), false);
 		Result->SetStringField(TEXT("why"), TEXT("The LiveCoding module is not loaded in this editor."));
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	if (LiveCoding->IsCompiling())
@@ -189,7 +191,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingCompile(const TShare
 		Result->SetBoolField(TEXT("started"), false);
 		Result->SetBoolField(TEXT("alreadyRunning"), true);
 		Result->SetStringField(TEXT("why"), TEXT("A live coding compile is already running."));
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	if (!LiveCoding->IsEnabledForSession() && !LiveCoding->CanEnableForSession())
@@ -200,7 +202,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingCompile(const TShare
 			? FString(TEXT("Live coding cannot be enabled in this session."))
 			: EnableError.ToString();
 		Result->SetStringField(TEXT("why"), Why);
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	// Hook the log before starting, not after: the first thing a failed start prints is the reason it
@@ -243,6 +245,6 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleLiveCodingCompile(const TShare
 		bCompileOutstanding = false;
 		AddLogField(Result, LastCompileLines);
 	}
-	return Result;
+	return MCPResponse::Ok(Result);
 #endif
 }

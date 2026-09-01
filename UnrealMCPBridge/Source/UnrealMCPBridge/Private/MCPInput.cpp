@@ -38,6 +38,8 @@
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 
+#include "MCPResponse.h"
+
 namespace
 {
 /** Find an asset of a given class by short name, the way the struct and enum resolvers do. */
@@ -193,7 +195,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadInputContext(const TShared
 		Result->SetStringField(TEXT("warning"),
 			TEXT("Some mappings point at no action - usually an InputAction asset that was deleted. They do nothing, and they are easy to miss in the editor."));
 	}
-	return Result;
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleMapInputKey(const TSharedPtr<FJsonObject>& Params)
@@ -296,7 +298,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleMapInputKey(const TSharedPtr<F
 	// restart and one that does not.
 	Result->SetStringField(TEXT("next"),
 		TEXT("Save it with save_asset, or the mapping is lost when the editor closes."));
-	return Result;
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleUnmapInputKey(const TSharedPtr<FJsonObject>& Params)
@@ -343,7 +345,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleUnmapInputKey(const TSharedPtr
 		Result->SetStringField(TEXT("note"),
 			FString::Printf(TEXT("%s was not mapped to %s in %s, so nothing was removed. Read the context to see what is."),
 				*KeyName, *Action->GetName(), *Context->GetName()));
-		return Result;
+		return MCPResponse::Ok(Result);
 	}
 
 	Context->Modify();
@@ -356,5 +358,5 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleUnmapInputKey(const TSharedPtr
 	Result->SetStringField(TEXT("action"), Action->GetName());
 	Result->SetStringField(TEXT("key"), Key.ToString());
 	Result->SetStringField(TEXT("next"), TEXT("Save it with save_asset."));
-	return Result;
+	return MCPResponse::Ok(Result);
 }
