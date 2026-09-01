@@ -1993,11 +1993,18 @@ register(
       "Searches the running editor's real catalog of Blueprint-callable functions, built from live C++ reflection " +
       "on the exact engine version that is open, so the names and signatures it returns are correct by construction " +
       "rather than recalled. Search by intent or partial name (e.g. \"spawn actor\", \"line trace\", \"print\") and get " +
-      "back exact functionName and className values that unreal_add_node will accept, ranked exact then prefix then " +
-      "contains. **Call this before unreal_add_node whenever you are not certain a function name and its owning class " +
-      "are exactly right**, which is most of the time: guessing Unreal's API surface from memory is the single most " +
-      "common cause of a failed edit. Returns compact entries without full pin lists; follow up with " +
-      "unreal_get_node_signature for exact pins.",
+      "back exact functionName and className values that unreal_add_node will accept. **Call this before " +
+      "unreal_add_node whenever you are not certain a function name and its owning class are exactly right**, which " +
+      "is most of the time: guessing Unreal's API surface from memory is the single most common cause of a failed " +
+      "edit. Returns compact entries without full pin lists; follow up with unreal_get_node_signature for exact " +
+      "pins.\n\n" +
+      "Matching is on WORDS, so type the name the editor shows you: \"Array Length\", \"array_length\" and " +
+      "\"ArrayLength\" are one search, and all three find Array_Length. A half-typed last word still matches, so " +
+      "\"len\" reaches Length.\n\n" +
+      "Not everything in the palette is a function. Flow-control macros - ForEachLoop, WhileLoop, DoOnce, DoN, Gate, " +
+      "FlipFlop - are macro instances, and Branch, Sequence, Cast and Select are node kinds; none live in this " +
+      "catalog. Place them with unreal_build_graph using nodeType \"Macro\" (plus macroName) or the matching " +
+      "nodeType directly.",
     inputSchema: {
       query: z
         .string()
