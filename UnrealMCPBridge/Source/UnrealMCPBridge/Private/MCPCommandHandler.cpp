@@ -3899,6 +3899,20 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSearchProject(const TSharedPtr
 	Result->SetStringField(TEXT("query"), Query);
 	Result->SetArrayField(TEXT("hits"), Hits);
 	Result->SetNumberField(TEXT("hitCount"), Hits.Num());
+
+	// How much was searched, not just how much was found.
+	//
+	// hitCount is the RESULT count. On its own, `hitCount: 0` cannot tell a caller whether the
+	// project has no such thing or whether this tool could not see it - and those need opposite
+	// responses. That distinction is not hypothetical here: trace_variable and trace_function_calls
+	// spent an unknown length of time reporting "never used at all" while scanning 182 Blueprints of
+	// 339, because their asset filter excluded every Widget and Animation Blueprint. The only reason
+	// anybody noticed was the blueprintsScanned figure printed beside the verdict.
+	//
+	// So every search here says what it looked at. find_node reports catalogSize,
+	// find_in_data_tables reports tablesSearched and rowsSearched and names the tables it could not
+	// read, and the two traces report blueprintsScanned. This one reported nothing.
+	Result->SetNumberField(TEXT("blueprintsSearched"), FMCPProjectIndex::Get().GetIndexedBlueprintCount());
 	Result->SetBoolField(TEXT("truncated"), Hits.Num() >= MaxResults);
 	return MakeOkResponse(Result);
 }

@@ -8417,3 +8417,50 @@ answer — a variable reported as unused looks exactly like a variable that is u
 number printed next to an answer nobody was checking, in a probe written to test something else
 entirely. `blueprintsScanned` exists so a caller can tell breadth from emptiness, and it earned its
 place here by contradicting the tool beside it.
+
+### Sweeping the defect, then sweeping what made it findable
+
+The blind-search bug was one missing `bRecursiveClasses`, so the first job was checking whether any
+other filter had it. Every `ClassPaths.Add` in the plugin, with the four lines after it:
+
+```
+MCPCommandHandler.cpp:1565   list_blueprints          bRecursiveClasses = true
+MCPCommandHandler.cpp:5084   list_assets              bRecursiveClasses = true
+MCPCommandHandler.cpp:6920   trace_function_calls     (fixed)
+MCPCommandHandler.cpp:7287   find_broken_names        (fixed)
+MCPCommandHandler.cpp:7520   trace_variable           (fixed)
+MCPProjectIndex.cpp:377      RebuildFull              bRecursiveClasses = true
+MCPProjectIndex.cpp:723      (index query)            bRecursiveClasses = true
+```
+
+Clean — the three fixed ones were all of them.
+
+The more useful sweep is the second one. That bug survived because a wrong answer and a right answer
+looked identical: a variable reported as unused reads exactly like a variable that is unused. The
+only thing that separated them was `blueprintsScanned: 182` printed beside the verdict. So: which
+other tools return a confident negative without saying what they looked at?
+
+Asked of every search tool with a query nothing can match:
+
+| tool | reports breadth |
+|---|---|
+| `find_node` | `catalogSize: 15234` |
+| `find_in_data_tables` | `tablesSearched: 20`, `rowsSearched: 128`, and names tables it could not read |
+| `trace_variable`, `trace_function_calls` | `blueprintsScanned: 339` |
+| `search_project` | **nothing** |
+
+`find_in_data_tables` is the model to copy — it reports what it searched *and* what defeated it, so a
+zero is never ambiguous. Its `tablesSearched: 20` looked like a cap until the project turned out to
+have exactly 20 Data Tables; complete coverage, honestly stated.
+
+`search_project` is the primary discovery tool and returned `hitCount: 0` with no breadth at all.
+`hitCount` is the RESULT count — on its own it cannot distinguish "the project has no such thing"
+from "this tool could not see it", and those need opposite responses from a caller. It now says:
+
+```json
+{"query":"ZzNoSuchThing_98765","hits":[],"hitCount":0,"blueprintsSearched":339,"truncated":false}
+```
+
+Eight tokens on every search, buying the one signal that made a whole class of blindness visible. The
+previous bug went unnoticed for an unknown length of time; the figure that ended it cost about the
+same as this.
