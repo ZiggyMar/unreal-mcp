@@ -6447,8 +6447,12 @@ during  srv target -4551 | cli target -4551
 ```
 
 Nothing moved, on either side. The drag had stopped working altogether — worse than the bug. Some
-other condition on that chain is not true on a client, and the coupling is deeper than the graph
-shows.
+other condition on that chain is not true on a client.
+
+**That condition has since been found, and the last clause of this paragraph — which used to read
+"and the coupling is deeper than the graph shows" — was wrong.** It is not deeper than the graph
+shows. It is one node, in the graph, named `Has Authority`. See *The gate that was in the graph the
+whole time* below.
 
 It was reverted in the same session and the revert was **verified the same way**: with the original
 wiring back, the target moves `-5427 → -5659` under a six-second pull. The drag works again, proven,
@@ -7456,3 +7460,58 @@ NOT FOUND IN EITHER INDEX (10) - probably plugin/module headers outside Engine/S
 
 Clean, and the ten unfound are Enhanced Input and Niagara, which live under `Engine/Plugins` rather
 than `Engine/Source` — exactly what the script says about them, rather than a result to explain away.
+
+### The gate that was in the graph the whole time
+
+Two attempted fixes for the rubber-band failed, and after the second one this README concluded that
+"the coupling is deeper than the graph shows". That was a guess, made at the end of a long session,
+and it was wrong in the direction that excuses not looking further. Reading the chain took four
+calls.
+
+`trace_variable` on `VaccumDragStrength` says where it is read — one place, a function called
+`DraggedByVacuum` on `BP_BaseCharacter`. `trace_function_calls` says who calls it — one place, the
+Event Graph. Walking the exec links backwards from that call gives the whole thing:
+
+```
+BP_BaseCharacter, EventGraph:
+    Event Tick  ->  Set DeltaSeconds  ->  DraggedByVacuum(DT)
+
+BP_BaseCharacter, DraggedByVacuum:
+    Branch  (CheckGameplayTag AND NOT isDead)
+      -> Branch  (Has Authority)                      <- the client stops here
+        -> CharacterMovement.AddForce( UnitDirection(ActorLocation -> LocationDragged)
+                                       * VaccumDragStrength * DT )
+```
+
+`Event Tick` runs on every machine. The first branch passes on every machine. The second one does
+not: `Has Authority` is false on a client, so `Add Force` is reached only on the server. The client's
+CharacterMovement predicts the next position with no force in it, the server's has one, they
+disagree, and the server sends a correction. That is the rubber-band, and it is four nodes.
+
+It also explains the second failed attempt exactly. That attempt replicated `VacuumingPlayers` so
+every machine would know *what* was pulling it, and the replication demonstrably worked — the client
+had the list. But the force is applied behind `Has Authority`, which nobody had changed, so the
+client still applied nothing. The data arrived and the gate was still shut. Half a fix looks
+identical to no fix from the outside, which is why it read as a deeper mystery than it was.
+
+And the inputs confirm it. `list_variables` on the same Blueprint:
+
+| variable | replicated |
+|---|---|
+| `LocationDragged` | **false** |
+| `VaccumDragStrength` | **false** |
+| `isDead` | false |
+
+Which matches the original measurement — server `VaccumDragStrength=250`, client `0` — and means a
+complete fix is two changes, not one: replicate the inputs the function reads, *and* let the owning
+client through the gate. Either alone does nothing, which is precisely why one attempt at each looked
+like two dead ends instead of two halves.
+
+**What is still a judgement call, and is the user's:** `AddForce` is not part of the move the client
+saves and the server replays, so applying it on both sides makes the two simulations agree closely
+rather than exactly. The engine-exact route is to feed the pull through `AddInputVector`, which *is*
+replicated with the move and replayed identically — at the cost of being clamped by `MaxAcceleration`
+and therefore changing how the vacuum feels and what `VaccumDragStrength = 250` means. The first
+option preserves the tuning and reduces the correction; the second removes the cause and changes the
+feel. Both are defensible; neither is mine to pick on a project with no version control and two
+reverted attempts behind it.
