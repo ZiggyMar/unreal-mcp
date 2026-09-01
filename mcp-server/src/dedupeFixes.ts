@@ -50,6 +50,16 @@ export interface DedupedReview {
  * findings at all - because a `fixes` map with one entry per finding is the same bytes plus a
  * lookup.
  */
+/**
+ * Checks whose node ids identify something a caller would never act on one at a time.
+ *
+ * The test is whether the fix is a per-node edit. `dead-node` says "remove them with
+ * unreal_remove_node" and needs every id; `long-exec-chain` says "extract the middle of it" and the
+ * root id says which chain. `unlabelled-sections` says "run unreal_auto_layout_graph", which takes a
+ * graph, not a node - so its ids are a list nobody can use, and its count is already in the message.
+ */
+const IDS_NOT_INDIVIDUALLY_ACTIONABLE = new Set(["unlabelled-sections"]);
+
 export function dedupeFixes<T extends object>(review: T): T & DedupedReview {
   // Read structurally rather than by declared type. The review's own finding types are stricter than
   // anything this needs to know - it only looks at `check` and `fix` - and importing them here would
@@ -72,19 +82,55 @@ export function dedupeFixes<T extends object>(review: T): T & DedupedReview {
     // under one key would be worse than the repetition this removes.
   }
 
-  if (repeated === 0) return review as T & DedupedReview;
+  // Untouched means untouched, identically.
+  //
+  // A review with nothing repeated and no unactionable ids is returned as the very object that came
+  // in, not a copy of it. That is asserted by a test, and it is worth asserting: a `fixes` map with
+  // one entry per finding is the same bytes plus a lookup, and rebuilding an object to change
+  // nothing is a cost with no reader.
+  const hasIdsToDrop = all.some(
+    (f) => typeof f.check === "string" && IDS_NOT_INDIVIDUALLY_ACTIONABLE.has(f.check) && "nodeIds" in f
+  );
+  if (repeated === 0 && !hasIdsToDrop) return review as T & DedupedReview;
 
   const strip = (finding: FindingLike): FindingLike => {
-    const { check, fix } = finding;
-    if (typeof check !== "string" || typeof fix !== "string") return finding;
-    if (fixes[check] !== fix) return finding; // varies from the map: keep this one's own text
-    const { fix: _lifted, ...rest } = finding;
-    return rest;
+    let out = finding;
+
+    // Node ids for a finding whose remedy is the whole graph.
+    //
+    // `unlabelled-sections` says "3 execution chains but only 0 comment box(es)" and its fix is
+    // "run unreal_auto_layout_graph", which wraps every chain at once. It also listed the root id of
+    // every chain. Measured on BP_Player: eleven of those findings carried 145 node ids and 1,562
+    // characters - 14% of the whole reply - against 260 characters of ids for all sixteen WARNINGS
+    // put together. The count is already in the message and nobody wraps a chain by id, so those
+    // bytes bought a caller nothing.
+    //
+    // Only the ids are dropped, and only here, at serialisation. cleanup.ts reads
+    // `finding.nodeIds.length` off the review internals to report what it left alone, and audit.ts
+    // reads findings too; both call reviewBlueprint directly and still get every field.
+    if (typeof out.check === "string" && IDS_NOT_INDIVIDUALLY_ACTIONABLE.has(out.check)) {
+      const { nodeIds: _ids, ...rest } = out as FindingLike & { nodeIds?: unknown };
+      out = rest;
+    }
+
+    // Lifting a fix into the map is only safe when the map is actually emitted, and it is emitted
+    // only when something repeated. Stripping regardless deleted the advice outright the moment a
+    // review had ids to drop and no repetition - the finding lost its `fix` and there was no `fixes`
+    // map to look it up in. Caught by a test written for the ids, which is the argument for writing
+    // the test for the case you think is boring.
+    const { check, fix } = out;
+    if (repeated === 0) return out;
+    if (typeof check !== "string" || typeof fix !== "string") return out;
+    if (fixes[check] !== fix) return out; // varies from the map: keep this one's own text
+    const { fix: _lifted, ...withoutFix } = out;
+    return withoutFix;
   };
 
   return {
     ...(review as object),
-    fixes,
+    // Only when something actually repeated. A `fixes` map holding one entry per finding is the
+    // repetition it exists to remove, wearing a different key.
+    ...(repeated > 0 ? { fixes } : {}),
     ...(graphs.length > 0
       ? {
           graphs: graphs.map((g) =>

@@ -7795,3 +7795,87 @@ an easy and entirely wrong inference, and it cost four detours before the patter
 `scripts/call-tool.mjs` is the fix, and it earned its keep the moment it existed. It also had the same
 disease in miniature: it truncated replies at 1,200 characters, so the first measurement it produced
 reported a 5,000-token reply as 300 tokens. It takes `--full` now.
+
+### Checking whether the last saving generalises, and finding it does not
+
+The repeated-struct compaction took 67% off `list_data_table_rows`, and it is written as a general
+function rather than something Data-Table-shaped. The obvious next move is to wire it into the other
+reads. The right next move is to find out whether they have anything to collapse.
+
+They do not. Every read in the census, scanned for balanced struct groups repeating three or more
+times:
+
+```
+  read                        tokens    prize     %
+  read_class_defaults           1691        0    0%
+  read_asset_properties          338        0    0%
+  list_actors                   2392        0    0%
+  review_blueprint              2787        0    0%
+  list_variables                1750        0    0%
+  read_blueprint_summary        2158        0    0%
+  list_blueprints               2625        0    0%
+```
+
+Zero, everywhere. Data Tables are the one read that exports a full nested struct per row, so they are
+the one read where the same untouched `FSlateBrush` can appear twenty-eight times. Wiring the
+compaction into the rest would have added a legend, a marker convention and a write-side guard to
+seven tools that would never use them.
+
+Recorded because a negative result that took ten minutes to establish saves the next person from
+re-deriving it, and because "the general fix should be applied generally" is exactly the kind of
+reasoning that sounds right and costs a day.
+
+### Fourteen percent of a reply was node ids nobody can use
+
+With that ruled out, `review_blueprint` is the most expensive read at 2,787 tokens. Breaking it down
+by where the bytes go:
+
+| part | share |
+|---|---|
+| `graphs` (the findings) | 69% |
+| `fixes` (advice, already deduped per check) | 17% |
+| everything else | 14% |
+
+And inside the findings, one number stands out. Node ids, by severity:
+
+```
+warning   16 findings    22 ids     260 chars
+info      15 findings   145 ids   1,610 chars
+```
+
+Sixteen warnings — the things that might be bugs — carry 260 characters of node ids between them.
+Fifteen infos carry **1,610**, and 1,562 of those belong to a single check:
+
+```
+unlabelled-sections   "3 execution chains but only 0 comment box(es)."
+                      nodeIds: [every chain root]
+                      fix: "Run unreal_auto_layout_graph"
+```
+
+The count is already in the message. The fix takes a *graph*, not a node — nobody wraps an execution
+chain in a comment box one id at a time. So those 1,562 characters, **14% of the whole reply**, are a
+list a caller cannot act on.
+
+Dropped, and only for checks that pass that test. `dead-node` says "remove them with
+unreal_remove_node" and needs every id. `long-exec-chain` says "extract the middle of it" and its root
+id says which chain. `debug-print-left-in` needs to say which prints. Twenty of the thirty-one
+findings keep their ids; the eleven that lose them lose nothing.
+
+**2,787 → 2,366 tokens, −15%**, and only at serialisation: `cleanup.ts` reads `finding.nodeIds.length`
+off the review internals to report what it left alone, and `audit.ts` reads findings too. Both call
+`reviewBlueprint` directly and still receive every field.
+
+### The test for the boring case caught the real bug
+
+The change came with three tests. Two check the intended behaviour. The third checks something that
+sounded like paperwork — a review with unactionable ids but *no repeated fixes* — and it was the one
+that failed.
+
+`dedupeFixes` builds its `fixes` map for every check, first one wins, and only *emits* the map when
+something actually repeated. The stripping ran off the map. So a review with ids to drop and nothing
+repeated had each finding's `fix` lifted into a map that was then thrown away: the advice disappeared
+from the reply entirely.
+
+That is a silent, total loss of the thing the tool exists to produce, and it existed for about four
+minutes. It was not found by thinking about it. It was found by writing the test for the combination
+that seemed too dull to break.

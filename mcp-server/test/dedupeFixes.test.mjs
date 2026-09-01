@@ -108,3 +108,53 @@ test("findings without a check or a fix are left alone", () => {
   assert.deepEqual(out.graphs[0].findings[2], { message: "no check at all" });
   assert.deepEqual(out.graphs[0].findings[3], { check: "no-fix-check", message: "c" });
 });
+
+test("unlabelled-sections loses its node ids, because nobody wraps a chain by id", () => {
+  // Measured on BP_Player: eleven of these carried 145 node ids and 1,562 characters - 14% of the
+  // whole reply - against 260 characters of ids for all sixteen warnings put together. The fix is
+  // "run unreal_auto_layout_graph", which takes a graph, and the count is already in the message.
+  const out = dedupeFixes(
+    review([
+      {
+        check: "unlabelled-sections",
+        severity: "info",
+        message: "3 execution chains but only 0 comment box(es).",
+        fix: "Run unreal_auto_layout_graph.",
+        nodeIds: ["A1", "B2", "C3"],
+      },
+    ])
+  );
+
+  const finding = out.graphs[0].findings[0];
+  assert.equal(finding.nodeIds, undefined, "the ids are dropped");
+  assert.match(finding.message, /3 execution chains/, "the count survives, in the message");
+});
+
+test("every other check keeps its ids, because they name what to edit", () => {
+  const out = dedupeFixes(
+    review([
+      { check: "dead-node", message: "3 dead", fix: "Remove them.", nodeIds: ["A1", "B2"] },
+      { check: "long-exec-chain", message: "40 nodes", fix: "Extract it.", nodeIds: ["C3"] },
+      { check: "debug-print-left-in", message: "2 prints", fix: "Remove them.", nodeIds: ["D4"] },
+    ])
+  );
+
+  const ids = out.graphs[0].findings.map((f) => f.nodeIds);
+  assert.deepEqual(ids, [["A1", "B2"], ["C3"], ["D4"]]);
+});
+
+test("a review with only unactionable ids is still rewritten, and nothing else is", () => {
+  // The identity check above must not be so eager that it skips this: nothing repeats here, so the
+  // early return would fire on the fix count alone.
+  const input = review([
+    { check: "unlabelled-sections", message: "2 chains", fix: "Lay it out.", nodeIds: ["A1"] },
+    { check: "tick-heavy", message: "b", fix: "Move it off Tick.", nodeIds: ["B2"] },
+  ]);
+  const out = dedupeFixes(input);
+
+  assert.notEqual(out, input, "it had ids to drop, so it is a new object");
+  assert.equal(out.graphs[0].findings[0].nodeIds, undefined);
+  assert.deepEqual(out.graphs[0].findings[1].nodeIds, ["B2"]);
+  assert.equal(out.fixes, undefined, "nothing repeated, so no fixes map was invented");
+  assert.equal(out.graphs[0].findings[1].fix, "Move it off Tick.", "its own fix text stays");
+});
