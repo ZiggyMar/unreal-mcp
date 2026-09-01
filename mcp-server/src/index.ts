@@ -1997,6 +1997,18 @@ register(
             ref: z.string().describe("Your short handle for this node, unique in the batch, no dots."),
             nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "Self"]),
             eventName: z.string().optional(),
+            // The four that were missing.
+            //
+            // This tool's own description says "Same per-type params as unreal_add_node", and the
+            // standing instructions tell every model to prefer it - "build whole graphs in one call,
+            // do not place nodes one at a time". It could not declare a custom event's inputs or
+            // make one a Server RPC, so the recommended way to author a graph could not express the
+            // thing all multiplayer logic is built from, and the only way to find that out was to
+            // try. Found by needing ownerClass and being told the variable did not exist.
+            netMode: z.string().optional(),
+            reliable: z.boolean().optional(),
+            inputs: z.array(z.object({ name: z.string(), type: z.string() })).optional(),
+            ownerClass: z.string().optional(),
             inputAction: z.string().optional(),
             key: z.string().optional(),
             axisName: z.string().optional(),
@@ -2043,10 +2055,27 @@ register(
         compile,
       });
 
+      // Trim the per-node echo unless asked for: the caller already knows what it sent, and the
+      // ref-to-id map is the only part it cannot reconstruct.
+      //
+      // Declared here, above every return, because it was not: three of this tool's five reply paths
+      // returned the UNtrimmed result, so `nodes.ref` was an object on a big graph and a bare id
+      // string on a small one. Code reading `nodes.ref.id` worked until the day it did not, which is
+      // how a script of mine crashed mid-session. The big graph also got the LARGER reply, which is
+      // backwards: that is the case where context is already scarce.
+      const buildPart = MODE.verboseBuildResult
+        ? result
+        : {
+            nodes: Object.fromEntries(Object.entries(result.nodes ?? {}).map(([ref, n]) => [ref, n.id])),
+            connectionsMade: result.connectionsMade,
+            pinDefaultsSet: result.pinDefaultsSet,
+            compile: result.compile,
+          };
+
       // Layout is cosmetic and must never turn a successful build into a failed tool call, so a
       // layout error is reported alongside the build result rather than thrown over it.
       if (autoLayout === false) {
-        return jsonResult(result);
+        return jsonResult(buildPart);
       }
       try {
         // Layout happens in every mode, because a graph nobody can read is not a cheaper graph - but
@@ -2073,7 +2102,7 @@ register(
         const priorNodes = Math.max(0, totalNodes - Object.keys(result.nodes ?? {}).length);
         if (priorNodes > 6) {
           return jsonResult({
-            ...result,
+            ...buildPart,
             layout: {
               nodesMoved: 0,
               skipped: true,
@@ -2087,17 +2116,6 @@ register(
         const layout = await autoLayoutGraph(bridge, path, graphName, {
           addCommentBoxes: MODE.commentBoxes,
         });
-
-        // Trim the per-node echo unless asked for: the caller already knows what it sent, and the
-        // ref-to-id map is the only part it cannot reconstruct.
-        const buildPart = MODE.verboseBuildResult
-          ? result
-          : {
-              nodes: Object.fromEntries(Object.entries(result.nodes ?? {}).map(([ref, n]) => [ref, n.id])),
-              connectionsMade: result.connectionsMade,
-              pinDefaultsSet: result.pinDefaultsSet,
-              compile: result.compile,
-            };
 
         if (MODE.attachReview === "none") {
           return jsonResult({ ...buildPart, layout: { nodesMoved: layout.nodesMoved }, mode: MODE.mode });
@@ -2150,8 +2168,10 @@ register(
           mode: MODE.mode,
         });
       } catch (layoutErr) {
+        // Same shape here too. A layout failure is the least useful moment to also change the shape
+        // of the reply out from under the caller.
         return jsonResult({
-          ...result,
+          ...buildPart,
           layoutError: layoutErr instanceof Error ? layoutErr.message : String(layoutErr),
         });
       }

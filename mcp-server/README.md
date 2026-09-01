@@ -189,9 +189,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2009 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
-| `core` | 12783 | the authoring spine |
-| `lazy` | 12796 | `core` plus deferred groups |
-| `full` | 40061 | everything, for a model that can afford it |
+| `core` | 12848 | the authoring spine |
+| `lazy` | 12861 | `core` plus deferred groups |
+| `full` | 40127 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6221,6 +6221,42 @@ true and useless. A verification tool that cries wolf is worse than none, becaus
 anyone learns is to stop reading it. Names are stripped for the comparison and kept for the report,
 "unwritten" now requires the value to be *empty* as well as stable, and four unit tests hold both
 lines.
+
+### The recommended tool could not do what the discouraged one could
+
+The standing instructions tell every model the same thing: *"Build whole graphs with
+`unreal_build_graph`, in one call. Do not place nodes one at a time."* That tool's own description
+says *"Same per-type params as `unreal_add_node`"*. It was missing four of them:
+
+```text
+netMode    reliable    inputs    ownerClass
+```
+
+So the recommended way to author a graph could not declare a custom event's parameters, and could not
+make one a **Server RPC** — the thing all multiplayer logic is built from. `unreal_add_node`, the one
+the instructions steer models away from, could do both.
+
+`check:nodetypes` compares the nodeType *values* the two tools offer and had nothing to say about
+their *parameters*. The only way to find this was to need `ownerClass` — for the ordinary cast-then-
+get-a-variable pattern — and be told the variable did not exist. A test now asserts that every
+per-node parameter `add_node` takes is expressible in `build_graph`, because its description promises
+exactly that.
+
+Verified by building what was previously impossible in one call:
+
+```text
+CustomEvent "ServerDoThing"  netMode: Server  reliable: true
+  inputs: [{Amount, int}, {Who, name}]
+    -> pins: then (exec), Amount (int), Who (name)
+```
+
+**And the same tool answered in two shapes.** It has five reply paths — layout ran, layout skipped,
+layout failed, layout off, review attached — and three returned the raw bridge result while two
+returned a trimmed one. So `nodes.ref` was an object on a big graph and a bare id string on a small
+one; code reading `nodes.ref.id` worked until the day it did not, which is how a script of mine
+crashed mid-session. Worse, the untrimmed replies were the **big-graph** paths, where context is
+already scarce. One shape now, on all five, checked by a test — and the compiler caught that my first
+fix put the declaration out of scope, which the source-reading test happily passed.
 
 ### The numbers a model reads are guarded too
 
