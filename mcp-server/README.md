@@ -29,6 +29,7 @@ written down next to the measurement that caused it.
 [When the host project cannot build, deliver the plugin anyway](#when-the-host-project-cannot-build-deliver-the-plugin-anyway) ·
 [Two ways a read-only tool said "there is nothing there"](#two-ways-a-read-only-tool-said-there-is-nothing-there) ·
 [The error on the screen that no tool could see](#the-error-on-the-screen-that-no-tool-could-see) ·
+["I pressed the key and nothing happened"](#i-pressed-the-key-and-nothing-happened) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -196,7 +197,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
 | `lazy` | 13251 | `core` plus deferred groups |
-| `full` | 42295 | everything, for a model that can afford it |
+| `full` | 42335 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6860,3 +6861,42 @@ before it is treated as a finding.
 In the project this was found in, all fifteen turned out to be Lyra and SuperGrid sample content —
 verified with `find_references`, which showed every referencer was either inside the broken set or
 other sample content, and **zero** references from the game's own folder.
+
+## "I pressed the key and nothing happened"
+
+The most common runtime dead end, and the honest answer used to stop at a shrug: *either the input
+is not reaching the game, or the thing it triggers needs something that is not there.* True, and it
+leaves the caller to open the graph and walk branches by hand.
+
+That hand-walk happened three times in one session on one ability. Holding the vacuum did nothing,
+and finding out why meant reading the input node, following exec pins, reading each Branch, chasing
+what fed its condition — one call at a time. Every step of it is mechanical, which is the definition
+of something a tool should do.
+
+So `unreal_verify_runtime` now answers it. When a press moves nothing, the reply carries
+`whyNothingHappened`:
+
+```
+"IA_Vacuum" runs through 2 gate(s) before anything happens: Get isAlive -> NOT Boolean.
+The FIRST one that is false is the one that stopped it, and everything after it never ran.
+```
+
+Three things had to be right for that to work, and each was wrong first.
+
+**It has to follow a call into an event body.** Ability gates live inside the server RPC, not in the
+input chain that asks for it — pressing the vacuum calls `StartVaccum`, and the gates are inside
+`StartVaccum`. Calling an event does not link to its body in the exec graph, so following links
+alone walks straight past every gate. The first version reported *no gates* on a chain with two.
+
+**It has to match a call to its event loosely.** The editor writes a call node's title as a display
+name — `Start Vaccum` — while the event is named `StartVaccum`. The unit test passed because it used
+the same spelling on both sides; no real graph does.
+
+**It has to read the CHAIN, not the graph.** Reading a large arbitrary slice and hoping the chain
+was in it stopped one node short and reported **one** gate on a chain with two. That is worse than
+reporting none: the gate it named was true, so the answer exonerated the thing that was actually
+stopping it. The walk now says which node it wanted and could not reach, that one is read, and it
+walks again — following the chain instead of the graph, which is both correct and faster.
+
+It runs only on the failure path, where the caller is already stuck. A run where everything moved
+pays nothing for it.

@@ -7,6 +7,7 @@ import { dedupeFixes } from "./dedupeFixes.js";
 import { stripSchemaDeclaration } from "./trimSchemaDeclaration.js";
 import { trimFloatPaddingIn, trimFloatPadding } from "./trimFloats.js";
 import { summariseRuntime } from "./verifyRuntime.js";
+import { walkChain, describeGates } from "./inputChain.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
 import { findInDataTables } from "./findInDataTables.js";
 import { matchSymptoms } from "./symptoms.js";
@@ -4945,7 +4946,9 @@ register(
       "client is a replication bug, and one that NEVER CHANGED for the whole session usually means nothing wrote " +
       "it, which is what an orphaned event looks like from the outside.\n\n" +
       "Leaves the editor as it found it: a PIE session you already had open is left running, one this started is " +
-      "stopped again.",
+      "stopped again.\n\n" +
+      "When a press moves NOTHING it also names the gates between that input and the effect " +
+      "(`whyNothingHappened`): the first one that is false is what stopped it.",
     inputSchema: {
       watch: z
         .array(z.string())
@@ -4994,7 +4997,114 @@ register(
       if (startedItHere) await bridge.send("stop_pie", {}).catch(() => {});
 
       const rows = Array.isArray(sampled.watched) ? (sampled.watched as never[]) : [];
-      return jsonResult({ ranForSeconds: runFor, startedPie: startedItHere, ...(press ? { pressed: press.inputAction } : {}), ...summariseRuntime(rows, press?.inputAction) });
+      const summary = summariseRuntime(rows, press?.inputAction);
+
+      // If a press moved nothing, say WHERE it stopped instead of shrugging.
+      //
+      // The old verdict ended at "either it is not reaching the game, or the thing it triggers
+      // needs something that is not there" - true, and it leaves the caller to open the graph and
+      // walk branches by hand. That hand-walk happened three times in one session on one ability.
+      // Every step of it is mechanical, so it is done here, and only here: on the failure path,
+      // where the caller is otherwise stuck. A run where everything moved pays nothing for this.
+      let gateNote: string | undefined;
+      const nothingMoved = press && (summary.agreement ?? []).length > 0 && (summary.agreement ?? []).every((a) => !a.moved);
+      if (nothingMoved) {
+        try {
+          // The Blueprint to look in comes from what was being watched: "BP_Player.Energy" is a
+          // statement about where the caller expected the effect, which is where the chain runs.
+          const owner = (watch[0] ?? "").split(".")[0];
+          const found = (await bridge.send<{ hits?: Array<{ path: string; kind: string; name: string }> }>(
+            "search_project",
+            { query: owner }
+          )).hits?.find((h) => h.kind === "blueprint" && h.name === owner);
+          if (found) {
+            // read_blueprint_graph_summary and read_blueprint_node_detail: the BRIDGE commands.
+            // explain_graph and read_node_detail are composed here in the server, so sending those
+            // names to the bridge throws unknown_cmd - which the catch below swallowed, leaving the
+            // diagnostic silently absent. The failure looked exactly like "no gates found".
+            const summary = await bridge.send("read_blueprint_graph_summary", {
+              path: found.path,
+              graphName: "EventGraph",
+            });
+            const explained = explainGraph(summary as never);
+            const entry = explained.chains
+              .map((chain) => [chain.entry, chain.entryId] as const)
+              .find(([name]) => name.includes(press.inputAction));
+            if (entry && entry[1]) {
+              // Read outward from the input node, following exec links, until the walk runs out.
+              // Capped: this is a diagnostic on a failure, not a licence to read a whole graph.
+              const nodes = new Map<string, { id: string; type: string; title?: string; pins?: never }>();
+              const queue = [entry[1]];
+              // Read the input chain first. The walk then says where it ran out, and that is read
+              // next - so the reads follow the CHAIN rather than the graph.
+              //
+              // Reading a large arbitrary slice was tried first and still stopped one node short,
+              // reporting ONE gate on a chain with two. That is worse than reporting none: the gate
+              // it named was true, so the answer exonerated the thing that was actually stopping it.
+              for (let i = 0; i < 120 && queue.length > 0; i++) {
+                const id = queue.shift() as string;
+                if (nodes.has(id)) continue;
+                const detail = await bridge.send<{ id: string; type: string; title?: string; pins?: Array<{ linkedTo?: Array<{ node: string }> }> }>(
+                  "read_blueprint_node_detail",
+                  { path: found.path, graphName: "EventGraph", nodeId: id }
+                );
+                nodes.set(id, detail as never);
+                for (const pin of detail.pins ?? []) {
+                  for (const link of pin.linkedTo ?? []) queue.push(link.node);
+                }
+              }
+              // Every entry point in the graph by name, so a CALL to a custom event can be
+              // followed into the event's body. Ability gates live inside the server RPC, not in
+              // the input chain that asks for it, and calling an event does not link to its body.
+              const eventEntries = new Map<string, string>();
+              for (const chain of explained.chains) {
+                if (chain.entryId && !eventEntries.has(chain.entry)) {
+                  eventEntries.set(chain.entry, chain.entryId);
+                }
+              }
+// Walk, and wherever it ran out, read from there and walk again. Ability gates sit
+              // inside a server RPC, so the chain nearly always leaves the input's own subtree.
+              let walk = walkChain(entry[1] as string, nodes as never, 40, eventEntries);
+              for (let pass = 0; pass < 6 && walk.needs; pass++) {
+                const frontier = [walk.needs];
+                for (let i = 0; i < 60 && frontier.length > 0; i++) {
+                  const id = frontier.shift() as string;
+                  if (nodes.has(id)) continue;
+                  const detail = await bridge.send<{ id: string; type: string; title?: string; pins?: Array<{ linkedTo?: Array<{ node: string }> }> }>(
+                    "read_blueprint_node_detail",
+                    { path: found.path, graphName: "EventGraph", nodeId: id }
+                  );
+                  nodes.set(id, detail as never);
+                  for (const pin of detail.pins ?? []) {
+                    for (const link of pin.linkedTo ?? []) frontier.push(link.node);
+                  }
+                }
+                const next = walkChain(entry[1] as string, nodes as never, 40, eventEntries);
+                // No progress means that read did not unblock it; stop rather than loop.
+                if (next.needs === walk.needs && next.gates.length === walk.gates.length) break;
+                walk = next;
+              }
+              gateNote = describeGates(press.inputAction, walk.gates);
+            }
+          }
+        } catch (err) {
+          // A diagnostic that fails must not fail the measurement it was explaining - but it must
+          // not vanish either. Swallowing this silently hid a wrong bridge command name for a whole
+          // debugging session: the field was simply absent, which reads as "no gates found" rather
+          // than "the lookup broke". Absent and broken are different answers.
+          gateNote =
+            "could not work out why nothing happened: " +
+            (err instanceof Error ? err.message : String(err)).slice(0, 200);
+        }
+      }
+
+      return jsonResult({
+        ranForSeconds: runFor,
+        startedPie: startedItHere,
+        ...(press ? { pressed: press.inputAction } : {}),
+        ...summary,
+        ...(gateNote ? { whyNothingHappened: gateNote } : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }

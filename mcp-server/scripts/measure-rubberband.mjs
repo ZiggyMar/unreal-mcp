@@ -98,6 +98,14 @@ await call("unreal_run_console_command", { command: "p.NetShowCorrections 1", wo
 await sleep(500);
 
 // 4. Hold the vacuum and sample both worlds' idea of where the dragged pawn is.
+// Aim first, and KEEP it held.
+//
+// StartVaccum is gated on Can Aim, so the vacuum never starts unless aim is already down. While
+// press_input kept a single hold, pressing the vacuum released the aim that made it possible - so
+// this harness reported "nothing moved" about a vacuum that works, several times, with no error
+// anywhere. Holds stack now, which is what makes this line possible at all.
+await call("unreal_press_input", { inputAction: "IA_Aim", seconds: SECONDS + 2, world: "Authority" });
+await sleep(400);
 await call("unreal_press_input", { inputAction: "IA_Vacuum", seconds: SECONDS, world: "Authority" });
 
 const samples = [];
