@@ -6258,6 +6258,40 @@ crashed mid-session. Worse, the untrimmed replies were the **big-graph** paths, 
 already scarce. One shape now, on all five, checked by a test — and the compiler caught that my first
 fix put the declaration out of scope, which the source-reading test happily passed.
 
+### The bug that only the host cannot see
+
+A player reported rubber-banding: when the host vacuums a client, the client snaps back; when a
+client vacuums the host, the host is smooth. That asymmetry is the whole diagnosis.
+
+`DraggedByVacuum` applied `Add Force` to the CharacterMovementComponent behind a **`Has Authority`**
+gate. CharacterMovement is client-predicted and server-corrected: the owning client simulates its own
+movement and the server corrects disagreement. A force applied *only* on the server is a
+disagreement by construction — the client never predicts it, the server insists on it, and the
+correction is what the player sees. The host never notices, because **the host is the authority**.
+
+The fix is not to remove the gate. It is to apply the movement where the pawn is *predicted* —
+`Is Locally Controlled`, true on the owning client and on the server for anything the server controls
+itself — and then to replicate every value the force calculation reads.
+
+That second half nearly shipped broken. `VaccumDragStrength` defaults to `0.0` and did not replicate,
+so a correctly-gated client would have multiplied the force by zero and the drag would have stopped
+working altogether — worse than the bug. Both it and `LocationDragged` replicate now.
+
+**It is a check.** `authority-gated-character-movement` walks the arm of an authority branch that
+runs when the check passes, and reports character movement found there. Priced at 85: the game still
+works, it just feels broken to everyone except the person most likely to be testing it.
+
+Four tests hold the edges, because a check that fires on the wrong things is worse than none:
+moving a plain replicated actor from the server is *correct* and must not fire; the `else` arm is the
+client path and must not fire; and the fixed shape must go quiet, or it nags on the graphs someone
+just corrected. Across 571 real graphs it produced **zero** false positives.
+
+**Why the existing check missed it.** `server-writes-unreplicated` exists and does fire elsewhere in
+that project, but its premise is "an event that runs on the server sets an unreplicated variable".
+Here the setter runs from an interface event, not a Server RPC, so it correctly said nothing. The bug
+was a different shape, and the honest response to "why did the check not catch this" was to work out
+what shape it actually was rather than widen the old check until it fired.
+
 ### The numbers a model reads are guarded too
 
 Three token figures in tool descriptions have gone stale and been caught **by accident** — each one

@@ -13,6 +13,11 @@
 export const FINDING_COST: Record<string, number> = {
   "cast-to-server-only-class": 100,
   "server-writes-unreplicated": 100,
+  // High, and below the silent-breakage hundreds on purpose. The game still works - it just feels
+  // broken to everyone except the listen-server host, who is the authority and never sees it. That
+  // asymmetry is what makes it expensive: it survives every test the person most likely to run one
+  // can perform.
+  "authority-gated-character-movement": 85,
   // A handle, not state. Deliberately far cheaper than the check above, because the commonest case
   // is not a bug at all: an object reference to an Actor that replicates itself. Costing it at 100
   // put correct code at the top of the audit, where a model acts on it first.

@@ -179,6 +179,71 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[], context: 
     });
   }
 
+  // --- Moving a character only on the server. ---
+  //
+  // CharacterMovementComponent is client-predicted and server-corrected: the owning client simulates
+  // its own movement and sends the result up, and the server corrects it when the two disagree. So a
+  // force applied ONLY on the server is a disagreement by construction - the client never predicts
+  // it, the server insists on it, and the correction that follows is what a player sees as
+  // rubber-banding.
+  //
+  // Found in a real game, where the drag of a vacuum ability was gated on Has Authority. It rubber-
+  // banded for every player except the listen-server host, who never noticed because the host IS the
+  // authority - which is exactly why this survives testing.
+  //
+  // The fix is not to remove the gate. It is to apply the movement where the pawn is PREDICTED -
+  // Is Locally Controlled - and to replicate whatever values that calculation reads, so the client
+  // computes the same force the server would.
+  const authorityNodes = nodes.filter((node) => /Has Authority|Switch Has Authority/i.test(titleOf(node)));
+  if (authorityNodes.length > 0) {
+    // Only the branch arm that runs WHEN the check passes. The other arm is the client path and is
+    // exactly where this movement usually belongs.
+    const serverOnly = new Set<string>();
+    for (const auth of authorityNodes) {
+      const gated =
+        auth.type === "K2Node_SwitchHasAuthority"
+          ? (auth.connectedPins ?? []).filter((pin) => /^Authority$/i.test(pin.pin))
+          : nodes
+              .filter((node) =>
+                (node.connectedPins ?? []).some(
+                  (pin) => pin.pin === "Condition" && (pin.linkedTo ?? []).some((link) => link.node.startsWith(auth.id))
+                )
+              )
+              .flatMap((branch) => (branch.connectedPins ?? []).filter((pin) => pin.pin === "then"));
+      const queue = gated.flatMap((pin) => (pin.linkedTo ?? []).map((link) => byId.get(link.node)).filter(Boolean));
+      while (queue.length > 0) {
+        const current = queue.pop() as LayoutNode;
+        if (serverOnly.has(current.id)) continue;
+        serverOnly.add(current.id);
+        for (const next of execTargets(current)) queue.push(next);
+      }
+    }
+
+    // Character movement specifically. Setting a replicated actor's location from the server is
+    // ordinary and correct; it is the predicted movement of a Character that must not be.
+    const MOVEMENT = /Add Force|Add Impulse|Launch Character|Add Movement Input|Set Velocity|Add Torque|Set Physics Linear Velocity/i;
+    const serverMoves = nodes.filter(
+      (node) => serverOnly.has(node.id) && MOVEMENT.test(titleOf(node)) && /Character/i.test(titleOf(node))
+    );
+    if (serverMoves.length > 0) {
+      findings.push({
+        check: "authority-gated-character-movement",
+        severity: "warning",
+        message:
+          `${serverMoves.length} character movement call(s) run only when Has Authority is true. On a ` +
+          `client-controlled character the client predicts its own movement, so a force the server ` +
+          `applies alone is a correction waiting to happen - the player sees rubber-banding.`,
+        fix:
+          "Gate on Is Locally Controlled instead of Has Authority, so the machine that predicts the " +
+          "pawn is the one that moves it - true on the owning client, and true on the server for " +
+          "anything the server controls itself. Then replicate every variable the force calculation " +
+          "reads, or the client will compute a different force from stale defaults. A listen-server " +
+          "host never sees this bug, because the host is the authority.",
+        nodeIds: serverMoves.map((node) => node.id),
+      });
+    }
+  }
+
   // --- Casting every frame instead of once. ---
   const castsInTick = nodes.filter((node) => /^K2Node_DynamicCast/.test(node.type) && inTick(node));
   if (castsInTick.length > 0) {
