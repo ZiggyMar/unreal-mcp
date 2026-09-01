@@ -390,9 +390,14 @@ TArray<TSharedPtr<FJsonValue>> FMCPNodeCatalog::Search(const FString& Query, int
 	TArray<FString> QueryWords;
 	TokenizeName(Query, QueryWords);
 
-	// Below this length a bare substring match stops meaning anything: "don" appears inside
-	// "GetCustomDoNotImportCurveWithZero". Short queries get the word tiers only.
-	const bool bSubstringIsMeaningful = LowerQuery.Len() >= 4;
+	// The last-resort substring tier is for a single half-typed word and nothing else.
+	//
+	// A multi-word query is precisely what the word tiers above exist to answer, so letting a raw
+	// substring have a second go at it only re-admits the noise they just removed. "Do N" is the
+	// case: it survived a minimum-length rule because the DISPLAY name "Get Custom Do Not Import
+	// Curve with Zero" contains the literal characters "do n", spaces included, and four characters
+	// cleared the floor. Words cannot match it, and now nothing else gets to either.
+	const bool bSubstringIsMeaningful = QueryWords.Num() <= 1 && LowerQuery.Len() >= 4;
 
 	for (const FMCPCatalogFunction& Fn : Functions)
 	{
