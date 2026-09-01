@@ -396,3 +396,37 @@ test("a class the engine could not resolve is reported, not counted as clean", (
     "and the note says what the absence of findings about them actually means"
   );
 });
+
+test("the project audit reports Blueprint-level findings, not only graph ones", async () => {
+  // These were computed for every Blueprint and thrown away, because the audit loop only read
+  // `graphs`. So review_blueprint on ONE asset reported replication bugs and audit_project across
+  // all of them reported none - and replication is the most expensive class of bug in the set.
+  // A whole-project audit that silently omits a whole family is worse than one that omits nothing,
+  // because the silence reads as "clean".
+  const bridge = fakeBridge({
+    list_variables: (params) =>
+      params.path === "/Game/BP_Messy.BP_Messy"
+        ? {
+            parentClass: "Actor",
+            variables: [
+              { name: "PlayerName", type: "Text", replicated: true, repNotify: "OnRep_PlayerName" },
+            ],
+          }
+        : { parentClass: "Actor", variables: [] },
+    // The handler exists as a graph and holds only its entry node: on the canvas, wired to nothing.
+    list_blueprint_graphs: (params) =>
+      params.path === "/Game/BP_Messy.BP_Messy"
+        ? { graphs: [{ name: "EventGraph" }, { name: "OnRep_PlayerName" }] }
+        : { graphs: [{ name: "EventGraph" }] },
+  });
+
+  const result = await auditProject(bridge, {});
+  const group = (result.groups ?? []).find((g) => g.check === "repnotify-does-nothing");
+  assert.ok(
+    group,
+    `expected the RepNotify finding in the project audit, got: ${(result.groups ?? []).map((g) => g.check).join(", ") || "(nothing)"}`
+  );
+  assert.equal(group.examples[0].blueprint, "BP_Messy");
+  // Filed as "variables" rather than under an arbitrary graph, because it is not about a graph.
+  assert.equal(group.examples[0].graph, "variables");
+});

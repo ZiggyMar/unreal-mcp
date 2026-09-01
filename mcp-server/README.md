@@ -32,6 +32,7 @@ written down next to the measurement that caused it.
 ["I pressed the key and nothing happened"](#i-pressed-the-key-and-nothing-happened) ·
 [The replication bug that never says anything](#the-replication-bug-that-never-says-anything) ·
 [Measuring the choice instead of arguing about it](#measuring-the-choice-instead-of-arguing-about-it) ·
+[The whole-project audit was missing a whole family](#the-whole-project-audit-was-missing-a-whole-family) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -6970,3 +6971,34 @@ one tool's real schema, as a reply, with no tool-list change.
 
 The measured comparison now sits in `unreal_call_tool`'s own description, because a rule of thumb a
 model reads is worth more than a number in a document it does not.
+
+## The whole-project audit was missing a whole family
+
+`review_blueprint` on one asset reported replication bugs. `audit_project` across all of them
+reported none. Both call the same reviewer.
+
+The cause: findings about the Blueprint *as a whole* — where its state lives, whether what the server
+writes ever reaches a client — are deliberately kept out of `graphs`, because they are not about a
+graph and filing them under an arbitrary one would be a lie. They are returned in `blueprint`. The
+audit loop only ever read `graphs`, so it computed the entire multiplayer family for every Blueprint
+in the project and threw it away.
+
+A whole-project audit that silently omits a family is worse than one that omits nothing, because the
+silence reads as *clean*.
+
+Measured on a real 150-Blueprint game after the fix, and every one of these was previously invisible
+to the project sweep:
+
+| check | count |
+|---|---:|
+| `repnotify-does-nothing` | **81** |
+| `server-writes-unreplicated` | 12 |
+| `replicated-set-without-server-event` | 6 |
+
+The 81 was spot-checked rather than trusted. On one Blueprint with five RepNotify variables, four
+handlers read *"nothing wired to it"* and the fifth — six nodes, casting to a widget and setting a
+texture — was correctly **not** flagged.
+
+Not every one is a live bug: a developer may have switched RepNotify on and read the value elsewhere,
+in which case the notify is pointless rather than broken. The finding says exactly that — wire the
+handler, or drop the RepNotify and replicate plainly.

@@ -297,6 +297,28 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         }
       }
 
+      // Findings about the Blueprint rather than about one of its graphs: where its state lives,
+      // and whether what the server writes ever reaches a client.
+      //
+      // These were computed for every Blueprint here and thrown away, because this loop only read
+      // `graphs`. So review_blueprint on ONE asset reported replication bugs and audit_project
+      // across all of them reported none - and replication is the most expensive class of bug in
+      // the set. A whole-project audit that silently omits a whole family is worse than one that
+      // omits nothing, because the silence reads as "clean".
+      for (const finding of review.blueprint ?? []) {
+        findings.push({
+          blueprint: bp.name,
+          path: bp.path,
+          // Not a graph, and saying so beats filing it under an arbitrary one.
+          graph: "variables",
+          check: finding.check,
+          severity: finding.severity,
+          message: finding.message,
+          fix: finding.fix,
+          cost: FINDING_COST[finding.check] ?? 1,
+        });
+      }
+
       // Event dispatcher signatures are not graphs anyone calls.
       //
       // Unreal exposes a `mcdelegate` variable's signature in the graph list, with a function entry
