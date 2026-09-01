@@ -26,14 +26,15 @@ export const estimateTokens = (chars) => Math.round(chars / 4);
  *
  * `env` is merged over the current environment, so a caller sets UNREAL_MCP_PROFILE and nothing else.
  */
-export function startServer(env = {}) {
-  const child = spawn(process.execPath, [SERVER_PATH], {
+export function startServer(env = {}, serverPath = SERVER_PATH) {
+  const child = spawn(process.execPath, [serverPath], {
     env: { ...process.env, UNREAL_MCP_MODE: "standard", ...env },
     stdio: ["pipe", "pipe", "pipe"],
   });
 
   let buffer = "";
   const waiters = new Map();
+  const pendingRejects = new Map();
   let nextId = 1;
 
   child.stdout.on("data", (chunk) => {
@@ -52,14 +53,52 @@ export function startServer(env = {}) {
       if (msg.id !== undefined && waiters.has(msg.id)) {
         waiters.get(msg.id)(msg);
         waiters.delete(msg.id);
+        pendingRejects.delete(msg.id);
       }
     }
   });
 
+  // Whatever the child wrote to stderr, kept so a crash can be reported instead of guessed at.
+  let stderrText = "";
+  child.stderr.on("data", (chunk) => {
+    stderrText += chunk.toString();
+  });
+
+  // A dead child must fail the pending request, not leave it pending forever.
+  //
+  // This cost twenty minutes of confusion once. A startup crash - a const read before its
+  // initialisation, which TypeScript compiles happily - killed the server, `initialize` never
+  // resolved, node's event loop emptied, and measure-profiles.mjs printed NOTHING and exited 0. A
+  // measurement script reporting silence and success when it measured nothing at all is worse than
+  // one that fails, because the reader believes it.
+  // "close", not "exit": exit fires as soon as the process is gone, which can beat the last read of
+  // its stderr - so a fast crash reported "it wrote nothing to stderr" while the reason sat
+  // unflushed in the pipe. close waits for the streams, which is the whole point of capturing them.
+  let exited = null;
+  child.on("close", (code) => {
+    exited = code;
+    const detail = stderrText.trim().split(NEWLINE).slice(-12).join(NEWLINE);
+    for (const [, reject] of pendingRejects) {
+      reject(
+        new Error(
+          `the MCP server exited (code ${code}) before answering.` +
+            (detail ? `${NEWLINE}--- server stderr ---${NEWLINE}${detail}` : " It wrote nothing to stderr.")
+        )
+      );
+    }
+    pendingRejects.clear();
+    waiters.clear();
+  });
+
   const request = (method, params) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      if (exited !== null) {
+        reject(new Error(`the MCP server already exited (code ${exited}); cannot send "${method}".`));
+        return;
+      }
       const id = nextId++;
       waiters.set(id, resolve);
+      pendingRejects.set(id, reject);
       child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + NEWLINE);
     });
   const notify = (method) => child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method }) + NEWLINE);
