@@ -86,6 +86,8 @@ const READ_ONLY_COMMANDS = new Set([
   // Reports on a compile that already happened. It drains its own capture buffer, so calling it
   // twice gives different answers, but it changes nothing in the project.
   "live_coding_status",
+  // Where things are in a running game. It reads the live worlds and changes nothing.
+  "pie_actors",
 ]);
 
 /** Plain-language names, because "set_class_default" means nothing to the person being told. */

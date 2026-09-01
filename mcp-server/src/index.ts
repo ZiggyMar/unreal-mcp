@@ -555,7 +555,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_press_input", "unreal_verify_runtime", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_pie_actors", "unreal_teleport_actor", "unreal_press_input", "unreal_verify_runtime", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -4673,6 +4673,70 @@ register(
       if (compile === false) return jsonResult(result);
       const compiled = (await bridge.send("compile_blueprint", { path })) as Record<string, unknown>;
       return jsonResult({ ...result, compiled });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_pie_actors",
+  {
+    title: "Where things are in the running game",
+    description:
+      "Lists matching actors in every running Play-In-Editor world with their position and net role, and whether " +
+      "each is locally controlled. The editor-world reads answer what a level contains; this answers where things " +
+      "actually are right now, which is what you need before moving anything or working out why an ability found " +
+      "no target.",
+    inputSchema: {
+      actorClass: z.string().describe('Blueprint name without _C, e.g. "BP_Player". Derived classes match. Use "Actor" to list everything.'),
+      world: z.string().optional().describe('Narrow to one world - "Authority" or "Client0", as unreal_watch_runtime labels them.'),
+    },
+  },
+  async ({ actorClass, world }) => {
+    try {
+      return jsonResult(await bridge.send("pie_actors", { actorClass, world }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_teleport_actor",
+  {
+    title: "Move something in the running game",
+    description:
+      "Teleports matching actors to a position while the game is running. This is what makes a two-player " +
+      "interaction testable at all: players spawn at different PlayerStarts, so an ability that needs a target in " +
+      "range finds none, and every value stays at its default while proving nothing.\n\n" +
+      "Read positions with unreal_pie_actors first and offset from one - teleporting somewhere unseen is how an " +
+      "actor ends up inside geometry. It uses TeleportTo, which refuses a destination the actor cannot fit in and " +
+      "says so rather than wedging it in a wall.\n\n" +
+      "It moves the actor in EVERY world it exists in unless you narrow it. A pawn has a copy per world, and " +
+      "moving only the server's leaves the client's behind - which looks exactly like the desync you were probably " +
+      "investigating.",
+    inputSchema: {
+      actorClass: z.string().describe('Blueprint name without _C, e.g. "BP_Player".'),
+      x: z.number().describe("Destination X."),
+      y: z.number().describe("Destination Y."),
+      z: z.number().describe("Destination Z. Give it some height - arriving inside the floor is a refused teleport."),
+      world: z.string().optional().describe('Only move the copy in this world - "Authority" or "Client0".'),
+      name: z.string().optional().describe('Only move the actor with this exact instance name, e.g. "BP_Player_C_1", from unreal_pie_actors.'),
+      yaw: z
+        .number()
+        .optional()
+        .describe(
+          "Which way to face, in degrees. Sets the CONTROL rotation on a possessed pawn, not just the mesh - " +
+            "an aimed ability tests the camera, so turning the body alone still misses. Aim at something with " +
+            "atan2(targetY - y, targetX - x) in degrees."
+        ),
+      pitch: z.number().optional().describe("Look up or down, in degrees. Negative looks down."),
+    },
+  },
+  async ({ actorClass, x, y, z: zPos, world, name, yaw, pitch }) => {
+    try {
+      return jsonResult(await bridge.send("teleport_actor", { actorClass, x, y, z: zPos, world, name, yaw, pitch }));
     } catch (err) {
       return errorResult(err);
     }

@@ -191,7 +191,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
 | `core` | 12848 | the authoring spine |
 | `lazy` | 12861 | `core` plus deferred groups |
-| `full` | 40671 | everything, for a model that can afford it |
+| `full` | 41372 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -408,6 +408,8 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
+| `unreal_pie_actors` | `pie_actors` | Where matching actors are in every running world, with facing, net role, and whether each is locally controlled. |
+| `unreal_teleport_actor` | `teleport_actor` | Move an actor while the game runs, optionally aiming it. Sets the control rotation on a possessed pawn, so aimed abilities actually point where you sent them. |
 | `unreal_press_input` | `press_input` | Press an Enhanced Input action in the running game, optionally held. Goes through the same modifiers and triggers a real key press would, so what the game sees is what a player would produce. |
 | `unreal_verify_runtime` | *(composite)* | Run the game, sample the values you name, and say whether every world agrees. Names the two failure shapes: values that differ between roles (a replication bug) and values that never changed (nothing wrote them). |
 | `unreal_set_variable_type` | `set_variable_type` | Retype an existing member variable, rebinding every Get and Set node through the engine. Compiles afterwards and reports what the retype broke. |
@@ -6374,6 +6376,37 @@ vacuum on demand.
 **The limit worth stating:** the two PIE players spawn apart, so nothing is in range to vacuum unless
 someone walks. Input injection can drive movement too, but not aim at another player reliably. Until
 that is solved, this class of bug still needs a human in the loop for the final check.
+
+### Reproducing a two-player bug with nobody playing
+
+The last thing standing between this server and testing a real interaction was position. Two players
+spawn at different PlayerStarts, so an ability needing a target in range finds none: the input
+arrives, the ability runs, every value stays at its default, and the session proves nothing. That is
+not a hypothetical — it is what the first automated vacuum test did.
+
+`unreal_pie_actors` reports where things are in each running world, with their net role, facing, and
+whether each is locally controlled. `unreal_teleport_actor` moves them, and takes a `yaw`.
+
+The facing mattered more than expected. Teleporting the two players next to each other still produced
+nothing, because the ability gates on a dot product against the camera and the host was looking the
+other way. A pawn's mesh rotation is not what an aimed ability tests — the **control rotation** is —
+so `teleport_actor` sets that on a possessed pawn, and `pie_actors` reports it.
+
+With those, the bug reproduces from a cold start with nobody at the keyboard: read where the players
+are, put the target in front of the host, aim the host at it, hold the vacuum, watch both worlds.
+
+```text
+Authority  VaccumDragStrength  BP_Player_C_3=250.000000   changed=true
+Client0    VaccumDragStrength  0.000000                   changed=false
+```
+
+The server is dragging the client's pawn. The client's copy never learns anything about it, so it
+predicts movement with no force in it and gets corrected — which is the rubber-banding, now
+reproducible on demand rather than by asking someone to go and play.
+
+`teleport_actor` moves the actor in **every** world by default. A pawn has a copy per world, and
+moving only the server's leaves the client's behind — which looks exactly like the desync you were
+investigating, except self-inflicted.
 
 ### The numbers a model reads are guarded too
 

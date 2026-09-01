@@ -130,6 +130,10 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     // Safe to probe: with no inputAction it refuses on the missing parameter before it looks for a
     // running game, so the reply separates "this command does not exist" from "nothing is playing".
     { cmd: "press_input", feature: "pressing an input action in a running game, so a change can be exercised" },
+    // Both refuse on a missing parameter before they look for a running game, so the reply separates
+    // "this command does not exist" from "nothing is playing".
+    { cmd: "pie_actors", feature: "seeing where things are in a running game" },
+    { cmd: "teleport_actor", feature: "positioning actors mid-game, so a two-player interaction can be reproduced" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 

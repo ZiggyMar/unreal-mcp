@@ -1255,6 +1255,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleInjectInput(Params);
 	}
+	else if (Cmd == TEXT("pie_actors"))
+	{
+		Response = HandlePieActors(Params);
+	}
+	else if (Cmd == TEXT("teleport_actor"))
+	{
+		Response = HandleTeleportActor(Params);
+	}
 	else if (Cmd == TEXT("remove_component"))
 	{
 		Response = HandleRemoveComponent(Params);
@@ -3142,7 +3150,7 @@ static bool MCPReadPropertyText(UObject* Object, const FString& PropertyName, FS
  * the parent's name to mean "and everything derived from it". Both are accepted, and so is the
  * suffixed form, because a caller who copied the name out of an earlier reply has the _C.
  */
-static bool MCPActorClassMatches(const AActor* Actor, const FString& Wanted)
+bool MCPActorClassMatches(const AActor* Actor, const FString& Wanted)
 {
 	if (!Actor)
 	{

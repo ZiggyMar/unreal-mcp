@@ -117,6 +117,8 @@ private:
 	static TSharedRef<FJsonObject> HandleCreateAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetVariableType(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleInjectInput(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandlePieActors(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleTeleportActor(const TSharedPtr<FJsonObject>& Params);
 	/** Remove a component, promoting its children rather than deleting them silently. */
 	static TSharedRef<FJsonObject> HandleRemoveComponent(const TSharedPtr<FJsonObject>& Params);
 	/** Remove a function graph, refusing while anything still calls it unless forced. */
