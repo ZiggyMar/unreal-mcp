@@ -24,6 +24,85 @@ namespace
 		return FString();
 	}
 
+	// Split a name into lowercase words, treating underscores, spaces and camelCase humps all as
+	// the same kind of boundary.
+	//
+	// "Array_Length", "Array Length" and "ArrayLength" all become ["array", "length"], which is the
+	// point: a caller types what the editor shows them, and the editor shows "Array Length" for a
+	// function actually called Array_Length.
+	void TokenizeName(const FString& In, TArray<FString>& Out)
+	{
+		FString Current;
+		for (int32 Index = 0; Index < In.Len(); ++Index)
+		{
+			const TCHAR Char = In[Index];
+			if (!FChar::IsAlnum(Char))
+			{
+				if (!Current.IsEmpty())
+				{
+					Out.Add(Current.ToLower());
+					Current.Reset();
+				}
+				continue;
+			}
+			// A capital starts a new word after a lowercase ("SpawnActor"), and also when it is the
+			// last capital of a run that runs into a lowercase ("HTTPServer" -> http, server).
+			if (FChar::IsUpper(Char) && !Current.IsEmpty())
+			{
+				const TCHAR Previous = In[Index - 1];
+				const bool bPreviousEndsWord = FChar::IsLower(Previous) || FChar::IsDigit(Previous);
+				const bool bNextIsLower = (Index + 1 < In.Len()) && FChar::IsLower(In[Index + 1]);
+				if (bPreviousEndsWord || (FChar::IsUpper(Previous) && bNextIsLower))
+				{
+					Out.Add(Current.ToLower());
+					Current.Reset();
+				}
+			}
+			Current.AppendChar(Char);
+		}
+		if (!Current.IsEmpty())
+		{
+			Out.Add(Current.ToLower());
+		}
+	}
+
+	// Where Needle appears in Hay as a run of consecutive WHOLE words, or INDEX_NONE.
+	//
+	// Whole words are what stops the nonsense. A plain substring search for "Do N" matched
+	// GetCustomDoNotImportCurveWithZero - "...Do N ot Import..." - and returned it as the best
+	// answer for a caller who wanted the DoN macro. A confident wrong hit is worse than no hit,
+	// because no hit sends the caller to look somewhere else.
+	int32 WordRunIndex(const TArray<FString>& Hay, const TArray<FString>& Needle, bool bAllowLastPartial)
+	{
+		if (Needle.Num() == 0 || Needle.Num() > Hay.Num())
+		{
+			return INDEX_NONE;
+		}
+		for (int32 Start = 0; Start + Needle.Num() <= Hay.Num(); ++Start)
+		{
+			bool bMatched = true;
+			for (int32 Offset = 0; Offset < Needle.Num(); ++Offset)
+			{
+				const FString& Want = Needle[Offset];
+				const FString& Have = Hay[Start + Offset];
+				// The final word may be a prefix, so someone typing "len" still finds Length. Only
+				// the final one: allowing it everywhere brings the noise straight back.
+				const bool bLast = (Offset == Needle.Num() - 1);
+				if (Have == Want || (bLast && bAllowLastPartial && Have.StartsWith(Want)))
+				{
+					continue;
+				}
+				bMatched = false;
+				break;
+			}
+			if (bMatched)
+			{
+				return Start;
+			}
+		}
+		return INDEX_NONE;
+	}
+
 	// Tooltips can run to several paragraphs. Only the first line is useful as a search
 	// hint, and returning the whole thing for every hit would defeat the point of a
 	// compact catalog.
@@ -182,6 +261,11 @@ FMCPCatalogFunction FMCPNodeCatalog::MakeEntry(const UFunction* Func, const UCla
 	Entry.Keywords = GetFunctionMetaData(Func, TEXT("Keywords"));
 	Entry.Tooltip = MakeShortTooltip(GetFunctionMetaData(Func, TEXT("ToolTip")));
 
+	// Split once here rather than on every search. The catalog holds tens of thousands of entries
+	// and is searched repeatedly in a session, so paying for this at build time is the cheap end.
+	TokenizeName(Entry.Name, Entry.NameWords);
+	TokenizeName(Entry.DisplayName, Entry.DisplayWords);
+
 	// Same reflection walk MCPProjectIndex uses for a Blueprint's own functions, applied
 	// here to every engine and game class instead.
 	for (TFieldIterator<FProperty> PropIt(Func); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
@@ -296,37 +380,57 @@ TArray<TSharedPtr<FJsonValue>> FMCPNodeCatalog::Search(const FString& Query, int
 	};
 	TArray<FScoredHit> Scored;
 
+	// The query, split the same way every catalog name was. Both sides being words is what makes
+	// "Array Length", "array_length" and "ArrayLength" the same search.
+	TArray<FString> QueryWords;
+	TokenizeName(Query, QueryWords);
+
+	// Below this length a bare substring match stops meaning anything: "don" appears inside
+	// "GetCustomDoNotImportCurveWithZero". Short queries get the word tiers only.
+	const bool bSubstringIsMeaningful = LowerQuery.Len() >= 4;
+
 	for (const FMCPCatalogFunction& Fn : Functions)
 	{
 		const FString LowerName = Fn.Name.ToLower();
 		const FString LowerDisplay = Fn.DisplayName.ToLower();
 
-		// Exact, then prefix, then contains, matching search_project's ordering so the
-		// two search surfaces behave the same way.
+		// Exact, then prefix, then whole-word run, then typeahead, then metadata, then - last and
+		// only for a query long enough to mean something - a raw substring, so nothing that used to
+		// be findable stops being findable.
 		int32 Score = -1;
-		if (LowerName == LowerQuery)
+		if (QueryWords.Num() > 0 && Fn.NameWords == QueryWords)
 		{
 			Score = 0;
 		}
-		else if (LowerDisplay == LowerQuery)
+		else if (QueryWords.Num() > 0 && Fn.DisplayWords == QueryWords)
 		{
 			Score = 1;
 		}
-		else if (LowerName.StartsWith(LowerQuery))
+		else if (WordRunIndex(Fn.NameWords, QueryWords, /*bAllowLastPartial=*/false) == 0)
 		{
 			Score = 2;
 		}
-		else if (LowerDisplay.StartsWith(LowerQuery))
+		else if (WordRunIndex(Fn.DisplayWords, QueryWords, /*bAllowLastPartial=*/false) == 0)
 		{
 			Score = 3;
 		}
-		else if (LowerName.Contains(LowerQuery) || LowerDisplay.Contains(LowerQuery))
+		else if (WordRunIndex(Fn.NameWords, QueryWords, /*bAllowLastPartial=*/false) != INDEX_NONE ||
+			WordRunIndex(Fn.DisplayWords, QueryWords, /*bAllowLastPartial=*/false) != INDEX_NONE)
 		{
 			Score = 4;
 		}
-		else if (Fn.Keywords.ToLower().Contains(LowerQuery) || Fn.OwnerClass.ToLower().Contains(LowerQuery))
+		else if (WordRunIndex(Fn.NameWords, QueryWords, /*bAllowLastPartial=*/true) != INDEX_NONE ||
+			WordRunIndex(Fn.DisplayWords, QueryWords, /*bAllowLastPartial=*/true) != INDEX_NONE)
 		{
 			Score = 5;
+		}
+		else if (Fn.Keywords.ToLower().Contains(LowerQuery) || Fn.OwnerClass.ToLower().Contains(LowerQuery))
+		{
+			Score = 6;
+		}
+		else if (bSubstringIsMeaningful && (LowerName.Contains(LowerQuery) || LowerDisplay.Contains(LowerQuery)))
+		{
+			Score = 7;
 		}
 
 		if (Score >= 0)

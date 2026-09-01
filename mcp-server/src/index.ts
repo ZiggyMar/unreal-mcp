@@ -209,6 +209,61 @@ const AUTHORING_TOOLS = [
 /** Sent once per session, with the first enable that switches on something able to author. */
 let groundTruthDelivered = false;
 
+// These two live here, above buildInstructions, rather than beside the other profile sets.
+//
+// buildInstructions runs at module scope, so anything it reads must already exist. Declared in
+// their natural place further down, they are in the temporal dead zone when it runs and the
+// server dies on startup with a ReferenceError - which TypeScript compiles without complaint,
+// because the error is in the ORDER, not the types. That is the second time this exact shape has
+// bitten (GROUND_TRUTH was the first), and both times the compiler was happy and only running it
+// told the truth.
+/**
+ * The "search" profile: everything reachable, almost nothing standing.
+ *
+ * The measurement is the whole argument. The tool definitions this server sends before the user has
+ * said a word cost, per request: minimal 3,883 tokens, core and lazy 9,989, full 25,111. A frontier
+ * model has the context to absorb `full` - that is why it is the in-process default - but "can
+ * afford it" is not the same as "should pay it". It is 25k tokens of standing cost on every turn,
+ * most of it describing tools the session will never call.
+ *
+ * Epic's own MCP plugin, shipped experimental in 5.8, hit the same wall and answered it the same
+ * way: its Tool Search mode returns a few meta-tools from tools/list and lets the agent pull in the
+ * rest on demand. That is a poor trade for a weak model, which struggles with the indirection -
+ * which is exactly why `minimal` and `core` are untouched. It is an excellent trade for a capable
+ * one, which will spend one call to buy back 24k tokens on every remaining turn.
+ *
+ * This comment used to end by dismissing "a generic call_tool proxy", on the grounds that enabling a
+ * group hands over the REAL typed schemas while a proxy flattens everything into a stringly-typed
+ * passthrough. The first half is still true and is why enable_tools remains the way to do real work.
+ * The second half was wrong about the alternative rather than right about this design: Epic ships a
+ * call_tool as well, and the reason is one this file had not measured. Enabling changes the
+ * advertised tool list, that list sits ahead of everything else in the request, and changing it
+ * invalidates the prompt cache for the whole conversation. For a tool used once, the "cheap" path
+ * here was the most expensive call the server offered.
+ *
+ * So unreal_call_tool exists too, and it is not a flattened proxy: it validates against the same
+ * strict schema the tool advertises. Both paths, honestly priced - see DEFERRAL_TOOLS below.
+ */
+const SEARCH_PROFILE_TOOLS = new Set([
+  // Is the bridge there, and if not, why not. Both are small, and both are what you reach for first
+  // when nothing works, so neither should need a round trip to switch on.
+  "unreal_ping",
+  "unreal_doctor",
+  // The two that make everything else reachable.
+  "unreal_list_tools",
+  "unreal_enable_tools",
+]);
+
+/**
+ * Tools that only earn their keep where OTHER tools are deferred.
+ *
+ * unreal_call_tool exists to run something without switching it on. On `full` everything is already
+ * on, and on `core` and `minimal` the only tools it could reach are the ones already registered and
+ * enabled, so in all three it is an extra hop and an extra schema for no gain. It stands on `lazy`
+ * and `search`, which are the profiles that defer anything.
+ */
+const DEFERRAL_TOOLS = new Set(["unreal_call_tool"]);
+
 function buildInstructions(profile: string): string {
   const lines: string[] = [];
 
@@ -220,9 +275,14 @@ function buildInstructions(profile: string): string {
   if (profile === "search") {
     lines.push(
       "THE TOOL LIST IS DELIBERATELY SHORT.",
-      `Four tools are listed. The rest are registered and switched off, because all of them is ~${Math.round(ALL_GROUPS_TOKENS / 100) / 10}k`,
+      `${SEARCH_PROFILE_TOOLS.size + DEFERRAL_TOOLS.size} tools are listed. The rest are registered and switched off, because all of them is ~${Math.round(ALL_GROUPS_TOKENS / 100) / 10}k`,
       "tokens on every turn and most goes unused. Switch on what the job needs and the real, fully",
       "typed schemas arrive - nothing is dumbed down or proxied.",
+      "",
+      "USING SOMETHING ONCE? unreal_call_tool({ tool, args }) runs any of them without switching it",
+      "on, which matters more than it sounds: enabling changes the tool list, and that re-reads this",
+      "whole conversation at full price on the next turn. Once or twice, dispatch. More, enable.",
+      "unreal_list_tools({ schema: \"<name>\" }) gives one tool's parameters without switching it on either.",
       "",
       "START WITH A PRESET: the tools for one job, already chosen, each checked by a trial that runs",
       "that whole job on it. These costs are measured, not estimated:",
@@ -695,44 +755,6 @@ const MINIMAL_PROFILE_TOOLS = new Set([
   "unreal_save_blueprint",
 ]);
 
-/**
- * The "search" profile: everything reachable, almost nothing standing.
- *
- * The measurement is the whole argument. The tool definitions this server sends before the user has
- * said a word cost, per request: minimal 3,883 tokens, core and lazy 9,989, full 25,111. A frontier
- * model has the context to absorb `full` - that is why it is the in-process default - but "can
- * afford it" is not the same as "should pay it". It is 25k tokens of standing cost on every turn,
- * most of it describing tools the session will never call.
- *
- * Epic's own MCP plugin, shipped experimental in 5.8, hit the same wall and answered it the same
- * way: its Tool Search mode returns a few meta-tools from tools/list and lets the agent pull in the
- * rest on demand. That is a poor trade for a weak model, which struggles with the indirection -
- * which is exactly why `minimal`, `core` and `lazy` are untouched. It is an excellent trade for a
- * capable one, which will spend one call to buy back 24k tokens on every remaining turn.
- *
- * The difference from a generic call_tool proxy matters: enabling a group here hands over the REAL
- * typed schemas. Nothing is flattened into a stringly-typed passthrough, so nothing is given up in
- * exchange for the saving, which is the entire point of doing it this way.
- */
-const SEARCH_PROFILE_TOOLS = new Set([
-  // Is the bridge there, and if not, why not. Both are small, and both are what you reach for first
-  // when nothing works, so neither should need a round trip to switch on.
-  "unreal_ping",
-  "unreal_doctor",
-  // The two that make everything else reachable.
-  "unreal_list_tools",
-  "unreal_enable_tools",
-]);
-
-/**
- * Tools that only earn their keep where OTHER tools are deferred.
- *
- * unreal_call_tool exists to run something without switching it on. On `full` everything is already
- * on, and on `core` and `minimal` the only tools it could reach are the ones already registered and
- * enabled, so in all three it is an extra hop and an extra schema for no gain. It stands on `lazy`
- * and `search`, which are the profiles that defer anything.
- */
-const DEFERRAL_TOOLS = new Set(["unreal_call_tool"]);
 
 // PROFILE is resolved above, next to the server it configures.
 

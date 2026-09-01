@@ -30,6 +30,14 @@ struct FMCPCatalogFunction
 	bool bPure = false;
 	bool bStatic = false;
 	TArray<FMCPCatalogParam> Params;
+
+	// The name split into lowercase words, computed once when the catalog is built.
+	//
+	// Searching used to compare raw strings, which meant the separator decided the answer: a model
+	// asking for "Array Length" - what the editor puts on the node - missed Array_Length entirely,
+	// because a space is not an underscore. Words make the two spellings the same question.
+	TArray<FString> NameWords;    // "Array_Length" -> ["array", "length"]
+	TArray<FString> DisplayWords; // "Print String" -> ["print", "string"]
 };
 
 /**
