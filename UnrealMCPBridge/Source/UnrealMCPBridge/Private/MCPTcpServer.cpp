@@ -417,7 +417,24 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 	// loop had cleared all of them and the bridge was fine - so nothing here was wrong except when
 	// it ran.
 	//
-	// Arriving first does not entitle a connection to a slot. It has to still be there.
+	// Arriving first does not entitle a connection to a slot. It has to still be there - and
+	// "still be there" has to be asked the way ProcessClientSocket asks it, not the obvious way.
+	//
+	// The first version of this check used IsConnected(), which wraps GetConnectionState(). That
+	// does not detect an orderly close: it still answers SCS_Connected for a peer that hung up
+	// minutes ago. This file already says so two hundred lines down, in the comment explaining why
+	// the receive loop stopped gating on HasPendingData - "Recv ... returns false for an orderly
+	// peer close ... That is the only reliable end-of-stream signal available here." The check was
+	// written anyway, shipped, and measured: 48 abandoned connections queued behind a busy game
+	// thread, 32 adopted as if alive, 16 refused, and not one of them discarded. It cost nothing and
+	// did nothing.
+	//
+	// So probe them the way the servicing loop does. ProcessClientSocket reads what is there into
+	// RecvBuffer, answers any complete request, and sets bPeerClosed when Recv reports end of
+	// stream, which means nothing is thrown away by asking early: a client that connected and has
+	// not spoken yet reads zero bytes and stays, and a client that sent a request and vanished still
+	// gets its reply because HasPendingSend keeps it. This is the same rule the loop below applies
+	// after a slot has been granted. Applying it before is the entire fix.
 	for (int32 i = Clients.Num() - 1; i >= 0; --i)
 	{
 		if (!Clients[i]->IsConnected())
@@ -430,7 +447,8 @@ bool FMCPTcpServer::Tick(float DeltaTime)
 	int32 AbandonedPending = 0;
 	while (PendingClients.Dequeue(Adopted))
 	{
-		if (!Adopted->IsConnected())
+		const bool bWorthKeeping = ProcessClientSocket(*Adopted);
+		if (!bWorthKeeping || (Adopted->bPeerClosed && !Adopted->HasPendingSend()))
 		{
 			++AbandonedPending;
 			continue;

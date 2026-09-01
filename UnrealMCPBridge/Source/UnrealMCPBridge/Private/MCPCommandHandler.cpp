@@ -21,7 +21,12 @@
 #include "K2Node_ConstructObjectFromClass.h"
 #include "Animation/WidgetAnimation.h"
 #include "Animation/AnimMontage.h"
-#include "Engine/UserDefinedStruct.h"
+// StructUtils/, not Engine/. Both spellings compile on 5.6 and only one of them is real: the
+// Engine/ header there is a shim whose whole body sits behind
+// UE_ENABLE_INCLUDE_ORDER_DEPRECATED_IN_5_5, and 5.8 has deleted it outright. So this was not simply
+// broken on 5.8 - on 5.6 it was resolving through a deprecation shim, one build setting away from
+// failing on the engine it was being tested against every day.
+#include "StructUtils/UserDefinedStruct.h"
 #include "Engine/Level.h"
 #include "Engine/LevelScriptBlueprint.h"
 #include "K2Node_CustomEvent.h"

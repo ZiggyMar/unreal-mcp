@@ -7348,18 +7348,59 @@ right, all of them downstream of the block. Which is the same shape as the guida
 sections up: good logic sitting behind the thing that is broken, and therefore not running when it is
 the only thing that would have helped.
 
-The fix is ordering, not policy. Reap before adopting, and never spend a slot on a connection that is
-already dead:
+The fix is ordering, not policy: apply the reaping rule *before* the slot is granted rather than
+after. Arriving first does not entitle a connection to a slot — it has to still be there.
+
+The first attempt asked that question the obvious way, and the obvious way is wrong:
 
 ```cpp
-if (!Adopted->IsConnected()) { ++AbandonedPending; continue; }
+if (!Adopted->IsConnected()) { ++AbandonedPending; continue; }   // shipped, and did nothing
+```
+
+`IsConnected()` wraps `GetConnectionState()`, which does not detect an orderly close — it still
+answers `SCS_Connected` for a peer that hung up minutes ago. This file already said so, two hundred
+lines further down, in the comment explaining why the receive loop stopped gating on
+`HasPendingData`: *"Recv ... returns false for an orderly peer close ... That is the only reliable
+end-of-stream signal available here."* The check was written anyway, against advice already present
+in the same file.
+
+What is worth recording is the reasoning that produced it, because it was not lazy — it was a
+specific, confident, wrong inference. The refusal had cleared on the very next tick, nine
+milliseconds later. From that I concluded `IsConnected()` works and the bug was purely ordering. The
+observation was real; the attribution was invented. The reap loop clears dead clients through
+`ProcessClientSocket`'s `Recv`, not through `IsConnected()` — so the effect I had watched had a
+mechanism I never checked, and I built the fix on the mechanism I had assumed.
+
+Measured, on the same trial, with only the predicate changed:
+
+| | connections refused | connections discarded |
+|---|---|---|
+| `IsConnected()` check | **18** | 0 |
+| `Recv`-based probe | **0** | **48**, in a single tick |
+
+The working version asks the way the servicing loop asks, which also means nothing is thrown away by
+asking early: `ProcessClientSocket` reads what is there into `RecvBuffer`, answers any complete
+request, and sets `bPeerClosed` at end of stream. A client that has connected but not spoken reads
+zero bytes and stays. A client that sent a request and then vanished still gets its reply, because
+`HasPendingSend` keeps it.
+
+```cpp
+const bool bWorthKeeping = ProcessClientSocket(*Adopted);
+if (!bWorthKeeping || (Adopted->bPeerClosed && !Adopted->HasPendingSend())) { ++AbandonedPending; continue; }
 if (Clients.Num() >= MCPMaxClients) { /* refuse */ }
 ```
 
-Arriving first does not entitle a connection to a slot. It has to still be there.
+### The trial that agreed with the bug, again
 
-Worth stating what settled it, because the wrong fix was available and plausible. The first guess was
-that dead sockets are simply undetectable and the queue needed an age limit — which would have meant
-picking a timeout, and picking it wrong for any client more patient than the default. One retry of
-the same ping, nine milliseconds, showed the reap loop clearing all thirty-two on its own on the very
-next tick. `IsConnected()` works. The bug was never detection.
+None of the table above would exist if the first trial had been believed. It reported PASS, and it
+reported PASS against the *unfixed* binary too — checked on purpose, by reverting the commit and
+rebuilding, which is the only reason it was caught. Two earlier versions of it were worse: one used
+the wrong request envelope, so every command returned `unknown_cmd` and the "heavy" phase it was
+racing never ran; another slept 800ms before opening its sockets, by which time the command it was
+racing had already finished. All three passed. A trial that cannot fail is not evidence, and the only
+way to find out which kind you have is to run it against the broken thing.
+
+The version that earns its keep asserts its own preconditions — the sockets must be opened *while*
+the command is still in flight, and the command must actually have succeeded — and reads the bridge's
+own log afterwards rather than trusting its own verdict. The log is what produced the table, and the
+log is what showed that the shipped fix had discarded nothing at all.

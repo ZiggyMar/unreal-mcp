@@ -382,7 +382,23 @@ for (const target of chosen) {
       .split(/\r?\n/)
       .filter((line) => /error\s|error[A-Z]?\d|Result:\s*Failed/i.test(line))
       .slice(-8);
-    for (const line of errorLines) console.log(`    ${line.trim().slice(0, 160)}`);
+    for (const line of errorLines) {
+      // Spend the width on the message, not on the path.
+      //
+      // A compiler line is "<absolute path>(line,col): <severity> <code>: <message>", and the path
+      // is boilerplate the reader already knows - the temp build root, the host project, the module,
+      // the Private dir. It was charged against the same budget as the diagnosis, and it won. This
+      // is the line that made the point, cut at exactly 160 characters:
+      //
+      //   ...\MCPCommandHandler.cpp(24,1): fatal error C1083: Cannot open include fi
+      //
+      // One character short of "le: 'Engine/UserDefinedStruct.h'". Everything needed to fix the
+      // build was in the half that was dropped; 110 characters of directory nobody can act on were
+      // in the half that was kept. Raising the limit would have papered over that - the path grows
+      // with wherever the build happens to run.
+      const trimmed = line.trim().replace(/^.*[\\/](?=[^\\/]+\(\d+[,\d]*\)\s*:)/, "");
+      console.log(`    ${trimmed.slice(0, 220)}`);
+    }
   }
   results.push({ target, ok: succeeded, why: succeeded ? `${seconds}s` : "build failed" });
 }
