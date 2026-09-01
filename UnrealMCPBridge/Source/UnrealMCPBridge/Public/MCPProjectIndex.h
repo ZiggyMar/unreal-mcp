@@ -138,6 +138,16 @@ private:
 	TMap<FString, FMCPIndexBlueprint> Entries;
 	bool bBuilt = false;
 	bool bAssetRegistryStillScanning = false;
+	/**
+	 * An asset changed before anything had asked for the index, so the snapshot on disk is behind.
+	 *
+	 * The callbacks below all begin `if (!bBuilt) return;`, and EnsureBuilt is lazy - nothing builds
+	 * the index until a tool needs it. Every change in that window was therefore dropped, and the
+	 * next EnsureBuilt loaded a cache that predated it. Observed: ten Blueprints deleted from a real
+	 * project stayed in get_project_overview afterwards, listed under a folder that no longer had
+	 * anything in it.
+	 */
+	bool bCacheStale = false;
 
 	FDelegateHandle OnAssetAddedHandle;
 	FDelegateHandle OnAssetRemovedHandle;

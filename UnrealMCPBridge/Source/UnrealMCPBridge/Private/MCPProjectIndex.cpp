@@ -347,11 +347,20 @@ void FMCPProjectIndex::EnsureBuilt()
 		return;
 	}
 
-	if (LoadFromDisk())
+	// A change arrived before anything asked for the index, so the snapshot on disk is behind and
+	// loading it would answer with assets that are gone. Rebuild instead. This costs one scan, once,
+	// and only in a session where something changed before the index was first needed.
+	if (!bCacheStale && LoadFromDisk())
 	{
 		bBuilt = true;
 		UE_LOG(LogMCPProjectIndex, Log, TEXT("UnrealMCPBridge: loaded project index from disk (%d blueprints)"), Entries.Num());
 		return;
+	}
+
+	if (bCacheStale)
+	{
+		UE_LOG(LogMCPProjectIndex, Log,
+			TEXT("UnrealMCPBridge: assets changed before the index was first used, so the cached one is behind - rebuilding."));
 	}
 
 	RebuildFull();
@@ -379,6 +388,7 @@ void FMCPProjectIndex::RebuildFull()
 	}
 
 	bBuilt = true;
+	bCacheStale = false;
 	UE_LOG(LogMCPProjectIndex, Log, TEXT("UnrealMCPBridge: rebuilt project index (%d blueprints, assetRegistryStillScanning=%d)"),
 		Entries.Num(), bAssetRegistryStillScanning ? 1 : 0);
 	SaveToDisk();
@@ -964,8 +974,15 @@ TSharedRef<FJsonObject> FMCPProjectIndex::GetHealthReport(int32 MaxPerCategory) 
 
 void FMCPProjectIndex::OnAssetAdded(const FAssetData& AssetData)
 {
-	if (!bBuilt || !IsBlueprintAsset(AssetData))
+	if (!IsBlueprintAsset(AssetData))
 	{
+		return;
+	}
+	if (!bBuilt)
+	{
+		// Nothing has asked for the index yet, so there is nothing to update - but the cache on disk
+		// no longer describes the project, and loading it later would hide this asset.
+		bCacheStale = true;
 		return;
 	}
 	IndexBlueprintByPath(AssetData.GetObjectPathString());
@@ -976,6 +993,7 @@ void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
 {
 	if (!bBuilt)
 	{
+		bCacheStale = true;
 		return;
 	}
 	if (Entries.Remove(AssetData.GetObjectPathString()) > 0)
@@ -988,6 +1006,7 @@ void FMCPProjectIndex::OnAssetRenamed(const FAssetData& AssetData, const FString
 {
 	if (!bBuilt)
 	{
+		bCacheStale = true;
 		return;
 	}
 	Entries.Remove(OldObjectPath);

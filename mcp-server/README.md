@@ -8300,3 +8300,64 @@ real game that has no version control and reported success ten times. The bug is
 folder is empty, but the lesson is about which direction a silent no-op fails in — a delete that
 quietly does nothing looks identical to a delete that worked, and only a census of the project ever
 finds out.
+
+### The index dropped every change made before anyone asked for it
+
+Having deleted ten stray Blueprints and watched `list_blueprints` report zero, `get_project_overview`
+still listed them:
+
+```
+index: 352   editor: 339
+folders: __MCPRuntimeTrial  10
+```
+
+Ten assets that did not exist, in the reply that describes the project, feeding every index-backed
+tool there is — `trace_variable`, `map_system`, `project_health`, `find_node`.
+
+The index subscribes to the asset registry properly, and the handlers are right:
+
+```cpp
+void FMCPProjectIndex::OnAssetRemoved(const FAssetData& AssetData)
+{
+    if (!bBuilt) { return; }
+    if (Entries.Remove(AssetData.GetObjectPathString()) > 0) { SaveToDisk(); }
+}
+```
+
+The keys match on both sides. The bug is the first line, and it is `EnsureBuilt` being **lazy** that
+makes it one: nothing builds the index until a tool needs it, so `bBuilt` is false for the whole
+opening stretch of a session, and every add, removal and rename in that window returns immediately.
+Then the first tool that wants the index calls `EnsureBuilt`, which loads a snapshot from disk that
+predates all of it.
+
+So the rule was: *changes are tracked, unless they happen before anyone looks* — which is exactly
+when a model does its setup work.
+
+A dropped change now marks the cache stale, and `EnsureBuilt` rebuilds instead of loading:
+
+```cpp
+if (!bBuilt) { bCacheStale = true; return; }
+...
+if (!bCacheStale && LoadFromDisk()) { bBuilt = true; return; }
+```
+
+It costs one rebuild, once, and only in a session where something changed before the index was first
+needed. Doing it the other way — replaying a queue of deltas — sounded cheaper until the callbacks
+also fire in their thousands during the registry's initial scan.
+
+Tested by reproducing the exact window on a fresh editor: create an asset and delete it before any
+index read, then ask.
+
+```
+deleted: {"requested":1,"deleted":1,"forced":true}
+phantom StaleProbe in index?  no
+old RuntimeTrial phantoms?    no
+index: 339   editor: 339   drift note: NONE
+```
+
+The ten phantoms went with it, and the log line explaining why fired exactly once.
+
+**Two bugs, one symptom, and they hid each other.** The delete reported success and did nothing; the
+index then reported the asset as present, which is what a working index would do for an asset that
+was genuinely still there. Each defect made the other look like correct behaviour, and the only thing
+that separated them was counting the actual assets in the actual project.
