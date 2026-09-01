@@ -191,7 +191,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
 | `core` | 12848 | the authoring spine |
 | `lazy` | 12861 | `core` plus deferred groups |
-| `full` | 40127 | everything, for a model that can afford it |
+| `full` | 40518 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -408,6 +408,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_create_struct` | `create_struct` | Create a user-defined Struct with typed fields, validated before the asset is created. |
 | `unreal_add_struct_field` | `add_struct_field` | Append a field to an existing Struct. |
 | `unreal_list_struct_fields` | `list_struct_fields` | Read a Struct's fields: name, type, sub-type, array-ness, default. |
+| `unreal_press_input` | `press_input` | Press an Enhanced Input action in the running game, optionally held. Goes through the same modifiers and triggers a real key press would, so what the game sees is what a player would produce. |
 | `unreal_verify_runtime` | *(composite)* | Run the game, sample the values you name, and say whether every world agrees. Names the two failure shapes: values that differ between roles (a replication bug) and values that never changed (nothing wrote them). |
 | `unreal_set_variable_type` | `set_variable_type` | Retype an existing member variable, rebinding every Get and Set node through the engine. Compiles afterwards and reports what the retype broke. |
 | `unreal_create_asset` | `create_asset` | Create any asset type the editor's New Asset menu can create — InputAction, InputMappingContext, Blackboard, BehaviorTree, SoundCue, CurveFloat, LevelSequence, NiagaraSystem, DataAsset. Refuses the eight types with a dedicated tool, and refuses to overwrite. |
@@ -6304,6 +6305,35 @@ that project, but its premise is "an event that runs on the server sets an unrep
 Here the setter runs from an interface event, not a Server RPC, so it correctly said nothing. The bug
 was a different shape, and the honest response to "why did the check not catch this" was to work out
 what shape it actually was rather than widen the old check until it fired.
+
+### The tool could not press anything
+
+This server could start a game, read variables out of it, and screenshot it. It could not **press**
+anything. So every runtime verification stopped at *"the values agree while nothing is happening"* —
+which is true, and proves nothing about behaviour that only exists while an ability is being used.
+
+That gap has a receipt. A networking fix in a real project was shipped on exactly that evidence: both
+roles agreeing at their defaults, with nobody using the ability. It made the bug worse and crashed
+the editor. The person on the other end found it in thirty seconds by holding a key. The tool could
+not hold a key.
+
+`unreal_press_input` closes it. It uses `InjectInputForAction`, which is how Enhanced Input is meant
+to be driven programmatically: the action passes through the same modifiers and triggers a real press
+would, so the game sees what a player would produce. Synthesising a key at the PlayerController would
+bypass the mapping context and test a path nobody plays.
+
+Proven against the real project by pressing the vacuum for six seconds and watching the game react:
+
+```text
+press: {"heldForSeconds":6,"inputAction":"IA_Vacuum","localPlayers":2,"worlds":["Authority","Client0"]}
+
+bDirector_IsVacuuming   Authority  changed=true
+VacuumChargePercent     Authority  0.000000 -> 2 actors differ   changed=true
+```
+
+Injection lasts one frame, so a hold is a ticker that re-injects until the time is up — capped at 30
+seconds, and a second call replaces the first rather than stacking, because a held key is a change to
+a running game that nothing else will undo.
 
 ### The numbers a model reads are guarded too
 

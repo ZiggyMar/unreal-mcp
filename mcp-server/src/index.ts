@@ -555,7 +555,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_verify_runtime", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_press_input", "unreal_verify_runtime", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -4673,6 +4673,37 @@ register(
       if (compile === false) return jsonResult(result);
       const compiled = (await bridge.send("compile_blueprint", { path })) as Record<string, unknown>;
       return jsonResult({ ...result, compiled });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_press_input",
+  {
+    title: "Press something in the running game",
+    description:
+      "Injects an Enhanced Input action into a running Play-In-Editor session, optionally held for a number of " +
+      "seconds. This is how a change to gameplay gets EXERCISED rather than reasoned about: read a variable while " +
+      "nothing is happening and every value agrees, because nothing is happening.\n\n" +
+      "The action passes the modifiers and triggers a real key " +
+      "press would - what the game sees is what a player would produce, not a synthetic key that skips the " +
+      "mapping context.\n\n" +
+      "Pair it with unreal_watch_runtime: start watching, press, read. A hold is capped at 30 seconds and a second " +
+      "call replaces the first, so nothing can be left held down.",
+    inputSchema: {
+      inputAction: z.string().describe('The InputAction, e.g. "IA_Vacuum" or a full path. Find them with unreal_list_assets className=InputAction.'),
+      seconds: z.number().optional().describe("Hold it this long. Omit for a single frame - a tap. Capped at 30."),
+      value: z.number().optional().describe("Magnitude. Default 1. For an Axis action this is how far; for a Boolean anything non-zero is pressed."),
+      world: z.string().optional().describe('Which running world to press in - "Authority" or "Client0", as unreal_watch_runtime labels them. Omit for all of them.'),
+      release: z.boolean().optional().describe("Let go of whatever is held, instead of pressing. Ignores the other parameters."),
+    },
+  },
+  async ({ inputAction, seconds, value, world, release }) => {
+    try {
+      if (release) return jsonResult(await bridge.send("press_input", { action: "stop" }));
+      return jsonResult(await bridge.send("press_input", { inputAction, seconds, value, world }));
     } catch (err) {
       return errorResult(err);
     }

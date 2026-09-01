@@ -127,6 +127,9 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     // Safe to probe: it refuses a request with no path/variableName/type before it touches the
     // Blueprint, so the reply separates "this command does not exist" from "you gave it nothing".
     { cmd: "set_variable_type", feature: "changing a variable's type without losing the nodes that use it" },
+    // Safe to probe: with no inputAction it refuses on the missing parameter before it looks for a
+    // running game, so the reply separates "this command does not exist" from "nothing is playing".
+    { cmd: "press_input", feature: "pressing an input action in a running game, so a change can be exercised" },
     { cmd: "live_coding_compile", feature: "hot-reloading C++ into the running editor" },
   ];
 

@@ -1251,6 +1251,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleSetVariableType(Params);
 	}
+	else if (Cmd == TEXT("press_input"))
+	{
+		Response = HandleInjectInput(Params);
+	}
 	else if (Cmd == TEXT("remove_component"))
 	{
 		Response = HandleRemoveComponent(Params);

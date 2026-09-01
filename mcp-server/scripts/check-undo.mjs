@@ -48,6 +48,7 @@ const NOT_UNDOABLE = {
   start_pie: "entering play is not an edit to the project",
   stop_pie: "leaving play is not an edit to the project",
   watch_runtime: "observes a running game; changes nothing",
+  press_input: "presses a key in a running game - it changes what the game is doing, not the project, and the game ends when PIE does",
   run_console_command: "the command decides what it does; this bridge cannot transact on its behalf",
   live_coding_compile: "compiling C++ changes build output, not project state",
   take_screenshot: "writes a PNG to disk; there is no project change to take back",
