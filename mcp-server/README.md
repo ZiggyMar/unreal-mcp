@@ -7515,3 +7515,69 @@ and therefore changing how the vacuum feels and what `VaccumDragStrength = 250` 
 option preserves the tuning and reduces the correction; the second removes the cause and changes the
 feel. Both are defensible; neither is mine to pick on a project with no version control and two
 reverted attempts behind it.
+
+### The C++ leg, end to end, on a bug the Blueprint leg could not fix
+
+The rubber-band diagnosis above ends at a decision the tool should not make alone, so it was put to
+the user: keep the feel and reduce the snap, change the feel and remove the cause, or fix it properly
+in C++. They chose C++, which is the interesting answer, because it exercises the half of this server
+that exists for exactly that and is used least.
+
+The first useful thing was not writing code. It was reading the engine to find out whether the code
+needed writing at all. The plan had been to extend `FSavedMove_Character` by hand — the standard
+recipe for "make the server replay a force the client applied" — which is a real amount of work and
+easy to get subtly wrong. Two greps said don't:
+
+```
+CharacterMovementComponent.h:2983    FRootMotionSourceGroup SavedRootMotion;
+CharacterMovementComponent.h:2513    ClientAdjustRootMotionSourcePosition_Implementation(...)
+CharacterMovementComponent.h:2740    ConvertRootMotionServerIDsToLocalIDs(...)
+RootMotionSource.h:470               struct FRootMotionSource_RadialForce
+                                       FVector Location; TObjectPtr<AActor> LocationActor;
+                                       float Radius; float Strength; bool bIsPush; bool bNoZForce;
+```
+
+Root motion sources are already part of the saved move, already have their own correction path, and
+already have an ID-matching function whose entire job is pairing a server's source with the client's
+predicted copy. And `FRootMotionSource_RadialForce` is a vacuum: a location, a radius, a strength,
+and a `bIsPush` that is false for a pull.
+
+Then the part that decided the design, from `PrepareRootMotion`:
+
+```cpp
+const FVector ForceLocation = LocationActor ? LocationActor->GetActorLocation() : Location;
+```
+
+Read every frame. Hand it the vacuuming *actor* and every machine computes the pull direction locally
+from that actor's own replicated position — which is precisely the shape this README had already
+identified as the real fix ("tell the client what is dragging it once and let it compute the
+per-frame direction locally"), sitting in the engine the whole time. It is also the exact failure of
+the first attempted fix, inverted: that one replicated a direction vector at the network rate to feed
+a force that needed one per frame, and the character juddered.
+
+What was actually written is one small function library, `UAVSVacuumStatics`, and the whole of it is
+`ApplyVacuumPull` / `RemoveVacuumPull` / `IsVacuumPullActive`.
+
+The round trip is the point:
+
+| step | how |
+|---|---|
+| find where the force is applied | `trace_variable`, `trace_function_calls`, exec-link walk |
+| confirm the engine API rather than recall it | reading `CharacterMovementComponent.h` and `RootMotionSource.cpp` |
+| write the C++ | into the project's existing module, no new dependencies |
+| compile it with the editor open | `live_coding_compile` → **"Live coding succeeded"** |
+| confirm the class exists at runtime | `describe_class` → `/Script/AntiVirusSquad.AVSVacuumStatics` |
+
+No editor restart, no build script, no closing anything. The header records the two things that do
+not carry over, because they are the kind of detail that turns a correct fix into a bug report:
+`Strength` is now an additive velocity in cm/s rather than a force divided by mass, so
+`VaccumDragStrength = 250` does not mean what it meant; and `Radius` is a hard gate —
+`PrepareRootMotion` applies nothing at all at `Distance >= Radius`, which the old `AddForce` had no
+equivalent of, so a radius left at zero is a pull that silently never happens.
+
+**What is deliberately not done:** the Blueprint rewiring. The primitive compiles and is callable, but
+switching `DraggedByVacuum` over means changing when the pull starts and stops, replicating the
+vacuum source to the pulled client, and calling it on both the server and that client — gameplay
+surgery on a project with no version control, whose final check still needs two humans in a session.
+The tool's job was to make the correct fix available and say exactly what it costs. That part is
+done and verified; the wiring is a decision, not a mechanism.
