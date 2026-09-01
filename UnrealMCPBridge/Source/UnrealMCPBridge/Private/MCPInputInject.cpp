@@ -66,16 +66,27 @@ namespace
 		return nullptr;
 	}
 
-	/** The one hold in flight, so a second call replaces it rather than fighting it. */
+	/**
+	 * The holds in flight, keyed by action.
+	 *
+	 * This was ONE hold, and a second call replaced it. That looked tidy and quietly made a whole
+	 * class of ability untestable: anything a person performs by holding two things at once. Aim
+	 * then fire, sprint then jump, aim then vacuum - the last of which is exactly what this was
+	 * being used to test, and it silently could not, because starting the vacuum required aim to
+	 * already be down and pressing the vacuum released it.
+	 *
+	 * Keyed by action so re-pressing the same one extends it rather than stacking, which is what a
+	 * key repeat does, while a different action joins it - which is what a second finger does.
+	 */
 	struct FMCPInputHold
 	{
-		FTSTicker::FDelegateHandle Ticker;
 		TWeakObjectPtr<const UInputAction> Action;
 		float Value = 0.f;
 		double EndsAt = 0.0;
 		FString WorldFilter;
 	};
-	FMCPInputHold GMCPHold;
+	TMap<TWeakObjectPtr<const UInputAction>, FMCPInputHold> GMCPHolds;
+	FTSTicker::FDelegateHandle GMCPHoldTicker;
 
 	/** Every Enhanced Input subsystem currently playing, optionally narrowed to one net role. */
 	TArray<UEnhancedInputLocalPlayerSubsystem*> PlayingSubsystems(const FString& WorldFilter, TArray<FString>& OutRoles)
@@ -120,10 +131,10 @@ namespace
 		return Found;
 	}
 
-	void InjectOnce(const UInputAction* Action, float Raw)
+	void InjectOnce(const UInputAction* Action, float Raw, const FString& WorldFilter)
 	{
 		TArray<FString> Roles;
-		for (UEnhancedInputLocalPlayerSubsystem* Sub : PlayingSubsystems(GMCPHold.WorldFilter, Roles))
+		for (UEnhancedInputLocalPlayerSubsystem* Sub : PlayingSubsystems(WorldFilter, Roles))
 		{
 			// Built from the action's own value type so a Boolean action is pressed rather than
 			// handed a float it will not read, and an Axis1D gets its magnitude.
@@ -132,14 +143,52 @@ namespace
 		}
 	}
 
-	void StopHold()
+	/** Let go of everything. One ticker serves every hold, so it goes with the last of them. */
+	void StopAllHolds()
 	{
-		if (GMCPHold.Ticker.IsValid())
+		GMCPHolds.Empty();
+		if (GMCPHoldTicker.IsValid())
 		{
-			FTSTicker::GetCoreTicker().RemoveTicker(GMCPHold.Ticker);
-			GMCPHold.Ticker.Reset();
+			FTSTicker::GetCoreTicker().RemoveTicker(GMCPHoldTicker);
+			GMCPHoldTicker.Reset();
 		}
-		GMCPHold.Action = nullptr;
+	}
+
+	/** Let go of one, leaving any others down. */
+	void StopHoldFor(const UInputAction* Action)
+	{
+		GMCPHolds.Remove(Action);
+		if (GMCPHolds.Num() == 0 && GMCPHoldTicker.IsValid())
+		{
+			FTSTicker::GetCoreTicker().RemoveTicker(GMCPHoldTicker);
+			GMCPHoldTicker.Reset();
+		}
+	}
+
+	/** Re-inject every live hold once, and drop the ones whose time is up. */
+	bool TickHolds(float)
+	{
+		const double Now = FPlatformTime::Seconds();
+		TArray<TWeakObjectPtr<const UInputAction>> Expired;
+		for (TPair<TWeakObjectPtr<const UInputAction>, FMCPInputHold>& Pair : GMCPHolds)
+		{
+			if (!Pair.Value.Action.IsValid() || Now >= Pair.Value.EndsAt)
+			{
+				Expired.Add(Pair.Key);
+				continue;
+			}
+			InjectOnce(Pair.Value.Action.Get(), Pair.Value.Value, Pair.Value.WorldFilter);
+		}
+		for (const TWeakObjectPtr<const UInputAction>& Key : Expired)
+		{
+			GMCPHolds.Remove(Key);
+		}
+		if (GMCPHolds.Num() == 0)
+		{
+			GMCPHoldTicker.Reset();
+			return false;
+		}
+		return true;
 	}
 }
 
@@ -154,8 +203,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleInjectInput(const TSharedPtr<F
 		FString Action;
 		if (Params.IsValid() && Params->TryGetStringField(TEXT("action"), Action) && Action.Equals(TEXT("stop"), ESearchCase::IgnoreCase))
 		{
-			StopHold();
+			const int32 Released = GMCPHolds.Num();
+			StopAllHolds();
 			Result->SetBoolField(TEXT("released"), true);
+			Result->SetNumberField(TEXT("releasedCount"), Released);
 			return MCPResponse::Ok(Result);
 		}
 		return MCPResponse::Fail(Result, TEXT("missing_param"),
@@ -178,8 +229,20 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleInjectInput(const TSharedPtr<F
 	FString WorldFilter;
 	Params->TryGetStringField(TEXT("world"), WorldFilter);
 
+	// Releasing just this one, leaving anything else still held - the difference between taking a
+	// finger off a key and taking your hand off the keyboard.
+	FString ActionVerb;
+	if (Params->TryGetStringField(TEXT("action"), ActionVerb) && ActionVerb.Equals(TEXT("stop"), ESearchCase::IgnoreCase))
+	{
+		const bool bWasHeld = GMCPHolds.Contains(Action);
+		StopHoldFor(Action);
+		Result->SetStringField(TEXT("inputAction"), Action->GetName());
+		Result->SetBoolField(TEXT("released"), bWasHeld);
+		Result->SetNumberField(TEXT("stillHeld"), GMCPHolds.Num());
+		return MCPResponse::Ok(Result);
+	}
+
 	TArray<FString> Roles;
-	GMCPHold.WorldFilter = WorldFilter;
 	const int32 Reachable = PlayingSubsystems(WorldFilter, Roles).Num();
 	if (Reachable == 0)
 	{
@@ -189,31 +252,28 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleInjectInput(const TSharedPtr<F
 				: FString::Printf(TEXT("No local player in world \"%s\". The watcher reports which worlds exist."), *WorldFilter));
 	}
 
-	StopHold();
-	InjectOnce(Action, static_cast<float>(Value));
+	// NOT StopAllHolds: a second action joins the first rather than replacing it, which is what a
+	// second finger does and what testing aim-then-fire requires.
+	InjectOnce(Action, static_cast<float>(Value), WorldFilter);
 
 	if (Seconds > 0.0)
 	{
 		// Capped, and low. A held key is a change to a running game that nothing else will undo, and
 		// a caller that crashes mid-hold should not leave the player walking into a wall forever.
 		const double Hold = FMath::Min(Seconds, 30.0);
-		GMCPHold.Action = Action;
-		GMCPHold.Value = static_cast<float>(Value);
-		GMCPHold.EndsAt = FPlatformTime::Seconds() + Hold;
-		GMCPHold.Ticker = FTSTicker::GetCoreTicker().AddTicker(
-			FTickerDelegate::CreateLambda([](float) -> bool
-			{
-				if (!GMCPHold.Action.IsValid() || FPlatformTime::Seconds() >= GMCPHold.EndsAt)
-				{
-					GMCPHold.Action = nullptr;
-					GMCPHold.Ticker.Reset();
-					return false;
-				}
-				InjectOnce(GMCPHold.Action.Get(), GMCPHold.Value);
-				return true;
-			}),
-			0.0f);
+		FMCPInputHold& Entry = GMCPHolds.FindOrAdd(Action);
+		Entry.Action = Action;
+		Entry.Value = static_cast<float>(Value);
+		Entry.EndsAt = FPlatformTime::Seconds() + Hold;
+		Entry.WorldFilter = WorldFilter;
+		// One ticker drives every hold. Adding one per action would leave a ticker behind each time
+		// a hold expired on its own rather than being stopped.
+		if (!GMCPHoldTicker.IsValid())
+		{
+			GMCPHoldTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&TickHolds), 0.0f);
+		}
 		Result->SetNumberField(TEXT("heldForSeconds"), Hold);
+		Result->SetNumberField(TEXT("nowHolding"), GMCPHolds.Num());
 	}
 
 	Result->SetStringField(TEXT("inputAction"), Action->GetName());

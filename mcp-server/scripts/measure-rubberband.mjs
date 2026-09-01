@@ -51,7 +51,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 1. A running two-player session, host as listen server - the setup the bug appears in.
 const status = await call("unreal_pie_status", {});
 if (!status.running) {
-  await call("unreal_start_pie", { numPlayers: 2, listenServer: true });
+  // ignoreCompileErrors, because a project with unrelated broken sample content would otherwise
+  // never start PIE at all - which is how this harness spent several runs measuring nothing.
+  await call("unreal_start_pie", { numPlayers: 2, listenServer: true, ignoreCompileErrors: true });
   for (let i = 0; i < 40; i++) {
     await sleep(1000);
     const s = await call("unreal_pie_status", {});

@@ -196,7 +196,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
 | `lazy` | 13251 | `core` plus deferred groups |
-| `full` | 42165 | everything, for a model that can afford it |
+| `full` | 42295 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person

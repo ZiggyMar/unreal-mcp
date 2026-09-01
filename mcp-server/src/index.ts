@@ -4898,19 +4898,32 @@ register(
       "The action passes the modifiers and triggers a real key " +
       "press would - what the game sees is what a player would produce, not a synthetic key that skips the " +
       "mapping context.\n\n" +
-      "Pair it with unreal_watch_runtime: start watching, press, read. A hold is capped at 30 seconds and a second " +
-      "call replaces the first, so nothing can be left held down.",
+      "Pair it with unreal_watch_runtime: start watching, press, read.\n\n" +
+      "**Holds STACK.** A second action joins the first rather than replacing it, which is what a second finger " +
+      "does - so aim-then-fire, sprint-then-jump and aim-then-vacuum are testable. That matters more than it " +
+      "sounds: an ability gated on another input being down could not be exercised at all while one hold " +
+      "replaced the last, and it failed silently, looking exactly like an ability that does not work. Each hold " +
+      "is capped at 30 seconds, so nothing can be left down forever.\n\n" +
+      "`release` with an inputAction lets go of that one; `release` without one lets go of everything.",
     inputSchema: {
       inputAction: z.string().describe('The InputAction, e.g. "IA_Vacuum" or a full path. Find them with unreal_list_assets className=InputAction.'),
       seconds: z.number().optional().describe("Hold it this long. Omit for a single frame - a tap. Capped at 30."),
       value: z.number().optional().describe("Magnitude. Default 1. For an Axis action this is how far; for a Boolean anything non-zero is pressed."),
       world: z.string().optional().describe('Which running world to press in - "Authority" or "Client0", as unreal_watch_runtime labels them. Omit for all of them.'),
-      release: z.boolean().optional().describe("Let go of whatever is held, instead of pressing. Ignores the other parameters."),
+      release: z
+        .boolean()
+        .optional()
+        .describe(
+          "Let go instead of pressing. With inputAction, releases just that one and leaves the rest held; " +
+            "without it, releases everything."
+        ),
     },
   },
   async ({ inputAction, seconds, value, world, release }) => {
     try {
-      if (release) return jsonResult(await bridge.send("press_input", { action: "stop" }));
+      // With an action named, "stop" means that one; without, it means all of them. The bridge
+      // reads the same two shapes, so the distinction is made once, here.
+      if (release) return jsonResult(await bridge.send("press_input", { action: "stop", inputAction }));
       return jsonResult(await bridge.send("press_input", { inputAction, seconds, value, world }));
     } catch (err) {
       return errorResult(err);
