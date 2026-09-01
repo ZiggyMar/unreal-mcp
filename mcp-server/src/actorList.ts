@@ -117,6 +117,54 @@ function hoistSharedClass(actors: ActorLike[]): { actors: ActorLike[]; sharedCla
   };
 }
 
+/**
+ * Say each Blueprint path once, keyed by the class that already identifies the row.
+ *
+ * Measured on this project's start level: forty actors carry fourteen distinct Blueprint paths, and
+ * those paths are **3,233 characters - 39% of the actors block** - against 736 for the class names
+ * they correspond to. The same path is written out for every actor of its kind.
+ *
+ * Note which half this lifts. The comment below records dropping `class` and keeping `blueprint`
+ * being implemented, measured and reverted: it saved 38 tokens and cost the field everybody
+ * identifies an actor by. This is the other direction. `class` stays on every row - it is what
+ * `classFilter` matches and what a test asserts on - and the expensive half moves to a map keyed by
+ * it. About 437 tokens on a 2,392-token reply, and the lookup a caller does is on a value the row
+ * already carries.
+ *
+ * The 1:1 relation is CHECKED, not assumed. Two Blueprints in different folders can both generate a
+ * class called `BP_Thing_C`, and then the class does not identify the path. Any class with more than
+ * one path keeps `blueprint` on its rows, so the map never claims something it cannot support.
+ */
+function hoistBlueprintPaths(actors: ActorLike[]): { actors: ActorLike[]; blueprintByClass?: Record<string, string> } {
+  const pathsFor = new Map<string, Set<string>>();
+  for (const a of actors) {
+    if (typeof a.class !== "string" || typeof a.blueprint !== "string") continue;
+    const seen = pathsFor.get(a.class) ?? new Set<string>();
+    seen.add(a.blueprint);
+    pathsFor.set(a.class, seen);
+  }
+
+  const lifted: Record<string, string> = {};
+  for (const [cls, paths] of pathsFor) {
+    if (paths.size !== 1) continue; // ambiguous: this class does not identify one path
+    const rows = actors.filter((a) => a.class === cls && typeof a.blueprint === "string").length;
+    if (rows < 2) continue; // said once either way; a map entry would only add a lookup
+    const [only] = [...paths];
+    lifted[cls] = only;
+  }
+
+  if (Object.keys(lifted).length === 0) return { actors };
+
+  return {
+    blueprintByClass: lifted,
+    actors: actors.map((a) => {
+      if (typeof a.class !== "string" || !(a.class in lifted)) return a;
+      const { blueprint: _lifted, ...rest } = a;
+      return rest;
+    }),
+  };
+}
+
 export function capActorList(result: ActorListLike, options: CapActorOptions = {}): ActorListLike {
   const all = result.actors ?? [];
   const filtered = Boolean(options.classFilter?.trim());
@@ -126,21 +174,28 @@ export function capActorList(result: ActorListLike, options: CapActorOptions = {
   );
 
   if (all.length <= limit) {
-    const { actors, sharedClass } = hoistSharedClass(all);
+    // Blueprint paths first: hoistSharedClass strips `class` off every row when they all share
+    // one, and this keys on `class`. Reversed, a level where every actor is the same Blueprint -
+    // the case with the most to lift - lifts nothing at all.
+    const { actors: pathed, blueprintByClass } = hoistBlueprintPaths(all);
+    const { actors, sharedClass } = hoistSharedClass(pathed);
     return {
       ...result,
       actors,
       ...(sharedClass ? { class: sharedClass } : {}),
+      ...(blueprintByClass ? { blueprintByClass } : {}),
     };
   }
 
   const kept = filtered ? all.slice(0, limit) : pickInteresting(all, limit);
-  const { actors, sharedClass } = hoistSharedClass(kept);
+  const { actors: pathed, blueprintByClass } = hoistBlueprintPaths(kept);
+  const { actors, sharedClass } = hoistSharedClass(pathed);
 
   return {
     ...result,
     actors,
     ...(sharedClass ? { class: sharedClass } : {}),
+    ...(blueprintByClass ? { blueprintByClass } : {}),
     totalActors: result.totalActors ?? all.length,
     shown: kept.length,
     omitted: all.length - kept.length,

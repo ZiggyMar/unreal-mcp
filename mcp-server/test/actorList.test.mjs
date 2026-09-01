@@ -38,8 +38,14 @@ test("the unfiltered reply keeps the actors that carry logic, not the head of th
   // the whole level in 193. The dump was not answering a question.
   const out = capActorList(bigLevel());
   assert.equal(out.actors.length, DEFAULT_UNFILTERED_ACTORS);
+  // "Carries logic" means Blueprint-backed. The path itself now lives in blueprintByClass whenever
+  // several actors share a class, so the question has to be asked of both places - the property is
+  // unchanged, only where the answer is written.
+  // Both hoists can fire at once: when every kept actor is the same Blueprint, the path goes to
+  // blueprintByClass AND the class itself is lifted to `out.class`, so a row carries neither.
+  const hasLogic = (a) => Boolean(a.blueprint) || Boolean(out.blueprintByClass?.[a.class ?? out.class]);
   assert.ok(
-    out.actors.every((a) => a.blueprint),
+    out.actors.every(hasLogic),
     "every slot should have gone to an actor with logic before any dressing was shown"
   );
   assert.equal(out.totalActors, 889);
@@ -113,4 +119,77 @@ test("one rare Blueprint is not buried under five hundred common ones", () => {
     out.actors.some((a) => a.class === "BP_Boss_C"),
     "the one rare Blueprint must survive the cap"
   );
+});
+
+test("a Blueprint path shared by several actors is said once, keyed by class", () => {
+  // Measured on the project's start level: forty actors carried fourteen distinct paths, and those
+  // paths were 39% of the actors block against 736 characters for the class names beside them.
+  const out = capActorList({
+    actors: [
+      actor("A", "BP_Turret_C_0", "BP_Turret_C", "/Game/Placeables/BP_Turret.BP_Turret_C"),
+      actor("B", "BP_Turret_C_1", "BP_Turret_C", "/Game/Placeables/BP_Turret.BP_Turret_C"),
+      actor("C", "BP_Turret_C_2", "BP_Turret_C", "/Game/Placeables/BP_Turret.BP_Turret_C"),
+    ],
+  });
+
+  assert.deepEqual(out.blueprintByClass, {
+    BP_Turret_C: "/Game/Placeables/BP_Turret.BP_Turret_C",
+  });
+  for (const a of out.actors) assert.equal(a.blueprint, undefined, "the repeated path is lifted");
+});
+
+test("the class stays on every row, because it is what identifies an actor", () => {
+  // The reverse trade - dropping `class` and keeping `blueprint` - was measured and reverted at 38
+  // tokens, because classFilter matches on class and callers assert on it. This must not undo that.
+  const out = capActorList({
+    actors: [
+      actor("A", "BP_A_C_0", "BP_A_C", "/Game/A.BP_A_C"),
+      actor("B", "BP_A_C_1", "BP_A_C", "/Game/A.BP_A_C"),
+      actor("C", "BP_B_C_0", "BP_B_C", "/Game/B.BP_B_C"),
+      actor("D", "BP_B_C_1", "BP_B_C", "/Game/B.BP_B_C"),
+    ],
+  });
+  for (const a of out.actors) assert.ok(a.class, "every row still says its class");
+});
+
+test("two Blueprints generating the same class name keep their own paths", () => {
+  // /Game/Red/BP_Thing and /Game/Blue/BP_Thing both produce a class called BP_Thing_C. The class
+  // then does not identify the path, and a map keyed by it would be wrong for half the rows.
+  const out = capActorList({
+    actors: [
+      actor("A", "BP_Thing_C_0", "BP_Thing_C", "/Game/Red/BP_Thing.BP_Thing_C"),
+      actor("B", "BP_Thing_C_1", "BP_Thing_C", "/Game/Blue/BP_Thing.BP_Thing_C"),
+    ],
+  });
+
+  assert.equal(out.blueprintByClass, undefined, "an ambiguous class is not lifted");
+  assert.deepEqual(
+    out.actors.map((a) => a.blueprint),
+    ["/Game/Red/BP_Thing.BP_Thing_C", "/Game/Blue/BP_Thing.BP_Thing_C"]
+  );
+});
+
+test("the only actor of its class keeps its path, because a map entry would only add a lookup", () => {
+  const out = capActorList({
+    actors: [
+      actor("A", "BP_Solo_C_0", "BP_Solo_C", "/Game/Solo.BP_Solo_C"),
+      actor("B", "BP_Pair_C_0", "BP_Pair_C", "/Game/Pair.BP_Pair_C"),
+      actor("C", "BP_Pair_C_1", "BP_Pair_C", "/Game/Pair.BP_Pair_C"),
+    ],
+  });
+
+  assert.deepEqual(Object.keys(out.blueprintByClass), ["BP_Pair_C"]);
+  const solo = out.actors.find((a) => a.class === "BP_Solo_C");
+  assert.equal(solo.blueprint, "/Game/Solo.BP_Solo_C", "said once either way, so left where it was");
+});
+
+test("actors with no Blueprint at all are untouched", () => {
+  const out = capActorList({
+    actors: [
+      { label: "Light", name: "PointLight_0", class: "PointLight", location: "0,0,0" },
+      { label: "Mesh", name: "StaticMeshActor_0", class: "StaticMeshActor", location: "1,1,1" },
+    ],
+  });
+  assert.equal(out.blueprintByClass, undefined);
+  assert.equal(out.actors.length, 2);
 });

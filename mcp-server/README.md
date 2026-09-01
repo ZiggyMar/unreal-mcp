@@ -7879,3 +7879,67 @@ from the reply entirely.
 That is a silent, total loss of the thing the tool exists to produce, and it existed for about four
 minutes. It was not found by thinking about it. It was found by writing the test for the combination
 that seemed too dull to break.
+
+### The expensive half of a row, and the note that said not to touch the cheap one
+
+`actorList.ts` carries a long comment recording an idea that was implemented, measured and reverted:
+dropping each actor's `class` because its `blueprint` path already ends in it. The measurement was 38
+tokens saved, against losing the field `classFilter` matches on and every caller identifies an actor
+by. Correctly rejected, and kept as a comment "because the idea looks good until it is measured".
+
+Measuring the same rows from the other end gives a very different number:
+
+```
+label       uniq 40/40    704 chars
+name        uniq 40/40    868 chars
+class       uniq 14/40    736 chars
+location    uniq 40/40    662 chars
+blueprint   uniq 14/40  3,233 chars   <- 39% of the actors block
+```
+
+Fourteen distinct paths written out forty times. The note defends `class`, which costs 736
+characters; the path beside it costs 3,233 and is the one repeating. So `class` stays on every row —
+it is what identifies an actor — and the path moves to a map keyed by it.
+
+**2,392 → 1,791 tokens, −25%**, and the lookup a caller does is on a value the row already carries.
+
+**The 1:1 relation is checked, not assumed.** `/Game/Red/BP_Thing` and `/Game/Blue/BP_Thing` both
+generate a class called `BP_Thing_C`, and then the class identifies nothing. Any class with more than
+one path keeps `blueprint` on its rows, so the map never claims something it cannot support. There is
+a test with exactly that pair. An actor that is the only one of its class also keeps its path, because
+a map entry would be the same bytes plus a lookup.
+
+**Two hoists that had to be ordered.** `hoistSharedClass` already lifts `class` out when every row
+shares one. Run first, it strips the field this keys on, so the level with the most to lift — every
+actor the same Blueprint — lifted nothing at all. Paths first, then the class. A test asserts on the
+combination, where a row ends up carrying neither field and both are named above it.
+
+That test was the interesting part of the change. An existing test asserted `out.actors.every(a =>
+a.blueprint)` to mean "the cap chose actors that carry logic, not dressing". The property is
+unchanged; only where the answer is written moved. Updating an assertion like that is the moment to
+be careful, because relaxing it and calling it a shape change is exactly how a real regression gets
+waved through — so it now asks both places rather than fewer.
+
+### Two reads measured and left alone
+
+`list_blueprints`, at 2,625 tokens, is the largest remaining read. Where the bytes go: 100 entries of
+`{"path": ..., "parentClass": ...}`, with 2,234 characters of repeated folder prefixes and 37 distinct
+parent classes across 100 rows. A columnar or folder-grouped shape would take roughly 28% off.
+
+It was not done, because the same saving is already available without a schema change and the reply
+says so:
+
+```
+fields: ["path"]     2,625 -> 1,888   (the reply claims "about 27% smaller"; it measures 28%)
+match: "Turret"      2,625 ->    84
+```
+
+Adding a grouped shape would duplicate what `fields` already gives, at the cost of making a caller
+reassemble paths it currently reads directly — and a wrong path is a failed call somewhere else.
+
+`read_class_defaults` at 1,691 and `list_variables` at 1,750 have the same story: a `match` filter
+that answers a specific question for 218 and 126 tokens respectively, advertised in the reply.
+
+Recorded because "the biggest number is the best target" is only true when the number is *waste*.
+These three are near their floor for what they are being asked, and the cheap forms beside them are
+accurate and advertised. The next saving is not here.
