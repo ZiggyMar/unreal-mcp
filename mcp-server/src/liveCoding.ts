@@ -140,6 +140,20 @@ export function interpretLiveCodingLog(lines: string[]): HotReloadReport {
     return {
       outcome: "patched",
       meaning: "The code compiled and is running in the editor now. No restart needed.",
+      // "It compiles" is a claim about ONE engine, and this plugin supports several.
+      //
+      // A call to FAnimNotifyEvent::LinkMontage compiled here for months. It was deprecated in 5.1
+      // and removed in 5.8, so on 5.6 it built with a warning nobody read and the 5.8 build failed
+      // outright - discovered only because someone asked whether 5.8 still worked.
+      //
+      // `npm run check:engines` compiles against every configured engine and installs nothing; it
+      // existed the whole time, the README names it in eight places, and the gap was never tooling
+      // or documentation. It was that nothing said so at the one moment the belief "this works" is
+      // actually being formed, which is here.
+      next:
+        "Verified on THIS engine only. If the change touched engine APIs, `npm run check:engines` " +
+        "compiles it against every configured engine without installing anything - an API removed " +
+        "in a later version fails there and passes here.",
     };
   }
 
