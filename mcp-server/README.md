@@ -37,6 +37,7 @@ written down next to the measurement that caused it.
 [A montage without its notifies is blend settings and nothing else](#a-montage-without-its-notifies-is-blend-settings-and-nothing-else) ·
 [A struct is its fields, and the generic reader had none of them](#a-struct-is-its-fields-and-the-generic-reader-had-none-of-them) ·
 [Enums could be created and never extended](#enums-could-be-created-and-never-extended) ·
+["Add a new upgrade type", walked end to end](#add-a-new-upgrade-type-walked-end-to-end) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -7170,3 +7171,38 @@ compiling, so a new case is **unhandled** rather than broken, which is quieter a
 
 Verified on a scratch asset — created with two entries, added a third, refused `gamma` against
 `Gamma`, read back `Alpha, Beta, Gamma`, deleted.
+
+## "Add a new upgrade type", walked end to end
+
+The Blueprint half of that promise had a trial. The **data** half did not, and it is the half a
+designer lives in: a new option is an enum entry, a row in the table typed by a struct, and the two
+have to agree. Every piece existed and nothing checked that they compose — which is how enums stayed
+un-extendable through several sessions of work on the read side. Reading an enum worked perfectly, so
+nothing ever tried to change one.
+
+`npm run trial:datafeature` walks it on scratch assets: define the type, define the row shape, add
+the option, make the table, write a row that uses it, read it back.
+
+### The test that agreed with a bug
+
+Its last assertion first read `/Shield/` against the whole row, and passed — on `"Shield Booster"` in
+the *neighbouring* field, while the enum cell read `NewEnumerator2`. A test matching the wrong string
+and reporting green.
+
+Tightened to the exact cell, it failed honestly and exposed a real defect. Writes accepted `Shield`;
+reads returned `NewEnumerator2` — so a caller could read a Data Table and not write back what it had
+just been told.
+
+### Why the read was wrong
+
+The engine's own note on `EDataTableExportFlags` says user enums are exported by the friendly name
+set in the editor — but only through `DataTableUtils`. This server's row reader has two paths, and
+the one that skips values matching the row defaults (added to keep replies small) had stopped calling
+`DataTableUtils` and used raw `ExportText_InContainer` instead.
+
+Skip-if-default decides **whether** to report a value. `DataTableUtils` decides how to **spell** it.
+Mixing those meant a token optimisation quietly changed the vocabulary of every enum cell in every
+table into one that means nothing to a reader and cannot be written back.
+
+Confirmed on the project's own tables afterwards: `Category` reads `VacuumStorage`, and no
+`NewEnumerator` survives anywhere in the reply.

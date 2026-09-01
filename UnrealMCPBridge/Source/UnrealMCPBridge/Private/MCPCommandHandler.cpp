@@ -8582,9 +8582,18 @@ static TSharedRef<FJsonObject> DescribeDataTableRow(const UScriptStruct* RowStru
 			{
 				continue;
 			}
-			FString Delta;
-			Property->ExportText_InContainer(0, Delta, RowData, DefaultRow, nullptr, PPF_None);
-			Values->SetStringField(DataTableUtils::GetPropertyExportName(Property), Delta);
+			// Skip-if-default decides WHETHER to report the value. DataTableUtils decides how to
+			// SPELL it, and both paths have to spell it the same way.
+			//
+			// This used raw ExportText_InContainer, and the difference was invisible until an enum
+			// cell went through it: a row written with "Shield" read back as "NewEnumerator2". The
+			// engine's own note says user enums are exported by their friendly name - but only
+			// through DataTableUtils, which this path had stopped calling. So the delta, added to
+			// save tokens, quietly changed the vocabulary of every enum cell in every table into
+			// one that means nothing to a reader and cannot be written back.
+			Values->SetStringField(
+				DataTableUtils::GetPropertyExportName(Property),
+				DataTableUtils::GetPropertyValueAsString(Property, RowData, EDataTableExportFlags::None));
 			continue;
 		}
 		Values->SetStringField(

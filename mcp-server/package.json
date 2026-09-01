@@ -43,6 +43,7 @@
     "trial:diagnose": "node scripts/trial-diagnose.mjs",
     "trial:runtime": "node scripts/trial-runtime.mjs",
     "measure:rubberband": "node scripts/measure-rubberband.mjs",
+    "trial:datafeature": "node scripts/trial-data-feature.mjs",
     "trial:findtruth": "node scripts/trial-find-truth.mjs",
     "trial:dispatch": "node scripts/trial-dispatch.mjs",
     "trial:nodesearch": "node scripts/trial-node-search.mjs",
