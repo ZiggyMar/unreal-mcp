@@ -204,9 +204,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2471 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
-| `core` | 12968 | the authoring spine |
-| `lazy` | 13276 | `core` plus deferred groups |
-| `full` | 42624 | everything, for a model that can afford it |
+| `core` | 12987 | the authoring spine |
+| `lazy` | 13296 | `core` plus deferred groups |
+| `full` | 42644 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -5144,14 +5144,27 @@ change's clothes, and worth saying so rather than claiming a saving it did not m
 
 ### The biggest token lever was never mentioned to the profile that needed it
 
-Standing context is resent with **every message**, so it is not paid once — and that reframes all the
-compaction work below it. A thirty-call job on `full` pays 38k tokens of tool definitions thirty
-times. Every reply saving in this file put together does not approach that.
+Standing context goes with **every message**, so it is not paid once — and that reframes all the
+compaction work below it. Every reply saving in this file put together does not approach it.
 
-The honest comparison, because the first version of this was wrong in the direction that flatters the
+**Corrected since this was written, and the correction matters.** This used to say a thirty-call job
+on `full` "pays 38k tokens of tool definitions thirty times". That is true only without prompt
+caching. The tool list is a cacheable prefix sitting ahead of the system prompt and the messages, so
+a client that caches — which is every client `--print-config` writes for — is charged it in full once
+and at a fraction after. Overstating the figure by roughly ten times, in the paragraph that goes on
+to insist the ratio "had to be the real one", is the same mistake one level down.
+
+What genuinely re-charges that prefix at full price is **changing the tool list**, which is why
+`unreal_enable_tools` is expensive and `unreal_call_tool` exists. The standing instructions now say
+that instead, because it is the sentence a model can act on. Two comments in `index.ts` had the model
+right the whole time — "sits ahead of the system prompt and every message, so changing it invalidates
+the prompt cache" — so this was one text disagreeing with two others, which is the defect this repo
+keeps finding in everything except its own prose.
+
+The comparison, because the first version of this was wrong in the direction that flatters the
 argument:
 
-| session | per message |
+| session | standing |
 |---|---:|
 | `full` | 38,282 |
 | `search` + the `cpp` preset | 6,615 |
@@ -6112,8 +6125,9 @@ and in our own newest code rather than by design.
 
 On `search` — the profile the shipped config selects, and the one a frontier model actually runs —
 the instructions had grown larger than the tools: **1,157 tokens of standing text against 1,135 of
-schemas.** Standing text is resent on every message, so it is the most expensive kind of text there
-is.
+schemas.** Standing text goes ahead of everything else in every message, is charged in full before
+any work happens, and is re-charged in full whenever it changes - so it is the most expensive kind of
+text there is to get wrong.
 
 Most of it earns its place. One block did not, *there*. `GROUND TRUTH YOU CANNOT DERIVE` — the target
 pin is `self`, exec pins are `execute`/`then` but `Exec` on loop macros, struct defaults are comma

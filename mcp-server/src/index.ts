@@ -372,11 +372,24 @@ function buildInstructions(profile: string): string {
   //   search + cpp       6.6k     search + feature   9.8k     search + diagnose  12.4k
   //   full              38.3k
   //
-  // Three to six times, not sixteen. Still the largest single lever here - standing context is
-  // resent with every message, so it dwarfs every reply compaction in this repo put together - but
-  // the number had to be the real one. An overstated saving in the one text nobody can skip would
-  // undermine every other measurement beside it, which is the exact failure the drift guard in
-  // measure:reads exists to catch.
+  // Three to six times, not sixteen. Still the largest single lever here - it dwarfs every reply
+  // compaction in this repo put together - but the number had to be the real one. An overstated
+  // saving in the one text nobody can skip would undermine every other measurement beside it, which
+  // is the exact failure the drift guard in measure:reads exists to catch.
+  //
+  // The ratio was fixed here once and the COST MODEL beside it was left wrong, which is the same
+  // mistake one level down. This used to say tool definitions "are not paid once" and that "a
+  // thirty-call job pays that thirty times". That is true only without prompt caching. The tool list
+  // is a cacheable prefix that sits ahead of the system prompt and the messages, so a client that
+  // caches - which is every client --print-config writes for - pays it in full once and a fraction
+  // after. Overstating it by roughly ten times, in the paragraph whose own comment warns against
+  // overstating, is worse than saying nothing.
+  //
+  // What genuinely re-charges the prefix at full price is CHANGING the tool list, which is why
+  // unreal_enable_tools is expensive and unreal_call_tool exists. That is the sentence a model can
+  // act on, so it replaced the wrong one rather than being added beside it - measure:profiles
+  // enforces a ceiling on this text and a correction that costs tokens is a correction that gets
+  // reverted.
   //
   // A model cannot change its own profile; it is set where this server is launched. So this ends by
   // telling it to tell the person who can.
@@ -386,10 +399,11 @@ function buildInstructions(profile: string): string {
     const dearest = Math.round((2292 + PRESET_COST_TOKENS.diagnose) / 100) / 10;
     lines.push(
       "WHAT THIS SESSION COSTS",
-      `Tool definitions are resent with your whole context on every message, so they are not paid once.`,
-      `Everything switched on is ~${standing}k tokens per message; a thirty-call job pays that thirty times.`,
+      `Tool definitions sit before your context and go with every message. Caching charges that prefix`,
+      `in full once and a fraction after - but CHANGING the tool list re-charges it, so switch on what`,
+      `a job needs in ONE unreal_enable_tools call, not several. Everything on stands at ~${standing}k.`,
       `The \`search\` profile starts with four tools and switches on the group the job needs - a working`,
-      `session lands around ${cheapest}k-${dearest}k per message, three to six times less, with the same tools and`,
+      `session stands around ${cheapest}k-${dearest}k, three to six times less, with the same tools and`,
       `the same fully typed schemas. One extra call at the start.`,
       "You cannot change this yourself - it is UNREAL_MCP_PROFILE where this server is launched - so if",
       "the user is paying for tokens, tell them the option exists.",
