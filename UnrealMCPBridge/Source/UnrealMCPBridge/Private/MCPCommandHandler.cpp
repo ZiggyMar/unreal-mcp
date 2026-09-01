@@ -20,6 +20,8 @@
 #include "K2Node_EventNodeInterface.h"
 #include "K2Node_ConstructObjectFromClass.h"
 #include "Animation/WidgetAnimation.h"
+#include "Engine/Level.h"
+#include "Engine/LevelScriptBlueprint.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
@@ -428,6 +430,42 @@ UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString
 {
 	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *Path);
 	UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+
+	// A LEVEL path resolves to that level's Level Blueprint.
+	//
+	// The Level Blueprint is where a great deal of ordinary Unreal work lives - a trigger opening a
+	// door, a sequence starting, anything specific to one map - and none of it was reachable here.
+	// It is not in the asset registry as a Blueprint, so list_blueprints never showed it and
+	// searching for it found nothing: an entire category of a project, invisible.
+	//
+	// Resolved HERE rather than behind a new tool on purpose. Every graph tool in this server -
+	// explain_graph, read_node_detail, review_blueprint, add_node, connect_pins - goes through this
+	// one function, so teaching it about levels lights all of them up at once and costs a caller
+	// nothing: no extra tool definition standing in context, no new name to learn. Pass the level's
+	// path where a Blueprint path goes.
+	if (!Blueprint)
+	{
+		if (UWorld* World = Cast<UWorld>(StaticLoadObject(UWorld::StaticClass(), nullptr, *Path)))
+		{
+			if (ULevel* Level = World->PersistentLevel)
+			{
+				// bDontCreate: asking a question must not silently author a Level Blueprint into a
+				// map that never had one. A level with no script is a fact worth reporting, not a
+				// gap to fill on a read.
+				Blueprint = Level->GetLevelScriptBlueprint(/*bDontCreate=*/true);
+				if (!Blueprint)
+				{
+					OutError = FString::Printf(
+						TEXT("level_has_no_blueprint: \"%s\" is a level, and it has no Level Blueprint yet - ")
+						TEXT("nothing has been added to it. Open it in the editor and add a node, or work in an ")
+						TEXT("asset Blueprint instead."),
+						*Path);
+					return nullptr;
+				}
+			}
+		}
+	}
+
 	if (!Blueprint)
 	{
 		// "blueprint_not_found: /Game/X.X" is true and useless. A weak model reads it, has no next
@@ -448,8 +486,9 @@ UBlueprint* FMCPCommandHandler::LoadBlueprintByPath(const FString& Path, FString
 			TEXT("blueprint_not_found: %s. Either it does not exist yet, in which case create it first - ")
 			TEXT("scaffold_blueprint makes a Blueprint together with its variables, components and event ")
 			TEXT("handlers in one call - or the path is wrong: a Blueprint path repeats the name, as in ")
-			TEXT("/Game/Folder/BP_Thing.BP_Thing, and list_blueprints will show the real ones. Do not repeat ")
-			TEXT("this call unchanged; it will fail the same way until one of those two things is fixed."),
+			TEXT("/Game/Folder/BP_Thing.BP_Thing, and list_blueprints will show the real ones. A LEVEL path ")
+			TEXT("works here too and gives you that level's Level Blueprint. Do not repeat this call ")
+			TEXT("unchanged; it will fail the same way until one of those things is fixed."),
 			*Path);
 	}
 	return Blueprint;

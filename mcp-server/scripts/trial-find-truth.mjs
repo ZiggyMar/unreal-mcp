@@ -91,6 +91,33 @@ check(
   JSON.stringify((fn.hits ?? []).map((h) => `${h.kind}:${h.name}`)).slice(0, 140)
 );
 
+// --- the Level Blueprint, which was in no list at all ---
+//
+// Where a great deal of ordinary Unreal work lives: a trigger opening a door, a sequence starting,
+// anything specific to one map. It is not in the asset registry as a Blueprint, so list_blueprints
+// never showed it and searching for it found nothing - an entire category of a project, invisible.
+// A level path resolves to it now, which means every graph tool reaches it without a new tool.
+const levels = await call("unreal_list_assets", { className: "World", pathPrefix: "/Game" });
+const level = (levels.assets ?? [])
+  .map((a) => (typeof a === "string" ? a : a.path))
+  .find(Boolean);
+if (level) {
+  const graphs = await call("unreal_list_blueprint_graphs", { path: level });
+  check(
+    "a level path reaches its Level Blueprint",
+    Array.isArray(graphs.graphs) && graphs.graphs.length > 0,
+    `${level.split("/").pop()} -> ${(graphs.graphs ?? []).map((g) => g.name).join(", ").slice(0, 80)}`
+  );
+  const explained = await call("unreal_explain_graph", { path: level, graphName: "EventGraph" });
+  check(
+    "and the ordinary graph readers work on it",
+    typeof explained.text === "string" && explained.text.length > 0,
+    (explained.text ?? explained.raw ?? "").slice(0, 90).replace(/\s+/g, " ")
+  );
+} else {
+  check("a level path reaches its Level Blueprint", false, "no levels found to test against");
+}
+
 server.child.kill();
 
 const failed = results.filter((r) => !r).length;

@@ -33,6 +33,7 @@ written down next to the measurement that caused it.
 [The replication bug that never says anything](#the-replication-bug-that-never-says-anything) ·
 [Measuring the choice instead of arguing about it](#measuring-the-choice-instead-of-arguing-about-it) ·
 [The whole-project audit was missing a whole family](#the-whole-project-audit-was-missing-a-whole-family) ·
+[The Level Blueprint was in no list at all](#the-level-blueprint-was-in-no-list-at-all) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -7025,3 +7026,35 @@ The fix mirrored `OnRep_PingTexture`, the one handler in that Blueprint that was
 correctly: cast to the widget, call the setter. Compiles clean, and a two-player PIE session shows
 the ping carrying the right name on both roles. The check no longer reports that variable, which is
 the tightest confirmation available — the tool that found the bug agrees it is gone.
+
+## The Level Blueprint was in no list at all
+
+A trigger opening a door. A sequence starting. Anything specific to one map. That work lives in the
+Level Blueprint, and none of it was reachable here — a Level Blueprint is not in the asset registry
+as a Blueprint, so `list_blueprints` never showed it and searching for it returned nothing. An entire
+category of an Unreal project, invisible.
+
+Found by the same sweep that turned up Timelines and widget animations: list what the engine holds,
+then check which of it any tool here can see.
+
+### One resolver, not one more tool
+
+Every graph tool in this server — `explain_graph`, `read_node_detail`, `review_blueprint`,
+`list_variables`, `add_node`, `connect_pins` — goes through a single function that turns a path into
+a `UBlueprint`. Teaching *that* about levels lights all of them up at once, and costs a caller
+nothing: no extra tool definition standing in context on every request, no new name to learn. Pass a
+level's path where a Blueprint path goes.
+
+Measured on a real project immediately after:
+
+```
+L_Motherboard  ->  LerpPP (18 nodes), EventGraph (69 nodes, 9 entry points)
+L_Tutorial     ->  EventGraph (22 nodes)
+review_blueprint on L_Tutorial  ->  score 98, 0 warnings
+list_variables                  ->  parentClass "LevelScriptActor"
+```
+
+Two deliberate choices. The level script is fetched with `bDontCreate`, because asking a question
+must never silently author a Level Blueprint into a map that never had one — a level with no script
+is a fact worth reporting, not a gap to fill on a read. And when a path is neither a Blueprint nor a
+level, the not-found message now names the level route as well, since it is a real answer.
