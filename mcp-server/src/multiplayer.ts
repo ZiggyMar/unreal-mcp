@@ -93,8 +93,27 @@ export type GraphSizes = Map<string, number>;
  * Only for variables the author explicitly gave a RepNotify. Asking for one where none was
  * requested is a style opinion, and this file is for defects.
  */
-function reviewRepNotifies(variables: MpVariable[], graphSizes: GraphSizes): MpFinding[] {
+function reviewRepNotifies(variables: MpVariable[], graphSizes: GraphSizes, nodes: MpNode[]): MpFinding[] {
   const findings: MpFinding[] = [];
+
+  // Which variables this Blueprint touches at all, by the name on the node.
+  //
+  // An empty RepNotify on a variable the Blueprint uses is one thing; an empty RepNotify on a
+  // variable nothing reads or writes is a stronger and much easier answer - the whole variable is
+  // dead, and replicating it is paying network for a value nobody looks at. Found on a real ping
+  // actor: CurrentDistanceMeters, replicated, with a RepNotify, zero writes and zero reads, while
+  // the distance it was meant to carry is recomputed locally every tick.
+  const touched = new Set<string>();
+  for (const node of nodes) {
+    if (!/K2Node_Variable(Get|Set)/.test(node.type ?? "")) {
+      continue;
+    }
+    const name = (node.title ?? "").replace(/^(Get|Set)\s+/i, "").split("\n")[0].trim();
+    if (name) {
+      touched.add(name.toLowerCase());
+    }
+  }
+
   for (const variable of variables) {
     const handler = (variable.repNotify ?? "").trim();
     if (!handler) {
@@ -108,19 +127,29 @@ function reviewRepNotifies(variables: MpVariable[], graphSizes: GraphSizes): MpF
     if ((graphSizes.get(handler) ?? 0) > 1) {
       continue;
     }
+    // Nothing in this Blueprint reads or writes it either, so there is no value to react TO. That
+    // is a different, easier finding: delete it rather than wire it.
+    const unused = !touched.has(variable.name.toLowerCase());
     findings.push({
       check: "repnotify-does-nothing",
       severity: "warning",
       variable: variable.name,
-      message:
-        `"${variable.name}" replicates with RepNotify "${handler}", and "${handler}" is empty - ` +
-        `the event is on the canvas with nothing wired to it.`,
-      observed: `${handler} has no nodes after its entry.`,
-      fix:
-        `The value arrives on every client and nothing reacts to it. It does not error, does not ` +
-        `warn, and surfaces much later as "the display never updates", by which point nobody is ` +
-        `looking at replication. Either wire ${handler} to whatever should respond to the new ` +
-        `value, or drop the RepNotify and replicate plainly if nothing needs to react.`,
+      message: unused
+        ? `"${variable.name}" replicates with RepNotify "${handler}", "${handler}" is empty, and ` +
+          `nothing in this Blueprint reads or writes the variable at all.`
+        : `"${variable.name}" replicates with RepNotify "${handler}", and "${handler}" is empty - ` +
+          `the event is on the canvas with nothing wired to it.`,
+      observed: unused
+        ? `${handler} has no nodes after its entry, and no Get or Set for ${variable.name} appears in this Blueprint.`
+        : `${handler} has no nodes after its entry.`,
+      fix: unused
+        ? `Dead state: it is replicated across the network, notified on arrival, and read by nobody. ` +
+          `Check nothing outside this Blueprint reads it - find_references - then delete the ` +
+          `variable. If something DOES need it, the missing piece is the write, not the handler.`
+        : `The value arrives on every client and nothing reacts to it. It does not error, does not ` +
+          `warn, and surfaces much later as "the display never updates", by which point nobody is ` +
+          `looking at replication. Either wire ${handler} to whatever should respond to the new ` +
+          `value, or drop the RepNotify and replicate plainly if nothing needs to react.`,
     });
   }
   return findings;
@@ -141,7 +170,7 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[], grap
   // definition, and gating this behind "does the Blueprint have a server event" would silence the
   // check on exactly the Blueprints that only replicate state - which is most of the UI.
   if (graphSizes) {
-    findings.push(...reviewRepNotifies(variables, graphSizes));
+    findings.push(...reviewRepNotifies(variables, graphSizes, nodes));
   }
 
   const networked =

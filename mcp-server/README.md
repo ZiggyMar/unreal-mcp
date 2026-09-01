@@ -7002,3 +7002,26 @@ texture — was correctly **not** flagged.
 Not every one is a live bug: a developer may have switched RepNotify on and read the value elsewhere,
 in which case the notify is pointless rather than broken. The finding says exactly that — wire the
 handler, or drop the RepNotify and replicate plainly.
+
+### Eighty-one findings are a list; tiers are an answer
+
+Handing someone 81 identical warnings is barely better than handing them none, so the check now
+separates two cases that need opposite responses.
+
+If the Blueprint reads or writes the variable somewhere, the missing piece is the handler: **wire it,
+or drop the RepNotify.** If nothing in the Blueprint touches the variable at all, the whole thing is
+**dead state** — replicated across the network, notified on arrival, read by nobody — and the answer
+is to delete it, not to wire it.
+
+The distinction came from working one Blueprint by hand. Of four empty handlers on the ping actor:
+
+| variable | verdict |
+|---|---|
+| `PlayerWhoPlacedName` | a live bug — the name arrived and nothing re-applied it. **Fixed** |
+| `CurrentDistanceMeters` | dead state: zero writes, zero reads, while the distance it carries is recomputed locally every tick |
+| `PingColor`, `PlayerName` | handler empty, variable used — wire or drop |
+
+The fix mirrored `OnRep_PingTexture`, the one handler in that Blueprint that was already wired
+correctly: cast to the widget, call the setter. Compiles clean, and a two-player PIE session shows
+the ping carrying the right name on both roles. The check no longer reports that variable, which is
+the tightest confirmation available — the tool that found the bug agrees it is gone.

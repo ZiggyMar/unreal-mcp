@@ -11,9 +11,11 @@ import { reviewMultiplayer } from "../dist/multiplayer.js";
 const varWith = (over = {}) => ({ name: "PlayerWhoPlacedName", type: "Text", replicated: true, repNotify: "OnRep_PlayerWhoPlacedName", ...over });
 
 test("a RepNotify with nothing wired to it is reported", () => {
-  // One node is the entry alone.
+  // One node is the entry alone. The Blueprint DOES use the variable elsewhere, which is what
+  // separates "wire the handler" from the dead-state case below.
   const sizes = new Map([["OnRep_PlayerWhoPlacedName", 1]]);
-  const findings = reviewMultiplayer([], [varWith()], sizes);
+  const used = [{ id: "g", type: "K2Node_VariableGet", title: "Get PlayerWhoPlacedName", connectedPins: [] }];
+  const findings = reviewMultiplayer(used, [varWith()], sizes);
   const hit = findings.find((f) => f.check === "repnotify-does-nothing");
   assert.ok(hit, `expected the finding, got: ${findings.map((f) => f.check).join(", ")}`);
   assert.match(hit.message, /OnRep_PlayerWhoPlacedName/);
@@ -60,4 +62,25 @@ test("without graph sizes the check stays silent rather than guessing", () => {
     reviewMultiplayer([], [varWith()]).find((f) => f.check === "repnotify-does-nothing"),
     undefined
   );
+});
+
+test("an empty RepNotify on a variable nothing touches is called dead state", () => {
+  // A stronger and much easier answer than "wire the handler": the whole variable is dead, and
+  // replicating it pays network for a value nobody looks at. Found on a real ping actor -
+  // CurrentDistanceMeters, replicated, RepNotify, zero writes and zero reads, while the distance it
+  // was meant to carry is recomputed locally every tick.
+  const sizes = new Map([["OnRep_PlayerWhoPlacedName", 1]]);
+  const findings = reviewMultiplayer([], [varWith()], sizes);
+  const hit = findings.find((f) => f.check === "repnotify-does-nothing");
+  assert.match(hit.message, /nothing in this Blueprint reads or writes/);
+  assert.match(hit.fix, /Dead state|delete the/i);
+});
+
+test("an empty RepNotify on a variable the Blueprint DOES use asks for the handler instead", () => {
+  // The two need opposite responses, so they must not read the same.
+  const sizes = new Map([["OnRep_PlayerWhoPlacedName", 1]]);
+  const nodes = [{ id: "g", type: "K2Node_VariableGet", title: "Get PlayerWhoPlacedName", connectedPins: [] }];
+  const hit = reviewMultiplayer(nodes, [varWith()], sizes).find((f) => f.check === "repnotify-does-nothing");
+  assert.doesNotMatch(hit.message, /reads or writes/);
+  assert.match(hit.fix, /wire OnRep_PlayerWhoPlacedName|drop the RepNotify/i);
 });
