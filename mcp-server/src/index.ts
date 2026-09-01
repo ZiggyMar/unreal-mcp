@@ -675,7 +675,12 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // something over time. Someone asking "why does aiming feel slow" or "the door closes too fast"
   // reaches here, not for the cutscene tools. It is deliberately NOT in `core`, which has no room
   // and is the authoring spine rather than everything a Blueprint can hold.
-  anim: ["unreal_read_anim_blueprint", "unreal_read_timeline"],
+  anim: [
+    "unreal_read_anim_blueprint",
+    "unreal_read_timeline",
+    "unreal_add_montage_notify",
+    "unreal_remove_montage_notify",
+  ],
   // AI is its own group for the same reason animation is: a project without Behavior Trees should
   // not carry the definition, and a project built around them wants it in the diagnose set.
   ai: ["unreal_read_behavior_tree"],
@@ -3410,6 +3415,69 @@ register(
   async ({ path, graphName, functionName, dryRun }) => {
     try {
       return jsonResult(await callParentFirst(bridge, path, graphName, functionName, { dryRun }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_add_montage_notify",
+  {
+    title: "Put a notify on a montage",
+    description:
+      "The write half of a read that already existed. unreal_read_asset_properties reports a montage's notifies as " +
+      "`{name, at, kind}` and nothing here could put one there - so a model could SEE that a montage has no notify " +
+      "to drive a footstep, a hit window or a sound, and had no way to add one. Animation was three tools and all " +
+      "three were read-only.\n\n" +
+      "Instant notifies only. A notify STATE has a duration and needs a UAnimNotifyState class to give it " +
+      "behaviour; asking for one is refused by name rather than quietly producing an instant notify, because a " +
+      "duration that vanishes is worse than a call that did not run.\n\n" +
+      "Refused rather than accepted: a time outside the montage (it would never fire), and a notify with the same " +
+      "name already at that time (it would fire twice, which reads as a doubled sound). Changes memory, not disk - " +
+      "unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The montage, e.g. "/Game/Anim/ILY_Attack2_Montage".'),
+      name: z
+        .string()
+        .describe(
+          'Notify name, the same string unreal_read_asset_properties reports. In a Blueprint this arrives on Play ' +
+            'Montage\'s OnNotifyBegin, or as an AnimNotify_<name> event in the Animation Blueprint.'
+        ),
+      at: z.number().describe("Seconds from the start of the montage. Must be within its lengthSeconds."),
+    },
+  },
+  async ({ path, name, at }) => {
+    try {
+      return jsonResult(await bridge.send("add_montage_notify", { path, name, at }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_remove_montage_notify",
+  {
+    title: "Take a notify off a montage",
+    description:
+      "Removes every notify with this name, or only the one at a given time when a montage carries the same name " +
+      "twice on purpose. Reports how many went and lists what is left, so a caller can see the result rather than " +
+      "assume it.\n\n" +
+      "Removing nothing is not reported as success: if no notify by that name exists, the reply says so and lists " +
+      "the names that do. Changes memory, not disk - unreal_save_asset writes it.",
+    inputSchema: {
+      path: z.string().describe('The montage, e.g. "/Game/Anim/ILY_Attack2_Montage".'),
+      name: z.string().describe("Notify name to remove. Case-sensitive."),
+      at: z
+        .number()
+        .optional()
+        .describe("Only the notify at this time, for a montage carrying the same name more than once."),
+    },
+  },
+  async ({ path, name, at }) => {
+    try {
+      return jsonResult(await bridge.send("remove_montage_notify", { path, name, ...(at === undefined ? {} : { at }) }));
     } catch (err) {
       return errorResult(err);
     }

@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12987 | the authoring spine |
 | `lazy` | 13296 | `core` plus deferred groups |
-| `full` | 42644 | everything, for a model that can afford it |
+| `full` | 43263 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -384,6 +384,8 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
 | `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
 | `unreal_read_timeline` | `read_timeline` | Read a Blueprint Timeline: length, loop/autoplay/**replicated**, and every float, vector, colour and event track with its curve shape. |
+| `unreal_add_montage_notify` | `add_montage_notify` | Put an instant notify on a montage at a time, so animation can drive a footstep, a hit window or a sound. Refuses a time outside the montage and a duplicate at the same time. |
+| `unreal_remove_montage_notify` | `remove_montage_notify` | Take notifies off a montage by name, or just the one at a given time. Reports how many went and what is left; removing nothing is not reported as success. |
 | `unreal_map_input_key` | `map_input_key` | Bind a key to an Input Action, with modifiers. Refuses unknown keys and duplicates. |
 | `unreal_unmap_input_key` | `unmap_input_key` | Remove one key binding, and say so honestly when it was not bound. |
 | `unreal_get_game_settings` | `get_game_settings` | Read the default GameMode and map, plus the open level's override. |
@@ -8789,3 +8791,66 @@ by hand each time.
 
 Nothing was added to the search itself. The scope was always this; the zero simply never said so,
 and a dead end and an answer look identical until one of them tells you where else to look.
+
+### Animation could be read and never touched
+
+Counting the gap rather than guessing at it. Animation tools here: three, and all three read.
+Animation assets in the project being worked on:
+
+| tool | asset | count |
+|---|---|---|
+| `read_anim_blueprint` | AnimBlueprint | 6 |
+| `read_level_sequence` | AnimMontage | **27** |
+| `read_timeline` | AnimSequence | 200 |
+| | BlendSpace | 21 |
+| | LevelSequence | 9 |
+
+So a model could *see* that a montage has no notify to drive a footstep, a hit window or a sound,
+and had no way to put one there. `unreal_read_asset_properties` already reports notifies as
+`{name, at, kind}` — a read with no write half.
+
+`unreal_add_montage_notify` and `unreal_remove_montage_notify` are that half, and they speak the
+read's vocabulary rather than inventing one: the same `name` and `at`, and the reply lists the
+notifies afterwards in the same shape, so a caller sees the result instead of assuming it.
+
+**Instant notifies only, and said out loud.** A notify STATE has a duration and needs a
+`UAnimNotifyState` class to give it behaviour; there is no honest way to choose one on a caller's
+behalf, so `lastsFor` is refused rather than quietly producing an instant notify. A duration that
+vanishes is worse than a call that did not run.
+
+**What it refuses is the interesting part**, verified against a real montage:
+
+```
+add "MCPTestFootstep" at 0.5   ->  notifies: [MCPTestFootstep@0.5, PlayMontageNotify@1.499]
+add at 99                      ->  time_out_of_range: 99.000 is outside this montage,
+                                   which is 2.360 seconds long
+add the same one again         ->  notify_already_there: ... adding it twice fires the event
+                                   twice, which is a bug that looks like a doubled sound
+remove "NoSuchNotify"          ->  removed: 0, and says so rather than reporting success
+remove "MCPTestFootstep"       ->  removed: 1
+```
+
+A notify past the end never fires and the montage never complains, so refusing is the only place that
+can be caught. A duplicate at the same time is worse than useless — it is a doubled sound that reads
+as an audio bug. And `removed: 0` is not success, which is the rule the `delete_asset` fix
+established three sections ago.
+
+`LinkMontage` rather than a bare time, because a montage notify belongs to a segment and linking is
+what keeps it in place when the segment moves; and `TriggerTimeOffset` from
+`CalculateOffsetForNotify`, which is what makes a notify sitting exactly on a frame boundary fire on
+the side the author meant. Both were read out of the engine headers rather than recalled.
+
+**Three guards caught things this change got wrong**, which is the argument for having them:
+
+| guard | what it caught |
+|---|---|
+| `check:docs` | two registered tools appearing nowhere in this README |
+| `check:undo` | both writes opened no transaction, so a human could not Ctrl+Z them |
+| `doctor.test` | two new bridge commands neither probed nor recorded as deliberately unprobed |
+
+The last one is the sharpest: a probe sends no parameters, and probing `add_montage_notify` to find
+out whether it exists would have put a notify on somebody's montage. Recorded as not-probed, with
+that reason.
+
+The test montage was left exactly as found — one `PlayMontageNotify` at 1.499 — and nothing was
+written to disk.

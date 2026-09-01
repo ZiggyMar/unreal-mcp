@@ -1327,6 +1327,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleRemoveFunction(Params);
 	}
+	else if (Cmd == TEXT("add_montage_notify"))
+	{
+		Response = HandleAddMontageNotify(Params);
+	}
+	else if (Cmd == TEXT("remove_montage_notify"))
+	{
+		Response = HandleRemoveMontageNotify(Params);
+	}
 	else if (Cmd == TEXT("open_level"))
 	{
 		Response = HandleOpenLevel(Params);
@@ -5879,6 +5887,194 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 					"pass force:true to sever those references and delete anyway."));
 	}
 
+	return MakeOkResponse(Result);
+}
+
+/**
+ * Shared lookup for the two montage notify commands.
+ *
+ * Both need the same three things and the same three refusals, and saying "montage_not_found" in one
+ * place is how the two stay consistent about what they accept.
+ */
+static UAnimMontage* MCPLoadMontage(const FString& Path, FString& OutError)
+{
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+	if (!Asset)
+	{
+		OutError = FString::Printf(TEXT("asset_not_found: %s"), *Path);
+		return nullptr;
+	}
+	UAnimMontage* Montage = Cast<UAnimMontage>(Asset);
+	if (!Montage)
+	{
+		OutError = FString::Printf(
+			TEXT("not_a_montage: %s is a %s. read_asset_properties on it says what it is; ")
+			TEXT("list_assets with className \"AnimMontage\" lists the ones this accepts."),
+			*Path, *Asset->GetClass()->GetName());
+		return nullptr;
+	}
+	return Montage;
+}
+
+/** The notify list, in exactly the shape read_asset_properties returns, so a caller sees one vocabulary. */
+static TArray<TSharedPtr<FJsonValue>> MCPNotifyList(const UAnimMontage* Montage)
+{
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (const FAnimNotifyEvent& Notify : Montage->Notifies)
+	{
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Notify.NotifyName.ToString());
+		Entry->SetNumberField(TEXT("at"), FMath::RoundToDouble(Notify.GetTriggerTime() * 1000.0) / 1000.0);
+		Entry->SetStringField(TEXT("kind"), Notify.NotifyStateClass ? TEXT("state") : TEXT("instant"));
+		Out.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	return Out;
+}
+
+/**
+ * Add an instant notify to a montage at a time.
+ *
+ * The write half of a read that already existed. read_asset_properties reports a montage's notifies
+ * as {name, at, kind} and nothing could put one there - so a model could see that a montage has no
+ * notify to drive a footstep or a hit window, and had no way to add one. This project holds 27
+ * montages and, before this, three animation tools, all of them read-only.
+ *
+ * Instant notifies only, deliberately. A notify STATE has a duration and needs a UAnimNotifyState
+ * class to give it behaviour, and inventing one would be guessing at what the caller meant. Asking
+ * for `lastsFor` is refused by name rather than silently producing an instant notify, because a
+ * duration that vanishes is worse than a call that did not run.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleAddMontageNotify(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString Name;
+	double At = 0.0;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), Name) || !Params->TryGetNumberField(TEXT("at"), At))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path, name and at are required"));
+	}
+
+	double LastsFor = 0.0;
+	if (Params->TryGetNumberField(TEXT("lastsFor"), LastsFor))
+	{
+		return MakeErrorResponse(
+			TEXT("notify_state_not_supported: `lastsFor` makes this a notify STATE, which needs a ")
+			TEXT("UAnimNotifyState class to give it behaviour and this command cannot choose one for you. ")
+			TEXT("Add the state in the montage editor, or add an instant notify by omitting lastsFor."));
+	}
+
+	FString Error;
+	UAnimMontage* Montage = MCPLoadMontage(Path, Error);
+	if (!Montage)
+	{
+		return MakeErrorResponse(Error);
+	}
+
+	const float Length = Montage->GetPlayLength();
+	if (At < 0.0 || At > Length)
+	{
+		// A notify past the end never fires, and the montage will not complain. Refusing here is the
+		// only place this can be caught.
+		return MakeErrorResponse(FString::Printf(
+			TEXT("time_out_of_range: %.3f is outside this montage, which is %.3f seconds long. ")
+			TEXT("read_asset_properties reports lengthSeconds and the sections you can place against."),
+			At, Length));
+	}
+
+	for (const FAnimNotifyEvent& Existing : Montage->Notifies)
+	{
+		if (Existing.NotifyName == FName(*Name) && FMath::IsNearlyEqual(Existing.GetTriggerTime(), static_cast<float>(At), 0.001f))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("notify_already_there: \"%s\" is already on this montage at %.3f. Adding it twice ")
+				TEXT("fires the event twice, which is a bug that looks like a doubled sound."),
+				*Name, At));
+		}
+	}
+
+	// Undoable, like every other write here. A notify added by a tool and not removable with Ctrl+Z
+	// is worse than one a person placed by hand, because they did not watch it happen.
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPAddMontageNotify", "MCP: Add Montage Notify"));
+	Montage->Modify();
+
+	FAnimNotifyEvent NewEvent;
+	NewEvent.NotifyName = FName(*Name);
+	// LinkMontage rather than a bare time: a montage notify belongs to a segment, and linking is what
+	// keeps it in the right place when the segment moves.
+	NewEvent.LinkMontage(Montage, static_cast<float>(At));
+	// The editor sets this so a notify sitting exactly on a frame boundary triggers on the side the
+	// author meant. Omitting it works until it does not, at exactly the times people place notifies.
+	NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(Montage->CalculateOffsetForNotify(static_cast<float>(At)));
+	Montage->Notifies.Add(NewEvent);
+
+	Montage->RefreshCacheData();
+	Montage->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("added"), Name);
+	Result->SetNumberField(TEXT("at"), At);
+	Result->SetArrayField(TEXT("notifies"), MCPNotifyList(Montage));
+	Result->SetStringField(TEXT("next"),
+		TEXT("The montage is changed in memory and not on disk - save_asset writes it. In a Blueprint, ")
+		TEXT("an instant notify arrives on the Play Montage node's OnNotifyBegin, or on an "
+		"AnimNotify_<name> event in the Animation Blueprint."));
+	return MakeOkResponse(Result);
+}
+
+/** Remove notifies by name, and say how many went. */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveMontageNotify(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	FString Name;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path and name are required"));
+	}
+
+	FString Error;
+	UAnimMontage* Montage = MCPLoadMontage(Path, Error);
+	if (!Montage)
+	{
+		return MakeErrorResponse(Error);
+	}
+
+	// An optional time, for a montage that carries the same notify more than once on purpose.
+	double At = 0.0;
+	const bool bHasTime = Params->TryGetNumberField(TEXT("at"), At);
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRemoveMontageNotify", "MCP: Remove Montage Notify"));
+	Montage->Modify();
+
+	const int32 Removed = Montage->Notifies.RemoveAll([&](const FAnimNotifyEvent& Event)
+	{
+		if (Event.NotifyName != FName(*Name))
+		{
+			return false;
+		}
+		return !bHasTime || FMath::IsNearlyEqual(Event.GetTriggerTime(), static_cast<float>(At), 0.001f);
+	});
+
+	if (Removed > 0)
+	{
+		Montage->RefreshCacheData();
+		Montage->MarkPackageDirty();
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetNumberField(TEXT("removed"), Removed);
+	Result->SetArrayField(TEXT("notifies"), MCPNotifyList(Montage));
+	if (Removed == 0)
+	{
+		// Removing nothing is not success. Same rule the delete_asset fix established.
+		Result->SetStringField(TEXT("next"), FString::Printf(
+			TEXT("Nothing was removed: this montage has no notify called \"%s\"%s. The remaining ")
+			TEXT("notifies are listed above, and names are case-sensitive."),
+			*Name, bHasTime ? TEXT(" at that time") : TEXT("")));
+	}
 	return MakeOkResponse(Result);
 }
 

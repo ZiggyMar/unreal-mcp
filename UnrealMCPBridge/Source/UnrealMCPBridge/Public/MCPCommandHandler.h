@@ -104,6 +104,10 @@ private:
 	static TSharedRef<FJsonObject> HandlePieStatus(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Level editing: open, populate, save ---
+	/** Add an instant notify to a montage. The write half of the notify list read_asset_properties reports. */
+	static TSharedRef<FJsonObject> HandleAddMontageNotify(const TSharedPtr<FJsonObject>& Params);
+	/** Remove notifies from a montage by name, optionally only the one at a given time. */
+	static TSharedRef<FJsonObject> HandleRemoveMontageNotify(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleOpenLevel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSpawnActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSaveLevel(const TSharedPtr<FJsonObject>& Params);

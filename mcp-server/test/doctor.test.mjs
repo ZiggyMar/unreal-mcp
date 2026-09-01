@@ -22,6 +22,11 @@ const NOT_PROBED = new Set([
   // The point of this set is not its contents. It is that adding a bridge command from now on fails
   // this test until somebody decides which side it belongs on - because the alternative, twice
   // already, was a doctor confidently reporting "missing 2" when it was missing eight.
+  // The montage notify pair: both WRITE. A probe sends no parameters, and a probe that succeeded
+  // would have put a notify on somebody's montage to find out whether the command exists. The
+  // freshness check covers them - it compares the plugin binary's build time against the C++ source,
+  // so a plugin missing either is caught, just without naming which.
+  "add_montage_notify", "remove_montage_notify",
   "add_component", "add_data_table_row", "add_enum_entry", "add_input_mapping", "add_node", "add_struct_field",
   "add_variable", "add_widget", "asset_status", "build_graph", "compile_blueprint",
   "connect_pins", "create_blueprint", "create_enum", "create_function", "create_level",
