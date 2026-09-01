@@ -191,7 +191,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
 | `core` | 12848 | the authoring spine |
 | `lazy` | 12861 | `core` plus deferred groups |
-| `full` | 40518 | everything, for a model that can afford it |
+| `full` | 40671 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6334,6 +6334,46 @@ VacuumChargePercent     Authority  0.000000 -> 2 actors differ   changed=true
 Injection lasts one frame, so a hold is a ticker that re-injects until the time is up — capped at 30
 seconds, and a second call replaces the first rather than stacking, because a held key is a change to
 a running game that nothing else will undo.
+
+### Holding the key while you watch
+
+Pressing and watching were two tools, and using them together meant getting the order and the timing
+right by hand. `unreal_verify_runtime` takes a `press` now: it starts sampling, waits, holds the
+input, keeps sampling, and reports. One call for "run it, hold this, tell me what moved".
+
+The first version of that reply was quietly useless. It reported where each value *ended up*, and a
+key is released before the last sample — so a charge meter that had visibly swung to full read back
+as `0.000000`, and the verdict said **"every watched value agreed"**. True, and no help at all. What
+a press asks is whether the thing moved at any point, so `moved` is now part of every row and of the
+verdict, and a value that never budged while the key was held is called out by name.
+
+Pointed at the real bug it was built for, it answered in one call what several rounds of reasoning
+had got wrong:
+
+```text
+LocationDragged      moved=true  agreed=false
+  Authority  BP_Player_C_1=(X=-5726.67, Y=1532.58, Z=2420.15)
+  Client0    (X=0.000000, Y=0.000000, Z=0.000000)
+
+VaccumDragStrength   moved=true  agreed=false
+  Authority  BP_Player_C_1=250.000000
+  Client0    0.000000
+```
+
+The server is dragging. The client knows nothing about it — not a stale value, *nothing* — so the
+client predicts movement with no force in it and the server corrects it. That is the rubber-band,
+measured rather than argued.
+
+It also explains why the obvious fix failed. Replicating those two values does not hand the client
+the drag; it hands it a value that updates at the network rate while the force needs one every frame,
+so the force flickers and the character judders in place. The shape of the real fix is to tell the
+client *what is dragging it* once and let it compute the per-frame direction locally — which is a
+design change, not a flag flip, and not one to attempt without being able to reproduce a two-player
+vacuum on demand.
+
+**The limit worth stating:** the two PIE players spawn apart, so nothing is in range to vacuum unless
+someone walks. Input injection can drive movement too, but not aim at another player reliably. Until
+that is solved, this class of bug still needs a human in the loop for the final check.
 
 ### The numbers a model reads are guarded too
 

@@ -4733,9 +4733,21 @@ register(
         .number()
         .optional()
         .describe("How long to let the game run while sampling. Default 20. Sampling happens on the editor tick, so this has to be real time."),
+      press: z
+        .object({
+          inputAction: z.string().describe('The InputAction to hold, e.g. "IA_Vacuum".'),
+          seconds: z.number().optional().describe("How long to hold it. Default 5."),
+          world: z.string().optional().describe('Which world to press in - "Authority" or "Client0". Omit for all.'),
+        })
+        .optional()
+        .describe(
+          "Hold an input while sampling. Without this the game runs untouched, and a value that only " +
+            "moves while an ability is in use will read as unchanged - which is exactly how a fix gets " +
+            "reported as working when it is not."
+        ),
     },
   },
-  async ({ watch, seconds }) => {
+  async ({ watch, seconds, press }) => {
     try {
       const runFor = Math.max(3, Math.min(120, seconds ?? 20));
       const before = (await bridge.send("pie_status", {})) as { running?: boolean };
@@ -4747,13 +4759,21 @@ register(
         await new Promise((resolve) => setTimeout(resolve, 12_000));
       }
       await bridge.send("watch_runtime", { action: "start", watch, intervalMs: 500, maxSamples: 200 });
+      // Sampling starts before the press, so the reply contains the value both before and during -
+      // which is what makes "changed" mean anything.
+      if (press) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await bridge
+          .send("press_input", { inputAction: press.inputAction, seconds: press.seconds ?? 5, world: press.world })
+          .catch(() => {});
+      }
       await new Promise((resolve) => setTimeout(resolve, runFor * 1000));
       const sampled = (await bridge.send("watch_runtime", { action: "read" })) as { watched?: unknown[] };
       await bridge.send("watch_runtime", { action: "stop" }).catch(() => {});
       if (startedItHere) await bridge.send("stop_pie", {}).catch(() => {});
 
       const rows = Array.isArray(sampled.watched) ? (sampled.watched as never[]) : [];
-      return jsonResult({ ranForSeconds: runFor, startedPie: startedItHere, ...summariseRuntime(rows) });
+      return jsonResult({ ranForSeconds: runFor, startedPie: startedItHere, ...(press ? { pressed: press.inputAction } : {}), ...summariseRuntime(rows, press?.inputAction) });
     } catch (err) {
       return errorResult(err);
     }

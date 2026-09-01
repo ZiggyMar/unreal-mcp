@@ -28,8 +28,8 @@ export interface RuntimeSample {
 
 export interface RuntimeVerdict {
   watched: RuntimeSample[];
-  /** One line per watched value: what every role ended up holding. */
-  agreement: Array<{ watch: string; agreed: boolean; byRole: Record<string, string> }>;
+  /** One line per watched value: what every role ended up holding, and whether it ever moved. */
+  agreement: Array<{ watch: string; agreed: boolean; moved: boolean; byRole: Record<string, string> }>;
   /** Values that never moved from their starting point, which usually means nothing set them. */
   neverChanged: string[];
   verdict: string;
@@ -67,7 +67,7 @@ function looksUnset(raw: string): boolean {
 }
 
 /** Roles collapse to one line per watched value, because that is the question being asked. */
-export function summariseRuntime(watched: RuntimeSample[]): RuntimeVerdict {
+export function summariseRuntime(watched: RuntimeSample[], pressed?: string): RuntimeVerdict {
   const byWatch = new Map<string, RuntimeSample[]>();
   for (const row of watched) {
     const list = byWatch.get(row.watch) ?? [];
@@ -82,7 +82,14 @@ export function summariseRuntime(watched: RuntimeSample[]): RuntimeVerdict {
     const byRole: Record<string, string> = {};
     for (const row of rows) byRole[row.role] = String(row.last ?? "");
     const values = [...new Set(Object.values(byRole).map(valuesOnly))];
-    agreement.push({ watch, agreed: values.length <= 1, byRole });
+    // Did it move at ANY point, not just where it ended up.
+    //
+    // `last` is sampled after the key is released, so a value that swung while an ability was held
+    // reads as its resting default by the time anyone looks. The first version reported "every value
+    // agreed" for a press that had visibly driven a charge meter off zero - true, and useless. Movement
+    // is the question a press is asking.
+    const moved = rows.some((r) => r.changed === true);
+    agreement.push({ watch, agreed: values.length <= 1, moved, byRole });
 
     // A value identical from first sample to last, in every role, was probably never written. That
     // is not proof - a value can be correct from the start - but it is the shape of "nothing ran",
@@ -115,8 +122,20 @@ export function summariseRuntime(watched: RuntimeSample[]): RuntimeVerdict {
         `is actually called, with unreal_trace_function_calls.`
     );
   }
+  const inert = agreement.filter((a) => !a.moved).map((a) => a.watch);
+  if (pressed && inert.length > 0) {
+    parts.push(
+      `${inert.length} value(s) never moved at any point while "${pressed}" was held: ${inert.join(", ")}. ` +
+        `If the input was meant to drive them, either it is not reaching the game, or the thing it ` +
+        `triggers needs something that is not there - a target in range, a resource, a state.`
+    );
+  }
   if (parts.length === 0) {
-    parts.push("every watched value agreed across all running worlds and none looked unwritten.");
+    parts.push(
+      pressed
+        ? `every watched value agreed across all running worlds, and each of them moved while "${pressed}" was held.`
+        : "every watched value agreed across all running worlds and none looked unwritten."
+    );
   }
 
   return { watched, agreement, neverChanged, verdict: parts.join(" ") };

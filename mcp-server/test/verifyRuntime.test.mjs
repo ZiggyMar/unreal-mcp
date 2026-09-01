@@ -52,3 +52,32 @@ test("a value that stayed empty all session is called out", () => {
   assert.match(verdict.verdict, /never changed/);
   assert.match(verdict.verdict, /trace_function_calls/);
 });
+
+test("a value that never moved while a key was held is called out", () => {
+  // `last` is sampled after the key is released, so a value that swung during the hold reads as its
+  // resting default by the time anyone looks. Reporting only agreement said "every value agreed" for
+  // a press that had visibly driven a charge meter off zero - true, and useless. What a press asks is
+  // whether the thing moved at all.
+  const verdict = summariseRuntime(
+    [
+      { watch: "BP_Player.Charge", role: "Authority", first: "0", last: "0", changed: false },
+      { watch: "BP_Player.Charge", role: "Client0", first: "0", last: "0", changed: false },
+    ],
+    "IA_Vacuum"
+  );
+  assert.equal(verdict.agreement[0].moved, false);
+  assert.match(verdict.verdict, /never moved at any point while "IA_Vacuum" was held/);
+});
+
+test("a value that moved during the hold reads as working, even if it returned to rest", () => {
+  const verdict = summariseRuntime(
+    [
+      { watch: "BP_Player.Charge", role: "Authority", first: "0", last: "0", changed: true },
+      { watch: "BP_Player.Charge", role: "Client0", first: "0", last: "0", changed: true },
+    ],
+    "IA_Vacuum"
+  );
+  assert.equal(verdict.agreement[0].moved, true);
+  assert.match(verdict.verdict, /moved while "IA_Vacuum" was held/);
+  assert.doesNotMatch(verdict.verdict, /never moved/);
+});
