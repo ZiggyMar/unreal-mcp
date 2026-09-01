@@ -45,6 +45,7 @@ import { ALL_GROUPS_TOKENS, FEATURE_SET_TOKENS, GROUP_COST_TOKENS, PRESET_COST_T
 import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
 import { hotReloadCpp } from "./liveCoding.js";
+import { comparePluginSource, outOfSyncNote } from "./pluginSourceSync.js";
 import { describeConsoleResult } from "./consoleCommand.js";
 import { callParentFirst } from "./parentCall.js";
 import { capGraphSummary } from "./graphSummary.js";
@@ -3903,7 +3904,11 @@ register(
       "means it worked but you changed data types - adding a UPROPERTY, typically - which live coding patches without " +
       "guaranteeing. Only \"patched\" means test it and move on.\n\n" +
       "Live coding is Windows-only and can be switched off per project; when it is unavailable the reply says so and " +
-      "names the rebuild that does work.",
+      "names the rebuild that does work.\n\n" +
+      "One more outcome sits above all of these: \"patched-wrong-tree\". A project installs this plugin by COPYING " +
+      "its source in, and live coding compiles the project's copy - so if the repo you are editing and the copy the " +
+      "editor compiles have drifted apart, a compile can succeed and still not contain your change. That reply names " +
+      "the differing files and the command that syncs them.",
     inputSchema: {
       timeoutSeconds: z
         .number()
@@ -3916,16 +3921,49 @@ register(
   },
   async ({ timeoutSeconds }) => {
     try {
-      return jsonResult(
-        await hotReloadCpp(
-          {
-            send: (cmd, params) => bridge.send(cmd, params),
-            wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-            now: () => Date.now(),
-          },
-          { timeoutSeconds }
-        )
+      // Checked BEFORE the compile, not after, because a compile of the wrong tree takes just as
+      // long as a compile of the right one and tells the caller nothing either way.
+      //
+      // The plugin is installed into a project by copying it, so there are two source trees and
+      // live coding compiles the project's. An edit here reaches the editor only once it is copied
+      // across - and until then this tool answers "patched: running in the editor now", which is
+      // true about what it did and false about what the caller will conclude. That reply cost a
+      // real detour: a fix was made, reloaded, measured, found unchanged, and the search went to
+      // the one place the reply had ruled out.
+      let outOfSync: string | undefined;
+      try {
+        const ping = await bridge.send<{ projectFile?: string }>("ping", {});
+        const repoSourceDir = fileURLToPath(new URL("../../UnrealMCPBridge/Source", import.meta.url));
+        const compared = comparePluginSource(repoSourceDir, ping?.projectFile ?? "");
+        if (compared && compared.differing.length > 0) {
+          outOfSync = outOfSyncNote(compared, repoSourceDir);
+        }
+      } catch {
+        // Never let the advisory break the thing it advises on. A failed comparison means no note,
+        // not a failed reload.
+      }
+
+      const report = await hotReloadCpp(
+        {
+          send: (cmd, params) => bridge.send(cmd, params),
+          wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          now: () => Date.now(),
+        },
+        { timeoutSeconds }
       );
+
+      // Overrides the outcome rather than sitting beside it. "patched" is the one word that tells a
+      // caller to stop checking and move on, and it must not be the word for a run that compiled
+      // somebody else's copy of the file.
+      if (outOfSync) {
+        return jsonResult({
+          ...report,
+          outcome: "patched-wrong-tree",
+          meaning:
+            `Live coding reported "${report.outcome}", and it did not compile your edits. ` + outOfSync,
+        });
+      }
+      return jsonResult(report);
     } catch (err) {
       return errorResult(err);
     }
