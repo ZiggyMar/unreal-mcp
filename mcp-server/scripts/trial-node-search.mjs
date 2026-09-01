@@ -157,6 +157,49 @@ check(
   `macros=${plain.macros !== undefined} nodeTypes=${plain.nodeTypes !== undefined} note=${plain.note !== undefined}`
 );
 
+// The next call after find_node names a macro is for its pins. Being told ForEachLoop does not
+// exist, one call after being told it does, is the two-tools-disagreeing defect with a single step
+// between the halves - and the didYouMean was the last place "Branch -> AddBranchNode" still lived.
+const sig = async (functionName) => {
+  const res = await server.request("tools/call", {
+    name: "unreal_call_tool",
+    arguments: { tool: "unreal_get_node_signature", args: { functionName } },
+  });
+  const text = res?.result?.content?.[0]?.text ?? "";
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+};
+
+const forEachSig = await sig("ForEachLoop");
+check(
+  "get_node_signature knows ForEachLoop exists",
+  forEachSig.kind === "macro" && forEachSig.isFunction === false,
+  JSON.stringify(forEachSig).slice(0, 140)
+);
+check(
+  "and reports its real pins, read from the macro graph",
+  JSON.stringify(forEachSig.outputs ?? []).includes("Array Element"),
+  `inputs=${JSON.stringify(forEachSig.inputs ?? [])} outputs=${JSON.stringify(forEachSig.outputs ?? [])}`.slice(0, 200)
+);
+
+const branchSig = await sig("Branch");
+check(
+  "get_node_signature no longer steers Branch to AddBranchNode",
+  branchSig.kind === "nodeType" && !JSON.stringify(branchSig).includes("AddBranchNode"),
+  JSON.stringify(branchSig).slice(0, 160)
+);
+
+// A genuinely unknown name must still fail, or this became a tool that never says no.
+const nonsense = await sig("ThisIsNotARealNodeAtAll");
+check(
+  "an unknown name still fails honestly",
+  /node_signature_not_found/.test(JSON.stringify(nonsense)),
+  JSON.stringify(nonsense).slice(0, 120)
+);
+
 server.child.kill();
 
 const failed = results.filter((r) => !r).length;

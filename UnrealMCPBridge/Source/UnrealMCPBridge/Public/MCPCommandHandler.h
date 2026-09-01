@@ -75,6 +75,12 @@ private:
 	static TSharedRef<FJsonObject> HandleFindNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleGetNodeSignature(const TSharedPtr<FJsonObject>& Params);
 
+	/**
+	 * Describe a macro or built-in node kind, for the many names that are real nodes and not
+	 * functions. Returns false if the name is neither, leaving the caller to report not-found.
+	 */
+	static bool DescribeNonFunctionNode(const FString& Name, TSharedRef<FJsonObject>& Out);
+
 	// --- Milestone 7 groundwork: functions and graph organization ---
 	static TSharedRef<FJsonObject> HandleCreateFunction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleOrganizeGraph(const TSharedPtr<FJsonObject>& Params);

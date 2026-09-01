@@ -43,6 +43,7 @@
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_MacroInstance.h"
+#include "K2Node_Tunnel.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_InputKey.h"
@@ -4066,6 +4067,102 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleFindNode(const TSharedPtr<FJso
 	return MakeOkResponse(Result);
 }
 
+/**
+ * Fill `Out` with the shape of a macro or built-in node kind, if `Name` is one.
+ *
+ * Macro pins are READ from the macro graph's own tunnel nodes rather than written down here. A
+ * hand-kept list of ForEachLoop's pins is a list that goes stale on an engine upgrade and lies
+ * confidently in the meantime, which is the failure mode this whole project is built against. The
+ * entry tunnel's OUTPUT pins are the macro's inputs, and the exit tunnel's INPUT pins are its
+ * outputs - the tunnel is seen from inside the macro body, so the directions read backwards.
+ */
+bool FMCPCommandHandler::DescribeNonFunctionNode(const FString& Name, TSharedRef<FJsonObject>& Out)
+{
+	TArray<FString> QueryWords;
+	FMCPNodeCatalog::TokenizeName(Name, QueryWords);
+	const auto IsExact = [&QueryWords](const FString& Candidate)
+	{
+		TArray<FString> CandidateWords;
+		FMCPNodeCatalog::TokenizeName(Candidate, CandidateWords);
+		return CandidateWords == QueryWords;
+	};
+
+	// The node kinds build_graph takes directly. Pins are not listed here on purpose: they belong to
+	// build_graph's own contract, and a second copy of them here would be a second thing to keep
+	// true. Naming the nodeType is what the caller cannot work out on their own.
+	static const TCHAR* const BuiltInNodeKinds[] = {
+		TEXT("Branch"), TEXT("Sequence"), TEXT("Cast"), TEXT("Self"),
+		TEXT("Event"), TEXT("CustomEvent"), TEXT("VariableGet"), TEXT("VariableSet"),
+		TEXT("InputKey"), TEXT("InputAxis"), TEXT("EnhancedInputAction"), TEXT("CallParent"),
+	};
+	for (const TCHAR* const Kind : BuiltInNodeKinds)
+	{
+		if (IsExact(Kind))
+		{
+			Out->SetStringField(TEXT("name"), Kind);
+			Out->SetStringField(TEXT("kind"), TEXT("nodeType"));
+			Out->SetBoolField(TEXT("isFunction"), false);
+			Out->SetStringField(TEXT("use"), FString::Printf(TEXT("build_graph nodeType \"%s\""), Kind));
+			Out->SetStringField(TEXT("note"),
+				TEXT("A node kind, not a callable function - it has no class and no function name. "
+					"unreal_guide topic \"handbook\" has the exec and data pin names."));
+			return true;
+		}
+	}
+
+	UBlueprint* MacroLib = LoadObject<UBlueprint>(nullptr,
+		TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros"));
+	if (!MacroLib)
+	{
+		return false;
+	}
+	for (UEdGraph* Candidate : MacroLib->MacroGraphs)
+	{
+		if (!Candidate || !IsExact(Candidate->GetName()))
+		{
+			continue;
+		}
+		Out->SetStringField(TEXT("name"), Candidate->GetName());
+		Out->SetStringField(TEXT("kind"), TEXT("macro"));
+		Out->SetBoolField(TEXT("isFunction"), false);
+		Out->SetStringField(TEXT("use"),
+			FString::Printf(TEXT("build_graph nodeType \"Macro\", macroName \"%s\""), *Candidate->GetName()));
+
+		TArray<TSharedPtr<FJsonValue>> Inputs, Outputs;
+		for (UEdGraphNode* Node : Candidate->Nodes)
+		{
+			UK2Node_Tunnel* Tunnel = Cast<UK2Node_Tunnel>(Node);
+			if (!Tunnel)
+			{
+				continue;
+			}
+			for (UEdGraphPin* Pin : Tunnel->Pins)
+			{
+				if (!Pin || Pin->bHidden || Pin->PinName.IsNone())
+				{
+					continue;
+				}
+				TSharedRef<FJsonObject> PinInfo = MakeShared<FJsonObject>();
+				PinInfo->SetStringField(TEXT("name"), Pin->PinName.ToString());
+				PinInfo->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
+				// Seen from inside the body: what the tunnel OUTPUTS is what the macro takes in.
+				if (Pin->Direction == EGPD_Output)
+				{
+					Inputs.Add(MakeShared<FJsonValueObject>(PinInfo));
+				}
+				else
+				{
+					Outputs.Add(MakeShared<FJsonValueObject>(PinInfo));
+				}
+			}
+		}
+		Out->SetArrayField(TEXT("inputs"), Inputs);
+		Out->SetArrayField(TEXT("outputs"), Outputs);
+		return true;
+	}
+	return false;
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetNodeSignature(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FunctionName;
@@ -4083,6 +4180,19 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleGetNodeSignature(const TShared
 	TSharedPtr<FJsonObject> Signature = Catalog.FindSignature(FunctionName, ClassName);
 	if (!Signature.IsValid())
 	{
+		// Before denying it exists, check the things that are not functions.
+		//
+		// find_node names macros and node kinds now, so the very next call a caller makes is for the
+		// pins of one - and being told ForEachLoop does not exist, one call after being told it
+		// does, is the two-tools-disagreeing defect with a single step between the halves. Worse,
+		// the didYouMean suggested AddBranchNode for "Branch": the last place that wrong answer
+		// still lived, actively steering the caller to it.
+		TSharedRef<FJsonObject> AsNodeType = MakeShared<FJsonObject>();
+		if (DescribeNonFunctionNode(FunctionName, AsNodeType))
+		{
+			return MakeOkResponse(AsNodeType);
+		}
+
 		const FString ClassSuffix = ClassName.IsEmpty()
 			? FString()
 			: FString::Printf(TEXT(" on %s"), *ClassName);
