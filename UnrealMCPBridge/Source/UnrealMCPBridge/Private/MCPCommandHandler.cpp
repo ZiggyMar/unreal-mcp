@@ -3489,6 +3489,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleWatchRuntime(const TSharedPtr<
 			const bool bChanged = Series.Distinct.Num() > 1;
 			Row->SetBoolField(TEXT("changed"), bChanged);
 			Row->SetNumberField(TEXT("samples"), Series.Samples);
+			// Every value it took, not just the ends.
+			//
+			// These were already being collected to decide `changed` and then thrown away, and the
+			// ends are the least informative pair for anything transient. A gameplay tag added when
+			// an ability starts and removed when it stops reads as absent at both `first` and `last`,
+			// so the tool reported "unchanged" for the exact state that explains the bug - twice, in
+			// two different investigations, before anyone noticed the list was right there.
+			if (bChanged)
+			{
+				TArray<TSharedPtr<FJsonValue>> Seen;
+				for (const FString& Value : Series.Distinct)
+				{
+					Seen.Add(MakeShared<FJsonValueString>(Value));
+				}
+				Row->SetArrayField(TEXT("values"), Seen);
+			}
 			if (Series.ActorsSeen > 1)
 			{
 				// Said only when it matters: with one actor the sample is unambiguous, and with

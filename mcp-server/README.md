@@ -6447,6 +6447,28 @@ The honest state of that bug: **still unfixed**, twice attempted, mechanism unde
 reproducible on demand. Two plausible fixes are ruled out by evidence rather than opinion, which is
 worth more than a third guess.
 
+### Reporting every value, not just the ends
+
+`watch_runtime` reported `first`, `last` and `changed`. For anything transient those are the least
+informative pair available: a gameplay tag added when an ability starts and removed when it stops is
+absent at both ends, so the tool said **"unchanged"** for the exact state that explained the bug.
+
+The distinct values were already being collected — to decide `changed` — and then thrown away. They
+are reported now, in order:
+
+```text
+Client0  values: () -> (GameplayTags=((TagName="isAiming.isVaccuming"))) -> ...
+```
+
+That one line disproved a hypothesis this project had been about to act on. The theory was that
+gameplay tags do not replicate, so a client can never pass the gate on the vacuum drag. The values
+show the vacuuming player's tag arriving on the client perfectly well — tags **do** propagate — and
+the dragged player carrying no tag on *either* side, while the server drag demonstrably works.
+
+So the explanation is wrong, and it was wrong in the direction that would have produced a third
+failed fix. Being able to see what a value actually did, rather than where it started and stopped,
+is the difference between disproving a theory in one run and shipping it.
+
 ### The numbers a model reads are guarded too
 
 Three token figures in tool descriptions have gone stale and been caught **by accident** — each one
