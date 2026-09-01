@@ -63,6 +63,8 @@ export interface MpFinding {
 // Anchored at a word start rather than the string start, because real projects prefix their custom
 // events - CE_Server_FinishedCutscene is a server event, and reading it as a client one produced a
 // false positive on a real project. "Observer" is not matched: the prefix must end at an underscore.
+import { isExecInput } from "./execFlow.js";
+
 const SERVER_EVENT = /(^|_)(server|sv)[_\s]/i;
 const MULTICAST_EVENT = /(^|_)(multicast|netmulticast|all)[_\s]/i;
 const CLIENT_EVENT = /(^|_)(client|owning)[_\s]/i;
@@ -220,9 +222,13 @@ export function reviewMultiplayer(nodes: MpNode[], variables: MpVariable[], grap
     for (const pin of node.connectedPins ?? []) {
       if (pin.direction !== "out") continue;
       for (const link of pin.linkedTo ?? []) {
-        if (!/^(execute|exec|then|in)$/i.test(link.pin)) continue;
+        // isExecInput, not a local regex. This file kept its own copy of
+        // /^(execute|exec|then|in)$/i, which misses a Timeline's Play/PlayFromStart/Stop and a
+        // macro's Reset - so "downstream of Switch Has Authority" stopped at every timeline, and a
+        // cast correctly guarded on the far side of one was reported as unguarded.
         const target = byId.get(link.node);
-        if (target) out.push(target);
+        if (!target || !isExecInput(target, link.pin)) continue;
+        out.push(target);
       }
     }
     return out;
@@ -457,7 +463,14 @@ export function classNameFromCastTitle(title: string | undefined): string | unde
 export function findServerOnlyCasts(
   nodes: MpNode[],
   isServerOnlyClass: (className: string) => boolean,
-  ownerIsServerOnly: boolean
+  ownerIsServerOnly: boolean,
+  /**
+   * Variable name -> the class it holds, for the variables this Blueprint declares.
+   *
+   * Optional because every existing caller predates it, and a missing map means the variable check
+   * below did not RUN - never that it ran and found nothing.
+   */
+  variableClasses?: Map<string, string>
 ): MpFinding[] {
   if (ownerIsServerOnly) return [];
 
@@ -468,9 +481,13 @@ export function findServerOnlyCasts(
       if (pin.direction !== "out") continue;
       if (onlyPin && !onlyPin.test(pin.pin)) continue;
       for (const link of pin.linkedTo ?? []) {
-        if (!/^(execute|exec|then|in)$/i.test(link.pin)) continue;
+        // isExecInput, not a local regex. This file kept its own copy of
+        // /^(execute|exec|then|in)$/i, which misses a Timeline's Play/PlayFromStart/Stop and a
+        // macro's Reset - so "downstream of Switch Has Authority" stopped at every timeline, and a
+        // cast correctly guarded on the far side of one was reported as unguarded.
         const target = byId.get(link.node);
-        if (target) out.push(target);
+        if (!target || !isExecInput(target, link.pin)) continue;
+        out.push(target);
       }
     }
     return out;
@@ -561,5 +578,74 @@ export function findServerOnlyCasts(
         `correct when hosting and do nothing for everyone else.`,
     });
   }
+
+  // The same defect, spelled as a variable instead of a cast.
+  //
+  // The loop above only ever looked at K2Node_DynamicCast. This project reaches its GameMode a
+  // different way: a variable typed GM_Gameplay_C, cached once and read everywhere. Ten Blueprints
+  // declare one. A Get of it on a client is null for exactly the reason a cast would have failed,
+  // and nothing flagged any of them.
+  //
+  // Not theoretical. A real PIE session logged:
+  //
+  //   Accessed None trying to read (real) property GM_Gameplay in PC_Gameplay_C.
+  //   Node: Branch  Graph: CreateWaveEndWBP  Blueprint: PC_Gameplay
+  //
+  // while review_blueprint returned 35 findings for that Blueprint and not one of them was this.
+  //
+  // A Get node carries no execution pins, so it can never be in `serverGuarded` itself; what
+  // matters is whether the node CONSUMING the value runs on a client. So the guard is read from the
+  // consumers, and a Get whose consumers are all server-guarded says nothing.
+  if (variableClasses && variableClasses.size > 0) {
+    const consumersOf = (node: MpNode): MpNode[] => {
+      const out: MpNode[] = [];
+      for (const pin of node.connectedPins ?? []) {
+        if (pin.direction !== "out") continue;
+        for (const link of pin.linkedTo ?? []) {
+          const target = byId.get(link.node);
+          if (target) out.push(target);
+        }
+      }
+      return out;
+    };
+
+    const reportedVariables = new Set<string>();
+    for (const node of nodes) {
+      if (!/K2Node_VariableGet/.test(node.type)) continue;
+      // ListView titles a getter either "GM_Gameplay" or "Get GM_Gameplay" depending on context.
+      const name = (node.title ?? "").trim().replace(/^Get\s+/i, "");
+      const className = variableClasses.get(name);
+      if (!className || !isServerOnlyClass(className)) continue;
+      if (reportedVariables.has(name)) continue;
+
+      const consumers = consumersOf(node);
+      // No consumer at all is dead data, which is a different check's business.
+      if (consumers.length === 0) continue;
+      if (consumers.every((c) => serverGuarded.has(c.id))) continue;
+      reportedVariables.add(name);
+
+      const entries = [...new Set(consumers.flatMap((c) => [...(reachedBy.get(c.id) ?? [])]))];
+      const from =
+        entries.length > 0
+          ? ` It is read on the chain from ${entries.slice(0, 3).join(", ")}${entries.length > 3 ? ` and ${entries.length - 3} more` : ""}.`
+          : "";
+
+      findings.push({
+        check: "reads-server-only-variable",
+        severity: "warning",
+        variable: name,
+        message:
+          `"${name}" holds a ${className}, which is a GameMode and therefore exists only on the ` +
+          `server. On every client it is null, so this Get returns None and whatever reads it gets ` +
+          `nothing.${from}`,
+        fix:
+          `Put what this needs on the GameState, which replicates to clients, and read it from ` +
+          `there. If the work genuinely belongs on the server, guard it with Switch Has Authority. ` +
+          `An Is Valid check would stop the log spam and leave the client doing nothing, which is ` +
+          `the bug.`,
+      });
+    }
+  }
+
   return findings;
 }

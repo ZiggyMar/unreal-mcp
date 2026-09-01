@@ -44,6 +44,8 @@ import { explainGraph } from "./explainGraph.js";
 
 
 const WHY_IT_COSTS: Record<string, string> = {
+  "reads-server-only-variable":
+    "A variable holding a GameMode is null on every client, so the Get returns None and everything reading it gets nothing. The same defect as a cast to one, and far more common in a project that caches the reference.",
   "cast-to-server-only-class":
     "A GameMode exists only on the server. On every client the cast fails silently and every node after it never runs. Single-player testing cannot see it.",
   "server-writes-unreplicated":
@@ -394,13 +396,30 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
 
       await learn(bp.name);
       const ownerIsServerOnly = isServerOnlyClass(bp.name);
+
+      // The class each object variable holds, so a Get of a GameMode reference is caught the same
+      // way a cast to one is. The project reaches its GameMode through a cached variable far more
+      // often than through a cast, and only the cast was ever checked.
+      const variableClasses = new Map<string, string>();
+      for (const variable of review.variables ?? []) {
+        const held = variable.subType;
+        if (!held) continue;
+        variableClasses.set(variable.name, held);
+        await learn(held);
+      }
+
       for (const graph of review.graphNodes ?? []) {
         const nodes = (graph.nodes ?? []) as Array<{ title?: string }>;
         for (const node of nodes) {
           const castTarget = classNameFromCastTitle(String(node.title ?? ""));
           if (castTarget) await learn(castTarget);
         }
-        for (const finding of findServerOnlyCasts(graph.nodes as never, isServerOnlyClass, ownerIsServerOnly)) {
+        for (const finding of findServerOnlyCasts(
+          graph.nodes as never,
+          isServerOnlyClass,
+          ownerIsServerOnly,
+          variableClasses
+        )) {
           findings.push({
             blueprint: bp.name,
             path: bp.path,

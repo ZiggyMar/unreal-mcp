@@ -12,6 +12,14 @@
  */
 export const FINDING_COST: Record<string, number> = {
   "cast-to-server-only-class": 100,
+  // The same 100, because it is the same defect and it fails just as certainly.
+  //
+  // A cast to a GameMode fails on every client; a Get of a variable HOLDING one returns null on
+  // every client. Nothing about the consequence differs, and the only reason this was not here is
+  // that the check looked at Cast nodes and this project caches the reference in a variable
+  // instead - ten Blueprints do. Scored lower, it would sort below findings that merely might
+  // matter, which is how a defect with runtime proof ends up under a style warning.
+  "reads-server-only-variable": 100,
   "server-writes-unreplicated": 100,
   // High, and below the silent-breakage hundreds on purpose. The game still works - it just feels
   // broken to everyone except the listen-server host, who is the authority and never sees it. That

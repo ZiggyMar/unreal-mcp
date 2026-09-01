@@ -24,7 +24,15 @@ export interface BlueprintReview {
    * audit needs them for the checks that depend on how a variable replicates, and list_variables is
    * one bridge call per Blueprint - across a real project that is hundreds.
    */
-  variables?: Array<{ name: string; type?: string; replicated?: boolean; repNotify?: string }>;
+  variables?: Array<{
+    name: string;
+    type?: string;
+    /** For an object variable, the class it holds - e.g. "GM_Gameplay_C". The audit's
+     *  reads-server-only-variable check needs the class, not the word "object". */
+    subType?: string;
+    replicated?: boolean;
+    repNotify?: string;
+  }>;
   /** What this Blueprint derives from, for the checks that compare a child against its parent. */
   parentClass?: string;
   /**
