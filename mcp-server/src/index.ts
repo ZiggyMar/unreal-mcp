@@ -1963,12 +1963,46 @@ register(
       //
       // Only on a zero, so a search that worked pays nothing for advice it does not need.
       const nothingFound = (result.hitCount ?? enrichedHits.length) === 0;
+
+      // A DECLARATION is almost never the question.
+      //
+      // The zero-hit note below exists because a search that found nothing dead-ended. A search that
+      // FOUND something dead-ends in exactly the same way, and that case had no note at all.
+      //
+      // Traced on a real session. Diagnosing why a vacuum drag rubber-banded on clients needed to
+      // know where `LocationDragged` is written. search_project answered:
+      //
+      //   {"kind":"variable","path":".../BP_BaseCharacter","context":"struct:Vector variable"}
+      //
+      // True, complete for what it searches, and not the thing anybody typed the name for - this
+      // index holds declarations, so "where is it declared" is the one question it can answer and
+      // "where is it used" is the one that was being asked. Recovering that took ten more calls and
+      // ended in grepping .uasset binaries from a shell, which a model using this server does not
+      // have. unreal_trace_variable answers it whole, in 89 tokens: declaredIn, writes, reads, each
+      // with blueprint, graph and node id.
+      //
+      // Only when a hit is of a kind a tracer covers, and it names only the tracer for that kind, so
+      // a search for an asset name pays nothing.
+      const hitKinds = new Set(enrichedHits.map((h) => (h as { kind?: string }).kind));
+      const traceHint = hitKinds.has("variable")
+        ? "unreal_trace_variable"
+        : hitKinds.has("function") || hitKinds.has("event")
+          ? "unreal_trace_function_calls"
+          : undefined;
       // Wrapped, because the note above names four tools and on `search` none of them are listed.
       // withDisabledToolNote says how to reach an unlisted tool - through unreal_call_tool, without
       // changing the tool list - so advice that would otherwise dead-end stays followable.
       return jsonResult(withDisabledToolNote({
         ...result,
         hits: enrichedHits,
+        ...(!nothingFound && traceHint
+          ? {
+              next:
+                `These are DECLARATIONS - this index records where things are declared, not where ` +
+                `they are used. If the question is where a hit is read or written, ${traceHint} ` +
+                `answers it directly, with the blueprint, graph and node id of every site.`,
+            }
+          : {}),
         ...(nothingFound
           ? {
               next:
