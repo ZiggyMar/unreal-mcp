@@ -34,6 +34,7 @@ written down next to the measurement that caused it.
 [Measuring the choice instead of arguing about it](#measuring-the-choice-instead-of-arguing-about-it) ·
 [The whole-project audit was missing a whole family](#the-whole-project-audit-was-missing-a-whole-family) ·
 [The Level Blueprint was in no list at all](#the-level-blueprint-was-in-no-list-at-all) ·
+[A montage without its notifies is blend settings and nothing else](#a-montage-without-its-notifies-is-blend-settings-and-nothing-else) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -7058,3 +7059,48 @@ Two deliberate choices. The level script is fetched with `bDontCreate`, because 
 must never silently author a Level Blueprint into a map that never had one — a level with no script
 is a fact worth reporting, not a gap to fill on a read. And when a path is neither a Blueprint nor a
 level, the not-found message now names the level route as well, since it is a real answer.
+
+## A montage without its notifies is blend settings and nothing else
+
+Reading an Anim Montage returned three thousand characters of blend options and **nothing about what
+the montage does**. Sections are the combo structure — which segment follows which. Notifies are the
+timing — when the hit box spawns, when the footstep plays, when the window to chain opens. *"Make the
+hit land later"*, *"why does the combo not chain"*, *"when does that sound fire"* are answered by
+those two lists and by nothing else in the reply.
+
+Folded into `unreal_read_asset_properties` rather than given a `read_montage` tool of its own, the
+same way widget animations went into `list_widgets`. A caller reading an asset wants to know what the
+asset does, and one more tool definition standing in context on every request costs more than it is
+worth. **Capability added, standing cost unchanged.**
+
+Each notify says whether it is an instant or a *state* with a duration, because Blueprint handles
+those with different nodes, so which one it is decides what a caller writes. Each section names what
+plays after it, with `(ends)` when nothing does — the difference between a combo that chains and one
+that stops, invisible otherwise.
+
+The first four montages read on a real project:
+
+```
+ILY_Death_Montage     len=5.64  sections=[Default@0 -> (ends)]     notifies=[]
+HealPlayer_Montage    len=0.36  sections=[Default@0 -> Default]    notifies=[]
+Shoot_Montage         len=0.36  sections=[Default@0 -> (ends)]     notifies=[]
+TakeDamage_Montage    len=0.36  sections=[Default@0 -> (ends)]     notifies=[]
+```
+
+`HealPlayer_Montage` points its only section at itself, which is how a montage is made to loop
+forever. None of the four fires a single notify, so a reply with no notifies says so rather than
+staying quiet — a caller hunting for the moment a hit lands should be told to stop looking here.
+
+### The sweep that found it
+
+Not a guess. List every asset class the project actually contains, then check which of them any tool
+here can read:
+
+| present | reader |
+|---|---|
+| Blueprint, World, WidgetBlueprint, DataTable, Material, BehaviorTree, AnimBlueprint, Niagara, InputAction, LevelSequence | already covered |
+| BehaviorTree + Blackboard | covered — `read_behavior_tree` returns the blackboard name and every key with its type |
+| **AnimMontage** | **nothing but generic properties** |
+
+Checking rather than assuming mattered: the blackboard pairing looked like the obvious gap and turned
+out to be complete.

@@ -20,6 +20,7 @@
 #include "K2Node_EventNodeInterface.h"
 #include "K2Node_ConstructObjectFromClass.h"
 #include "Animation/WidgetAnimation.h"
+#include "Animation/AnimMontage.h"
 #include "Engine/Level.h"
 #include "Engine/LevelScriptBlueprint.h"
 #include "K2Node_CustomEvent.h"
@@ -8639,6 +8640,72 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSha
 	{
 		Result->SetNumberField(TEXT("totalProperties"), Total);
 	}
+
+	// A montage's SECTIONS and NOTIFIES, which the property walk cannot see.
+	//
+	// Reading a montage returned three thousand characters of blend options and nothing about what
+	// the montage DOES. Sections are the combo structure - which segment follows which - and
+	// notifies are the timing: when the hit box spawns, when the footstep plays, when the window to
+	// chain opens. "Make the hit land later", "why does the combo not chain", "when does that sound
+	// fire" are all answered by these two lists and by nothing else in the reply.
+	//
+	// Added here rather than as a read_montage tool, the same way widget animations went into
+	// list_widgets: a caller reading an asset wants to know what the asset does, and one more tool
+	// definition standing in context on every request costs more than it is worth.
+	if (const UAnimMontage* Montage = Cast<UAnimMontage>(Asset))
+	{
+		Result->SetNumberField(TEXT("lengthSeconds"), FMath::RoundToDouble(Montage->GetPlayLength() * 1000.0) / 1000.0);
+
+		TArray<TSharedPtr<FJsonValue>> Sections;
+		for (const FCompositeSection& Section : Montage->CompositeSections)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Section.SectionName.ToString());
+			Entry->SetNumberField(TEXT("startsAt"), FMath::RoundToDouble(Section.GetTime() * 1000.0) / 1000.0);
+			// What plays after it. NAME_None means the montage stops here, which is the difference
+			// between a combo that chains and one that does not - and it is invisible otherwise.
+			Entry->SetStringField(TEXT("nextSection"),
+				Section.NextSectionName.IsNone() ? TEXT("(ends)") : Section.NextSectionName.ToString());
+			Sections.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		if (Sections.Num() > 0)
+		{
+			Result->SetArrayField(TEXT("sections"), Sections);
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Notifies;
+		for (const FAnimNotifyEvent& Notify : Montage->Notifies)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Notify.NotifyName.ToString());
+			Entry->SetNumberField(TEXT("at"), FMath::RoundToDouble(Notify.GetTriggerTime() * 1000.0) / 1000.0);
+			// A notify STATE lasts; a notify is an instant. Blueprint handles them with different
+			// nodes, so which one it is decides what a caller writes.
+			if (Notify.NotifyStateClass)
+			{
+				Entry->SetStringField(TEXT("kind"), TEXT("state"));
+				Entry->SetNumberField(TEXT("lastsFor"), FMath::RoundToDouble(Notify.GetDuration() * 1000.0) / 1000.0);
+			}
+			else
+			{
+				Entry->SetStringField(TEXT("kind"), TEXT("instant"));
+			}
+			Notifies.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		if (Notifies.Num() > 0)
+		{
+			Result->SetArrayField(TEXT("notifies"), Notifies);
+		}
+		else
+		{
+			// Worth saying. A montage with no notifies cannot drive anything from animation timing,
+			// and a caller looking for the moment a hit lands should stop looking here.
+			Result->SetStringField(TEXT("notifiesNote"),
+				TEXT("No notifies: nothing in this montage fires an event, so animation timing cannot drive "
+					"gameplay from it."));
+		}
+	}
+
 	return MakeOkResponse(Result);
 }
 
