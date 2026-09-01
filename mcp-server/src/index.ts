@@ -490,6 +490,25 @@ const CORE_PROFILE_TOOLS = new Set([
  * list changed. Nothing is dumbed down; it just arrives when it is wanted.
  */
 const TOOL_GROUPS: Record<string, string[]> = {
+  // Running the game and watching what happens - the closed loop, in one place.
+  //
+  // These were split across two groups: start_pie and watch_runtime sat with level authoring, while
+  // press_input, pie_actors, teleport_actor and verify_runtime sat with asset maintenance. So the
+  // cheapest way to hold a key and watch a value was to enable BOTH, most of which is unrelated -
+  // level creation on one side, renaming assets on the other. A session that wants to prove a change
+  // works should pay for proving it, not for everything filed near it.
+  runtime: [
+    "unreal_start_pie",
+    "unreal_stop_pie",
+    "unreal_pie_status",
+    "unreal_watch_runtime",
+    "unreal_verify_runtime",
+    "unreal_press_input",
+    "unreal_pie_actors",
+    "unreal_teleport_actor",
+    "unreal_read_runtime_errors",
+    "unreal_screenshot",
+  ],
   edit: [
     // Reachable but not offered by default. It makes an EMPTY Blueprint, and a weak model reaches
     // for the familiar name over scaffold_blueprint and then cannot finish - measured, see
@@ -545,17 +564,12 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_set_class_default",
     "unreal_set_game_settings",
     "unreal_add_input_mapping",
-    "unreal_start_pie",
-    "unreal_watch_runtime",
-    "unreal_stop_pie",
-    "unreal_pie_status",
-    "unreal_screenshot",
     "unreal_find_orphans",
     "unreal_run_console_command",
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_pie_actors", "unreal_teleport_actor", "unreal_press_input", "unreal_verify_runtime", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint", "unreal_read_runtime_errors"],
+  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools

@@ -187,11 +187,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2009 | four tools; hand it a sentence or a preset name |
+| `search` | 2014 | four tools; hand it a sentence or a preset name |
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
-| `core` | 12848 | the authoring spine |
-| `lazy` | 12861 | `core` plus deferred groups |
-| `full` | 41474 | everything, for a model that can afford it |
+| `core` | 12853 | the authoring spine |
+| `lazy` | 12866 | `core` plus deferred groups |
+| `full` | 41478 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6468,6 +6468,39 @@ the dragged player carrying no tag on *either* side, while the server drag demon
 So the explanation is wrong, and it was wrong in the direction that would have produced a third
 failed fix. Being able to see what a value actually did, rather than where it started and stopped,
 is the difference between disproving a theory in one run and shipping it.
+
+### Filing the runtime tools where the work is
+
+Five tools were added this week for one job: run the game, press something, watch what happens.
+They landed in whichever group looked closest at the time, and the result was that the job cost
+almost four times what it should.
+
+`start_pie`, `watch_runtime` and `screenshot` sat in `scene`, with level creation and actor
+authoring. `press_input`, `pie_actors`, `teleport_actor` and `verify_runtime` sat in `maintenance`,
+with renaming assets and tracing variables. So the cheapest way to hold a key and watch a value was
+to switch on **both** groups and pay for everything filed near them:
+
+```text
+before   maintenance 6,575 + scene 6,611  = 13,186 tokens
+after    runtime                          =  3,143 tokens
+```
+
+`runtime` is now its own group, and the other two got smaller as a result — `maintenance` 6,575 to
+4,578, `scene` 6,611 to 5,465 — so a session that wanted asset surgery was also paying for PIE it
+never started.
+
+The whole closed loop runs from it. On the `search` profile, enabling `runtime` alone gives 14 tools
+for **4,283** tokens, and that is enough to start a game, position two players, aim one at the other,
+hold an input, and read the verdict:
+
+```text
+VaccumDragStrength moved=true | agreed=false
+1 value(s) differ between roles - a replicated value that differs between Authority and a client
+is a replication bug, and the actor names say which copy is wrong.
+```
+
+Presets name individual tools rather than groups, so none of them changed. The grouping is about what
+a session pays to *hold*, not about what any given job can reach.
 
 ### The numbers a model reads are guarded too
 
