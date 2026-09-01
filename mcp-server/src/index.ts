@@ -1676,22 +1676,54 @@ register(
     title: "Connect two Blueprint node pins",
     description:
       "Connects an output pin on one node to an input pin on another (works for both exec and data pins). Source/target " +
-      "node ids come from unreal_read_blueprint_summary or unreal_add_node. Fails with incompatible_pins if the schema " +
+      "node ids come from unreal_read_blueprint_summary or unreal_add_node. `fromNode`/`fromPin`/`toNode`/`toPin` are " +
+      "accepted as aliases for the source/target four. Fails with incompatible_pins if the schema " +
       "rejects the connection (e.g. mismatched data types). The error message explains why.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph name containing both nodes."),
-      sourceNodeId: z.string().describe("Node id (GUID) owning the OUTPUT pin."),
-      sourcePin: z.string().describe('Output pin name on the source node, e.g. "then" or "ReturnValue".'),
-      targetNodeId: z.string().describe("Node id (GUID) owning the INPUT pin."),
-      targetPin: z.string().describe('Input pin name on the target node, e.g. "execute" or "Target".'),
+      // `source`/`target` is the only place on this surface that spells a node id this way: twelve
+      // other tools call it `nodeId`, and nothing else takes a `sourceNodeId` at all. This is the
+      // tool every graph edit goes through, so the one odd spelling is also the most-typed one, and
+      // `fromNode`/`toNode` is what a caller reaches for when wiring A to B.
+      //
+      // Measured on this server's own sessions rather than assumed: four parameter-name misses in
+      // one working session, and this tool accounted for one of them - a call that named all four
+      // pins correctly and still ran nothing. The existing check:params guard was built for exactly
+      // this and its synonym table did not cover it, so the table grew too.
+      //
+      // The published names stay primary; renaming them would break callers. They just are not the
+      // only way in any more.
+      sourceNodeId: z.string().optional().describe("Node id (GUID) owning the OUTPUT pin."),
+      sourcePin: z.string().optional().describe('Output pin name on the source node, e.g. "then" or "ReturnValue".'),
+      targetNodeId: z.string().optional().describe("Node id (GUID) owning the INPUT pin."),
+      targetPin: z.string().optional().describe('Input pin name on the target node, e.g. "execute" or "Target".'),
+      fromNode: z.string().optional(),
+      fromPin: z.string().optional(),
+      toNode: z.string().optional(),
+      toPin: z.string().optional(),
     },
   },
-  async ({ path, graphName, sourceNodeId, sourcePin, targetNodeId, targetPin }) => {
+  async (args) => {
     try {
+      const sourceNodeId = args.sourceNodeId ?? args.fromNode;
+      const sourcePin = args.sourcePin ?? args.fromPin;
+      const targetNodeId = args.targetNodeId ?? args.toNode;
+      const targetPin = args.targetPin ?? args.toPin;
+      const missing = [
+        !sourceNodeId && "sourceNodeId (or fromNode)",
+        !sourcePin && "sourcePin (or fromPin)",
+        !targetNodeId && "targetNodeId (or toNode)",
+        !targetPin && "targetPin (or toPin)",
+      ].filter(Boolean);
+      if (missing.length > 0) {
+        return errorResult(
+          new Error(`unreal_connect_pins needs ${missing.join(", ")}. Nothing ran.`)
+        );
+      }
       const result = await bridge.send<ConnectPinsResult>("connect_pins", {
-        path,
-        graphName,
+        path: args.path,
+        graphName: args.graphName,
         sourceNodeId,
         sourcePin,
         targetNodeId,
@@ -2133,7 +2165,11 @@ register(
       "includes a didYouMean list of near-misses. Find the function name first with unreal_find_node if you do not " +
       "already know it.",
     inputSchema: {
-      functionName: z.string().describe('Exact function name, e.g. "PrintString".'),
+      // `name` is the single most common parameter on this surface - 34 tools take it - and this one
+      // did not. A caller who has typed `name` thirty-four times types it here too, and pays a
+      // failed round trip to be told the word is `functionName`. Primary spelling unchanged.
+      functionName: z.string().optional().describe('Exact function name, e.g. "PrintString".'),
+      name: z.string().optional(),
       className: z
         .string()
         .optional()
@@ -2143,9 +2179,18 @@ register(
         ),
     },
   },
-  async ({ functionName, className }) => {
+  async ({ functionName, name, className }) => {
     try {
-      const result = await bridge.send<NodeCatalogEntry>("get_node_signature", { functionName, className });
+      const wanted = functionName ?? name;
+      if (!wanted) {
+        return errorResult(
+          new Error("unreal_get_node_signature needs a function name: pass `functionName` (or `name`).")
+        );
+      }
+      const result = await bridge.send<NodeCatalogEntry>("get_node_signature", {
+        functionName: wanted,
+        className,
+      });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
@@ -2923,13 +2968,17 @@ register(
       // error message was good and the call was still wasted - and this server's own instructions
       // tell models not to guess, which only works if the names do not need guessing at.
       functionName: z.string().optional().describe("Same as `function`."),
+      // And `name`, which 18 tools use for the thing they act on. The note above stopped at the six
+      // that say `functionName`; the surface-wide count says `name` is the commonest spelling here
+      // by a wide margin, so it is the one a model reaches for first.
+      name: z.string().optional(),
       pathPrefix: z.string().optional().describe('Scope the scan, e.g. "/Game/MyGame". Defaults to "/Game".'),
     },
   },
-  async ({ function: fnRaw, functionName, pathPrefix }) => {
-    const fn = fnRaw ?? functionName;
+  async ({ function: fnRaw, functionName, name, pathPrefix }) => {
+    const fn = fnRaw ?? functionName ?? name;
     if (!fn) {
-      return errorResult(new Error("unreal_trace_function_calls needs a function name: pass `function` (or `functionName`)."));
+      return errorResult(new Error("unreal_trace_function_calls needs a function name: pass `function` (or `functionName`, or `name`)."));
     }
     try {
       return jsonResult(await bridge.send("trace_function_calls", { function: fn, pathPrefix }));
@@ -4570,14 +4619,25 @@ register(
       "unreal_delete_asset apply. Pass force:true when that is what you mean.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
-      functionName: z.string().describe("The function to remove. An event is not a function; use unreal_remove_node for those."),
+      functionName: z.string().optional().describe("The function to remove. An event is not a function; use unreal_remove_node for those."),
+      name: z.string().optional(),
       force: z.boolean().optional().describe("Remove it even though calls remain, leaving them broken. Off by default."),
       save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
     },
   },
-  async ({ path, functionName, force, save }) => {
+  async ({ path, functionName, name, force, save }) => {
     try {
-      const result = await bridge.send<Record<string, unknown>>("remove_function", { path, functionName, force });
+      const wanted = functionName ?? name;
+      if (!wanted) {
+        return errorResult(
+          new Error("unreal_remove_function needs a function name: pass `functionName` (or `name`).")
+        );
+      }
+      const result = await bridge.send<Record<string, unknown>>("remove_function", {
+        path,
+        functionName: wanted,
+        force,
+      });
       return jsonResult(await savedAfter(result, path, save));
     } catch (err) {
       return errorResult(err);
@@ -6686,7 +6746,7 @@ register(
     title: "Map an existing system across the Blueprints it spans",
     description:
       "**Call this FIRST on any request that touches an existing project, before reading a single graph.**\n\n" +
-      "Give it a concept (\"health\", \"inventory\", \"door\", \"save\") and it returns the assets that make up that " +
+      "Give it a `query` (\"health\", \"inventory\", \"door\", \"save\") and it returns the assets that make up that " +
       "system, how they reference each other, which ones are risky to change, and the order to read them in. It is " +
       "built entirely from the project index and the asset dependency graph, so mapping a twenty-asset system costs " +
       "a fraction of reading one large Blueprint.\n\n" +

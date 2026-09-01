@@ -34,6 +34,18 @@ const source = readFileSync(join(here, "..", "src", "index.ts"), "utf8");
 const SYNONYMS = [
   { odd: "variable", common: "variableName" },
   { odd: "function", common: "functionName" },
+  // Added after four more misses in one working session. The table was too narrow: it covered the
+  // two pairs that had bitten by then, so the guard passed while the same class of mistake kept
+  // costing round trips. These come from measuring the whole surface rather than from taste -
+  // `name` is on 34 tools, `nodeId` on 12, and connect_pins was the only tool of 126 spelling a
+  // node id `sourceNodeId`.
+  { odd: "functionName", common: "name" },
+  // connect_pins' source/target spelling is deliberately NOT here. This guard's argument is a
+  // majority one - "a model that has read the other eighteen will type the common word" - and
+  // source/target vs from/to is one tool against one tool, so there is no majority to appeal to.
+  // It got aliased in index.ts on the separate ground that twelve tools spell a node id `nodeId`
+  // and this was the only one that did not, but that is a claim this table cannot check, and an
+  // entry the guard has to be argued out of is worse than no entry.
 ];
 
 const problems = [];
@@ -51,11 +63,26 @@ if (tools.length < 50) {
   problems.push(`only ${tools.length} tool registrations parsed - this guard has drifted from src/index.ts`);
 }
 
-/** Tools declaring a given parameter at the top level of their inputSchema. */
+/**
+ * Tools declaring a given parameter at the top level of their inputSchema.
+ *
+ * "Top level" is now enforced rather than just claimed. The old pattern allowed any leading
+ * whitespace, so a field nested inside an array-of-objects counted as a parameter of the tool -
+ * and unreal_add_event_handler was reported for taking `functionName` when what it really has is
+ * an `actions: [{ function, functionName, className, params }]` array. Renaming a field inside
+ * that object to `name` would be actively worse: at the top level `name` means "the thing this
+ * tool acts on", and inside an action it could as easily mean the action's own name.
+ *
+ * A guard that argues for a wrong change is worse than one that stays quiet, and this one is built
+ * to be believed - it already refuses table entries whose majority claim it cannot verify.
+ *
+ * Top-level keys sit at exactly six spaces: `inputSchema: {` is indented four inside the
+ * register() options object, and its own keys one level further in.
+ */
 const declaring = (param) =>
   tools.filter((t) => {
     const schema = /inputSchema:\s*\{([\s\S]*?)\n    \},/.exec(t.body);
-    return schema ? new RegExp(`(^|\\s)${param}:\\s*z\\.`, "m").test(schema[1]) : false;
+    return schema ? new RegExp(`^ {6}${param}:\\s*z\\.`, "m").test(schema[1]) : false;
   });
 
 for (const { odd, common } of SYNONYMS) {
