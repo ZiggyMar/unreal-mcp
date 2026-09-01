@@ -31,6 +31,7 @@ written down next to the measurement that caused it.
 [The error on the screen that no tool could see](#the-error-on-the-screen-that-no-tool-could-see) ·
 ["I pressed the key and nothing happened"](#i-pressed-the-key-and-nothing-happened) ·
 [The replication bug that never says anything](#the-replication-bug-that-never-says-anything) ·
+[Measuring the choice instead of arguing about it](#measuring-the-choice-instead-of-arguing-about-it) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -194,10 +195,10 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2425 | five tools; hand it a sentence or a preset name |
+| `search` | 2471 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12990 | the authoring spine |
-| `lazy` | 13251 | `core` plus deferred groups |
+| `lazy` | 13297 | `core` plus deferred groups |
 | `full` | 42335 | everything, for a model that can afford it |
 <!-- costs:end -->
 
@@ -6935,3 +6936,37 @@ terse discovery, schemas on demand — is the same conclusion reached here indep
 plugin, [monolith](https://github.com/tumourlove/monolith), advertises "unbalanced-handler audits" in
 a network namespace. That phrase was the whole contribution: this project had checks for a server
 writing an unreplicated variable, and none for a handler that exists and does nothing.
+
+## Measuring the choice instead of arguing about it
+
+`unreal_enable_tools` and `unreal_call_tool` are two ways to reach the same tool, and the guidance
+for choosing between them was a rule of thumb: one or two uses, dispatch; more, enable. Reasonable,
+and unmeasured.
+
+So the three flagship journeys — a bug, a feature and a change, each run from the sentence a person
+would type — were run **both ways**, and `npm run trial:workflows --dispatch` keeps that honest.
+
+| | enable | dispatch |
+|---|---:|---:|
+| calls | 14 | **11** |
+| reply tokens | 4,371 | **3,692** |
+| tool-list changes | 1 | **0** |
+| standing context afterwards | **17,302** | **1,458** |
+
+All three journeys pass either way — a bug, a feature and a change each got from a sentence to the
+right tool. Dispatching costs three fewer calls, ~680 fewer reply tokens, and leaves standing context
+**~15,800 tokens lower on every request for the rest of the session**, with no cache invalidation.
+
+That is a bigger number than anything else in this document, and it was invisible while only
+standing context was being measured. The enables were counted as three cheap calls; what they
+actually bought was a permanent 15,800-token surcharge.
+
+### What this does not say
+
+Dispatching is not free and is not always right. It hands the model no typed schema, so a job that
+needs the parameter list in front of it to sequence correctly should enable — and a tool about to be
+called many times is worth switching on once. `unreal_list_tools({ schema })` sits between the two:
+one tool's real schema, as a reply, with no tool-list change.
+
+The measured comparison now sits in `unreal_call_tool`'s own description, because a rule of thumb a
+model reads is worth more than a number in a document it does not.

@@ -5587,7 +5587,9 @@ register(
       "Runs any tool by name and returns its result, without adding it to the tool list. " +
       "unreal_enable_tools changes that list, which re-reads the whole conversation at full price on the next " +
       "turn - a bargain for a tool you use ten times, the most expensive way to make one call.\n\n" +
-      "**One or two uses, call_tool. More than that, or you need the schema in front of you, enable_tools.**\n\n" +
+      "**Measured, three real journeys both ways: dispatching took 11 calls and left standing context at " +
+      "1,458 tokens; enabling took 14 and left it at 17,302 tokens, paid on every later request. Same outcomes.** " +
+      "Prefer this unless you need the schema visible, or will call one tool many times.\n\n" +
       "Arguments come from unreal_list_tools({ schema: \"unreal_save_asset\" }) and are checked against the " +
       "identical schema the tool itself uses, so nothing is looser here.",
     inputSchema: {

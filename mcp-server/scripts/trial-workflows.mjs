@@ -45,7 +45,33 @@ const measureStanding = async () => {
   return Math.round(JSON.stringify(listed?.result?.tools ?? []).length / 4);
 };
 
+/**
+ * --dispatch: run the same journeys through unreal_call_tool instead of switching tools on.
+ *
+ * The point is to put a number on the choice rather than argue about it. Enabling hands the model
+ * real typed schemas and costs a tool-list change; dispatching costs nothing standing and gives the
+ * model no schema. Both are defensible, and which is cheaper depends on how many times a tool gets
+ * used - so the honest thing is to measure the same three journeys both ways.
+ */
+const DISPATCH = process.argv.includes("--dispatch");
+
 const call = async (name, args) => {
+  // In dispatch mode the enables are skipped entirely: nothing needs switching on, because
+  // unreal_call_tool reaches any registered tool.
+  if (DISPATCH && name === "unreal_enable_tools") {
+    return { newlyEnabled: [], skippedInDispatchMode: true };
+  }
+  if (DISPATCH && name !== "unreal_call_tool" && name.startsWith("unreal_")) {
+    const wrapped = await server.request("tools/call", {
+      name: "unreal_call_tool",
+      arguments: { tool: name, args: args ?? {} },
+    });
+    const body = (wrapped.result ?? wrapped).content[0].text;
+    calls += 1;
+    tokens += Math.round(body.length / 4);
+    if ((wrapped.result ?? wrapped).isError) throw new Error(body.slice(0, 200));
+    return JSON.parse(body);
+  }
   const reply = await server.request("tools/call", { name, arguments: args });
   const body = (reply.result ?? reply).content[0].text;
   calls += 1;
@@ -246,6 +272,9 @@ try {
   // sweep and the teardown - so the headline moved with how much residue happened to be lying around,
   // which is the opposite of a number you can compare between runs.
   console.log(`all three journeys: ${journeyTotals.calls} calls, ~${journeyTotals.tokens} tokens of replies`);
+  console.log(
+    `mode: ${DISPATCH ? "dispatch (unreal_call_tool, nothing switched on)" : "enable (real typed schemas)"}`
+  );
   console.log(
     `tool-list changes: ${listChanges}` +
       (listChanges > 0

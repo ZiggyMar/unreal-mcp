@@ -60,6 +60,16 @@ const CLAIMS = [
     what: "list_tools, in the enable_tools description",
     verifiedBy: "not watched live - re-measured by hand 2026-08-31, 551 against \"about 540\"",
   },
+  {
+    figure: "1,458",
+    what: "standing context after three journeys run through call_tool, in the call_tool description",
+    verifiedBy: "trial:workflows --dispatch (prints standing and tool-list changes)",
+  },
+  {
+    figure: "17,302",
+    what: "standing context after the same three journeys run by enabling groups, in the call_tool description",
+    verifiedBy: "trial:workflows (prints standing after enables); measured 2026-09-01",
+  },
 ];
 
 const problems = [];
