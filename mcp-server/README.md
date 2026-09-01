@@ -8040,3 +8040,38 @@ Worth stating plainly, because it is easy to overstate in the other direction: t
 before the system prompt and the messages, so with prompt caching it is paid at full price **once**
 and read cheaply afterwards. It is not re-charged per turn. What re-charges it is *changing* the tool
 list, which is the whole reason `unreal_call_tool` exists and `unreal_enable_tools` is expensive.
+
+### Fixing the same four lines twice is how they got wrong in the first place
+
+Catching tool refusals meant editing `step()` in `trial-diagnose` and again in `trial-runtime`, and
+the two copies were near-identical before and after. That is the duplication this repository
+complains about everywhere else, committed while fixing a bug caused by it.
+
+`scripts/lib/trialStep.mjs` now holds it. A caller still owns the **check** — whether a reply says
+the thing the trial claims, which should differ per trial — and no longer owns deciding whether a
+reply happened at all. `trial-runtime`'s one genuine difference survives as a hook: a bridge command
+the installed plugin has never heard of is an environment that has not caught up, not a broken claim,
+so it downgrades to a warning instead of a failure.
+
+Both trials produce byte-identical output after the change, which is the only evidence a refactor of
+a test harness is worth anything.
+
+### What the replication trial was always meant to print
+
+With its refused steps repaired, `trial-runtime` runs both halves for the first time:
+
+```
+unreplicated   Authority  62 -> 376   changed=true
+               Client       0 -> 0     changed=false      <- the bug, observed
+replicated     Authority  67 -> 390   changed=true
+               Client       0 -> 390   changed=true       <- the fix, observed
+```
+
+Its closing line reported only the first of those. That was accurate for as long as the trial could
+not do the second — `bReplicates` was never set, because the call that sets it had been refused since
+the step was written — so the summary described what the trial actually managed rather than what it
+claimed in its own header. It says both now.
+
+Worth separating the two failures, because they are different sizes. Missing the fix half is a bug in
+a test. Announcing a conclusion the run did not reach is the thing this repo keeps having to correct
+in itself, and it is the one that costs a reader their trust in every other line beside it.

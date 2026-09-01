@@ -23,6 +23,7 @@
 // whether it finishes. If a tool is missing, this fails on the step that needed it.
 
 import { startAndInitialize } from "./lib/mcpStdio.mjs";
+import { createStepper } from "./lib/trialStep.mjs";
 
 const NL = String.fromCharCode(10);
 const PKG = "/Game/__MCPDiagnoseTrial/BP_DiagnoseTrial";
@@ -55,43 +56,9 @@ if (byPreset) {
   console.log(`diagnose preset + 2 harness tools: ${await size()} tokens standing (search baseline ${before}); core would be 11666`);
   console.log("");
 }
-const stalls = [];
-let calls = 0;
-let tokens = 0;
-
-async function step(label, name, args, check) {
-  calls++;
-  const r = await server.request("tools/call", { name, arguments: args });
-  const text = ((r.result && r.result.content) || []).map((c) => c.text || "").join("") || JSON.stringify(r.error || {});
-  tokens += Math.round(text.length / 4);
-  let parsed = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    /* not every reply is JSON */
-  }
-  // A tool that REFUSED did not answer, whatever its own check thinks.
-  //
-  // This used to test `r.error` only, which is the JSON-RPC transport error - a tool-level refusal
-  // arrives as `result.isError` with the reason as ordinary text content. So a step whose check was
-  // "did anything come back" passed on the refusal, because a refusal is words.
-  //
-  // It was not hypothetical. "find orphans project-wide" called unreal_find_orphans with `{}`, which
-  // the schema rejects for missing `of` and `pairedWith`, and this trial reported the whole loop
-  // green - "the defect was planted, found, fixed, and the fix was proved" - with one of the finding
-  // steps having never run. It even costed the error message at 89 tokens.
-  const refused = r.result?.isError === true;
-  const problem = r.error
-    ? "JSON-RPC error"
-    : refused
-      ? "the tool refused the call"
-      : check
-        ? check(text, parsed)
-        : null;
-  if (problem) stalls.push({ label, problem, reply: text.slice(0, 240).split(NL).join(" ") });
-  console.log(`  ${label.padEnd(38)} ${String(Math.round(text.length / 4)).padStart(5)} tok${problem ? "   <-- STALL" : ""}`);
-  return { text, parsed };
-}
+// The step helper lives in lib/trialStep.mjs, because the last bug in it was in two copies of this
+// function that agreed on everything except whether a tool refusal counts as an answer.
+const { step, stalls, counters } = createStepper(server, { pad: 38 });
 
 // ---------------------------------------------------------------------------------------------
 // Plant the defect: a graph with a node wired to nothing.
@@ -218,7 +185,7 @@ await step("clean up the trial asset", "unreal_delete_asset", { paths: [PATH], f
   (t, j) => (j && j.deleted >= 1 ? null : "the trial Blueprint is still in the project"));
 
 console.log("");
-console.log(`${calls} calls, ~${tokens} tokens`);
+console.log(`${counters.calls} calls, ~${counters.tokens} tokens`);
 
 if (stalls.length > 0) {
   console.error(`${NL}${stalls.length} step(s) did not do their job:`);

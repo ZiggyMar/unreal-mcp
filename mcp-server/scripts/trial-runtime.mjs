@@ -27,6 +27,7 @@
 // Usage: node scripts/trial-runtime.mjs
 
 import { startAndInitialize } from "./lib/mcpStdio.mjs";
+import { createStepper } from "./lib/trialStep.mjs";
 
 const NL = String.fromCharCode(10);
 
@@ -67,61 +68,21 @@ const LABEL = `MCPRuntimeSpawner_${RUN}`;
 
 const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "trial-runtime");
 
-let calls = 0;
-const stalls = [];
-/** Things that did not work but are not this trial's claim. Reported, never silent, never fatal. */
-const warnings = [];
 /** Bridge commands this server sends that the installed plugin does not have. */
 const unavailable = [];
 
-async function step(label, name, args, check) {
-  calls++;
-  const r = await server.request("tools/call", { name, arguments: args });
-  const text = ((r.result && r.result.content) || []).map((c) => c.text || "").join("") || JSON.stringify(r.error || {});
-  let parsed = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    /* not every reply is JSON */
-  }
-  // A command the plugin has never heard of is not a failure of what this trial tests.
-  //
-  // Seven bridge commands currently exist in this server and not in the installed plugin binary,
-  // watch_runtime among them, so this trial reported four stalls that were all "the plugin is older
-  // than the server". A trial that fails for an environmental reason is indistinguishable from one
-  // that found a bug, and after a few runs you learn to ignore it - at which point it has stopped
-  // protecting anything.
-  //
-  // The `warnings` channel already existed for exactly this: things that did not work and are not
-  // this trial's claim.
-  const missing = /unknown_cmd:\s*([a-z0-9_]+)/i.exec(text);
-  if (missing) {
+// The step helper lives in lib/trialStep.mjs. The `downgrade` hook is what this trial needs that the
+// others do not: a command the plugin has never heard of is an environment that has not caught up,
+// not a broken claim, and reporting it as a failure is how a guard gets ignored.
+const { step, stalls, warnings, counters } = createStepper(server, {
+  pad: 42,
+  downgrade: (text) => {
+    const missing = /unknown_cmd:\s*([a-z0-9_]+)/i.exec(text);
+    if (!missing) return null;
     if (!unavailable.includes(missing[1])) unavailable.push(missing[1]);
-    warnings.push(`${label}: the plugin has never heard of "${missing[1]}", so this step could not run`);
-    console.log(`  ${label.padEnd(42)} ${String(Math.round(text.length / 4)).padStart(5)} tok   <-- cannot run yet`);
-    return { text, parsed, unavailable: true };
-  }
-
-  // A tool that REFUSED did not answer, whatever its own check thinks.
-  //
-  // The same hole trial-diagnose had: `r.error` is the JSON-RPC transport error, while a tool-level
-  // refusal arrives as `result.isError` with the reason as ordinary text. A step whose check is "did
-  // something come back" passes on a refusal, because a refusal is words. There it hid a step
-  // calling unreal_find_orphans with arguments the schema rejects - it had never run once.
-  //
-  // Checked AFTER the unknown_cmd branch above, which downgrades a missing plugin command to a
-  // warning on purpose: that is an environment that has not caught up, not a broken claim.
-  const problem = r.error
-    ? `JSON-RPC error: ${JSON.stringify(r.error).slice(0, 160)}`
-    : r.result?.isError === true
-      ? "the tool refused the call"
-      : check
-        ? check(text, parsed)
-        : null;
-  if (problem) stalls.push({ label, problem, reply: text.slice(0, 300).split(NL).join(" ") });
-  console.log(`  ${label.padEnd(42)} ${String(Math.round(text.length / 4)).padStart(5)} tok${problem ? "   <-- STALL" : ""}`);
-  return { text, parsed };
-}
+    return `the plugin has never heard of "${missing[1]}", so this step could not run`;
+  },
+});
 
 /**
  * Let real time pass.
@@ -421,7 +382,7 @@ console.log(NL + "cleaning up");
 await step("take the actor back out of the level", "unreal_delete_actor", { actor: LABEL });
 await step("delete the trial asset", "unreal_delete_asset", { path: PATH, force: true });
 
-console.log(NL + `${calls} calls`);
+console.log(NL + `${counters.calls} calls`);
 
 // Said before the verdict, because it changes how the verdict should be read.
 if (unavailable.length > 0) {
@@ -452,8 +413,10 @@ console.log(
       ? "runtime trial: nothing failed, but it could not test its claim - see CANNOT FULLY RUN above. " +
         "Exiting non-zero on purpose: a green tick here would be a pass nobody earned, and this trial " +
         "exists precisely because reasoning about replication is not the same as watching it."
-      : "runtime trial ok: two worlds ran, both were sampled, and the server's counter moved while " +
-        "the client's did not - the replication bug, observed on a running game.")
+      : "runtime trial ok: two worlds ran and both were sampled, twice. Unreplicated, the server's " +
+        "counter moved and the client's stayed at zero - the bug, observed. Replicated, the client " +
+        "followed the server - the fix, observed. The second half is the one nothing else here can " +
+        "do, and this line claimed only the first until the steps that set bReplicates began running.")
 );
 // Non-zero when the claim could not be tested. It is not a failure of the tools and the message says
 // so, but it is not a pass either, and the two must not share an exit code - a trial that returns 0
