@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12987 | the authoring spine |
 | `lazy` | 13295 | `core` plus deferred groups |
-| `full` | 44766 | everything, for a model that can afford it |
+| `full` | 45235 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -261,6 +261,7 @@ scrutiny.
 | `unreal_get_project_overview` | `get_project_overview` | Cheap top-level summary: counts + folder/parent-class breakdowns. **Call this first** to orient yourself. |
 | `unreal_search_project` | `search_project` | Keyword/substring search across blueprint/function/variable/class names, via a persistent index, not a live rescan. |
 | `unreal_find_references` | `find_references` | What references an asset, and what it depends on, via the AssetRegistry dependency graph. The direct answer to "what uses this Blueprint." |
+| `unreal_document_asset` | *composite* | Everything connected to one asset in one call: ancestry, interfaces, components, replicated variables, event-graph entry points with where each RUNS, and both directions of reference. |
 
 These exist to solve the actual problem this whole project is for: finding things across
 a large project without enumerating everything every time, and without losing track of
@@ -9027,3 +9028,63 @@ change was never saved, and an editor restart mid-test confirmed that - the para
 its own.
 
 `search` stands at **2,471 tokens**, unchanged, for the seventh tool in a row.
+
+### "Tell me everything about BP_Player"
+
+A real request, in the words it arrived in: *"take BP_Player and make me a full document of every
+feature that's connected to BP_Player."*
+
+Every part of that answer was already reachable and nothing returned it. By hand it is six calls,
+and the six calls are not the problem - the problem is having to remember all six. This project's
+own history is the evidence that does not happen: `search_project` was called for a variable,
+answered with its declaration, and `unreal_trace_variable`, which had the whole answer in 89 tokens,
+went unused for ten more calls because nothing named it.
+
+`unreal_document_asset` decides once what "connected to" means and always returns that. Four kinds,
+ordered by how much each constrains a change:
+
+| | |
+|---|---|
+| **inherits** | the ancestry, and the interfaces it promises to implement |
+| **owns** | its components and variables, and which of those cross the network |
+| **does** | its graphs, each entry point with where it RUNS |
+| **reaches** | what it references, and what references it |
+
+The last is the one people mean by "connected", and the one hand-assembly usually misses. On the
+real BP_Player - 819 nodes, 86 variables, 18 components:
+
+```
+BP_Player (a BP_BaseCharacter_C)
+  inherits: BP_Player_C <- BP_BaseCharacter_C <- Character <- Pawn <- Actor <- Object
+  components (18): SpringArm [SpringArmComponent], Camera [CameraComponent], ...
+  variables: 86, of which 15 cross the network
+  replicated: MaxHealth (real), DataHeld (real), VacuumChargePercent (real), ...
+  EventGraph - 819 nodes:
+    StartVaccum [server] -> Branch (Get isAlive) -> Can Aim -> ...
+    KillPlayerMC [multicast] -> Set isAlive -> Set isDead -> ...
+  used by (40): PC_Gameplay, GM_Gameplay, BP_FireWall, C_Vacuumable, BP_BaseEnemy, ...
+    - a change here is felt by every one of those.
+  note: referencedBy truncated to 40 of 48; raise maxReferences to see the rest.
+```
+
+The `[server]` and `[multicast]` tags are the same `runsOn` the graph readers were taught to carry
+two commits earlier. That is the argument for fixing a field rather than a caller: it was added for
+one diagnosis and it turns up here, in a tool written afterwards, with nobody connecting them.
+
+**What it actually saves, measured rather than claimed:**
+
+| | calls | tokens |
+|---|---:|---:|
+| by hand (describe_class, list_components, list_variables, list_blueprint_graphs, explain_graph, find_references) | 6 | 8,131 |
+| `unreal_document_asset` | 1 | 7,649 |
+
+Six percent. The tokens in the reply are the answer, and an answer does not get cheaper by being
+asked for differently - so anyone claiming a large saving here would be claiming to have deleted
+some of it. The saving that matters is the other column: six sequential calls are six turns, and
+every turn re-reads the whole conversation, so the round trips cost far more than the reply does.
+What is worth more again is that the six are always all six.
+
+Three sizes, because the graphs are the expensive half: `graphDetail: "none"` is 3,011 tokens,
+`"entries"` (the default, event graphs only) 7,649, `"all"` 11,317. And every truncation says so -
+a list that quietly stops short reads as "this is all of them", which is the one thing a document
+must never get wrong.

@@ -46,6 +46,7 @@ import { PRESET_NAMES, presetTools } from "./toolPresets.js";
 import { compileNative } from "./nativeBuild.js";
 import { hotReloadCpp } from "./liveCoding.js";
 import { comparePluginSource, outOfSyncNote } from "./pluginSourceSync.js";
+import { documentAsset } from "./documentAsset.js";
 import { describeConsoleResult } from "./consoleCommand.js";
 import { callParentFirst } from "./parentCall.js";
 import { capGraphSummary } from "./graphSummary.js";
@@ -662,7 +663,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
+  maintenance: ["unreal_document_asset", "unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -6772,6 +6773,46 @@ register(
     try {
       const result = await bridge.send("list_material_parameters", { path });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_document_asset",
+  {
+    title: "Document one asset and everything connected to it",
+    description:
+      "**The answer to \"tell me everything about X\" and \"what would break if I changed X\".** One call returns " +
+      "what a Blueprint inherits, what it owns, what it does, and what it reaches: ancestry and interfaces, " +
+      "components, variables with which of them replicate, each event graph's entry points with where each one RUNS " +
+      "(server / multicast / owning client), and both directions of reference - what uses it, and what it uses.\n\n" +
+      "Assembling this by hand is eight calls (describe_class, list_components, list_variables, " +
+      "list_blueprint_graphs, read_blueprint_summary, explain_graph, find_references), and the cost is not the " +
+      "point - the point is that all eight have to be remembered. This returns the same structure every time, so " +
+      "nothing is dropped because it did not occur to anyone to ask.\n\n" +
+      "Use unreal_map_system instead when you have a CONCEPT and no asset (\"the health system\"); use this when you " +
+      "have the asset. They pair: map_system finds the pieces, this documents one of them.",
+    inputSchema: {
+      path: z.string().describe('The asset, e.g. "/Game/Characters/BP_Player". Both /Game/X and /Game/X.X work.'),
+      graphDetail: z
+        .enum(["none", "entries", "all"])
+        .optional()
+        .describe(
+          'How much graph to expand. "entries" (default) explains the event graphs and names the rest - an event ' +
+            'graph is where behaviour is triggered from, so it is the map and the functions are the streets. "all" ' +
+            'explains every graph and is the expensive one on a large Blueprint. "none" just lists their names.'
+        ),
+      maxReferences: z
+        .number()
+        .optional()
+        .describe("Cap on each reference list. Defaults to 40. Truncation is always stated, never silent."),
+    },
+  },
+  async ({ path, graphDetail, maxReferences }) => {
+    try {
+      return jsonResult(await documentAsset(bridge, path, { graphDetail, maxReferences }));
     } catch (err) {
       return errorResult(err);
     }

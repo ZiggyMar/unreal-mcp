@@ -42,7 +42,7 @@ const aliases = new Map([
 // which is the point: it works while the editor is mid-crash, and it can read the session that
 // already happened - which is the situation somebody is in when they say "I pressed play and got
 // errors".
-const compositeTools = new Set(["call_tool", "verify_runtime", "read_runtime_errors", "auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature", "cleanup_blueprint", "add_event_handler", "scaffold_blueprint", "scaffold_widget", "explain_graph", "audit_project", "guard_with_authority", "list_tools", "guide", "find_source", "verify_feature", "check_data_tables", "find_in_data_tables", "find_orphans",
+const compositeTools = new Set(["document_asset", "call_tool", "verify_runtime", "read_runtime_errors", "auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature", "cleanup_blueprint", "add_event_handler", "scaffold_blueprint", "scaffold_widget", "explain_graph", "audit_project", "guard_with_authority", "list_tools", "guide", "find_source", "verify_feature", "check_data_tables", "find_in_data_tables", "find_orphans",
   // compile_cpp asks the bridge only where the engine and project are (ping) and then runs
   // UnrealBuildTool itself. It is deliberately NOT a bridge command: the compile must survive the
   // editor being busy, and a build that takes minutes has no business occupying the game thread.
