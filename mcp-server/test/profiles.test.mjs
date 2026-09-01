@@ -204,7 +204,17 @@ test("every tool is reachable: none is stranded outside core and every group", a
 
   const missing = full.filter((name) => !everythingOn.includes(name));
   assert.deepEqual(missing, [], `these tools are in no group and can never be enabled: ${missing.join(", ")}`);
-  assert.equal(everythingOn.length, full.length);
+
+  // `lazy` with every group on is a SUPERSET of `full`, not an equal, and the difference is
+  // deliberate: unreal_call_tool stands wherever tools are deferred and is switched off on `full`,
+  // where everything is already on and dispatching would be a hop for no gain. Asserting equality
+  // here would force the dispatcher onto a profile it does nothing for.
+  const extra = everythingOn.filter((name) => !full.includes(name));
+  assert.deepEqual(
+    extra.sort(),
+    ["unreal_call_tool"],
+    `lazy has tools full does not, and only the dispatcher is meant to: ${extra.join(", ")}`
+  );
   assert.ok(lazyStart.length < full.length);
 });
 
@@ -315,8 +325,9 @@ test("individual tools can be enabled by name, not only whole groups", async () 
   for (const name of wanted) {
     assert.ok(listed.includes(name), `${name} should be enabled by name`);
   }
-  // Four always-on plus the four asked for, and nothing else from their groups came along.
-  assert.equal(listed.length, 8, `expected only the named tools, got: ${listed.join(", ")}`);
+  // Five always-on - ping, doctor, list_tools, enable_tools and the call_tool dispatcher - plus the
+  // four asked for, and nothing else from their groups came along.
+  assert.equal(listed.length, 9, `expected only the named tools, got: ${listed.join(", ")}`);
   assert.ok(!listed.includes("unreal_spawn_actor"), "asking for one scene tool must not enable the whole scene group");
 });
 

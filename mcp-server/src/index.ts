@@ -46,6 +46,7 @@ import { hotReloadCpp } from "./liveCoding.js";
 import { describeConsoleResult } from "./consoleCommand.js";
 import { callParentFirst } from "./parentCall.js";
 import { capGraphSummary } from "./graphSummary.js";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import type {
   AddNodeResult,
   AddVariableResult,
@@ -723,6 +724,16 @@ const SEARCH_PROFILE_TOOLS = new Set([
   "unreal_enable_tools",
 ]);
 
+/**
+ * Tools that only earn their keep where OTHER tools are deferred.
+ *
+ * unreal_call_tool exists to run something without switching it on. On `full` everything is already
+ * on, and on `core` and `minimal` the only tools it could reach are the ones already registered and
+ * enabled, so in all three it is an extra hop and an extra schema for no gain. It stands on `lazy`
+ * and `search`, which are the profiles that defer anything.
+ */
+const DEFERRAL_TOOLS = new Set(["unreal_call_tool"]);
+
 // PROFILE is resolved above, next to the server it configures.
 
 // How much to spend per build. The floor never moves: every mode still builds atomically, lays the
@@ -758,6 +769,28 @@ const GROUP_OF_TOOL = new Map<string, string>(
 /** name -> what unreal_list_tools says about it, captured at registration so it cannot drift. */
 const toolCatalog = new Map<string, { title: string; summary: string; group: string }>();
 const toolHandles = new Map<string, { enable(): void; disable(): void; enabled: boolean }>();
+
+/**
+ * name -> the handler and its parameter shape, so a tool can be CALLED without being ENABLED.
+ *
+ * Enabling a tool changes the advertised tool list. That list is the first thing in the request,
+ * ahead of the system prompt and every message, so changing it invalidates the prompt cache for the
+ * whole conversation - the entire history is re-read at full price on the next turn. Every
+ * measurement in this file counted standing tokens and none of them counted that, which made
+ * `enable_tools` look free when it is the most expensive call the server offers.
+ *
+ * It is still the right call for a tool used repeatedly: one invalidation, then a typed schema the
+ * model can see for the rest of the session. It is the wrong call for a tool used once. This map is
+ * the other path - unreal_call_tool dispatches straight to the handler, the tool list never moves,
+ * and the cache survives.
+ *
+ * Registration, not enablement, is the permission boundary: `core` and `minimal` never register the
+ * tools they exclude, so those stay unreachable here too and the profiles keep their promise.
+ */
+const toolImpls = new Map<
+  string,
+  { handler: (args: never, extra: never) => Promise<unknown>; shape: Record<string, unknown> }
+>();
 
 /**
  * registerTool, gated by the active profile.
@@ -888,6 +921,14 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
   }
   const handle = server.registerTool(name, config, guarded);
   toolHandles.set(name, handle as unknown as { enable(): void; disable(): void; enabled: boolean });
+  // The same handler the SDK will call, kept where unreal_call_tool can reach it. Captured AFTER the
+  // strict-schema swap above so the dispatcher validates against exactly the schema the tool
+  // advertises - two ways to call one tool that disagree about its arguments is the defect class
+  // this project keeps finding, and it is not going to be introduced deliberately here.
+  {
+    const cfg = config as unknown as { inputSchema?: Record<string, unknown> };
+    toolImpls.set(name, { handler: guarded as never, shape: cfg.inputSchema ?? {} });
+  }
   return handle;
 }) as typeof server.registerTool;
 
@@ -4990,9 +5031,55 @@ register(
         .boolean()
         .optional()
         .describe("Every tool at once (~5.5k tokens). Without a filter you get a group census instead, which is cheaper and usually enough."),
+      schema: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe(
+          'Tool name(s) to get the FULL parameter schema for, e.g. "unreal_save_asset". Returned as a reply, ' +
+            "not as a definition, so the tool list does not change. Pair with unreal_call_tool."
+        ),
     },
   },
-  async ({ match, group, all }) => {
+  async ({ match, group, all, schema }) => {
+    // The full schema for a named tool, without switching it on.
+    //
+    // Until this existed the only way to see a tool's parameters was to enable it, which changes the
+    // tool list and re-reads the whole conversation at full price. So "what arguments does this
+    // take" - the cheapest question in the catalogue - was priced like a commitment. It is a reply
+    // now, which is what it always should have been.
+    if (schema !== undefined) {
+      const wantedNames = Array.isArray(schema) ? schema : [schema];
+      const found: Record<string, unknown> = {};
+      const missing: string[] = [];
+      for (const name of wantedNames) {
+        const impl = toolImpls.get(name);
+        const meta = toolCatalog.get(name);
+        if (!impl || !meta) {
+          missing.push(name);
+          continue;
+        }
+        found[name] = {
+          title: meta.title,
+          group: meta.group,
+          on: toolHandles.get(name)?.enabled ?? false,
+          // The advertised JSON Schema, derived from the same zod object the tool validates with,
+          // so what is read here and what is enforced there cannot drift apart.
+          parameters: zodToJsonSchema(impl.shape as never),
+        };
+      }
+      return jsonResult({
+        tools: found,
+        ...(missing.length > 0
+          ? { unknown: missing, unknownNote: "No tool by that name. Call unreal_list_tools with `match` to find it." }
+          : {}),
+        note:
+          Object.keys(found).length > 0
+            ? "Call these with unreal_call_tool({ tool, args }) - no tool-list change, so the cache survives. " +
+              "Switch them on with unreal_enable_tools only if you will use them repeatedly."
+            : "Nothing matched.",
+      });
+    }
+
     const needle = (match ?? "").trim().toLowerCase();
     const wanted = (group ?? "").trim().toLowerCase();
 
@@ -5111,7 +5198,8 @@ register(
                 ` This is a keyword match on the words listed in matchedSymptomWords, not an ` +
                 `understanding of the sentence - check the suggestions against what you actually want.` +
                 (groupsFor.length > 0
-                  ? ` unreal_enable_tools({ groups: ${JSON.stringify(groupsFor)} }) turns them on.`
+                  ? ` unreal_enable_tools({ groups: ${JSON.stringify(groupsFor)} }) turns them on, or ` +
+                    `unreal_call_tool({ tool, args }) runs one without turning anything on.`
                   : ""),
             }
           : {
@@ -5132,7 +5220,9 @@ register(
       groupsNotYetOn: off,
       next:
         off.length > 0
-          ? `Call unreal_enable_tools with ${JSON.stringify(off)} to get the real schemas for the tools above that are off.`
+          ? `Using one of these once? unreal_call_tool({ tool, args }) runs it now without changing the tool ` +
+            `list. Using it repeatedly, or need to see its parameters first? unreal_enable_tools with ` +
+            `${JSON.stringify(off)} for the real schemas, or unreal_list_tools({ schema: "<name>" }) for one.`
           : "Every matching tool is already enabled; call it directly.",
     });
   }
@@ -5239,6 +5329,93 @@ register(
           ? "These tools are now available. Your client has been notified that the tool list changed."
           : "Nothing new to enable.",
     });
+  }
+);
+
+/**
+ * Calling a tool without switching it on.
+ *
+ * Epic's own MCP plugin ships exactly this shape - list_toolsets, describe_toolset, call_tool - and
+ * reading their docs is what exposed the hole here. This server had the listing and the enabling
+ * and no way to just USE something, so every one-off tool call cost a tool-list change, and a
+ * tool-list change costs the whole prompt cache. That is the opposite of the goal.
+ *
+ * The two paths are not redundant and neither replaces the other:
+ *
+ *   enable_tools  - one cache invalidation, then the schema is visible for the rest of the session.
+ *                   Right for a tool used repeatedly, and right when the model needs the schema in
+ *                   front of it to sequence a job correctly.
+ *   call_tool     - no tool-list change at all, so the cache survives. Right for the long tail: the
+ *                   single save, the one compile, the status check at the end of a job in a group
+ *                   nothing else needs.
+ *
+ * The trap to avoid is a dispatcher that guesses. It validates against the SAME strict schema the
+ * tool advertises, so a bad argument is refused here exactly as it would be if the tool were on -
+ * two ways to call one thing that disagree about its arguments is the defect class this project
+ * keeps finding, and it will not be introduced on purpose.
+ */
+register(
+  "unreal_call_tool",
+  {
+    title: "Call a tool once, without switching it on",
+    description:
+      "Runs any tool by name and returns its result, without adding it to the tool list. " +
+      "unreal_enable_tools changes that list, which re-reads the whole conversation at full price on the next " +
+      "turn - a bargain for a tool you use ten times, the most expensive way to make one call.\n\n" +
+      "**One or two uses, call_tool. More than that, or you need the schema in front of you, enable_tools.**\n\n" +
+      "Arguments come from unreal_list_tools({ schema: \"unreal_save_asset\" }) and are checked against the " +
+      "identical schema the tool itself uses, so nothing is looser here.",
+    inputSchema: {
+      tool: z.string().describe('Exact tool name, e.g. "unreal_save_asset".'),
+      args: z
+        .record(z.unknown())
+        .optional()
+        .describe("The tool's own arguments. Omit for a tool that takes none."),
+    },
+  },
+  async ({ tool, args }, extra) => {
+    // Dispatching to itself would recurse until the stack gives out, and there is no reading of
+    // that call which means anything useful.
+    if (tool === "unreal_call_tool") {
+      return errorResult(
+        new Error("bad_param: unreal_call_tool cannot call itself. Name the tool you actually want to run.")
+      );
+    }
+
+    const impl = toolImpls.get(tool);
+    if (!impl) {
+      // A near-miss is far more likely than a genuinely unknown tool, and the caller who guessed
+      // a half-remembered name wants the tool it is one word away from, rather than a lecture about the catalogue.
+      const needle = tool.toLowerCase().replace(/^unreal_/, "");
+      const near = [...toolImpls.keys()]
+        .filter((name) => name.includes(needle) || needle.includes(name.replace(/^unreal_/, "")))
+        .slice(0, 5);
+      return errorResult(
+        new Error(
+          `unknown_tool: no tool named "${tool}"${near.length > 0 ? `. Did you mean: ${near.join(", ")}?` : ""}` +
+            (near.length > 0 ? "" : ". Call unreal_list_tools to see the exact names.") +
+            (PROFILE === "core" || PROFILE === "minimal"
+              ? ` This is the "${PROFILE}" profile, which does not carry every tool - the fuller profiles do.`
+              : "")
+        )
+      );
+    }
+
+    // The tool's own schema, not a looser copy. `shape` is whatever register() ended up advertising,
+    // which for every tool here is the strict object built by strictSchema - so an unknown key or a
+    // missing required one produces the same guidance it would through the normal path.
+    let parsed: unknown = args ?? {};
+    const schema = impl.shape as unknown as { parse?: (value: unknown) => unknown };
+    if (typeof schema.parse === "function") {
+      try {
+        parsed = schema.parse(args ?? {});
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        return errorResult(new Error(`bad_args for ${tool}: ${detail}`));
+      }
+    }
+
+    return (await impl.handler(parsed as never, extra as never)) as never;
   }
 );
 
@@ -6441,7 +6618,7 @@ async function main() {
   // The rest arrive when unreal_enable_tools asks for them.
   if (PROFILE === "lazy") {
     for (const [name, handle] of toolHandles) {
-      if (!CORE_PROFILE_TOOLS.has(name)) handle.disable();
+      if (!CORE_PROFILE_TOOLS.has(name) && !DEFERRAL_TOOLS.has(name)) handle.disable();
     }
   }
 
@@ -6450,8 +6627,14 @@ async function main() {
   // and one unreal_enable_tools call brings back whatever the job actually needs - fully typed.
   if (PROFILE === "search") {
     for (const [name, handle] of toolHandles) {
-      if (!SEARCH_PROFILE_TOOLS.has(name)) handle.disable();
+      if (!SEARCH_PROFILE_TOOLS.has(name) && !DEFERRAL_TOOLS.has(name)) handle.disable();
     }
+  }
+
+  // `full` switches everything on, so dispatching through unreal_call_tool would add a hop and its
+  // own schema to the one profile that already pays for every tool directly. Off.
+  if (PROFILE === "full") {
+    for (const name of DEFERRAL_TOOLS) toolHandles.get(name)?.disable();
   }
 
   // `--print-config` emits the exact JSON to paste into a client, with absolute paths already

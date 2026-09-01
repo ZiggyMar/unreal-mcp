@@ -24,6 +24,7 @@ written down next to the measurement that caused it.
 
 **Using it well**
 [Recommended agent workflow](#recommended-agent-workflow) · [What this costs today](#what-this-costs-today) ·
+[The cost nobody was measuring: switching a tool on](#the-cost-nobody-was-measuring-switching-a-tool-on) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -187,11 +188,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2014 | four tools; hand it a sentence or a preset name |
+| `search` | 2332 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4156 | ten tools, fixed, for a small local model |
-| `core` | 12853 | the authoring spine |
-| `lazy` | 12866 | `core` plus deferred groups |
-| `full` | 41478 | everything, for a model that can afford it |
+| `core` | 12923 | the authoring spine |
+| `lazy` | 13184 | `core` plus deferred groups |
+| `full` | 41549 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6568,3 +6569,67 @@ the server exposed 23, so levels, actors, components, class defaults, input mapp
 implemented, live-verified, documented, and **unreachable by any AI client**. Nothing failed
 loudly, because nothing was checking.
 
+
+
+## The cost nobody was measuring: switching a tool on
+
+Every token measurement in this project counted **standing context** - the bytes resent on each
+turn - and that is the number the profiles, the groups and the presets were all tuned against. It
+is a real number, and it was the wrong one to optimise alone.
+
+The advertised tool list is the first thing in a request, ahead of the system prompt and ahead of
+every message. `unreal_enable_tools` changes that list. Changing it invalidates the prompt cache
+for **the entire conversation**, so the next turn re-reads the whole history at full price instead
+of the cached rate. A tool switched on at turn thirty, in a session carrying 60k tokens of history,
+costs that re-read once - and the saving it was bought with is a few hundred cached tokens a turn.
+
+So the call this server presents as the cheap path is, for a tool used once, the single most
+expensive thing it offers. Nothing here measured that, because everything here measured the wrong
+axis.
+
+### What Epic does, and what we were missing
+
+Epic's own MCP plugin (UE 5.8, and extended to UEFN in August 2026) defaults to what their docs call
+tool-search mode: `tools/list` returns three meta-tools - `list_toolsets`, `describe_toolset` and
+`call_tool` - rather than every schema. The first of those we had. The other two we did not, and
+the third is the important one: **you call a tool through the dispatcher instead of switching it
+on**, so the tool list never moves and the cache survives.
+
+Reading their documentation is what exposed the hole. This is the one place a competing design was
+straightforwardly ahead, and the fix is to adopt it rather than argue with it.
+
+### Both paths, honestly priced
+
+`unreal_call_tool({ tool, args })` runs any registered tool and returns its result with no
+tool-list change. `unreal_list_tools({ schema: "unreal_save_asset" })` returns that tool's full
+parameter schema **as a reply rather than as a definition** - the same information, derived from
+the same zod object the tool validates against, with no tool-list change either. Until it existed,
+"what arguments does this take" - the cheapest question in the catalogue - could only be answered by
+enabling the tool, which priced a question like a commitment.
+
+Neither path replaces the other, and the tools say so:
+
+| | `unreal_enable_tools` | `unreal_call_tool` |
+|---|---|---|
+| Tool list changes | yes, once | never |
+| Prompt cache | invalidated | survives |
+| Schema visible afterwards | yes | no - fetch it with `list_tools({schema})` |
+| Right for | a tool used repeatedly, or one whose schema you need in front of you to sequence the job | the long tail: one save, one compile, one status check |
+
+The rule of thumb is in the tool description: one or two uses, dispatch; three or more, enable.
+
+### Where it stands, and where it does not
+
+`unreal_call_tool` is registered on `lazy` and `search` and switched off everywhere else, because
+those are the only profiles that defer anything. On `full` every tool is already on, and on `core`
+and `minimal` the only tools the dispatcher could reach are the ones already registered and enabled;
+in all three it would be an extra hop and an extra schema for no gain.
+
+Registration, not enablement, stays the permission boundary. `core` and `minimal` never register the
+tools they exclude, so the dispatcher cannot reach them either and those profiles keep their promise.
+A dispatcher that quietly reached everything would have turned a documented tool budget into a
+suggestion.
+
+Arguments are validated against the identical strict schema the tool advertises, captured after the
+`strictSchema` swap in `register`. Two ways to call one tool that disagree about its arguments is
+the defect class this project keeps finding; it is not going to be introduced deliberately.

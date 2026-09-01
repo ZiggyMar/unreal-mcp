@@ -69,8 +69,24 @@ export const PROFILES = [
   },
   {
     name: "lazy",
-    // The recommended default, and the one the 5/5 local-model result was measured with.
-    ceilingTokens: 13_000,
+    // Raised from 13,000 to 13,400 for unreal_call_tool, with the benchmark re-run rather than
+    // argued about.
+    //
+    // This ceiling protects a quality result, not a cost result: `lazy` is the recommended default
+    // and a weaker model has to hold all of it before it can work, so the worry about adding a tool
+    // is that tool selection degrades. unreal_call_tool costs ~294 tokens standing here and pays for
+    // itself by removing the need to change the tool list at all - and a tool-list change invalidates
+    // the prompt cache for the whole conversation, which is a far larger bill than 294 tokens a turn.
+    //
+    // Measured on qwen2.5-coder:7b at 13,184 standing, with the dispatcher present:
+    //   task `health` 1/1 pass, task `graph` 3/3 pass (PPP)
+    //   0 malformed args, 0 invented tools, 0 errored calls across all four runs
+    // The model never reached for the dispatcher, which is the wanted behaviour: it is there for
+    // the long tail, not for the common path.
+    //
+    // Re-run before raising this again: node scripts/bench-local-model.mjs --model qwen2.5-coder:7b
+    //   --task graph --runs 3
+    ceilingTokens: 13_400,
     why: "the recommended default; the local-model benchmark result is measured with this",
   },
   {
