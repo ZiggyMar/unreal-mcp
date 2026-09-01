@@ -4651,7 +4651,11 @@ register(
       "unreal_add_variable, containers included.\n\n" +
       "A retype BREAKS connections that no longer typecheck, and the engine reports those from the compiler " +
       "rather than from this call, so it compiles for you and returns what the compiler said. Inherited variables " +
-      "are refused: retype them where they are declared.",
+      "are refused: retype them where they are declared.\n\n" +
+      "SLOW, and occasionally worse, on a variable a FUNCTION SIGNATURE uses. Retyping one that a function takes " +
+      "as a parameter made an editor stop answering entirely - every later call timed out, including ping - and it " +
+      "had to be closed and reopened. Nothing was lost, because nothing had been saved. Save first, expect this " +
+      "one to take a while, and if the bridge goes quiet afterwards that is what happened.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       variableName: z.string().describe("The variable to retype. Must be declared on this Blueprint, not inherited."),
