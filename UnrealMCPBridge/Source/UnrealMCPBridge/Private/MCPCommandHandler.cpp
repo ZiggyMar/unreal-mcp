@@ -3192,6 +3192,7 @@ static void MCPSampleWatches()
 			int32 Found = 0;
 			FString Value;
 			TArray<FString> DistinctThisPass;
+			TArray<FString> LabelledThisPass;
 			for (TActorIterator<AActor> It(World); It; ++It)
 			{
 				AActor* Actor = *It;
@@ -3218,9 +3219,20 @@ static void MCPSampleWatches()
 				// that still holds: identical values collapse to one, exactly as before. Only actual
 				// disagreement widens the reply - and disagreement between actors is the whole point of
 				// watching a replicated value.
+				//
+				// Named, too. "2 actors differ: Bunny | None" says a replication bug exists and not where -
+				// and WHICH actor holds the wrong value is the entire question. Is the empty one the local
+				// pawn, the remote player's copy, or an unpossessed leftover in the level? Chasing exactly
+				// that cost several rounds of guessing, because the name is what lets a caller line the
+				// sample up against the log, where every message is already prefixed [BP_Player_C_2].
+				const FString Labelled = FString::Printf(TEXT("%s=%s"), *Actor->GetName(), *ThisValue);
 				if (!DistinctThisPass.Contains(ThisValue))
 				{
 					DistinctThisPass.Add(ThisValue);
+				}
+				if (LabelledThisPass.Num() < 8)
+				{
+					LabelledThisPass.Add(Labelled);
 				}
 			}
 
@@ -3238,8 +3250,8 @@ static void MCPSampleWatches()
 			}
 			else
 			{
-				DistinctThisPass.Sort();
-				Value = FString::Printf(TEXT("%d actors differ: %s"), Found, *FString::Join(DistinctThisPass, TEXT(" | ")));
+				LabelledThisPass.Sort();
+				Value = FString::Printf(TEXT("%d actors differ: %s"), Found, *FString::Join(LabelledThisPass, TEXT(" | ")));
 			}
 
 			++Series.Samples;
