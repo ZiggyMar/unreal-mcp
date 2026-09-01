@@ -368,6 +368,44 @@ namespace
 // UK2Node_CallFunction, which has no wildcard logic to notify. See the comment where call nodes are
 // created. This stays because notifying a node that its connections changed is correct on its own
 // terms, not because it solved anything.
+/**
+ * Write a number into JSON without its own approximation error.
+ *
+ * A float32 widened to a double prints seventeen digits of a value that holds about seven:
+ * CrossfadeDuration 0.2f arrives as 0.20000000298023224. Those digits are not precision, they are
+ * the widening artefact, and every one of them is a token a reader then has to know to ignore.
+ * Measured on a real project: 31 of them in a single read_anim_blueprint reply.
+ *
+ * This existed already, seven times, written out by hand at each site with the scale inline -
+ * RoundToDouble(x * 1000.0) / 1000.0 for times, * 1000000.0 for Niagara parameters. Seven copies of
+ * an idea is how the eighth site comes to be written without it, which is exactly what happened to
+ * blendSeconds. So the idea gets a name, and the next number written into a reply has something
+ * obvious to call.
+ *
+ * Decimals defaults to 6: past that a float32 is reporting noise, and short of it an authored value
+ * like 0.125 would be damaged.
+ */
+static void SetRoundedNumberField(const TSharedPtr<FJsonObject>& Object, const FString& Field, double Value,
+	int32 Decimals = 6)
+{
+	if (!Object.IsValid())
+	{
+		return;
+	}
+	// Formatted and parsed back, rather than multiplied and divided.
+	//
+	// Scale-and-divide is the obvious way and it does not survive contact with the values that
+	// matter. Both spellings of it - FMath::Pow for the scale and repeated multiplication - turned
+	// 0.20000000298023224 into 0.19999999999999998: seventeen digits again, one ULP the other side
+	// of 0.2, which is the same defect wearing a different number. The multiply pushes the value
+	// across a representable boundary and the divide cannot bring it back.
+	//
+	// Printing to a fixed number of decimals and parsing that has no such step. "0.200000" has
+	// exactly one nearest double and it is the one that prints as 0.2.
+	const FString Formatted = FString::Printf(TEXT("%.*f"), Decimals, Value);
+	Object->SetNumberField(Field, FCString::Atod(*Formatted));
+}
+
 static void NotifyConnectionChanged(UEdGraphPin* Pin)
 {
 	if (!Pin)
@@ -3647,8 +3685,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleWatchRuntime(const TSharedPtr<
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("watched"), Rows);
 	Result->SetNumberField(TEXT("samplesTaken"), GMCPWatch.Ticks);
-	Result->SetNumberField(TEXT("secondsElapsed"),
-		FMath::RoundToDouble((FPlatformTime::Seconds() - GMCPWatch.StartedAt) * 10.0) / 10.0);
+	// One decimal, not the helper's six: this is a wall clock reading, and tenths is as much of it as
+	// is worth reporting.
+	SetRoundedNumberField(Result, TEXT("secondsElapsed"), FPlatformTime::Seconds() - GMCPWatch.StartedAt, 1);
 	Result->SetBoolField(TEXT("stillWatching"), GMCPWatch.Ticker.IsValid());
 
 	if (Unmatched.Num() > 0)
@@ -5944,7 +5983,7 @@ static TArray<TSharedPtr<FJsonValue>> MCPNotifyList(const UAnimMontage* Montage)
 	{
 		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), Notify.NotifyName.ToString());
-		Entry->SetNumberField(TEXT("at"), FMath::RoundToDouble(Notify.GetTriggerTime() * 1000.0) / 1000.0);
+		SetRoundedNumberField(Entry, TEXT("at"), Notify.GetTriggerTime(), 3);
 		Entry->SetStringField(TEXT("kind"), Notify.NotifyStateClass ? TEXT("state") : TEXT("instant"));
 		Out.Add(MakeShared<FJsonValueObject>(Entry));
 	}
@@ -7287,7 +7326,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAnimBlueprint(const TShare
 					}
 					if (Transition->CrossfadeDuration > 0.f)
 					{
-						Entry->SetNumberField(TEXT("blendSeconds"), Transition->CrossfadeDuration);
+						SetRoundedNumberField(Entry, TEXT("blendSeconds"), Transition->CrossfadeDuration);
 					}
 					Transitions.Add(MakeShared<FJsonValueObject>(Entry));
 				}
@@ -8507,8 +8546,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadNiagaraSystem(const TShare
 			// this to 0.42 read back as 0.41999998688697815, seventeen digits of a number that holds
 			// about seven. The extra digits are not precision, they are noise that a reader has to
 			// decide to ignore - and the montage read next door already rounds for the same reason.
-			Entry->SetNumberField(TEXT("value"),
-				FMath::RoundToDouble(static_cast<double>(Store.GetParameterValue<float>(Var)) * 1000000.0) / 1000000.0);
+			SetRoundedNumberField(Entry, TEXT("value"), static_cast<double>(Store.GetParameterValue<float>(Var)));
 		}
 		else if (VarType == FNiagaraTypeDefinition::GetIntDef())
 		{
@@ -9111,7 +9149,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListWidgets(const TSharedPtr<F
 		Entry->SetStringField(TEXT("name"), Label.IsEmpty() ? Animation->GetName() : Label);
 		const float Start = Animation->GetStartTime();
 		const float End = Animation->GetEndTime();
-		Entry->SetNumberField(TEXT("durationSeconds"), FMath::RoundToDouble((End - Start) * 1000.0) / 1000.0);
+		SetRoundedNumberField(Entry, TEXT("durationSeconds"), End - Start, 3);
 		// How many widgets it actually drives. An animation bound to nothing plays perfectly and
 		// animates nothing, which is invisible in the editor except by opening it and looking.
 		Entry->SetNumberField(TEXT("boundWidgets"), Animation->AnimationBindings.Num());
@@ -9519,14 +9557,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSha
 	// definition standing in context on every request costs more than it is worth.
 	if (const UAnimMontage* Montage = Cast<UAnimMontage>(Asset))
 	{
-		Result->SetNumberField(TEXT("lengthSeconds"), FMath::RoundToDouble(Montage->GetPlayLength() * 1000.0) / 1000.0);
+		SetRoundedNumberField(Result, TEXT("lengthSeconds"), Montage->GetPlayLength(), 3);
 
 		TArray<TSharedPtr<FJsonValue>> Sections;
 		for (const FCompositeSection& Section : Montage->CompositeSections)
 		{
 			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 			Entry->SetStringField(TEXT("name"), Section.SectionName.ToString());
-			Entry->SetNumberField(TEXT("startsAt"), FMath::RoundToDouble(Section.GetTime() * 1000.0) / 1000.0);
+			SetRoundedNumberField(Entry, TEXT("startsAt"), Section.GetTime(), 3);
 			// What plays after it. NAME_None means the montage stops here, which is the difference
 			// between a combo that chains and one that does not - and it is invisible otherwise.
 			Entry->SetStringField(TEXT("nextSection"),
@@ -9543,13 +9581,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSha
 		{
 			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
 			Entry->SetStringField(TEXT("name"), Notify.NotifyName.ToString());
-			Entry->SetNumberField(TEXT("at"), FMath::RoundToDouble(Notify.GetTriggerTime() * 1000.0) / 1000.0);
+			SetRoundedNumberField(Entry, TEXT("at"), Notify.GetTriggerTime(), 3);
 			// A notify STATE lasts; a notify is an instant. Blueprint handles them with different
 			// nodes, so which one it is decides what a caller writes.
 			if (Notify.NotifyStateClass)
 			{
 				Entry->SetStringField(TEXT("kind"), TEXT("state"));
-				Entry->SetNumberField(TEXT("lastsFor"), FMath::RoundToDouble(Notify.GetDuration() * 1000.0) / 1000.0);
+				SetRoundedNumberField(Entry, TEXT("lastsFor"), Notify.GetDuration(), 3);
 			}
 			else
 			{
