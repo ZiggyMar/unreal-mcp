@@ -16,6 +16,16 @@ struct FMCPIndexFunction
 	FString Name;
 	FString ReturnType;
 	TArray<FMCPIndexParam> Params;
+
+	/**
+	 * True for a Custom Event, which is callable by name exactly like a function but lives in the
+	 * event graph rather than in FunctionGraphs.
+	 *
+	 * Kept as a flag rather than a separate list because to a caller searching for "the thing named
+	 * X" these are the same question - and the distinction still has to be reported, since one has a
+	 * graph you can open by name and the other is a node inside a bigger one.
+	 */
+	bool bIsCustomEvent = false;
 };
 
 struct FMCPIndexVariable

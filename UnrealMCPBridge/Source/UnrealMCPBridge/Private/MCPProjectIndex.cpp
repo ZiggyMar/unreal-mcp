@@ -16,8 +16,18 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "K2Node_CustomEvent.h"
+#include "EdGraphSchema_K2.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMCPProjectIndex, Log, All);
+
+/**
+ * Bump this whenever the cached index format changes.
+ *
+ * Version 2 added Custom Events, which are callable by name and were previously invisible to
+ * search_project because the index only walked FunctionGraphs.
+ */
+static constexpr int32 MCPIndexSchemaVersion = 2;
 
 FMCPProjectIndex* FMCPProjectIndex::Instance = nullptr;
 
@@ -83,6 +93,10 @@ namespace
 			ParamsArr.Add(MakeShared<FJsonValueObject>(ParamToJson(P)));
 		}
 		O->SetArrayField(TEXT("params"), ParamsArr);
+		if (F.bIsCustomEvent)
+		{
+			O->SetBoolField(TEXT("isCustomEvent"), true);
+		}
 		return O;
 	}
 
@@ -93,6 +107,7 @@ namespace
 		{
 			O->TryGetStringField(TEXT("name"), F.Name);
 			O->TryGetStringField(TEXT("returnType"), F.ReturnType);
+			O->TryGetBoolField(TEXT("isCustomEvent"), F.bIsCustomEvent);
 			const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
 			if (O->TryGetArrayField(TEXT("params"), ParamsArr) && ParamsArr)
 			{
@@ -445,13 +460,54 @@ void FMCPProjectIndex::IndexBlueprintByPath(const FString& ObjectPath)
 		Entry.Functions.Add(FuncEntry);
 	}
 
+	// Custom Events, which are callable by name and are not in FunctionGraphs.
+	//
+	// They live as nodes inside the event graph, so an index built only from FunctionGraphs cannot
+	// see them - and searching for one returned nothing at all. That is the worst kind of miss:
+	// "CE_Server_TryPing" is the name of a whole subsystem, and a search that answers "no hits"
+	// reads as "this does not exist", which is how a live feature gets rebuilt from scratch or
+	// declared broken.
+	for (UEdGraph* Ubergraph : Blueprint->UbergraphPages)
+	{
+		if (!Ubergraph)
+		{
+			continue;
+		}
+		for (UEdGraphNode* Node : Ubergraph->Nodes)
+		{
+			const UK2Node_CustomEvent* Event = Cast<UK2Node_CustomEvent>(Node);
+			if (!Event)
+			{
+				continue;
+			}
+			FMCPIndexFunction EventEntry;
+			EventEntry.Name = Event->CustomFunctionName.ToString();
+			EventEntry.bIsCustomEvent = true;
+			// Parameters come off the event's own output pins: an event's inputs are what it hands
+			// to the chain below it, so they read as outputs on the node.
+			for (UEdGraphPin* Pin : Event->Pins)
+			{
+				if (!Pin || Pin->Direction != EGPD_Output || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec ||
+					Pin->PinName == UK2Node_Event::DelegateOutputName)
+				{
+					continue;
+				}
+				FMCPIndexParam Param;
+				Param.Name = Pin->PinName.ToString();
+				Param.Type = UEdGraphSchema_K2::TypeToText(Pin->PinType).ToString();
+				EventEntry.Params.Add(Param);
+			}
+			Entry.Functions.Add(EventEntry);
+		}
+	}
+
 	Entries.Add(ObjectPath, MoveTemp(Entry));
 }
 
 void FMCPProjectIndex::SaveToDisk() const
 {
 	TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-	Root->SetNumberField(TEXT("version"), 1);
+	Root->SetNumberField(TEXT("version"), MCPIndexSchemaVersion);
 
 	TSharedRef<FJsonObject> BlueprintsObj = MakeShared<FJsonObject>();
 	for (const TPair<FString, FMCPIndexBlueprint>& Pair : Entries)
@@ -486,6 +542,22 @@ bool FMCPProjectIndex::LoadFromDisk()
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
 	{
 		UE_LOG(LogMCPProjectIndex, Warning, TEXT("UnrealMCPBridge: failed to parse project index cache at %s, will rebuild"), *FilePath);
+		return false;
+	}
+
+	// A cache older than the format is worse than no cache.
+	//
+	// The version was being WRITTEN and never read. So when the index learned to record Custom
+	// Events, the improvement did nothing: the editor loaded a cache built by the previous format,
+	// found no events in it, and every search kept answering "no hits" - which reads exactly like
+	// the change not working. The fix was to delete a file nobody knew existed, and the same trap
+	// was waiting for every future change to this format.
+	double CachedVersion = 0.0;
+	if (!Root->TryGetNumberField(TEXT("version"), CachedVersion) || static_cast<int32>(CachedVersion) != MCPIndexSchemaVersion)
+	{
+		UE_LOG(LogMCPProjectIndex, Log,
+			TEXT("UnrealMCPBridge: project index cache is version %d, this build writes %d - rebuilding."),
+			static_cast<int32>(CachedVersion), MCPIndexSchemaVersion);
 		return false;
 	}
 
@@ -531,7 +603,8 @@ TArray<TSharedPtr<FJsonValue>> FMCPProjectIndex::Search(const FString& Query, in
 			if (Fn.Name.ToLower().Contains(LowerQuery))
 			{
 				Hits.Add(MakeShared<FJsonValueObject>(
-					MakeHit(TEXT("function"), BP.Path, Fn.Name, FString::Printf(TEXT("function in %s"), *BP.Name))));
+					MakeHit(Fn.bIsCustomEvent ? TEXT("customEvent") : TEXT("function"), BP.Path, Fn.Name,
+						FString::Printf(TEXT("%s in %s"), Fn.bIsCustomEvent ? TEXT("custom event") : TEXT("function"), *BP.Name))));
 			}
 		}
 

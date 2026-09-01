@@ -27,6 +27,7 @@ written down next to the measurement that caused it.
 [The cost nobody was measuring: switching a tool on](#the-cost-nobody-was-measuring-switching-a-tool-on) ·
 [Searching for a node by the name the editor shows](#searching-for-a-node-by-the-name-the-editor-shows) ·
 [When the host project cannot build, deliver the plugin anyway](#when-the-host-project-cannot-build-deliver-the-plugin-anyway) ·
+[Two ways a read-only tool said "there is nothing there"](#two-ways-a-read-only-tool-said-there-is-nothing-there) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -6740,3 +6741,47 @@ can.
 
 Measured: the game target went from unbuildable to built and installed in 117 seconds, and
 `npm run trial:nodesearch` then passed 11/11 against that editor.
+
+## Two ways a read-only tool said "there is nothing there"
+
+A tool that fails gets retried. A tool that confidently answers "no" gets believed, and the reader
+goes off to build something that already exists or to fix something that was never broken. Both of
+these cost a full investigation before they were noticed.
+
+**`trace_variable` did not count spawn pins.** `PlayerWhoPlacedName` came back *read but never
+written*, with a verdict explaining that the reading side "silently takes the fallback forever" —
+so the ping system read as half-built. It was not. The name was being set on the `SpawnActor` node,
+through an **Expose on Spawn** pin, one pin away from where the tracer was looking. That is how most
+such variables get their value, and none of it involves a Set node.
+
+It now asks the engine — `UK2Node_ConstructObjectFromClass::IsSpawnVarPin` — rather than guessing,
+which covers SpawnActor, Construct Object and Create Widget together and cannot drift from what the
+editor shows. A pin that is exposed but left alone is still not a write: an untouched pin sits at
+the class default, and counting it would make every spawn of a class a spurious writer. The reply
+names the node (`via: "SpawnActor BP Ping Actor"`), because "BP_Player writes a variable it does not
+declare" reads as a mistake until you can see it is a spawn pin.
+
+**`search_project` did not index Custom Events.** The index walked `FunctionGraphs`, and a Custom
+Event is a node inside the event graph, so `CE_Server_TryPing` — the name of an entire subsystem —
+returned zero hits. Events are indexed now and reported as `kind: "customEvent"` so they are never
+described as functions.
+
+### The cache that outlived its format
+
+Adding events to the index changed nothing at first, and the reason is worth recording. The index is
+cached to `Saved/UnrealMCPBridge/index.json`, the cache carried a `version` field, and **nothing ever
+read it**. The editor loaded a cache written by the previous format, found no events in it, and kept
+answering "no hits" — which reads exactly like the change not working. The fix would have been to
+delete a file nobody knew existed, and the same trap was waiting for every future change to the
+format.
+
+The loader checks the version now and rebuilds on a mismatch. Verified the honest way, by leaving a
+version-1 cache on disk and watching the new build reject it:
+
+```
+LogMCPProjectIndex: project index cache is version 1, this build writes 2 - rebuilding.
+```
+
+`npm run trial:findtruth` asserts all of it against the real Blueprints each tool was wrong about —
+including that a name which genuinely exists nowhere is *still* reported as nowhere, because
+replacing one wrong answer with its opposite is not a fix.
