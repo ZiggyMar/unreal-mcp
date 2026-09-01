@@ -63,6 +63,26 @@ function installPackagedPlugin(target) {
   }
 }
 
+/**
+ * The project's own editor target name, e.g. "AntiVirusSquadEditor".
+ *
+ * Mirrors editorTargetName in src/nativeBuild.ts. Duplicated deliberately: this script has to work
+ * before and after a TypeScript build, and importing from dist/ would make the thing that builds
+ * the plugin depend on the thing it builds.
+ */
+function editorTargetName(projectFile) {
+  const sourceDir = join(dirname(projectFile), "Source");
+  if (!existsSync(sourceDir)) return "UnrealEditor";
+  try {
+    const targets = readdirSync(sourceDir)
+      .filter((name) => name.endsWith(".Target.cs"))
+      .map((name) => name.slice(0, -".Target.cs".length));
+    return targets.find((name) => name.endsWith("Editor")) ?? "UnrealEditor";
+  } catch {
+    return "UnrealEditor";
+  }
+}
+
 const valueOf = (flag) => {
   const i = process.argv.indexOf(flag);
   return i >= 0 ? process.argv[i + 1] : undefined;
@@ -306,10 +326,28 @@ for (const target of chosen) {
     : spawnSync(
         join(target.engine, "Engine", "Build", "BatchFiles", "Build.bat"),
         [
-          "UnrealEditor",
+          // The PROJECT's editor target, not the engine's.
+          //
+          // This said "UnrealEditor" for every project, which is the engine's own editor target.
+          // Building that against -Project asks UnrealBuildTool to plan a build in which the
+          // engine's editor and the project's own editor both link the same plugin DLLs - two
+          // actions producing one file - and it refuses with "Action graph is invalid" before
+          // compiling anything.
+          //
+          // The symptom was a whole target that could never build, and it was blamed on other
+          // things for a long time: a duplicate plugin, a nested sample project, the host being
+          // "unbuildable". Running Build.bat by hand with the project's real target name succeeded
+          // immediately, which is what settled it. nativeBuild.ts had resolved this correctly all
+          // along; this script simply never asked it.
+          editorTargetName(target.project),
           "Win64",
           "Development",
-          `-Project=${target.project}`,
+          // QUOTED. shell:true means the shell re-splits this line, and a project path with a
+          // space in it - "M:/Unreal Projects/..." - became two arguments, so UnrealBuildTool was
+          // handed "-Project=M:/Unreal" and failed. The isolated branch above quotes its paths and
+          // has always worked; this one did not, so the failure only ever appeared on projects
+          // whose path contains a space, and looked exactly like an unbuildable project.
+          `"-Project=${target.project}"`,
           "-TargetType=Editor",
           "-Progress",
           "-NoHotReloadFromIDE",

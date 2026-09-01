@@ -6726,34 +6726,43 @@ come back silently.
 
 ## When the host project cannot build, deliver the plugin anyway
 
-The default build mode syncs the plugin source into each target project and builds that project's
-editor target. That is what actually happens to a user, and it is the only mode that leaves usable
-binaries — so it is the right default. It also depends on the host project building at all.
-
-One did not. The real game project has a second, complete 6.5 GB sample project nested inside it,
-each with its own `.uproject`, so UnrealBuildTool discovers two copies of several plugins —
-`CommonStartupLoadingScreen` gets linked twice — and refuses with `Action graph is invalid` before
-compiling a single file. Nothing there is the plugin's fault, and no amount of fixing the plugin
-changes it.
-
-The consequence was the exact failure `build-targets.json` warns about, arriving by a route nobody
-had considered. Every C++ improvement shipped cleanly to two scratch projects while the editor doing
-real work kept answering on a binary from days earlier. The build said `ok` for the targets it could
-do, the editor kept responding, and nothing anywhere said the change had not arrived.
-
-`--package` is the way through. It compiles the plugin with `RunUAT BuildPlugin`, which does not load
-the host project and therefore cannot be blocked by one, then **installs** the resulting binaries
-into each target. The install is part of the result rather than a follow-up step: a plugin packaged
-to a temp folder and never copied is the same unverified fix this script exists to prevent, so a
-failed copy fails the target.
+`--package` compiles the plugin with `RunUAT BuildPlugin`, which does not load the host project and
+therefore cannot be blocked by one, then **installs** the resulting binaries into each target. The
+install is part of the result rather than a follow-up step: a plugin packaged to a temp folder and
+never copied is the same unverified fix this script exists to prevent, so a failed copy fails the
+target.
 
 It is not a replacement for the default. `BuildPlugin` compiles against public engine APIs only,
-which is a narrower check than the editor target, and the closing message says so rather than
-implying an equivalent result. Use it when the full build is unavailable — and fix the host when you
-can.
+which is a narrower check than the editor target, and the closing message says so.
 
-Measured: the game target went from unbuildable to built and installed in 117 seconds, and
-`npm run trial:nodesearch` then passed 11/11 against that editor.
+### It was written for a diagnosis that turned out to be wrong
+
+This existed because one project's editor target "could not build at all". That was stated here as
+fact for several sessions. It was two bugs, and one of them was in this script.
+
+**A duplicate plugin.** The project has a complete second sample project nested inside it, so
+UnrealBuildTool discovered two copies of several plugins and refused with `Action graph is invalid`
+before compiling anything. The supported fix is one empty file: UBT's plugin enumerator stops
+descending into any directory containing a `.ubtignore`, so a marker in the nested project's folder
+removes it from the scan. Nothing moved, nothing deleted, one line to undo.
+
+```csharp
+else if (PluginFile.Name == ".ubtignore")
+{
+    bSearchSubDirectories = false;
+}
+```
+
+**An unquoted path, here.** With `shell: true`, `-Project=${target.project}` is re-split by the
+shell, so a project path containing a space — `M:/Unreal Projects/...` — reached UBT as
+`-Project=M:/Unreal`. The isolated branch quotes its paths and always worked; this one did not. So
+the failure appeared **only** on projects whose path has a space, which is why two scratch targets
+under `A:/UnrealProjects/` built for months while the real game did not, and why it looked like a
+property of that project rather than of this script.
+
+With both fixed, the target that "could not build" builds in nine seconds. `--package` stays,
+because a host that genuinely cannot build is a real situation — but it is no longer the answer to
+this one.
 
 ## Two ways a read-only tool said "there is nothing there"
 
