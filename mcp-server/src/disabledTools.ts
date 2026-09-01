@@ -97,10 +97,18 @@ export function disabledToolNote(reply: unknown, isEnabled: IsEnabled): Disabled
   const canDispatch = isEnabled("unreal_call_tool") === true;
   return {
     toolsNotEnabled: off,
+    // Short on purpose, and shorter on the dispatch path.
+    //
+    // This note fires on any reply whose advice names an unlisted tool, which on `search` is most
+    // replies that give advice at all - measured as the entire remaining per-call gap between
+    // dispatch and direct calls: 178 tokens across two reviews in an eight-call task, all of it this.
+    //
+    // The tool NAMES are the part that varies and the part a caller acts on, so they stay. The
+    // mechanism - what dispatch costs against enabling - does not vary, is already in the standing
+    // instructions every model reads, and was being re-explained on every reply. Saying it once is
+    // the whole difference between advice and nagging.
     toolsNotEnabledNote: canDispatch
-      ? `${off.length} tool(s) named above are not in this session's tool list: ${off.join(", ")}. ` +
-        `unreal_call_tool({ tool: "${off[0]}", args: {...} }) runs one straight away and leaves the ` +
-        `list alone; enabling them instead re-charges your whole cached prefix.`
+      ? `Not listed this session: ${off.join(", ")}. Reach them with unreal_call_tool; no need to enable.`
       : `${off.length} tool(s) named above are switched off in this session: ${off.join(", ")}. ` +
         `unreal_enable_tools({ tools: [${off.map((n) => `"${n}"`).join(", ")}] }) turns on exactly those, ` +
         `which costs far less than a whole group.`,

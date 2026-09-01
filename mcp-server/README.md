@@ -8191,3 +8191,62 @@ profile that does not exist. `full` disables the dispatcher deliberately, becaus
 already listed and a hop would only add a schema. The fixture now says so, and a second one models
 `search` where the dispatcher stands. One of them had to break for this change to be visible, and the
 one that broke was the one describing a session nobody runs.
+
+### A one-time cost charged to every run
+
+The task-cost benchmark said dispatch costs 521 tokens more per run of an eight-call task, and most
+of that was one step: `build_graph`, 124 tokens direct against 397 dispatched. A wrapper adding 273
+tokens to one call and nothing to five others is not a wrapper cost, so it was worth asking what it
+actually was.
+
+Running the same call twice in one session answers it:
+
+```
+build_graph #1: 381 tokens, 2 content blocks
+build_graph #2: 108 tokens, 1 content block
+```
+
+The second block is `GROUND_TRUTH` — the pin names and node kinds a model cannot derive — delivered
+alongside the first authoring call of a session and never again. And the steady-state dispatched call
+is **108 tokens against the direct call's 124**, because the dispatcher's reply does not repeat the
+schema the direct path echoes.
+
+So the benchmark was charging a once-per-session cost to every run. It now runs the task twice and
+reports both, because "a session's first pass" and "every pass after" are different questions and
+only the second one decides anything:
+
+|  | full | search |
+|---|---|---|
+| replies, first pass | 1,125 | 1,496 |
+| replies, second pass | 1,125 | **1,223** |
+| first run of the task | 43,036 | **3,366** |
+| every run after | **1,421** | 1,589 |
+
+Break-even moved from about 616 calls to **about 1,910**. The earlier figure was not wrong about
+anything it measured; it was measuring a first pass and calling it a repeat.
+
+### The last recurring difference was a paragraph nobody needed twice
+
+With the one-time cost separated out, the remaining gap came to 178 tokens over eight calls — and all
+178 of it was two copies of one note. Every reply whose advice names an unlisted tool carried:
+
+```
+1 tool(s) named above are not in this session's tool list: unreal_auto_layout_graph.
+unreal_call_tool({ tool: "unreal_auto_layout_graph", args: {...} }) runs one straight away and
+leaves the list alone; enabling them instead re-charges your whole cached prefix.
+```
+
+The tool **names** vary and are what a caller acts on. Everything else — what dispatch costs against
+enabling — does not vary, is already in the standing instructions every model reads, and was being
+re-explained on every reply that gave advice. On `search` that is most of them.
+
+```
+Not listed this session: unreal_auto_layout_graph. Reach them with unreal_call_tool; no need to enable.
+```
+
+**84 tokens to 44**, and the per-task overhead from 248 to 168. What is left is about 70 tokens of
+`{tool, args}` nesting on the requests, which is what dispatch *is*, and one short note per advisory
+reply, which is information rather than overhead. That is the floor.
+
+Saying a thing once is the difference between advice and nagging, and the standing instructions are
+the right place to say it once.

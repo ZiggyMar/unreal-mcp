@@ -75,6 +75,30 @@ async function run(mode) {
     })
     .catch(() => undefined);
 
+  // The task is run TWICE, and the two runs are reported separately.
+  //
+  // Dispatch delivers GROUND_TRUTH - the pin names and node kinds a model cannot derive - alongside
+  // the first authoring call of a session, and never again. Measured: build_graph through the
+  // dispatcher costs 381 tokens the first time in two content blocks, and 108 the second in one,
+  // which is CHEAPER than the 124 the direct call costs. Charging that 273 to every run made
+  // dispatch look 521 tokens worse per task when most of the gap is paid once and never repeats.
+  //
+  // So run one is "a session's first pass" and run two is "every pass after", and the break-even
+  // below uses the second, because a session that does the task once is not the case anybody is
+  // worried about.
+  const runs = [];
+  for (let pass = 0; pass < 2; pass++) runs.push(await onePass());
+  server.child.kill();
+  return {
+    mode,
+    standing: listed.tokens,
+    tools: listed.tools.length,
+    first: runs[0],
+    repeat: runs[1],
+    perStep: runs[0].perStep,
+  };
+
+  async function onePass() {
   let replyTokens = 0;
   let requestTokens = 0;
   const perStep = [];
@@ -107,8 +131,8 @@ async function run(mode) {
     perStep.push({ label, tokens: t });
   }
 
-  server.child.kill();
-  return { mode, standing: listed.tokens, tools: listed.tools.length, replyTokens, requestTokens, perStep };
+  return { replyTokens, requestTokens, perStep };
+  }
 }
 
 const full = await run("full");
@@ -126,14 +150,16 @@ const row = (label, a, b) => console.log(`  ${label.padEnd(34)}${String(a).padSt
 console.log("");
 row("tools advertised", full.tools, search.tools);
 row("standing (paid once, then cached)", full.standing, search.standing);
-row("requests sent", full.requestTokens, search.requestTokens);
-row("replies received", full.replyTokens, search.replyTokens);
+row("requests sent", full.first.requestTokens, search.first.requestTokens);
+row("replies, first pass", full.first.replyTokens, search.first.replyTokens);
+row("replies, second pass", full.repeat.replyTokens, search.repeat.replyTokens);
 console.log("");
-row("first run of this task", full.standing + full.requestTokens + full.replyTokens, search.standing + search.requestTokens + search.replyTokens);
-row("each repeat, cache warm", full.requestTokens + full.replyTokens, search.requestTokens + search.replyTokens);
+const cost = (m, pass) => m[pass].requestTokens + m[pass].replyTokens;
+row("first run of this task", full.standing + cost(full, "first"), search.standing + cost(search, "first"));
+row("every run after", cost(full, "repeat"), cost(search, "repeat"));
 
 const standingSaved = full.standing - search.standing;
-const perTaskExtra = search.requestTokens + search.replyTokens - (full.requestTokens + full.replyTokens);
+const perTaskExtra = cost(search, "repeat") - cost(full, "repeat");
 console.log("");
 if (perTaskExtra <= 0) {
   console.log(`  search is cheaper on BOTH counts: ${standingSaved} tokens of standing cost saved, and`);
