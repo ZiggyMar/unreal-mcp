@@ -21,6 +21,7 @@
 #include "K2Node_ConstructObjectFromClass.h"
 #include "Animation/WidgetAnimation.h"
 #include "Animation/AnimMontage.h"
+#include "Engine/UserDefinedStruct.h"
 #include "Engine/Level.h"
 #include "Engine/LevelScriptBlueprint.h"
 #include "K2Node_CustomEvent.h"
@@ -8639,6 +8640,60 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadAssetProperties(const TSha
 	if (Properties.Num() != Total)
 	{
 		Result->SetNumberField(TEXT("totalProperties"), Total);
+	}
+
+	// A STRUCT's fields and an ENUM's entries, which the property walk returns nothing for.
+	//
+	// Reading a User Defined Struct gave `"properties": []` - a struct IS its fields, so that reply
+	// contained none of the asset. Reading a User Defined Enum gave one entry called
+	// EnumDescription and not a single enumerator.
+	//
+	// That blocks the most ordinary data work there is. A Data Table is TYPED by a struct, so
+	// writing a row without its field names and types is guesswork, and "add a new upgrade type"
+	// cannot be answered without the enum entries that already exist.
+	//
+	// Names are the AUTHORED ones. Unreal stores a user struct's fields internally as
+	// "Count_5_9B3F..." with a GUID appended, and that spelling appears nowhere a person types -
+	// handing it back would be a name the caller cannot use in a Data Table row or anywhere else.
+	if (const UUserDefinedStruct* Struct = Cast<UUserDefinedStruct>(Asset))
+	{
+		TArray<TSharedPtr<FJsonValue>> Fields;
+		for (TFieldIterator<FProperty> It(Struct); It; ++It)
+		{
+			FProperty* Field = *It;
+			if (!Field)
+			{
+				continue;
+			}
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Field->GetAuthoredName());
+			Entry->SetStringField(TEXT("type"), Field->GetCPPType());
+			Fields.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("fields"), Fields);
+		Result->SetNumberField(TEXT("fieldCount"), Fields.Num());
+		Result->SetStringField(TEXT("fieldsNote"),
+			TEXT("These are the row columns of any Data Table using this struct, in this order, by the name "
+				"you write."));
+	}
+
+	if (const UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(Asset))
+	{
+		TArray<TSharedPtr<FJsonValue>> Entries;
+		// NumEnums() includes the trailing _MAX sentinel, which is engine bookkeeping and not a
+		// value anyone selects. Reporting it would invite a caller to use it.
+		const int32 Count = FMath::Max(0, Enum->NumEnums() - 1);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			// The display name is what the editor shows and what a Data Table cell contains; the
+			// raw name is "E_Thing::NewEnumerator0", which is not what anybody types.
+			Entry->SetStringField(TEXT("name"), Enum->GetDisplayNameTextByIndex(Index).ToString());
+			Entry->SetNumberField(TEXT("value"), Enum->GetValueByIndex(Index));
+			Entries.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("entries"), Entries);
+		Result->SetNumberField(TEXT("entryCount"), Entries.Num());
 	}
 
 	// A montage's SECTIONS and NOTIFIES, which the property walk cannot see.

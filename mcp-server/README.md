@@ -35,6 +35,7 @@ written down next to the measurement that caused it.
 [The whole-project audit was missing a whole family](#the-whole-project-audit-was-missing-a-whole-family) ·
 [The Level Blueprint was in no list at all](#the-level-blueprint-was-in-no-list-at-all) ·
 [A montage without its notifies is blend settings and nothing else](#a-montage-without-its-notifies-is-blend-settings-and-nothing-else) ·
+[A struct is its fields, and the reply had none of them](#a-struct-is-its-fields-and-the-reply-had-none-of-them) ·
 [Notes / limitations](#notes--limitations)
 
 
@@ -7104,3 +7105,37 @@ here can read:
 
 Checking rather than assuming mattered: the blackboard pairing looked like the obvious gap and turned
 out to be complete.
+
+## A struct is its fields, and the reply had none of them
+
+Reading a User Defined Struct returned `"properties": []`. A struct **is** its fields, so that reply
+contained none of the asset. Reading a User Defined Enum returned one entry called
+`EnumDescription` and not a single enumerator.
+
+Between them that blocks the most ordinary data work there is. A Data Table is *typed by* a struct,
+so writing a row without knowing its columns and their types is guesswork — and "add a new upgrade
+type" cannot be answered without seeing the enum entries that already exist.
+
+Both fold into `unreal_read_asset_properties`, like montage sections and widget animations before
+them. No new tool, no extra standing context.
+
+### Names a person can actually use
+
+Unreal stores a user struct's fields internally as `Count_5_9B3F...` with a GUID appended, and that
+spelling appears nowhere anyone types. Handing it back would be a name unusable in a Data Table row
+or anywhere else, so fields report their **authored** name. Enum entries likewise report the display
+name rather than `E_Thing::NewEnumerator0`, and the trailing `_MAX` sentinel is dropped — it is
+engine bookkeeping, and listing it would invite a caller to select it.
+
+### The loop this closes
+
+```
+DT_UpgradesOld  ->  rowStruct: S_UpgradeRow
+S_UpgradeRow    ->  UpgradeId:FName, DisplayName:FText,
+                    Category:TEnumAsByte<E_UpgradeCategoryold>, bIsGlobal:bool,
+                    ApplyPolicy:TEnumAsByte<E_UpgradeApplyPolicy>, Icon:UTexture2D*, ...
+E_UpgradeCategoryold  ->  its valid values
+```
+
+Table, to columns, to the legal values for an enum column — the whole path a change request to a
+Data Table needs, and none of it was reachable before.

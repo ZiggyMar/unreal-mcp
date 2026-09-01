@@ -118,6 +118,46 @@ if (level) {
   check("a level path reaches its Level Blueprint", false, "no levels found to test against");
 }
 
+// --- a struct's fields and an enum's entries ---
+//
+// Reading a User Defined Struct returned `"properties": []`. A struct IS its fields, so that reply
+// contained none of the asset. An enum returned one entry called EnumDescription and not a single
+// enumerator. Between them that blocks the most ordinary data work there is: a Data Table is TYPED
+// by a struct, so writing a row without its columns is guesswork.
+const structs = await call("unreal_list_assets", { className: "UserDefinedStruct", pathPrefix: "/Game" });
+const structPath = (structs.assets ?? []).map((a) => (typeof a === "string" ? a : a.path)).find(Boolean);
+if (structPath) {
+  // `match` filters the ordinary property walk down to nothing, so this asserts the struct fields
+  // specifically rather than passing on unrelated properties.
+  const st = await call("unreal_read_asset_properties", { path: structPath, match: "zzz-no-such-property" });
+  check(
+    "a struct reports its fields",
+    Array.isArray(st.fields) && st.fields.length > 0,
+    `${structPath.split("/").pop()} -> ${(st.fields ?? []).map((f) => `${f.name}:${f.type}`).join(", ").slice(0, 90)}`
+  );
+  check(
+    "and by the name a person writes, not the GUID-suffixed internal one",
+    (st.fields ?? []).every((f) => !/_\d+_[0-9A-F]{16,}/i.test(f.name ?? "")),
+    (st.fields ?? []).map((f) => f.name).join(", ").slice(0, 80)
+  );
+}
+
+const enums = await call("unreal_list_assets", { className: "UserDefinedEnum", pathPrefix: "/Game" });
+const enumPath = (enums.assets ?? []).map((a) => (typeof a === "string" ? a : a.path)).find(Boolean);
+if (enumPath) {
+  const en = await call("unreal_read_asset_properties", { path: enumPath, match: "zzz-no-such-property" });
+  check(
+    "an enum reports its entries",
+    Array.isArray(en.entries) && en.entries.length > 0,
+    `${enumPath.split("/").pop()} -> ${(en.entries ?? []).map((e) => `${e.name}=${e.value}`).join(", ").slice(0, 90)}`
+  );
+  check(
+    "and not the _MAX sentinel, which is bookkeeping nobody selects",
+    (en.entries ?? []).every((e) => !/_MAX$/i.test(e.name ?? "")),
+    (en.entries ?? []).map((e) => e.name).join(", ").slice(0, 80)
+  );
+}
+
 server.child.kill();
 
 const failed = results.filter((r) => !r).length;
