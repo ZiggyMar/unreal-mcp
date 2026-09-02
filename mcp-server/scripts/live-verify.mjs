@@ -122,6 +122,46 @@ async function main() {
     return `${r.plugin} protocol ${r.protocolVersion}`;
   });
 
+  // --- Overload resolution -------------------------------------------------------------------
+  //
+  // A function name with no class was answered with whichever module registered first, so the
+  // answer depended on engine load order rather than on the question. Measured against a real
+  // editor: IsValid resolved to SharedImageConstRefBlueprintFns, GetPlayerController to
+  // CheatManager. Both are among the most-placed nodes in any Blueprint, and both came back as a
+  // straight, confident answer from the wrong class - which costs more than a failed call, because
+  // nothing about it looks wrong.
+  //
+  // This can only be checked here. It is engine reflection over every loaded module, so there is no
+  // fixture that would prove anything.
+  section("overload resolution");
+  for (const [functionName, expected] of [
+    ["IsValid", "KismetSystemLibrary"],
+    ["GetPlayerController", "GameplayStatics"],
+    ["PrintString", "KismetSystemLibrary"],
+    ["Delay", "KismetSystemLibrary"],
+  ]) {
+    await check(`${functionName} resolves to ${expected}`, async () => {
+      const r = await bridge.send("get_node_signature", { functionName });
+      if (r.className !== expected) {
+        throw new Error(`resolved to ${r.className}, expected ${expected}`);
+      }
+      return r.className;
+    });
+  }
+
+  await check("an explicit className still wins over the ranking", async () => {
+    // The ranking must only break ties. A caller who names a class has answered the question
+    // already, and second-guessing them would make the parameter useless.
+    const r = await bridge.send("get_node_signature", {
+      functionName: "IsValid",
+      className: "SharedImageConstRefBlueprintFns",
+    });
+    if (r.className !== "SharedImageConstRefBlueprintFns") {
+      throw new Error(`asked for SharedImageConstRefBlueprintFns, got ${r.className}`);
+    }
+    return r.className;
+  });
+
   // --- Structs -------------------------------------------------------------------------------
   section("structs");
   const structPath = `${ROOT}/S_MCPVerifyItem`;

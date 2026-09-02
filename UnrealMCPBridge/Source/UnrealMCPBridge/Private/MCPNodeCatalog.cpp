@@ -491,10 +491,78 @@ TArray<TSharedPtr<FJsonValue>> FMCPNodeCatalog::Search(const FString& Query, int
 	return Hits;
 }
 
+/**
+ * Where a Blueprint author means, when a function name exists on several classes.
+ *
+ * These are Unreal's own canonical function libraries: the classes that exist precisely to be the
+ * home of the static utility nodes everybody places. This is not a list of bugs to paper over, it is
+ * the shape of the engine's own API, which is why it is stable enough to write down.
+ *
+ * Order matters only between entries here; everything absent is ranked by the tiebreaks below.
+ */
+static const TCHAR* const PreferredOwnerClasses[] = {
+	TEXT("kismetsystemlibrary"),
+	TEXT("gameplaystatics"),
+	TEXT("kismetmathlibrary"),
+	TEXT("kismetstringlibrary"),
+	TEXT("kismettextlibrary"),
+	TEXT("kismetarraylibrary"),
+	TEXT("kismetinputlibrary"),
+	TEXT("kismetmateriallibrary"),
+	TEXT("kismetrenderinglibrary"),
+	TEXT("navigationsystemv1"),
+};
+
+/** Lower is better. Not in the table scores just past the end of it. */
+static int32 OwnerClassRank(const FMCPCatalogFunction& Fn)
+{
+	const FString Lower = Fn.OwnerClass.ToLower();
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(PreferredOwnerClasses); ++Index)
+	{
+		if (Lower == PreferredOwnerClasses[Index])
+		{
+			return Index;
+		}
+	}
+
+	// Everything else, split by module. A name that exists on both an Engine class and a plugin's is
+	// far more likely to have meant the Engine one - and the editor-only modules are never what a
+	// Blueprint author is reaching for, because their nodes cannot ship in a build.
+	const int32 Base = UE_ARRAY_COUNT(PreferredOwnerClasses);
+	if (Fn.OwnerClassPath.StartsWith(TEXT("/Script/Engine.")))
+	{
+		return Base;
+	}
+	return Base + 1;
+}
+
+/**
+ * The first match was whichever module happened to register first.
+ *
+ * Measured against the running editor, with no className passed:
+ *
+ *   IsValid              -> SharedImageConstRefBlueprintFns   (wanted KismetSystemLibrary)
+ *   GetPlayerController  -> CheatManager                      (wanted GameplayStatics)
+ *   Add                  -> TypedElementListLibrary
+ *
+ * The first two are among the most-placed nodes in any Blueprint, and the answer was an image
+ * library and a cheat console. Nothing was wrong with the lookup - `Functions` is in catalog build
+ * order and this took the head of it, so the answer depended on module load order and not on the
+ * question.
+ *
+ * add_node is unaffected: it refuses an ambiguous name outright and lists candidates. This is the
+ * READ path, where a caller asked what the pins are and got a straight answer from the wrong class -
+ * a confident wrong answer rather than a failed call, which is the more expensive of the two.
+ *
+ * An explicit className still wins outright; this only decides between equals.
+ */
 TSharedPtr<FJsonObject> FMCPNodeCatalog::FindSignature(const FString& FunctionName, const FString& ClassNameOrPath) const
 {
 	const FString LowerFunc = FunctionName.ToLower();
 	const FString LowerClass = ClassNameOrPath.ToLower();
+
+	const FMCPCatalogFunction* Best = nullptr;
+	int32 BestRank = MAX_int32;
 
 	for (const FMCPCatalogFunction& Fn : Functions)
 	{
@@ -508,7 +576,23 @@ TSharedPtr<FJsonObject> FMCPNodeCatalog::FindSignature(const FString& FunctionNa
 		{
 			continue;
 		}
-		return FunctionToJson(Fn, /*bIncludeParams=*/true);
+		// Asked for by name: that IS the answer, and ranking it would be second-guessing the caller.
+		if (!LowerClass.IsEmpty())
+		{
+			return FunctionToJson(Fn, /*bIncludeParams=*/true);
+		}
+
+		const int32 Rank = OwnerClassRank(Fn);
+		if (Rank < BestRank)
+		{
+			BestRank = Rank;
+			Best = &Fn;
+		}
+	}
+
+	if (Best != nullptr)
+	{
+		return FunctionToJson(*Best, /*bIncludeParams=*/true);
 	}
 
 	return nullptr;
@@ -563,6 +647,17 @@ TArray<TSharedPtr<FJsonValue>> FMCPNodeCatalog::SuggestSimilar(const FString& Fu
 		if (A.Distance != B.Distance)
 		{
 			return A.Distance < B.Distance;
+		}
+		// Same distance means the same NAME is on several classes, and every exact match scores 0 -
+		// so without this the list was in catalog order and "IsValid" suggested
+		// CameraRigInstanceFunctions and an image library ahead of KismetSystemLibrary. A caller who
+		// takes the first suggestion is the whole reason suggestions exist; putting a niche module
+		// at the top of the list steers them into the failed call this was meant to save.
+		const int32 RankA = OwnerClassRank(*A.Fn);
+		const int32 RankB = OwnerClassRank(*B.Fn);
+		if (RankA != RankB)
+		{
+			return RankA < RankB;
 		}
 		return A.Fn->Name.Len() < B.Fn->Name.Len();
 	});

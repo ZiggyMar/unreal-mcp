@@ -10978,3 +10978,40 @@ Rename and remove intents are now suppressed when the sentence describes an edit
 and build are not — "I deleted the old one, now add a new one" is still a build request. Two tests:
 four regression sentences that must offer nothing destructive, and three real removal requests that
 must still work.
+
+### The answer depended on module load order, not on the question
+
+Found by using the tool on a real feature. Asking `unreal_get_node_signature` for a function name
+with no class returned **whichever module happened to register first**:
+
+| asked | answered | wanted |
+|---|---|---|
+| `IsValid` | `SharedImageConstRefBlueprintFns` | `KismetSystemLibrary` |
+| `GetPlayerController` | `CheatManager` | `GameplayStatics` |
+| `Add` | `TypedElementListLibrary` | — |
+
+The first two are among the most-placed nodes in any Blueprint, and the answers were an image
+library and a cheat console. `FindSignature` walked `Functions` in catalog build order and returned
+the head of it; the parameter documentation even said so — *"Omit to take the first exact name
+match."* Nothing was broken. Nothing was ranked either.
+
+**`add_node` is unaffected**, and that distinction is the interesting part. It refuses an ambiguous
+name outright and lists candidates, so a build never silently places the wrong node. The damage was
+confined to the READ path — a caller asks what the pins are and gets a straight answer from the wrong
+class. That is worse than a failed call, because nothing about it looks wrong, and the pins it
+returns are real.
+
+The `didYouMean` list had the same fault for the same reason: every exact-name match scores distance
+0, so the tiebreak was catalog order again, and `IsValid` suggested `CameraRigInstanceFunctions`
+first. A caller who takes the top suggestion is the entire reason suggestions exist.
+
+Both now rank by owner class: Unreal's own canonical function libraries first (`KismetSystemLibrary`,
+`GameplayStatics`, the Kismet libraries, `NavigationSystemV1`), then anything in `/Script/Engine`,
+then everything else. **That list is the shape of the engine's own API, not a list of bugs to paper
+over**, which is why it is stable enough to write down. An explicit `className` still wins outright —
+the ranking only decides between equals, and a caller who names a class has already answered the
+question.
+
+Compiles on 5.6, 5.8 and the game target. Four cases are pinned in `live-verify.mjs`, including one
+asserting that asking for `SharedImageConstRefBlueprintFns` by name still gets it: this is engine
+reflection over every loaded module, so a fixture would prove nothing and only a running editor can.
