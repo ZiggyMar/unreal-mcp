@@ -7,37 +7,37 @@
 // `npm run measure:groups` fails when they drift, because a stale number here is worse than none.
 
 /** Tool-definition tokens standing on the `search` profile before anything is enabled. */
-export const SEARCH_BASELINE_TOKENS = 1140;
+export const SEARCH_BASELINE_TOKENS = 1536;
 
 /** Tokens added by enabling each group. */
 export const GROUP_COST_TOKENS: Record<string, number> = {
-  core: 10717,
+  core: 10916,
   ai: 294,
-  anim: 306,
+  anim: 1678,
   cine: 299,
-  cpp: 745,
-  data: 4797,
-  edit: 4465,
+  cpp: 840,
+  data: 6089,
+  edit: 4565,
   input: 946,
-  maintenance: 4578,
+  maintenance: 5451,
   materials: 1359,
-  runtime: 3143,
+  runtime: 3709,
   scene: 5465,
-  ui: 1900,
-  vfx: 315,
+  ui: 2032,
+  vfx: 698,
 };
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
-export const ALL_GROUPS_TOKENS = 40469;
+export const ALL_GROUPS_TOKENS = 45876;
 
 /** Naming the eight tools one Blueprint feature needs, instead of enabling the `core` group. */
-export const FEATURE_SET_TOKENS = 4631;
+export const FEATURE_SET_TOKENS = 5201;
 
 /** Standing cost of each preset, enabled on its own from the `search` baseline. */
 export const PRESET_COST_TOKENS: Record<string, number> = {
-  diagnose: 10226,
-  feature: 7770,
-  ui: 5827,
-  data: 6701,
-  cpp: 4327,
+  diagnose: 10835,
+  feature: 8360,
+  ui: 6512,
+  data: 7231,
+  cpp: 4952,
 };

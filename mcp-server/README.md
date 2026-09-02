@@ -202,7 +202,7 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2524 | five tools; hand it a sentence or a preset name |
+| `search` | 2523 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4251 | ten tools, fixed, for a small local model |
 | `core` | 13194 | the authoring spine |
 | `lazy` | 13501 | `core` plus deferred groups |
@@ -10778,3 +10778,44 @@ Three tests hold it there, including one pinning `estimateTokens(6144) === 1536`
 profile's 1,536 is quoted in the workflow guide, registered in `check-claims.mjs` and re-measured by
 `check:profiles` on every run; if the divisor moves, all of those move silently with it. Now that is a
 deliberate act with a failing test attached.
+
+### Seven recorded numbers nobody was comparing
+
+`src/groupCosts.ts` is generated, and `unreal_list_tools` reads it back to tell a model what a group
+costs *before* it enables one. Its header says `measure:groups` "fails when they drift, because a stale
+number here is worse than none."
+
+It checked the fourteen groups. It also wrote seven more figures and compared none of them — the
+baseline, everything-on, the named-feature set, and all five presets. Every one had drifted:
+
+| | recorded | measured |
+|---|---|---|
+| `SEARCH_BASELINE_TOKENS` | 1,140 | **1,536** |
+| `ALL_GROUPS_TOKENS` | 40,469 | **45,876** |
+| `FEATURE_SET_TOKENS` | 4,631 | **5,201** |
+| preset `diagnose` | 10,226 | **10,835** |
+| group `anim` | 306 | **1,678** |
+| group `data` | 4,797 | **6,089** |
+| group `vfx` | 315 | **698** |
+
+`anim` was understating itself by more than five times to the one reader whose decision depends on it.
+
+The gap was invisible because **the report prints all of them.** A run showed the preset table and the
+everything-on total on screen, directly above a line saying costs were ok — a check that looks like it
+covers what you are reading and does not. That is the same shape as the `undefined` ceiling this script
+already carries a scar for, in the same file.
+
+Two things kept it from being noticed: `measure:groups` was **not in `npm test`**, so it only ran when
+someone chose to; and its success line said "14 measured" while writing 21. Both fixed — it runs in the
+suite now (11 seconds) and reports "22 recorded figures checked".
+
+The presets are read from their own block. `ui`, `data` and `cpp` name both a group and a preset, and
+the old `\bui:\s*(\d+)` matched whichever came first in the file. Extending the naive pattern would have
+compared a preset against a group's cost and called the result fine.
+
+**A knock-on the suite caught immediately:** the standing instructions quote these generated costs
+inline (`ALL_GROUPS_TOKENS`, every preset, `GROUP_COST_TOKENS.core`), so regenerating them moved the
+`search` profile from 2,524 to 2,523 tokens. `check:profiles` compares the README's cost table against a
+live measurement and refused the push over the one-token difference — which is exactly the coupling
+worth having, since the figure is also quoted twice in the workflow guide and registered in
+`check-claims.mjs`. All four now agree at 2,523.

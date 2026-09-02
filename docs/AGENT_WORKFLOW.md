@@ -8,7 +8,7 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
 ## Starting from a sentence
 
 The golden path below assumes you already have the tools for the job switched on. If the session
-started on the `search` profile - five tools, 2,524 tokens - or you have a request in the
+started on the `search` profile - five tools, 2,523 tokens - or you have a request in the
 user's words and no plan yet, this is the step before step 0.
 
 **`unreal_list_tools({ match: "<what the user actually said>" })`.** `match` searches tool names and
@@ -31,7 +31,7 @@ profile the difference is **1,008 tokens** against **16,381 tokens** for the sam
 forty-odd sitting in the prompt for the rest of the session. If you only need one call, skip enabling
 altogether: `unreal_call_tool({ tool, args })` runs it and leaves the tool list untouched.
 
-Measured on a real project: the `search` profile stands at **2,524 tokens**, one discovery reply
+Measured on a real project: the `search` profile stands at **2,523 tokens**, one discovery reply
 costs **455-557 tokens** depending on how many tools match, and then you call the tool. Three calls
 from the sentence to the thing that finds the bug, and nothing enabled along the way.
 

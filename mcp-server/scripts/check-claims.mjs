@@ -85,9 +85,9 @@ const CLAIMS = [
   //
   // None of these were registered until the scan below was widened to the served guides. Two of them
   // were also wrong: the guide said the `search` profile was "four tools, about 2,200 tokens" when
-  // check:profiles has it at five tools and 2,524.
+  // check:profiles has it at five tools and 2,523.
   {
-    figure: "2,524",
+    figure: "2,523",
     what: "the `search` profile's standing cost, quoted twice in the workflow guide",
     verifiedBy: "check:profiles (measures every profile each run and fails outside its ceiling)",
   },

@@ -227,17 +227,59 @@ function renderRecord(rows, baseline, everything, featureSet, presets) {
   ].join(NEWLINE);
 }
 
-function checkRecord(rows) {
+/** One record block, so a key that exists in two of them is read from the right one. */
+function blockOf(text, constName) {
+  const start = text.indexOf(constName);
+  if (start < 0) return "";
+  const end = text.indexOf("};", start);
+  return end < 0 ? "" : text.slice(start, end);
+}
+
+/**
+ * Everything this file records, compared with what was just measured.
+ *
+ * It used to check the fourteen groups and nothing else, while writing SEVEN more figures nobody
+ * ever compared: the baseline, everything-on, the named-feature set, and all five presets. Every one
+ * of them had drifted, some a long way - the baseline read 1,140 against a measured 1,536, and
+ * `anim` was recorded at 306 against 1,678, understating itself more than five times over to the
+ * model reading it to decide what to switch on.
+ *
+ * The gap was invisible because the report PRINTS all of them. A run showed the preset table and the
+ * everything-on total right above a line saying costs were ok, which is a check that looks like it
+ * covers what is on the screen and does not.
+ *
+ * The presets are read out of their own block. `ui`, `data` and `cpp` are the names of both a group
+ * and a preset, and the old `\bui:\s*(\d+)` matched whichever came first in the file - which happened
+ * to be the group, so the naive version would have compared a preset against a group's cost and
+ * called it drift, or worse, called it fine.
+ */
+function checkRecord(rows, baseline, everything, featureSet, presets) {
   if (!existsSync(RECORD)) return rows.map((r) => ({ group: r.group, recorded: "missing", measured: r.addedTokens }));
   const text = readFileSync(RECORD, "utf8");
+  const groupBlock = blockOf(text, "GROUP_COST_TOKENS");
+  const presetBlock = blockOf(text, "PRESET_COST_TOKENS");
   const drift = [];
-  for (const row of rows) {
-    const found = new RegExp(`\\b${row.group}:\\s*(\\d+)`).exec(text);
-    const recorded = found ? Number(found[1]) : null;
-    if (recorded === null || Math.abs(recorded - row.addedTokens) > TOLERANCE_TOKENS) {
-      drift.push({ group: row.group, recorded: recorded ?? "missing", measured: row.addedTokens });
+
+  const compare = (label, recorded, measured) => {
+    if (recorded === null || Math.abs(recorded - measured) > TOLERANCE_TOKENS) {
+      drift.push({ group: label, recorded: recorded ?? "missing", measured });
     }
-  }
+  };
+  const numberIn = (block, key) => {
+    const found = new RegExp(`\\b${key}:\\s*(\\d+)`).exec(block);
+    return found ? Number(found[1]) : null;
+  };
+  const scalar = (name) => {
+    const found = new RegExp(`${name}\\s*=\\s*(\\d+)`).exec(text);
+    return found ? Number(found[1]) : null;
+  };
+
+  for (const row of rows) compare(row.group, numberIn(groupBlock, row.group), row.addedTokens);
+  for (const p of presets) compare(`preset ${p.preset}`, numberIn(presetBlock, p.preset), p.tokens);
+  compare("SEARCH_BASELINE_TOKENS", scalar("SEARCH_BASELINE_TOKENS"), baseline);
+  compare("ALL_GROUPS_TOKENS", scalar("ALL_GROUPS_TOKENS"), everything);
+  compare("FEATURE_SET_TOKENS", scalar("FEATURE_SET_TOKENS"), featureSet);
+
   return drift;
 }
 
@@ -287,9 +329,9 @@ async function main() {
     writeFileSync(RECORD, renderRecord(rows, baseline.tokens, everything.tokens, featureSet, presets), "utf8");
     console.log(NEWLINE + `wrote ${RECORD}`);
   } else {
-    const drift = checkRecord(rows);
+    const drift = checkRecord(rows, baseline.tokens, everything.tokens, featureSet, presets);
     if (drift.length > 0) {
-      console.error(NEWLINE + "recorded group costs have drifted from what the server actually sends:");
+      console.error(NEWLINE + "recorded costs have drifted from what the server actually sends:");
       for (const d of drift) console.error(`  ${d.group}: recorded ${d.recorded}, measured ${d.measured}`);
       console.error(
         `${NEWLINE}unreal_list_tools reports these numbers to a model deciding what to enable, so a stale ` +
@@ -309,7 +351,7 @@ async function main() {
     );
     process.exit(1);
   }
-  console.log(NEWLINE + `groups ok: ${rows.length} measured, everything-on averages ~${everythingPerTool} tokens a tool across ${everything.tools.length}, within ${PER_TOOL_CEILING}`);
+  console.log(NEWLINE + `groups ok: ${rows.length + presets.length + 3} recorded figures checked (${rows.length} groups, ${presets.length} presets, baseline, everything-on, feature set), everything-on averages ~${everythingPerTool} tokens a tool across ${everything.tools.length}, within ${PER_TOOL_CEILING}`);
 }
 
 main().catch((err) => {
