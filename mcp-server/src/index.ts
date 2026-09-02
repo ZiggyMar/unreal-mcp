@@ -1246,7 +1246,7 @@ register(
     title: "List Unreal Blueprints",
     description:
       "Blueprint assets in the open project: path and parent class, not graph contents; the name is the last " +
-      "segment of `path`. Drill in with unreal_list_blueprint_graphs.",
+      "segment of `path`. Drill in by listing that Blueprint's graphs.",
     inputSchema: {
       pathPrefix: z
         .string()
@@ -1508,7 +1508,8 @@ register(
       "Node ids are abbreviated to the shortest prefix unique in this graph, and every tool that takes a node " +
       "id accepts that prefix. Type names have their K2Node_ prefix stripped. Positions, cosmetic metadata and " +
       "unconnected pins are omitted. " +
-      "Use unreal_read_node_detail for the full pin and property detail of one node id from this result.",
+      "Pass withPinValues for the literals on many nodes at once; one node's full pin and property detail is a " +
+      "read of that node id.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),
@@ -2204,14 +2205,14 @@ register(
       "Searches the running editor's real catalog of Blueprint-callable functions, built from live C++ reflection " +
       "on the exact engine version that is open, so the names and signatures it returns are correct by construction " +
       "rather than recalled. Search by intent or partial name (e.g. \"spawn actor\", \"line trace\", \"print\") and get " +
-      "back exact functionName and className values that unreal_add_node will accept. **Call this before " +
-      "unreal_add_node whenever you are not certain a function name and its owning class are exactly right**, which " +
+      "back exact functionName and className values a node will accept. **Call this before " +
+      "you place a node whenever you are not certain a function name and its owning class are exactly right**, which " +
       "is most of the time: guessing Unreal's API surface from memory is the single most common cause of a failed " +
-      "edit. Returns compact entries without full pin lists; follow up with unreal_get_node_signature for exact " +
+      "edit. Returns compact entries without full pin lists; read a function's signature for exact " +
       "pins. Matched on WORDS, so type what the editor shows: \"Array Length\", \"array_length\" and " +
       "\"ArrayLength\" all find Array_Length.\n\n" +
       "Searches macros and node kinds too. A hit under `macros` or `nodeTypes` is placed by " +
-      "unreal_build_graph with that nodeType (macros also need macroName), not as a function call.",
+      "placed with that nodeType (macros also need macroName), not called as a function.",
     inputSchema: {
       query: z
         .string()
@@ -2236,8 +2237,8 @@ register(
     description:
       "Given an exact function name (and optionally its owning class, to disambiguate), returns that function's real " +
       "parameter list from engine reflection: each parameter's name, C++ type, direction (in/out/return), and default " +
-      "value where one exists. Use this to get pin names exactly right before calling unreal_connect_pins or " +
-      "unreal_set_pin_default_value, instead of guessing what a pin is called. If the name does not resolve, the error " +
+      "value where one exists. Use this to get pin names exactly right before you wire a pin or set its " +
+      "default, instead of guessing what a pin is called. If the name does not resolve, the error " +
       "includes a didYouMean list of near-misses. Find the function name first with unreal_find_node if you do not " +
       "already know it.",
     inputSchema: {
@@ -2328,7 +2329,10 @@ register(
           })
         )
         .optional()
-        .describe("Nodes to create, in order. Same per-type params as unreal_add_node."),
+        .describe(
+          "Nodes to create, in order. Which fields a node needs depends on its nodeType; unreal_guide topic " +
+            "\"handbook\" lists them with the exact pin names."
+        ),
       connections: z
         .array(z.object({ from: z.string(), to: z.string() }))
         .optional()
@@ -2600,8 +2604,8 @@ register(
     description:
       "Creates a new function graph on a Blueprint with typed inputs and outputs, and returns the graph name plus " +
       "the entry (and result, if outputs exist) node ids so you can immediately add nodes inside it with " +
-      "unreal_add_node targeting the new graphName. Wire logic from the entry node's output pins to the result " +
-      "node's input pins. Call the function from other graphs via unreal_add_node CallFunction with functionName " +
+      "unreal_build_graph targeting the new graphName. Wire logic from the entry node's output pins to the result " +
+      "node's input pins. Call the function from other graphs with a CallFunction node, functionName " +
       "set to this name and no className. Type strings are the same compact descriptors unreal_add_variable uses " +
       '("bool", "int", "float", "string", "vector", "object:<Class>", "struct:<Struct>", "enum:<Enum>", ...).',
     inputSchema: {
@@ -7480,7 +7484,7 @@ register(
       'connections. Events: "BeginPlay", "Tick", "ActorBeginOverlap" map to the engine ones; any other name makes a ' +
       "Custom Event. A function's class is looked up in the live engine if you omit it, and one this engine does " +
       "not have is refused before anything is built. Everything lands in one atomic call. " +
-      "For branches, loops, or wiring one node's output into another's input, use unreal_build_graph.",
+      "For branches, loops, or wiring one node's output into another's input, build the graph in one call.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe('Graph to build in. Defaults to "EventGraph".'),

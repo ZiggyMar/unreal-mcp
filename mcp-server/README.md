@@ -203,10 +203,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2471 | five tools; hand it a sentence or a preset name |
-| `minimal` | 4223 | ten tools, fixed, for a small local model |
-| `core` | 13078 | the authoring spine |
-| `lazy` | 13386 | `core` plus deferred groups |
-| `full` | 46483 | everything, for a model that can afford it |
+| `minimal` | 4216 | ten tools, fixed, for a small local model |
+| `core` | 13088 | the authoring spine |
+| `lazy` | 13396 | `core` plus deferred groups |
+| `full` | 46493 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -9306,3 +9306,38 @@ failure mode that makes a test runner worse than no test runner.
 **`match` is required to run.** `Automation RunAll` here means ~5,000 tests and many minutes with the
 editor held. That is not something to start because a parameter was left out, so it refuses and points
 at `list`.
+
+### A description must not name a tool the profile does not have
+
+The standing instructions had this bug once and it was found by hand: the shared text named 18
+tools, `minimal` registers 11, and 13 were unreachable - including the first thing step 1 said to
+call. That was fixed in `buildInstructions`, and nothing stopped it happening one level down, in the
+tool descriptions, which are read in the same breath and cost the same tokens on every request.
+
+It had already happened, in the worst possible place. `unreal_build_graph` is the recommended way to
+author a graph on `core`, and its `nodes` field said *"Same per-type params as unreal_add_node"* -
+a tool `core` deliberately withholds, because it is a worse path for a weak model. So the profile
+built for the weakest models pointed them at a tool they cannot call, in the one field that decides
+whether the call is well formed.
+
+A scan found **24 of them** across `core` and `minimal`. The split that matters is not how many but
+what kind:
+
+| | example | verdict |
+|---|---|---|
+| **directing** | "Call this before `unreal_add_node`" | strands a caller — fixed |
+| **describing** | "Prefer this over individual `unreal_add_node` calls" | tells them *not* to — allowed |
+
+Twelve directing references were reworded to name the **action** rather than the tool that performs
+it: "before you place a node", "with a CallFunction node", "build the graph in one call". That reads
+better on every profile, not just the constrained ones — what a caller needs to know is what to do
+next, not which entry point happens to do it. `unreal_create_function` was pointing at
+`unreal_add_node` for graph authoring, which was wrong for *every* profile: `unreal_build_graph` is
+the recommended path and now that is what it says.
+
+Fourteen descriptive references are allowlisted in `check:profilerefs`, each with the reason a model
+cannot be stranded by it, and the guard fails if an allowance stops matching real code — an
+allowance for something that no longer happens teaches the next reader something false.
+
+Cost: `core` 13,078 → 13,088 and `full` 46,483 → 46,493. Ten tokens for text that stops sending
+constrained models to tools that are not there.
