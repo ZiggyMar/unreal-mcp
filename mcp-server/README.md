@@ -7425,6 +7425,7 @@ anybody noticed.
 - [You could write a component property and never read it back](#you-could-write-a-component-property-and-never-read-it-back)
 - [The workflow guide told models to trust the echo](#the-workflow-guide-told-models-to-trust-the-echo)
 - [The answer was in the last 9% of the reply](#the-answer-was-in-the-last-9-of-the-reply)
+- [One rule, whole surface: the guidance goes first](#one-rule-whole-surface-the-guidance-goes-first)
 
 <!-- INDEX:END -->
 
@@ -11762,3 +11763,36 @@ same cost, arriving in the order a summary should: what to do, then why, then th
 
 A test pins `nextAction` within the first five keys of a review, and requires it to still be long
 enough to act on — early and empty would be a worse answer than late and useful.
+
+### One rule, whole surface: the guidance goes first
+
+Fixing three replies by hand was the wrong shape. Sweeping more of the surface found the same defect
+everywhere:
+
+```
+read_blueprint_summary   "next"  at 96% of 9,260 chars
+list_actors              "next"  at 96% of 7,162
+map_system               "note"  at 98% of 3,311
+check_data_tables        "next"  at 81% of 3,486
+```
+
+So it moved into `jsonResult` — the one function every tool builds its reply with. `guidanceFirst`
+lifts `nextAction`, `next`, `warning`, `remedy`, `verdict` and `note` to the front and leaves
+everything else exactly where it was. Every reply measured now leads with its guidance **at 0%**, and
+every one is the same length it was.
+
+Done centrally for the reason the write guard in the C++ dispatch gives for itself: *a rule with thirty
+call sites has thirty chances to be forgotten* — and a tool added next year gets this for free.
+
+It reorders only a plain object's top level. Arrays and primitives pass through, and a nested `note`
+stays with the thing it annotates rather than being hoisted away from it.
+
+**Two mistakes worth recording, because both were mine and both were caught by the suite.**
+
+The helper started life inside `index.ts`, so the test had to `import("../dist/index.js")` to reach
+it — and *index is the entry point*, so importing it **started a server** and the test run hung until
+it timed out. It lives in its own module now, which is where a pure function belongs anyway.
+
+And the test that matters is not "is `nextAction` first". It is that the reordering is **free**: same
+keys, same values, same `JSON.stringify` length. That is the entire argument for doing it, so that is
+what is asserted — a version that quietly dropped a field would pass an ordering check and fail this one.

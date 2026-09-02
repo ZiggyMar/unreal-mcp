@@ -214,3 +214,37 @@ test("the conclusion comes before the evidence it was drawn from", async () => {
   // And it must still be a real answer, not just early.
   assert.ok(review.nextAction.length > 20, `nextAction is too short to act on: "${review.nextAction}"`);
 });
+
+test("guidanceFirst reorders without adding, dropping or changing anything", async () => {
+  // The central rule that puts what-to-do at the front of every reply. Its whole claim is that it
+  // costs nothing, so that is what this checks: same keys, same values, same JSON length - only the
+  // order differs.
+  const { guidanceFirst } = await import("../dist/guidanceFirst.js");
+
+  const before = { path: "/Game/X", findings: [1, 2, 3], count: 3, nextAction: "do the thing", note: "a caveat" };
+  const after = guidanceFirst(before);
+
+  assert.deepEqual(
+    Object.keys(after).sort(),
+    Object.keys(before).sort(),
+    "no key may be added or dropped"
+  );
+  for (const k of Object.keys(before)) assert.deepEqual(after[k], before[k], `${k} changed value`);
+  assert.equal(
+    JSON.stringify(after).length,
+    JSON.stringify(before).length,
+    "the reply must be the same size - reordering is free, and that is the entire argument for it"
+  );
+  assert.equal(Object.keys(after)[0], "nextAction", "the conclusion leads");
+  assert.ok(Object.keys(after).indexOf("note") < Object.keys(after).indexOf("path"), "caveats precede data");
+});
+
+test("guidanceFirst leaves arrays and primitives alone", async () => {
+  // A reply is not always an object. Reordering must never reshape one that is not.
+  const { guidanceFirst } = await import("../dist/guidanceFirst.js");
+  assert.deepEqual(guidanceFirst([3, 1, 2]), [3, 1, 2]);
+  assert.equal(guidanceFirst("plain"), "plain");
+  assert.equal(guidanceFirst(null), null);
+  const noGuidance = { b: 1, a: 2 };
+  assert.deepEqual(Object.keys(guidanceFirst(noGuidance)), ["b", "a"], "untouched when there is nothing to lead with");
+});

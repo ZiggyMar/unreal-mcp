@@ -12,6 +12,7 @@ import { walkChain, describeGates } from "./inputChain.js";
 import { normaliseEngineType, normaliseFieldTypes, typeHint } from "./engineTypes.js";
 import { findInDataTables } from "./findInDataTables.js";
 import { matchSymptoms } from "./symptoms.js";
+import { guidanceFirst } from "./guidanceFirst.js";
 import { UnrealBridgeClient } from "./bridgeClient.js";
 import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
@@ -1096,7 +1097,7 @@ function jsonResult(value: unknown) {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(value),
+        text: JSON.stringify(guidanceFirst(value)),
       },
     ],
   };
