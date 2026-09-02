@@ -1,5 +1,6 @@
 import { execTargets } from "./execFlow.js";
 import { ENTRY_TYPES } from "./entryTypes.js";
+import { matchTerms, matchesAllTerms } from "./matchTerms.js";
 
 /**
  * Turn a graph into a paragraph.
@@ -102,6 +103,9 @@ export interface ExplainOptions {
 
 export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}): GraphExplanation {
   const maxStepsPerChain = options.maxStepsPerChain ?? DEFAULT_MAX_STEPS_PER_CHAIN;
+  // Every term rather than one literal substring - see matchTerms.ts. "vacuum charge" showed 0
+  // chains here and "VacuumCharge" showed 2, which is the trap, not a filter working.
+  const terms = matchTerms(options.match);
   const needle = (options.match ?? "").trim().toLowerCase();
   const nodes = summary.nodes ?? [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -339,13 +343,10 @@ function runsOnTag(runsOn: string | undefined): string {
   // Filtered here, not in the traversal. `visited` is built from every chain, so narrowing the walk
   // would make the unreachable list wrong - it would report everything outside the filter as dead
   // logic, which is the worst possible way to answer a narrower question.
-  const shownChains = needle
-    ? chains.filter(
-        (chain) =>
-          chain.entry.toLowerCase().includes(needle) ||
-          chain.steps.some((step) => step.toLowerCase().includes(needle))
-      )
-    : chains;
+  const shownChains =
+    terms.length > 0
+      ? chains.filter((chain) => matchesAllTerms(`${chain.entry} ${chain.steps.join(" ")}`, terms))
+      : chains;
   const hiddenByMatch = chains.length - shownChains.length;
 
   const lines: string[] = [];

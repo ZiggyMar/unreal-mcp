@@ -9858,3 +9858,43 @@ confirm they are deliberate developer output."* A verifier that passed that woul
 `"ArrayLength"` all find `Array_Length`. All three do. That promise is what makes the
 `search_project` space trap in the previous commit surprising — the two search surfaces genuinely
 behave differently, and only one of them says so.
+
+### The space trap was the whole `match` convention, not one tool
+
+The previous commit found that `search_project` matches a substring, so a space matches nothing. That
+was not one tool's problem. Every `match` filter in the server did the same thing, and the standing
+instructions send every model straight at them — *"Every large read takes a filter (match, fields,
+replicatedOnly, direction, limit). Use it: the difference is 1,691 tokens against 218."*
+
+Measured before:
+
+| | natural phrasing | concatenated |
+|---|---:|---:|
+| `list_blueprints` `"shop upgrade"` / `"ShopUpgrade"` | **0** | 7 |
+| `list_variables` `"vacuum charge"` / `"VacuumCharge"` | **0** | 3 |
+| `read_blueprint_summary` | **0 nodes** | 5 nodes |
+| `explain_graph` | **0 chains** | 2 chains |
+
+Four tools, one behaviour: the way a person writes a name is the one input guaranteed to fail, and
+the failure is an empty result that reads as *"this project has none"*.
+
+`match` now splits on whitespace and requires every term, in any order. All four agree:
+
+```text
+"vacuum charge"  ->  5 nodes, 2 chains
+"VacuumCharge"   ->  5 nodes, 2 chains
+"charge vacuum"  ->  5 nodes, 2 chains
+```
+
+**It is a strict superset, which is what made it safe to change all four at once.** If the whole
+phrase appeared literally then each of its words appears too, so nothing that matched before stops
+matching — the concatenated column above is unchanged. Order is not required either, because
+"upgrade shop" and "shop upgrade" are the same request and honouring one but not the other would be
+a second trap beside the first.
+
+`search_project` keeps its warning rather than this fix: it is the bridge's own C++ search, so
+changing it means a rebuild before anyone benefits. Same split this project has made before — the
+bridge stays faithful, the tool layer accommodates.
+
+Two `match` filters were deliberately left alone. `unreal_list_tools` already reads whole sentences
+on purpose, and `unreal_guide` searches prose, where a literal phrase is the right thing to look for.

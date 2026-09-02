@@ -102,6 +102,7 @@ export interface GraphSummaryLike {
 
 /** Nodes a graph is read FROM. Losing these to a cap makes everything else unreadable. */
 import { ENTRY_TYPES } from "./entryTypes.js";
+import { matchTerms, matchesAllTerms } from "./matchTerms.js";
 
 /**
  * Default node cap.
@@ -162,8 +163,11 @@ export function capGraphSummary(result: GraphSummaryLike, options: CapOptions = 
   const all = result.nodes ?? [];
   const needle = (options.match ?? "").trim().toLowerCase();
 
+  // Every term rather than one literal substring - see matchTerms.ts. "vacuum charge" matched 0
+  // nodes here and "VacuumCharge" matched 5.
+  const terms = matchTerms(options.match);
   const filtered = needle
-    ? all.filter((n) => `${n.title ?? ""} ${n.type ?? ""}`.toLowerCase().includes(needle))
+    ? all.filter((n) => matchesAllTerms(`${n.title ?? ""} ${n.type ?? ""}`, terms))
     : all;
 
   // A filter narrows to the nodes asked for and then puts back the ones they are wired to, so the

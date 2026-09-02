@@ -91,6 +91,7 @@ import {
   type PathCandidate,
 } from "./suggestPath.js";
 import { rankNames } from "./didYouMean.js";
+import { matchTerms, matchesAllTerms } from "./matchTerms.js";
 
 const BRIDGE_HOST = process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1";
 const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
@@ -1307,10 +1308,16 @@ register(
     try {
       const result = await bridge.send<ListBlueprintsResult>("list_blueprints", { pathPrefix });
       const all = result.blueprints ?? [];
+      // Every term, in any order, rather than one literal substring. "shop upgrade" found
+      // nothing here and "ShopUpgrade" found seven, which is the trap matchTerms.ts documents.
+      const terms = matchTerms(match);
       const needle = (match ?? "").trim().toLowerCase();
-      const filtered = needle
-        ? all.filter((b) => `${b.name ?? ""} ${b.path ?? ""} ${b.parentClass ?? ""}`.toLowerCase().includes(needle))
-        : all;
+      const filtered =
+        terms.length > 0
+          ? all.filter((b) =>
+              matchesAllTerms(`${b.name ?? ""} ${b.path ?? ""} ${b.parentClass ?? ""}`, terms)
+            )
+          : all;
       const limit = Math.max(1, Math.min(maxResults ?? 100, 5000));
 
       // Compact AFTER filtering: `match` reads the name that compaction removes. The field view is
@@ -2987,9 +2994,10 @@ register(
         // separate subType. A filter that cannot find what the tool just showed you is the same
         // quiet mismatch as a read and a write disagreeing about type names.
         filtered = filtered.filter((v) =>
-          `${v.name ?? ""} ${v.type ?? ""} ${v.subType ?? ""} ${asTypeDescriptor(v).type ?? ""} ${v.category ?? ""}`
-            .toLowerCase()
-            .includes(needle)
+          matchesAllTerms(
+            `${v.name ?? ""} ${v.type ?? ""} ${v.subType ?? ""} ${asTypeDescriptor(v).type ?? ""} ${v.category ?? ""}`,
+            matchTerms(match)
+          )
         );
       }
       if (replicatedOnly === true) {
