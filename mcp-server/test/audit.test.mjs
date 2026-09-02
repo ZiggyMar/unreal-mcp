@@ -548,3 +548,25 @@ test("a Blueprint row struct gets no C++ pointer, because there is no C++ to poi
   assert.equal(r.dataTableNulls.length, 1);
   assert.doesNotMatch(r.nextAction, /unreal_find_source/, "a Blueprint struct is not found with find_source");
 });
+
+test("a native parent is reported as uncovered, not as a finding", async () => {
+  // parent-event-not-called compares a child against its parent's graph, so a parent that is not a
+  // Blueprint is skipped - and was skipped in silence. Measured: 296 of 339 Blueprints inherit from
+  // a native class, so a cost-95 check was running on 13% of the project and the report said so
+  // nowhere.
+  //
+  // Firing anyway would be worse. This check's own rule is that the signal is overriding a parent
+  // implementation that DOES work; without the parent there is no signal, only a shape, and it would
+  // fire on hundreds of ordinary widgets. So it reports coverage, like classesNotResolved does.
+  // BP_Messy and BP_Clean are the fixture's own Blueprints and already have event graphs, so they
+  // reach the parent-call stage; giving them a native parent is the whole scenario.
+  const bridge = fakeBridge({
+    list_variables: () => ({ parentClass: "AVSActivatableWidget", variables: [] }),
+  });
+
+  const r = await auditProject(bridge, {});
+  const groups = (r.groups ?? []).map((g) => g.check);
+  assert.ok(!groups.includes("parent-event-not-called"), "no parent graph means no finding, only a gap");
+  assert.match(r.parentCallNotChecked ?? "", /AVSActivatableWidget/);
+  assert.match(r.parentCallNotChecked ?? "", /unreal_find_source/);
+});

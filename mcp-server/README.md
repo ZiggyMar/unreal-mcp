@@ -9682,3 +9682,40 @@ by a test.
 This is the join the project is meant to close — *"whether it's C++ or Blueprints or a Data Table"*.
 The finding starts in a Data Table, the explanation is in a `.cpp`, and until now nothing connected
 them.
+
+### A cost-95 check was running on 13% of the project, silently
+
+`parent-event-not-called` is one of the most expensive findings in the table, and rightly so: adding
+`Event BeginPlay` to a child silently replaces the parent's, nothing warns, and the child's own logic
+still works — so the Blueprint looks correct while everything the parent set up is missing.
+
+It compares a child against its parent's **graph**, so a parent that is not a Blueprint is skipped:
+
+```ts
+const parent = eventGraphs.get(child.parentClass);
+if (!parent) continue;                 // a C++ parent: skipped, and until now in silence
+```
+
+Measured here: **296 of 339 Blueprints inherit from a native class.** The check ran on 43 of them,
+and the report mentioned the other 87% nowhere. It found 3 — a number that reads very differently
+once you know what it was looking at.
+
+**Firing anyway would have been worse.** This check's own rule is that the signal is overriding a
+parent implementation that *does work*; without the parent there is no signal, only a shape, and it
+would have fired on hundreds of ordinary widgets. Reading C++ parents properly means parsing
+`BeginPlay` out of source, which is a different piece of work.
+
+So it reports coverage instead of inventing findings — the same answer `classesNotResolved` gives,
+for the same reason:
+
+> parent-event-not-called ran on 43 of 326 Blueprints; the rest inherit from a native class, which
+> this cannot read. Most-used: UserWidget (87), Actor (70), None (11), **AVSActivatableWidget (9)**,
+> **AVSButtonBase (6)**, CommonUserWidget (6). Overriding an engine parent is usually fine; one of
+> your own C++ classes is worth a look with `unreal_find_source`.
+
+The list is there so the reader can spot their own classes, which they do instantly — `AVS*` is not
+`UserWidget`. 190 tokens, on a reply that had just dropped 238 from the two previous commits.
+
+**A coverage number is not a finding, and this project keeps discovering it needs both.** Three
+findings from a check that ran on 13% of the project is a different fact from three findings, and
+nothing in the reply distinguished them.

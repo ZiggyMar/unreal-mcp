@@ -748,6 +748,26 @@ const unresolvedClasses = new Set<string>();
   const PARENT_CALL_GRAPH = "EventGraph";
 
   // A child against its parent. Both have to have been read, which is why this waits until here.
+  //
+  // A parent that is NOT a Blueprint is skipped, and until now was skipped in silence. Measured
+  // here: 296 of 339 Blueprints inherit from a native class, so this check ran on 43 of them - 13%
+  // - and the report said nothing about the other 87%.
+  //
+  // The silence is the defect, not the skip. Comparing a child against a C++ parent would mean
+  // reading the parent's BeginPlay out of source, and firing on every child that overrides one
+  // without that evidence would be noise on hundreds of perfectly ordinary widgets: this check's
+  // own header says the signal is overriding a parent implementation that DOES work, and without
+  // the parent there is no signal, only a shape.
+  //
+  // So it reports coverage instead of inventing findings - the same answer classesNotResolved
+  // gives, for the same reason. A reader recognises their own C++ classes in the list instantly.
+  const nativeParents = new Map<string, number>();
+  for (const [, child] of eventGraphs) {
+    if (child.parentClass && !eventGraphs.has(child.parentClass)) {
+      nativeParents.set(child.parentClass, (nativeParents.get(child.parentClass) ?? 0) + 1);
+    }
+  }
+
   for (const [name, child] of eventGraphs) {
     const parent = eventGraphs.get(child.parentClass);
     if (!parent) continue;
@@ -1098,6 +1118,21 @@ const unresolvedClasses = new Set<string>();
           checkNotFound:
             `No finding kind called "${options.check}". This run found: ${checkNames.join(", ")}. ` +
             `Every group below is counted only, because the one you named is not among them.`,
+        }
+      : {}),
+    ...(nativeParents.size > 0
+      ? {
+          parentCallNotChecked:
+            `parent-event-not-called ran on ${eventGraphs.size - [...nativeParents.values()].reduce((a, b) => a + b, 0)} ` +
+            `of ${eventGraphs.size} Blueprints; the rest inherit from a native class, which this cannot read. ` +
+            `Most-used: ` +
+            [...nativeParents.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 6)
+              .map(([cls, n]) => `${cls} (${n})`)
+              .join(", ") +
+            `. Overriding an engine parent is usually fine; one of your own C++ classes is worth a ` +
+            `look with unreal_find_source.`,
         }
       : {}),
     ...(possiblyReplaced ? { possiblyReplaced } : {}),
