@@ -204,9 +204,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2471 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
-| `core` | 12990 | the authoring spine |
-| `lazy` | 13299 | `core` plus deferred groups |
-| `full` | 46099 | everything, for a model that can afford it |
+| `core` | 13042 | the authoring spine |
+| `lazy` | 13350 | `core` plus deferred groups |
+| `full` | 46150 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -9102,3 +9102,27 @@ Three sizes, because the graphs are the expensive half: `graphDetail: "none"` is
 `"entries"` (the default, event graphs only) 3,883, `"all"` 5,470 - each roughly half what it was. And every truncation says so -
 a list that quietly stops short reads as "this is all of them", which is the one thing a document
 must never get wrong.
+
+### Reading a literal off sixteen nodes
+
+"Which gameplay tag does each of these `SetGameplayTagMC` nodes set?" is an ordinary question and it
+used to cost fourteen calls: one `read_blueprint_summary` with `match`, then a `read_node_detail` per
+node to recover a single pin value from 230 tokens of full pin detail.
+
+| | tokens | calls |
+|---|---:|---:|
+| summary alone (shape only, no values) | 1,258 | 1 |
+| summary + 13 `read_node_detail` | 4,248 | 14 |
+| summary with `withPinValues` | **1,534** | **1** |
+
+Sixty-three percent fewer tokens, and thirteen fewer round trips - which is the larger saving, since
+every round trip re-reads the whole conversation.
+
+The values cost 276 tokens for all sixteen nodes, because only unwired inputs with something in them
+are emitted: a wired pin's default is meaningless and is already omitted everywhere else for that
+reason, an exec pin has no value, and an empty one is not worth the characters.
+
+**Off by default, and that matters more than the saving.** `explain_graph`, `review_blueprint` and
+the whole audit read graph summaries constantly and none of them want pin literals. Switching this
+on for everyone would have grown the most-read reply on the surface to answer a question most callers
+are not asking. Measured with the flag off, the reply is byte-identical to what it was.

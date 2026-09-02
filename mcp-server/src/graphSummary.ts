@@ -29,6 +29,8 @@ export interface SummaryNodeLike {
   title?: string;
   ghost?: boolean;
   runsOn?: string;
+  /** Present only when the caller asked for withPinValues. */
+  values?: Record<string, string>;
   connectedPins?: Array<{
     pin?: string;
     direction?: string;
@@ -86,6 +88,9 @@ function compactNode(node: SummaryNodeLike): Record<string, unknown> {
     //
     // Emitted only for replicated events, so the common case still costs nothing.
     ...(node.runsOn ? { runsOn: node.runsOn } : {}),
+    // Only when asked for, and the bridge only fills it for pins that are unwired and non-empty -
+    // so a node with nothing set costs nothing here.
+    ...(node.values ? { values: node.values } : {}),
     ...(pins ? { pins } : {}),
   };
 }

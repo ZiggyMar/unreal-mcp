@@ -1761,6 +1761,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		return MakeErrorResponse(TEXT("missing_param: path and graphName are required"));
 	}
 
+	// Opt-in, because every other caller of this command would pay for it.
+	//
+	// explain_graph, review_blueprint and the whole audit read graph summaries constantly and none of
+	// them want pin literals; switching this on by default would grow the most-read reply on this
+	// surface for the benefit of one question.
+	bool bWithPinValues = false;
+	Params->TryGetBoolField(TEXT("withPinValues"), bWithPinValues);
+
 	FString LoadError;
 	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
 	if (!Blueprint)
@@ -1837,6 +1845,49 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			else if (Flags & FUNC_NetClient)
 			{
 				NodeEntry->SetStringField(TEXT("runsOn"), TEXT("owningClient"));
+			}
+		}
+
+		// What the unwired input pins are actually SET to, when asked for.
+		//
+		// Answering "which gameplay tag does each of these sixteen SetGameplayTagMC nodes set?" took
+		// one summary and thirteen read_node_detail calls - 4,248 tokens across fourteen round trips,
+		// and the round trips cost far more than the tokens because every one re-reads the whole
+		// conversation. Each of those replies was 230 tokens of full pin detail to recover a single
+		// literal.
+		//
+		// Only unwired inputs with something in them: a wired pin's default is meaningless and is
+		// omitted elsewhere for exactly that reason, an exec pin has no value, and an empty one says
+		// nothing worth the characters.
+		if (bWithPinValues)
+		{
+			TSharedRef<FJsonObject> Values = MakeShared<FJsonObject>();
+			bool bAny = false;
+			for (UEdGraphPin* Pin : Node->Pins)
+			{
+				if (!Pin || Pin->Direction != EGPD_Input || Pin->LinkedTo.Num() > 0)
+				{
+					continue;
+				}
+				if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+				{
+					continue;
+				}
+				const bool bIsClassDefault =
+					Pin->DefaultObject && Pin->DefaultObject->GetName().StartsWith(TEXT("Default__"));
+				const FString Value = (Pin->DefaultObject && !bIsClassDefault)
+					? Pin->DefaultObject->GetPathName()
+					: Pin->DefaultValue;
+				if (Value.IsEmpty())
+				{
+					continue;
+				}
+				Values->SetStringField(Pin->PinName.ToString(), Value);
+				bAny = true;
+			}
+			if (bAny)
+			{
+				NodeEntry->SetObjectField(TEXT("values"), Values);
 			}
 		}
 

@@ -1460,13 +1460,21 @@ register(
         .number()
         .optional()
         .describe("Cap on nodes returned. Defaults to 150. Entry points are always kept. Raise it only when you genuinely need the whole graph."),
+      withPinValues: z
+        .boolean()
+        .optional()
+        .describe(
+          "What each node's unwired input pins are SET to, as `values`. With `match`, reads a literal off many " +
+            "nodes in one call instead of a read_node_detail each."
+        ),
     },
   },
-  async ({ path, graphName, match, maxNodes }) => {
+  async ({ path, graphName, match, maxNodes, withPinValues }) => {
     try {
       const result = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
         path,
         graphName,
+        withPinValues,
       });
 
       // Bounded in the TOOL, not in the bridge: review, audit and explain_graph call the bridge

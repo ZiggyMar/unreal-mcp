@@ -64,7 +64,23 @@ export const PROFILES = [
     // only this set, while `lazy` registers everything and disables all but this set so it can grow
     // at runtime. Identical tools/list output is the correct result, not a bug - which this script
     // established the hard way by asserting otherwise first.
-    ceilingTokens: 13_000,
+    // Raised from 13,000 to 13,100 for read_blueprint_summary's withPinValues, measured rather than
+    // argued about - and recorded because this guard's own message says not to move a ceiling
+    // silently.
+    //
+    // The parameter costs 42 tokens standing here, minimal description included, and it was 42 that
+    // did not exist: core measured 12,987 against a 13,000 ceiling, so it had thirteen tokens of
+    // headroom and could not have absorbed ANY new capability. That is the more useful finding than
+    // the number itself.
+    //
+    // What the 42 buys, on a real graph: reading one literal off sixteen nodes went from 4,248
+    // tokens across fourteen calls to 1,534 in one. Thirteen round trips removed, each of which
+    // re-reads the whole conversation. A standing cost paid once per request against a per-workflow
+    // saving that large is not a close call.
+    //
+    // 13,100 and not 13,400: enough for this, not enough to stop the next addition having to make
+    // its own case. A ceiling that moves to fit whatever arrives has stopped being one.
+    ceilingTokens: 13_100,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {
