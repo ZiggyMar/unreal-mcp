@@ -10493,3 +10493,34 @@ that is precisely the busy editor this must not accuse of being dead. The compos
 editor that dies mid-command to exercise end to end, and the honest note is that it has not been:
 what is verified is that the probe answers correctly, the message says the right things, and the
 whole thing compiles.
+
+### The C++ half had no guard at all
+
+`npm test` runs fifteen checks and 860 tests, and every one of them is about TypeScript. The plugin
+is C++, it runs inside the editor, and this project has now watched it take the editor down — and
+nothing anywhere compiled it.
+
+That is not theoretical. A C++ change was pushed to this repo two commits ago, and it compiled only
+because somebody chose to check by hand. Had it not, the failure would land on the user's next
+`npm run build:engines` — which is precisely the rebuild `unreal_doctor` asks for after a crash. **The
+one moment they most need a working build is the one a broken push would ruin.**
+
+So the pre-push hook now compiles the plugin when, and only when, the push touches its C++:
+
+```sh
+changed=$(git diff --name-only "$upstream"..HEAD)
+if ! echo "$changed" | grep -qE '^UnrealMCPBridge/.*\.(cpp|h|cs)$'; then exit 0; fi
+node scripts/build-engines.mjs --isolated
+```
+
+`--isolated` is what makes it affordable — RunUAT BuildPlugin against public engine APIs, no
+configured project, no binaries installed, nothing touched in anyone's game. Three minutes, on the
+rare push that changes C++; a TypeScript push is unaffected.
+
+Both branches were checked against real commits before this was trusted: `215b7be0`, which added the
+`create_struct` guard, is seen and would compile; `e988118c`, TypeScript only, skips.
+
+**It refuses rather than skipping when it cannot run.** A machine with no `build-targets.json` gets a
+refusal naming `--no-verify`, not a quiet pass. A guard that succeeds when it could not do its job is
+the false confidence this repo has spent a dozen commits removing — and it would be worst here, on
+the half that can crash an editor.

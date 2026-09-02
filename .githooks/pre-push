@@ -13,6 +13,19 @@
 # is not a fix; this is. The mistake is now impossible rather than discouraged, which is the same
 # argument every other guard in this repo makes for itself.
 #
+# ## The C++ half
+#
+# `npm test` covers TypeScript and nothing else. The plugin is C++, it runs inside the editor, and
+# this project has watched it take the editor down - so a C++ change that does not compile is worse
+# than a failing test. It lands on the user's next `npm run build:engines`, which is exactly the
+# rebuild unreal_doctor asks for after a crash: the one moment they most need a working build is the
+# one a broken push would ruin. A C++ change was pushed to this repo having been compiled only
+# because somebody remembered to.
+#
+# So a push that touches the plugin's C++ compiles it first, and a push that does not stays fast.
+# `--isolated` is what makes that affordable: RunUAT BuildPlugin against public engine APIs only, no
+# configured project, no binaries installed, nothing touched in anyone's game. About three minutes.
+#
 # ## Turning it on
 #
 # Hooks are not carried by a clone, so this needs one command per working copy:
@@ -23,10 +36,12 @@
 #
 # `git push --no-verify` skips it. That is deliberate and it should feel like a decision - pushing a
 # red suite to main is sometimes right (a WIP branch, a revert that fixes it two commits later) and
-# always worth being deliberate about.
+# always worth being deliberate about. It is also the escape hatch on a machine with no engine
+# installed: this REFUSES rather than skipping quietly, because a guard that passes when it could not
+# run is the false confidence this repo keeps removing.
 #
-# The suite is about a minute. That is the whole cost, and it is paid per push rather than per
-# commit, which is roughly once per finished piece of work.
+# The suite is about a minute; the C++ build about three more, and only when C++ changed. Paid per
+# push rather than per commit, which is roughly once per finished piece of work.
 
 set -e
 
@@ -40,12 +55,44 @@ if [ ! -d node_modules ]; then
 fi
 
 echo "pre-push: running the guard suite (about a minute)..."
-if npm test; then
-  echo "pre-push: green."
+if ! npm test; then
+  echo ""
+  echo "pre-push: REFUSED - the suite is red, so this push was not sent."
+  echo "          Fix it, or push with --no-verify if the red is deliberate."
+  exit 1
+fi
+echo "pre-push: green."
+
+# --- the C++ half, only when it changed ---------------------------------------------------------
+#
+# Compared against the upstream branch when there is one and origin/main otherwise, so this still
+# works on a branch that has never been pushed.
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "origin/main")
+changed=$(git diff --name-only "$upstream"..HEAD 2>/dev/null || echo "")
+
+if ! echo "$changed" | grep -qE '^UnrealMCPBridge/.*\.(cpp|h|cs)$'; then
   exit 0
 fi
 
 echo ""
-echo "pre-push: REFUSED - the suite is red, so this push was not sent."
-echo "          Fix it, or push with --no-verify if the red is deliberate."
+echo "pre-push: this push changes the plugin's C++, so it has to compile."
+echo "          (--isolated: public engine APIs only, no project touched, no binaries installed)"
+
+if [ ! -f build-targets.json ]; then
+  echo ""
+  echo "pre-push: REFUSED - build-targets.json is missing, so the C++ cannot be compiled here."
+  echo "          A C++ change that does not build lands on the next 'npm run build:engines', which"
+  echo "          is the rebuild the doctor asks for after a crash. Configure a target, or push with"
+  echo "          --no-verify if you have verified it another way."
+  exit 1
+fi
+
+if node scripts/build-engines.mjs --isolated; then
+  echo "pre-push: the plugin compiles."
+  exit 0
+fi
+
+echo ""
+echo "pre-push: REFUSED - the plugin does not compile, so this push was not sent."
+echo "          Fix it, or push with --no-verify if you know the build failure is unrelated."
 exit 1
