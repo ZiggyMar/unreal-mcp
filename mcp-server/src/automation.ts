@@ -25,6 +25,7 @@
  */
 
 import { open, stat } from "node:fs/promises";
+import { matchTerms, matchesAllTerms } from "./matchTerms.js";
 
 /** One test the engine reported on. */
 export interface TestResult {
@@ -148,12 +149,14 @@ export interface AutomationList {
  */
 export function parseAutomationList(text: string, match?: string, limit = 100): AutomationList {
   const names: string[] = [];
-  const needle = (match ?? "").trim().toLowerCase();
+  const terms = matchTerms(match);
   for (const line of text.split(/\r?\n/)) {
     const m = /Display:\s*\t'?([A-Za-z0-9._+\-]+)'?\s*$/.exec(line);
     if (!m) continue;
     const name = m[1];
-    if (needle.length > 0 && !name.toLowerCase().includes(needle)) continue;
+    // Every term, not one literal substring: a test is called System.Mass.EntityView.Invalidate
+    // and "mass entityview" is how a person asks for it. See matchTerms.ts.
+    if (!matchesAllTerms(name, terms)) continue;
     names.push(name);
   }
   const unique = [...new Set(names)];

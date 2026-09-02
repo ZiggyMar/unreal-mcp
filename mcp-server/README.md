@@ -9898,3 +9898,36 @@ bridge stays faithful, the tool layer accommodates.
 
 Two `match` filters were deliberately left alone. `unreal_list_tools` already reads whole sentences
 on purpose, and `unreal_guide` searches prose, where a literal phrase is the right thing to look for.
+
+### A guard for the trap that nothing could have caught
+
+The `match` fix in the previous commit was found by typing a two-word query by hand. Nothing failed,
+no test broke, and all four tools looked like they were filtering correctly — which means nothing
+would catch the same mistake in the *next* filter somebody writes.
+
+`check:matchfilters` scans `src/` for `haystack.includes(needle)` and requires every file containing
+one to declare **how many** it has and **why** each is deliberate. The question is always the same:
+
+> Is the haystack a **name** or is it **prose**? A name has no spaces, so a spaced query can never
+> match it and the filter is broken for the most natural input. Prose has spaces, so a literal
+> phrase is a meaningful thing to look for.
+
+Two more name-based filters were converted on the way: `unreal_run_tests` matching automation test
+names like `System.Mass.EntityView.Invalidate`, and `unreal_find_orphans` matching actor class names.
+Seven substring tests remain, all in two files, all over prose — `list_tools` reads whole sentences
+on purpose, and `guide` searches documentation.
+
+**The count is the point, not the filename.** An allowance keyed only by file would let a new
+plain-substring filter in `index.ts` inherit the reason belonging to a guide search three hundred
+lines away — which is precisely the false confidence the guard exists to prevent. It also fails on an
+allowance for a file that no longer has any, so the reasons cannot rot into notes about nothing.
+
+Two things worth recording about building it:
+
+**I ran the guard against a deliberate regression before trusting it.** Dropping a new file with the
+old pattern into `src/` made it fail, with the message naming the fix. A guard nobody has watched
+fail is a guard nobody should believe.
+
+**It immediately caught my own miscount.** I had declared four allowances for `index.ts`; there are
+five, because `list_tools` tests a tool's name and its summary on separate lines. The first thing the
+guard did was contradict the person who wrote it.

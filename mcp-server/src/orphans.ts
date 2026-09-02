@@ -32,6 +32,8 @@
  * level with no orphan - there is no such step and nothing is reported.
  */
 
+import { matchTerms, matchesAllTerms } from "./matchTerms.js";
+
 export interface BridgeLike {
   send<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T>;
 }
@@ -126,8 +128,10 @@ async function actorsMatching(bridge: BridgeLike, filter: string): Promise<Actor
   });
   // classFilter is a substring match on the class name, and the bridge still returns the whole
   // level when nothing matches, so the filter is applied again here rather than trusted.
-  const needle = filter.toLowerCase();
-  return (listed.actors ?? []).filter((a) => String(a.class ?? "").toLowerCase().includes(needle));
+  // Every term, not one literal substring - an actor class name has no spaces in it, so a filter
+  // written the way a person says it matched nothing. See matchTerms.ts.
+  const terms = matchTerms(filter);
+  return (listed.actors ?? []).filter((a) => matchesAllTerms(String(a.class ?? ""), terms));
 }
 
 export async function findOrphans(
