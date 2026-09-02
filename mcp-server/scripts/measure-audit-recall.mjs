@@ -123,8 +123,24 @@ if (missed.length > 0) {
     console.log(`    ${m.blueprint}.${m.graph} - ${m.property} (${m.count} hits at runtime)`);
   }
   console.log(
-    "\n  Not every miss is a defect. Whether an array Get is in range depends on what is in the\n" +
-      "  array, and no static check can know that. The ones worth acting on are those where the\n" +
-      "  reason it is null is visible in the graph."
+    "\n  Not every miss is a defect, and one whole class of them is settled - measured, not argued:\n" +
+      "\n" +
+      "  MOST OF THESE ARE NULL-REFERENCE READS, AND THAT CLASS IS NOT STATICALLY DECIDABLE HERE.\n" +
+      "  The obvious check is \"a Get feeding a self pin with no Set of it upstream\". Measured over\n" +
+      "  90 Blueprints: 120 such sites, 110 with no upstream Set - 92%. Nearly all correct, because\n" +
+      "  setting a reference in BeginPlay and using it everywhere else is the normal idiom, and the\n" +
+      "  Set is simply in another graph. Blueprint events have no ordering guarantee between them,\n" +
+      "  so \"was it set before this ran\" has no static answer. A 92% check is noise, and noise is\n" +
+      "  how a whole report stops being read - the same reason branch-dead-path was narrowed rather\n" +
+      "  than repaired at 58%.\n" +
+      "\n" +
+      "  So for null references the right detector is the one that already works: run it and read\n" +
+      "  unreal_read_runtime_errors, which names the Blueprint, the graph, the node and the count.\n" +
+      "  Static analysis earns its keep on what a single PIE session CANNOT show - a cast or a Get\n" +
+      "  that only fails on a second machine - which is where the checks that do fire all live.\n" +
+      "\n" +
+      "  Worth acting on here: a miss whose CAUSE is visible in the graph even though the null is\n" +
+      "  not. BP_FireWall was one - the guard was a Branch with both arms wired to the same node,\n" +
+      "  which is now branch-decides-nothing."
   );
 }
