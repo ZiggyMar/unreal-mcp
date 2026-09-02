@@ -3205,20 +3205,55 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetPinDefaultValue(const TShar
 		{
 			return MakeErrorResponse(FString::Printf(TEXT("asset_not_found: %s (object pins take a full asset path)"), *Value));
 		}
-		Pin->DefaultObject = Loaded;
+		/**
+		 * Through the schema, not by assigning the field.
+		 *
+		 * `Pin->DefaultObject = Loaded` looks like it works and reports success: the assignment
+		 * happens, and reading the pin back in the same call returns the path just written. It does
+		 * not survive. Read the same pin in a later call and it is empty, because the node has since
+		 * been reconstructed and nothing told the schema this pin now carries a default.
+		 *
+		 * Found by building a feature that needed two of them. `Get All Actors Of Class` had no
+		 * ActorClass and `Get Components By Class` had no ComponentClass, so both returned nothing -
+		 * and an empty class pin is LEGAL, so the Blueprint compiled with zero errors and the whole
+		 * feature silently did nothing. Two chains, both reported built and set, both inert.
+		 *
+		 * TrySetDefaultObject is the sanctioned path: it validates against the pin's type, updates
+		 * the pin the way the editor's own class picker does, and notifies the node afterwards.
+		 */
+		const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+		K2Schema->TrySetDefaultObject(*Pin, Loaded);
 	}
 	else
 	{
 		Pin->DefaultValue = Value;
+		Node->PinDefaultValueChanged(Pin);
 	}
-	Node->PinDefaultValueChanged(Pin);
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("set"), true);
+	/**
+	 * Report what the pin HOLDS, and say so when that is not what was asked for.
+	 *
+	 * This returned `set: true` unconditionally for years, and a class pin that silently kept nothing
+	 * was indistinguishable from one that worked. A caller then builds on the lie: the graph compiles,
+	 * because an empty class pin is legal, and the failure surfaces at runtime as "nothing happens".
+	 *
+	 * Reading the pin back costs nothing and turns a confident falsehood into a fact.
+	 */
+	const FString Landed = Pin->DefaultObject ? Pin->DefaultObject->GetPathName() : Pin->DefaultValue;
+	const bool bLanded = !Landed.IsEmpty();
+	Result->SetBoolField(TEXT("set"), bLanded);
 	Result->SetStringField(TEXT("pin"), PinName);
-	Result->SetStringField(TEXT("value"), Pin->DefaultObject ? Pin->DefaultObject->GetPathName() : Pin->DefaultValue);
+	Result->SetStringField(TEXT("value"), Landed);
+	if (!bLanded)
+	{
+		Result->SetStringField(TEXT("warning"),
+			FString::Printf(TEXT("the pin is still empty after setting it to \"%s\". The node may have been ")
+				TEXT("reconstructed, or the value is not valid for this pin's type. Read the node back before ")
+				TEXT("relying on it - an empty class pin is legal and compiles, and fails only at runtime."), *Value));
+	}
 	if (!PinCorrection.IsEmpty())
 	{
 		Result->SetStringField(TEXT("corrected"), PinCorrection);
@@ -4957,6 +4992,8 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 	// quietly carried. Silent forgiveness teaches a model nothing and hides real mistakes.
 	TArray<FString> PinCorrections;
 	int32 DefaultsSet = 0;
+	/** Defaults that reported set and kept nothing, so the reply can say so instead of counting them. */
+	TArray<FString> UnlandedDefaults;
 
 	// The whole batch is atomic: any failure restores the graph to exactly its pre-call
 	// state. A model that gets step 7 of 9 wrong retries the whole batch instead of
@@ -5235,14 +5272,26 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 						RollbackBatch();
 						return MakeErrorResponse(FString::Printf(TEXT("pinDefault %d: asset_not_found: %s"), i, *Value));
 					}
-					Pin->DefaultObject = Loaded;
+					// Through the schema. See HandleSetPinDefaultValue for why the direct assignment
+					// does not survive - this is the path that actually built the two dead class
+					// pins that made a whole feature compile cleanly and do nothing.
+					GetDefault<UEdGraphSchema_K2>()->TrySetDefaultObject(*Pin, Loaded);
 				}
 				else
 				{
 					Pin->DefaultValue = Value;
+					Node->PinDefaultValueChanged(Pin);
 				}
-				Node->PinDefaultValueChanged(Pin);
-				++DefaultsSet;
+				// Counted only when it landed. `pinDefaultsSet: 5` while one of the five kept nothing
+				// is the report that let this go unnoticed through an entire feature build.
+				if (Pin->DefaultObject != nullptr || !Pin->DefaultValue.IsEmpty())
+				{
+					++DefaultsSet;
+				}
+				else
+				{
+					UnlandedDefaults.Add(FString::Printf(TEXT("%s on %s"), *PinName, *Node->GetName()));
+				}
 			}
 		}
 
@@ -5251,6 +5300,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetObjectField(TEXT("nodes"), NodesOut);
+	if (UnlandedDefaults.Num() > 0)
+	{
+		Result->SetStringField(TEXT("pinDefaultsNotLanded"),
+			FString::Printf(TEXT("%d pin default(s) were applied and the pin is still empty: %s. An empty ")
+				TEXT("class or object pin is LEGAL and compiles, so this will not appear as a build error - ")
+				TEXT("it fails at runtime as \"nothing happens\". Read the node back before relying on it."),
+				UnlandedDefaults.Num(), *FString::Join(UnlandedDefaults, TEXT(", "))));
+	}
 	// Put the new nodes where their wires are.
 	//
 	// Averaging the neighbours rather than picking one: a node feeding a Set and reading a Get belongs

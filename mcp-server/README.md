@@ -7415,6 +7415,7 @@ anybody noticed.
 - [A comment edit stopped every push, and the error pointed forty lines away](#a-comment-edit-stopped-every-push-and-the-error-pointed-forty-lines-away)
 - [The index said 140 sections and there were 293](#the-index-said-140-sections-and-there-were-293)
 - [The suite got five minutes slower and nothing had changed](#the-suite-got-five-minutes-slower-and-nothing-had-changed)
+- [Two class pins kept nothing, and everything reported success](#two-class-pins-kept-nothing-and-everything-reported-success)
 
 <!-- INDEX:END -->
 
@@ -11432,3 +11433,36 @@ This is the third time in two days that a check read live machine state it did n
 doctor's port probe, `check:profilerefs` reading source comments, and now four test files reaching a
 real editor. The pattern is worth naming — *a test that can see the outside world will eventually
 depend on it*, and here the dependency showed up as five minutes rather than a wrong answer.
+
+### Two class pins kept nothing, and everything reported success
+
+Building the tutorial guide-arrow feature, two chains were placed, wired, compiled with zero errors,
+saved — and did nothing at all.
+
+`Get All Actors Of Class` had **no ActorClass**. `Get Components By Class` had **no ComponentClass**.
+Both were set through `build_graph`'s `pinDefaults`, which reported `pinDefaultsSet: 5`. Both were
+empty when read back.
+
+Every signal said it worked:
+
+- `build_graph` → `pinDefaultsSet: 5`
+- `set_pin_default_value` → `{"set": true, "value": "/Script/Engine.SplineMeshComponent"}`
+- `compile_blueprint` → `errorCount: 0`
+
+That last one is why this survives: **an empty class pin is legal.** It compiles. `Get All Actors Of
+Class` with no class simply returns an empty array, so the feature builds, saves, runs, and quietly
+does nothing — the failure only exists at runtime, as "the arrows never appear".
+
+The cause is one line. Both paths did `Pin->DefaultObject = Loaded`, which succeeds *in that call* —
+reading the pin back immediately returns the value just written — and does not survive the node's
+next reconstruction, because nothing told the schema the pin now carries a default.
+`TrySetDefaultObject` is the sanctioned path: it validates against the pin type and updates the pin
+the way the editor's own class picker does. Both call sites use it now.
+
+**The deeper fix is that success is no longer assumed.** `set_pin_default_value` reads the pin back
+and reports what it *holds*, with a warning when that is empty. `build_graph` counts a default only
+when it landed, and names the ones that did not — because `pinDefaultsSet: 5` while one of the five
+kept nothing is precisely the report that let this run through an entire feature build unnoticed.
+
+The lesson is not "use the right API". It is that a write which verifies costs one read, and a write
+that reports success without checking can be wrong for hours across a dozen calls that each look fine.
