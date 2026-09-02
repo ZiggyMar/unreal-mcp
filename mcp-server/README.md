@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 13078 | the authoring spine |
 | `lazy` | 13386 | `core` plus deferred groups |
-| `full` | 46186 | everything, for a model that can afford it |
+| `full` | 46483 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -9236,3 +9236,73 @@ Applied in the bridge client, which is the choke point every command's failure p
 there rather than in the C++ that builds the list, for the reason recorded about the same choice for
 type spellings: the resolver is the tidier place and only reaches somebody who has rebuilt their
 plugin, while this layer reaches everyone now.
+
+### What Epic's own MCP plugin has, and what it does not
+
+Epic shipped a first-party `Unreal MCP` plugin in **UE 5.8** (June 2026), experimental, embedded in
+the editor at `127.0.0.1:8000/mcp`. Checked because it is the obvious question: is there anything in
+it this project should have?
+
+**The architecture converged independently.** Epic's `tools/list` returns three meta-tools -
+`list_toolsets`, `describe_toolset`, `call_tool` - and discovers the real tools through them. That
+is the same answer as the `search` profile here: `unreal_list_tools`, `unreal_list_tools({ schema })`
+and `unreal_call_tool`, for the same reason, which is that a full tool list is paid on every request
+before the user's message is even read. Two independent designs arriving at the same shape is the
+strongest evidence available that it is the right one - stronger than the measurements in this repo,
+which only prove it works here.
+
+Differences worth recording:
+
+| | Epic's plugin | this project |
+|---|---|---|
+| transport | HTTP + SSE, no stdio | stdio MCP, TCP to the editor |
+| auth | *"No authentication layer"* | per-session token file |
+| surface | Scene, Actor, MaterialInstance, Object toolsets | 134 tools: Blueprints, C++, Data Tables, anim, Niagara, widgets, sequences, audits |
+| authoring | spawn, configure, inspect | builds Blueprint graphs, writes C++, edits Data Tables |
+| engine | 5.8+ | 5.3+ |
+
+**It is not available to this project.** The editor here is UE 5.6; Epic's plugin needs 5.8. That is
+two engine upgrades away for a project with 341 Blueprints, so the comparison is informative rather
+than actionable.
+
+One genuine gap it exposed, now closed: **running automation tests**.
+
+### `unreal_run_tests`, without a plugin rebuild
+
+Epic's plugin lists "running automation tests" among its tools and this project had no route to them
+at all - not in the bridge, not in the server. Running the tests is something a person does from
+Session Frontend every day, and "supports everything a normal human would have for this engine" has
+to include the thing that says whether the engine still works.
+
+The obvious implementation is a new bridge command, which means rebuilding the plugin and restarting
+the editor before anyone can use it. It did not need one. `Automation` is a console command, the
+bridge already runs console commands, and the editor writes every automation line to `Saved/Logs`
+before anything else happens - the same property `runtimeLog.ts` is built on. So this is a console
+command plus a parser: it works on a plugin nobody rebuilt, and it can read a run that has already
+finished.
+
+```text
+unreal_run_tests { list: true, match: "Mass.EntityView" }
+  ->  {"total":4957,"names":["System.Mass.EntityView.Invalidate"],"omitted":0}          18 tokens
+
+unreal_run_tests { match: "System.Mass.EntityView" }
+  ->  {"passed":1,"failed":0,"failures":[],"complete":true,"found":1,"performed":1}     19 tokens
+```
+
+Both measured against a live editor. The project has **4,957 tests**; listing them all is roughly
+thirty thousand tokens to answer "is there a test for X". So passes are counted and never named, and
+failures come back with the engine's own messages attached - the same rule the audit follows.
+
+Three decisions worth keeping:
+
+**`complete` is reported separately from `failed`.** A run that timed out and a run where everything
+passed both show zero failures. Reporting the first as the second is the one way this tool could do
+real harm, so an unfinished run says so in words rather than leaving it to be inferred from a zero.
+
+**A verdict that is not `Success` is not a pass.** `Fail`, `Skipped`, or a result word a later engine
+version introduces all count as not-passing. Treating an unrecognised verdict as success is the
+failure mode that makes a test runner worse than no test runner.
+
+**`match` is required to run.** `Automation RunAll` here means ~5,000 tests and many minutes with the
+editor held. That is not something to start because a parameter was left out, so it refuses and points
+at `list`.

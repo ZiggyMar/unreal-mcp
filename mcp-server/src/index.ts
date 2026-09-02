@@ -26,6 +26,14 @@ import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
+import { logFileFor } from "./runtimeLog.js";
+import {
+  logSize,
+  readLogFrom,
+  runIsComplete,
+  parseAutomationRun,
+  parseAutomationList,
+} from "./automation.js";
 import { auditProject } from "./audit.js";
 import { withDisabledToolNote } from "./disabledTools.js";
 import { guardWithAuthority } from "./authorityGuard.js";
@@ -604,6 +612,10 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_teleport_actor",
     "unreal_read_runtime_errors",
     "unreal_screenshot",
+    // Beside read_runtime_errors because it works the same way - run something, read what the
+    // editor wrote to Saved/Logs - and answers the same question one level up: not "what went wrong
+    // when I pressed Play" but "does the engine still think this project is correct".
+    "unreal_run_tests",
   ],
   edit: [
     // Reachable but not offered by default. It makes an EMPTY Blueprint, and a weak model reaches
@@ -3950,6 +3962,100 @@ register(
   async ({ path, action, key }) => {
     try {
       return jsonResult(await bridge.send("unmap_input_key", { path, action, key }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_run_tests",
+  {
+    title: "Run the engine's automation tests and report what failed",
+    description:
+      "Runs Unreal's own automation tests - the ones in Session Frontend - and returns what failed. " +
+      "Pass `match` to run a subset by name prefix (\"System.Mass\", \"MyGame.Inventory\"); pass `list: true` " +
+      "to see what tests exist without running anything. Passing tests are counted, not listed: a real " +
+      "project has ~5,000 and naming them all answers a question nobody asked. Failures come back with the " +
+      "engine's own messages attached. Running everything takes many minutes, so `match` is required unless " +
+      "you explicitly ask to list.",
+    inputSchema: {
+      match: z
+        .string()
+        .optional()
+        .describe('Test name or prefix, e.g. "System.Mass" or "MyGame". Required to run; optional to filter a list.'),
+      list: z
+        .boolean()
+        .optional()
+        .describe("List matching test names instead of running them. Cheap, and the way to find the right `match`."),
+      timeoutSeconds: z
+        .number()
+        .optional()
+        .describe("How long to wait for the run to finish. Defaults to 120. A partial result says so rather than pretending."),
+    },
+  },
+  async ({ match, list, timeoutSeconds }) => {
+    try {
+      const ping = await bridge.send<{ projectFile?: string }>("ping", {});
+      if (!ping?.projectFile) {
+        return errorResult(
+          new Error(
+            "The editor did not report which project it has open, so there is no log to read the results from. " +
+              "unreal_doctor diagnoses a bridge that answers but cannot say where it is."
+          )
+        );
+      }
+      const logPath = logFileFor(ping.projectFile);
+
+      // Refusing rather than defaulting to everything. "Automation RunAll" on a real project runs
+      // ~5,000 tests, takes many minutes, and holds the editor while it does - not something to
+      // start because a parameter was left out.
+      if (!list && !(match ?? "").trim()) {
+        return errorResult(
+          new Error(
+            "unreal_run_tests needs a `match` to run, because running everything takes many minutes and holds the " +
+              "editor. Call with `list: true` (optionally with a `match`) to see what exists first."
+          )
+        );
+      }
+
+      // Where the log ends BEFORE the command, so the parse sees this run and not the session
+      // before it. The editor appends, so this is a stable point to read from.
+      const start = await logSize(logPath);
+      const command = list ? "Automation List" : `Automation RunTests ${(match ?? "").trim()}`;
+      await bridge.send("run_console_command", { command });
+
+      const budgetMs = Math.max(5, Math.min(timeoutSeconds ?? 120, 900)) * 1000;
+      const deadline = Date.now() + budgetMs;
+      let text = "";
+      // Polling, because the engine runs these asynchronously and the console call returns as soon
+      // as the queue accepts the request. The terminal line is the only reliable "finished".
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        text = await readLogFrom(logPath, start);
+        if (runIsComplete(text)) break;
+      }
+
+      if (list) {
+        const listed = parseAutomationList(text, match);
+        return jsonResult({
+          ...listed,
+          note: listed.omitted > 0 ? `${listed.omitted} more match; narrow \`match\` to see them.` : undefined,
+          incomplete: runIsComplete(text) ? undefined : "The engine did not finish listing within the timeout.",
+        });
+      }
+
+      const run = parseAutomationRun(text);
+      return jsonResult({
+        ...run,
+        // Said outright rather than left to be inferred from a zero. A timed-out run and a clean run
+        // both show no failures, and reporting the first as the second is the one way this tool
+        // could do real harm - somebody shipping on "0 failed" that never finished.
+        incomplete: run.complete
+          ? undefined
+          : `The engine did not print its finished line within ${Math.round(budgetMs / 1000)}s, so these counts are ` +
+            `partial. Raise timeoutSeconds or narrow the match.`,
+      });
     } catch (err) {
       return errorResult(err);
     }
