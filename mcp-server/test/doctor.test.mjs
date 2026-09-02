@@ -134,7 +134,11 @@ test("a healthy editor reports ready, with every check ok and no remedies", asyn
 
 test("an unreachable bridge reports not_connected and stops, keeping the client's own checklist", async () => {
   const detailed = new Error("Could not reach the UnrealMCPBridge plugin at 127.0.0.1:8765. Check, in this order: ...");
-  const report = await runDoctor(fakeBridge({ ping: detailed }), CONN, clock());
+  // The port probe is injected and answers "nothing is listening" here. Without that this test read
+  // whatever was really on 127.0.0.1:8765 on the machine running it, so it passed or failed
+  // depending on whether an editor happened to be open - which is the opposite of what a fake bridge
+  // is for.
+  const report = await runDoctor(fakeBridge({ ping: detailed }), CONN, clock(), () => 0, async () => false);
 
   assert.equal(report.verdict, "not_connected");
   assert.equal(report.checks.length, 1, "no further check is meaningful until the editor answers");
@@ -397,4 +401,33 @@ test("every bridge command is either probed or deliberately not, with a reason",
   // And nothing probed should have been retired from the bridge.
   const gone = [...probed].filter((c) => !commands.has(c));
   assert.deepEqual(gone, [], `probing commands the bridge no longer has: ${gone.join(", ")}`);
+});
+
+test("a blocked editor is not reported as a missing one", async () => {
+  // Lived through it. set_variable_type raised an engine confirmation dialog, the game thread
+  // stopped answering, and the doctor said "No answer from the editor bridge" about an editor
+  // holding 7 GB of resident memory with its window open. Everything in that reading points at a
+  // dead process - check the port, hunt for a crash, restart things - while the fix is a dialog
+  // waiting for a click.
+  //
+  // A blocked editor still ACCEPTS connections, because accepting happens below the game thread. A
+  // dead one refuses. That is the whole distinction and it costs one socket.
+  const timedOut = new Error("did not answer 'ping' within 15s");
+  const report = await runDoctor(fakeBridge({ ping: timedOut }), CONN, clock(), () => 0, async () => true);
+
+  const reachable = report.checks.find((c) => c.name === "bridge reachable");
+  assert.match(reachable.detail, /RUNNING/, `said: ${reachable.detail}`);
+  assert.doesNotMatch(reachable.detail, /nothing is listening/);
+  assert.match(reachable.remedy, /modal dialog/, "the commonest cause has to be named");
+  assert.match(report.nextAction, /dialog/, "and the next action has to point at it");
+});
+
+test("a port with nothing behind it still reads as nothing behind it", async () => {
+  // The other half: making the blocked case clearer must not blur the case it was split from.
+  const refused = new Error("connection refused");
+  const report = await runDoctor(fakeBridge({ ping: refused }), CONN, clock(), () => 0, async () => false);
+
+  const reachable = report.checks.find((c) => c.name === "bridge reachable");
+  assert.match(reachable.detail, /nothing is listening/, `said: ${reachable.detail}`);
+  assert.doesNotMatch(reachable.detail, /RUNNING/);
 });

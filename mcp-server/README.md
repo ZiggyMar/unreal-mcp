@@ -11140,3 +11140,41 @@ case for each approach that does not need restating.
 Same mechanism as `groundTruthDelivered`, which already ships the unguessable Blueprint facts once per
 session. A test pins both halves: the first reply must still explain itself, the second must be under
 a third the length and still name the tools, both call forms and the caveat.
+
+### "Not connected" about an editor holding 7 GB of RAM
+
+`set_variable_type` on a variable already wired into a graph raised an engine confirmation dialog.
+The game thread stopped answering — and `unreal_doctor` said:
+
+> **verdict: not_connected** — "No answer from the editor bridge."
+
+The editor was running, its window was open, and the port was accepting connections. Everything in
+that reading points at a dead process: check the port, hunt for a crash, restart things. The actual
+fix was a dialog box waiting for a click.
+
+**A blocked editor still accepts connections**, because accepting happens below the game thread. A
+dead one refuses. That is the entire distinction and it costs one socket — and `portIsAccepting()`
+already existed for it, used by `bridgeClient` on every command timeout. The doctor, the one tool
+people run when nothing works, was the last place still guessing.
+
+It now separates them:
+
+| | detail | next action |
+|---|---|---|
+| port accepts | "The editor is RUNNING and its game thread is blocked — it has not crashed and it has not gone away" | check the window for a dialog |
+| port refuses | "the port refuses connections — so nothing is listening" | the transport's own checklist, verbatim |
+
+The remedy names the cause first: a modal dialog blocks the game thread and every command with it,
+**and a tool cannot dismiss one**. Engine operations raise them for confirmation — a variable retype
+that would break connections, an asset overwrite, a compile prompt. Failing that, a long operation:
+a big compile, the first asset registry scan, a level load.
+
+**The suite immediately caught a flaw in the fix.** Calling `portIsAccepting` directly opens a *real*
+socket to the configured port, so a unit test with a fake bridge and port 8765 got its answer from
+whatever was really listening on the machine — the test passed or failed depending on whether an
+editor happened to be open. The probe is injected now, the same way `newestSource` already was and
+for the same recorded reason.
+
+My first attempt at the new tests stood up a real socket that accepts and never answers — a faithful
+simulation that made the bridge wait its full timeout and hang the runner. They test the branch
+directly through the injection instead: hermetic, instant, and covering both directions.

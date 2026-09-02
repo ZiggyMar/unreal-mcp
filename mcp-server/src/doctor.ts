@@ -23,6 +23,7 @@ import type { FindNodeResult, GetProjectOverviewResult, PingResult } from "./typ
 import { stat, open } from "node:fs/promises";
 import { logFileFor } from "./runtimeLog.js";
 import { patchDepthWarning } from "./livePatchDepth.js";
+import { portIsAccepting } from "./editorGone.js";
 
 /** The bridge protocol this server was written against. */
 const EXPECTED_PROTOCOL_VERSION = 1;
@@ -151,7 +152,17 @@ export async function runDoctor(
    * Injected so this module keeps its property of touching nothing but the bridge, and so the
    * freshness check can be tested without a source tree that happens to look right.
    */
-  newestSource: () => number = newestSourceMs
+  newestSource: () => number = newestSourceMs,
+  /**
+   * Injected for the same reason, and it was needed immediately.
+   *
+   * The first version called portIsAccepting directly, which opens a REAL socket to the configured
+   * port. A unit test with a fake bridge and port 8765 then got its answer from whatever was
+   * actually listening on this machine - so a doctor test passed or failed depending on whether an
+   * editor happened to be open. That is the opposite of what a fake bridge is for, and the suite
+   * caught it on the first run.
+   */
+  probePort: (host: string, port: number) => Promise<boolean> = portIsAccepting
 ): Promise<DoctorReport> {
   const expectedProject = connection.expectedProject;
   const checks: DoctorCheck[] = [];
@@ -163,21 +174,51 @@ export async function runDoctor(
   try {
     ping = await bridge.send<PingResult>("ping", {});
   } catch (err) {
+    /**
+     * "No answer" and "nothing is there" are different problems with different fixes.
+     *
+     * This reported `not_connected` with "No answer from the editor bridge" when the editor was
+     * running fine and its game thread was blocked on a modal dialog. Everything about that reading
+     * points at a dead editor: you go looking for a crashed process, check the port, restart things -
+     * while the answer is a dialog box sitting in front of you waiting for a click.
+     *
+     * The distinction costs one socket. A blocked editor still ACCEPTS connections, because accepting
+     * happens below the game thread; a dead one refuses. bridgeClient already makes exactly this call
+     * when a command times out, and the doctor - the tool people run when nothing works - was the one
+     * place still guessing.
+     *
+     * Lived through it: set_variable_type raised an engine confirmation dialog, every later call timed
+     * out, and the doctor said "not connected" about an editor holding 7 GB of resident memory.
+     */
+    const accepting = await probePort(connection.host, connection.port);
     checks.push({
       name: "bridge reachable",
       status: "fail",
-      detail: "No answer from the editor bridge. Everything below depends on this, so nothing else was checked.",
-      // The client's own error already contains the ordered checklist; do not paraphrase it.
-      remedy: message(err),
+      detail: accepting
+        ? `The port is open and accepting connections, but the plugin did not answer. The editor is ` +
+          `RUNNING and its game thread is blocked - it has not crashed and it has not gone away.`
+        : "No answer from the editor bridge, and the port refuses connections - so nothing is listening.",
+      remedy: accepting
+        ? "Look at the editor window: a modal dialog blocks the game thread and every command with it, " +
+          "and a tool cannot dismiss one. Engine operations raise them for confirmation - changing a " +
+          "variable's type when it would break connections, overwriting an asset, a compile warning " +
+          "prompt. Otherwise it is a long operation still running: a big compile, the first asset " +
+          "registry scan, or a level load. Everything recovers on its own once the thread is free. " +
+          `Underlying error: ${message(err)}`
+        : // The client's own error already contains the ordered checklist; do not paraphrase it.
+          message(err),
     });
     return {
       verdict: "not_connected",
       host: connection.host,
       port: connection.port,
       checks,
-      nextAction:
-        "Nothing else can be checked until the editor is reachable. Work through the remedy on the " +
-        "'bridge reachable' check, then run this again.",
+      nextAction: accepting
+        ? "The editor is alive and its game thread is busy or blocked. Check the editor window for a " +
+          "dialog waiting to be dismissed, then run this again - nothing else could be checked while " +
+          "the thread is held."
+        : "Nothing else can be checked until the editor is reachable. Work through the remedy on the " +
+          "'bridge reachable' check, then run this again.",
     };
   }
   const latencyMs = now() - started;
