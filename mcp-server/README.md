@@ -9194,3 +9194,45 @@ lost and carries more conviction than the error it decorated. The bridge's own e
 intact underneath either way - it explains the path-repeats-the-name rule and the create-it-first
 case, neither of which a name match can answer, and an error that gets shorter when it gets smarter
 is a bad trade.
+
+### The near-miss list was ranked by prefix, so the right answer came third
+
+`didYouMean` is the most useful self-correction signal this system has - the plugin answers an
+unresolvable name with the near misses it knows about. It ranked them by shared prefix, and measured
+against a live editor that produced answers worse than none:
+
+```text
+SpawnActor  ->  Spawn                 (a ThirdParty tutorial conveyor Blueprint)
+                Spawn                 (UMG.Viewport)
+                SpawnActorFromClass   <- what the caller wanted, ranked third
+
+ApplyRootMotionRadialForce  ->  Apply  (VariantManagerBlueprintLibrary)
+```
+
+`Apply` shares five characters out of twenty-six. Offering it to someone already lost is the
+confident-falsehood failure this project keeps finding, wearing the costume of helpfulness - and it
+costs a round trip AND the credibility of every other suggestion the system makes.
+
+**Containment beats prefix.** A candidate that CONTAINS what was asked for is a better answer than
+one that merely starts the same way: `SpawnActorFromClass` contains `SpawnActor`, `Spawn` does not.
+Among containing candidates the shortest wins, being the least embellished version of the thing
+asked for. Ties keep the engine's own order rather than one invented here.
+
+| query | before | after | |
+|---|---:|---:|---|
+| `SpawnActor` | 142 | 95 | right answer now first, two junk entries dropped |
+| `ApplyRootMotionRadialForce` | 46 | 19 | nothing plausible, so nothing offered |
+| `PrintStrng` | 39 | 39 | a real typo still finds `PrintString` |
+
+That last row is the one that mattered. Tightening a filter until the noise goes is easy; the check
+that it has not also eaten the genuine near-misses is the whole test.
+
+**An emptied list is removed, not left as `[]`.** An empty array still costs tokens and still
+invites the reader to look for an answer that is not there. `unreal_find_node` does proper word
+matching and is one call away.
+
+Applied in the bridge client, which is the choke point every command's failure passes through, so
+`get_node_signature`, `add_node` and `build_graph` are fixed by one call rather than three. Done
+there rather than in the C++ that builds the list, for the reason recorded about the same choice for
+type spellings: the resolver is the tidier place and only reaches somebody who has rebuilt their
+plugin, while this layer reaches everyone now.

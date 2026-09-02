@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
 import { SessionTokenCache } from "./sessionToken.js";
+import { rankContextSuggestions } from "./didYouMean.js";
 
 export interface BridgeRequest {
   cmd: string;
@@ -472,7 +473,16 @@ export class UnrealBridgeClient {
             // reached a model. Found by testing a claim this project had been making in three
             // separate documents.
             const { ok: _ok, error: _error, id: _id, result: _result, ...context } = parsed as unknown as Record<string, unknown>;
-            const extras = Object.keys(context).length > 0 ? ` ${JSON.stringify(context)}` : "";
+            // Re-rank the near-misses before they go out. The plugin ranks by shared prefix, which
+            // put SpawnActorFromClass third behind two unrelated functions called Spawn, and
+            // answered ApplyRootMotionRadialForce with Apply. Here rather than in the C++ that
+            // builds the list, for the reason engineTypes.ts records about the same choice: the
+            // resolver is the tidier place and only reaches somebody who has rebuilt their plugin.
+            //
+            // This is the choke point every command's failure passes through, so get_node_signature,
+            // add_node and build_graph are all fixed by the one call.
+            const ranked = rankContextSuggestions(String(parsed.error ?? ""), context);
+            const extras = Object.keys(ranked).length > 0 ? ` ${JSON.stringify(ranked)}` : "";
             if (typeof parsed.error === "string" && parsed.error.startsWith("unauthorized")) {
               // Most likely the editor restarted and issued a new token. Drop the cached one so the next
               // call re-reads the file, and name the file that was used: a token mismatch is otherwise
