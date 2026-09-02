@@ -8103,9 +8103,35 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleTraceFunctionCalls(const TShar
 
 	if (Live.Num() == 0 && Dead.Num() == 0)
 	{
+		// "No caller" is not "dead", and this used to read like it was.
+		//
+		// The two explanations it offered - a typo, or C++ - are the two LEAST likely. The engine
+		// calls plenty of functions with no call node anywhere: anim graphs and state machines,
+		// overrides of a parent or interface function, construction scripts, RepNotify handlers, and
+		// anything a Set Timer by Function Name names in a string pin this does not read.
+		//
+		// The blindSpots field beside this lists all of those, which made the pairing worse rather
+		// than better: it says such functions are "counted as callable", and that is true of how
+		// call SITES are classified - it has nothing to do with this branch, where no site was found
+		// at all. Two fields that appeared to agree and did not.
+		//
+		// Measured on a real project: of 448 author-written graphs, 82 have no Blueprint caller, and
+		// the largest of them are AnimGraph, a Behavior Tree decorator override, and a function
+		// driven by a timer. Reading this verdict as "dead" would condemn all three.
+		//
+		// It cost a real mistake. I read this line about three separate functions in one session and
+		// concluded each was dead code; one of them, AttemptSkinUpdate, turned out to be a finished
+		// feature nobody had wired up - which is the opposite of dead and the far more valuable
+		// finding.
 		Result->SetStringField(TEXT("verdict"),
-			TEXT("Nothing in any Blueprint calls a function whose name contains this. Check the spelling, or it "
-				 "may be called from C++ - find_source will say."));
+			TEXT("No Blueprint node names this function. That is often ordinary rather than dead: the engine "
+				 "calls anim graphs and state machines, overrides of a parent or interface function, "
+				 "construction scripts and RepNotify handlers with no call node at all, and a timer started "
+				 "with Set Timer by Function Name names its target in a string this does not read. It is "
+				 "genuinely unused only if it is none of those - so check whether it overrides something, "
+				 "whether a timer names it, and then find_source for a C++ caller. A function that IS none of "
+				 "those and has a real body is usually a finished feature nobody wired up, which is worth more "
+				 "than dead code."));
 	}
 	else if (Live.Num() == 0)
 	{
