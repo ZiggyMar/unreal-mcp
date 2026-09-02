@@ -7427,6 +7427,7 @@ anybody noticed.
 - [The answer was in the last 9% of the reply](#the-answer-was-in-the-last-9-of-the-reply)
 - [One rule, whole surface: the guidance goes first](#one-rule-whole-surface-the-guidance-goes-first)
 - [Importing the server started a server](#importing-the-server-started-a-server)
+- [Mutation testing the suite: seven breaks, six caught, one that did not matter](#mutation-testing-the-suite-seven-breaks-six-caught-one-that-did-not-matter)
 
 <!-- INDEX:END -->
 
@@ -11820,3 +11821,36 @@ sentence explaining what came back.
 And it asserts both directions. Making a module safe to import must not make it impossible to run, so
 the second test launches it and requires real output — otherwise "never starts a server" would pass
 perfectly by never starting one at all.
+
+### Mutation testing the suite: seven breaks, six caught, one that did not matter
+
+Three times in one session I nearly wrote a test that would pass a broken implementation. That raises
+a fair question about the other 888, so rather than wonder: break the code deliberately and see which
+breaks the suite notices.
+
+First the cheap check — every test contains at least one assertion. None are empty. But "has an
+assertion" is not "can fail", so seven real mutations went in, one at a time, each reverted after:
+
+```
+caught      guidanceFirst drops every non-guidance field
+caught      match filters become OR instead of AND
+caught      live-coding depth warning never fires
+caught      gamemode check fires on menu/loading GameModes
+caught      dedupe drops a fix that differs from the shared one
+caught      review `check` filter is ignored entirely
+NOT CAUGHT  path suggester runs on an empty query
+```
+
+**The interesting one is the survivor, and my first reading of it was wrong.** "Nothing catches this"
+looked like a missing test. It is not: `rankCandidates` guards its substring arm with
+`want.length >= 3`, so an empty needle can never reach it, and the earlier `want.length === 0` return
+is a redundant fast path. The mutant returns `[]` either way.
+
+A surviving mutant means one of two things — **a missing test, or code that does not matter** — and
+they are easy to confuse. Asking what the mutant actually *returned* separated them in one call. The
+test stays, because the behaviour is worth pinning: a substring search for `""` is true of every
+candidate, so if the `>= 3` rule were relaxed an empty name would produce a confident "did you mean"
+list of unrelated assets. It asserts the behaviour without caring which line provides it.
+
+Six of seven caught, and the seventh was not a hole. That is a better answer than any amount of
+reasoning about whether the tests are any good.

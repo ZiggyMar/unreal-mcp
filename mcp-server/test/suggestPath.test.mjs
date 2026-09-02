@@ -86,3 +86,22 @@ test("a graph_not_found names the graph it could not find", async () => {
   );
   assert.equal(notFoundGraph("UnrealMCPBridge error: blueprint_not_found: /Game/X"), undefined);
 });
+
+test("an empty name suggests nothing, rather than everything", () => {
+  // Mutation testing said removing the `want.length === 0` early return changes nothing, and it was
+  // right - the substring arm below requires `want.length >= 3`, so an empty needle can never reach
+  // it. The early return is a redundant fast path, not a load-bearing guard.
+  //
+  // The first reading of that result was the opposite: "nothing catches this, so the guard is
+  // unwatched". Worth recording, because a surviving mutant means one of two things - a missing test,
+  // or code that does not matter - and they are easy to confuse. Checking what the mutant actually
+  // RETURNED settled it in one call.
+  //
+  // The behaviour is still worth pinning, which is why this stays. A substring search for "" is true
+  // of every candidate, so if the `>= 3` rule were ever relaxed, an empty or missing name would
+  // produce a confident "did you mean" list of unrelated assets - the worst answer to "I do not know
+  // what you meant", because it looks like knowledge. This test does not care WHICH line prevents
+  // that; it cares that something does.
+  assert.deepEqual(rankCandidates("", [{ path: "/Game/A/BP_One" }, { path: "/Game/B/BP_Two" }]), []);
+  assert.deepEqual(rankCandidates("   ".trim(), [{ path: "/Game/A/BP_One" }]), []);
+});
