@@ -11178,3 +11178,30 @@ for the same recorded reason.
 My first attempt at the new tests stood up a real socket that accepts and never answers — a faithful
 simulation that made the bridge wait its full timeout and hang the runner. They test the branch
 directly through the injection instead: hermetic, instant, and covering both directions.
+
+### One dialog stops the whole server, and a tool cannot click it
+
+Unreal's editor APIs ask for confirmation — changing a variable's type when it would break pin
+connections, overwriting an asset, some compile paths. A confirmation window blocks the **game
+thread**, and every bridge command runs on the game thread. So one dialog stops everything: no
+command answers, **not even `ping`**, until a person clicks it.
+
+That is not hypothetical. A `set_variable_type` call raised a confirmation mid-session, and from that
+point the editor accepted TCP connections and answered nothing. An agent has no way out: it cannot see
+the dialog, cannot click it, and cannot tell it from a crash without probing the port.
+
+`Dispatch` now runs under `GIsRunningUnattendedScript` — the same flag commandlets and build scripts
+run under, which makes `FMessageDialog` return a default instead of showing UI. Scoped to one command
+via `TGuardValue`, set once in `Dispatch` for the reason already written directly below it about the
+write guard: *a guard with thirty call sites has thirty chances to be forgotten.*
+
+**The trade, stated plainly.** The default answer is the conservative one — it declines rather than
+proceeds. So an operation that used to hang now *declines*, and a caller may get "nothing changed"
+where it previously got silence forever. That is worse than succeeding and far better than hanging: a
+failed command is a result an agent can read, retry or report, while a blocked editor ends the session
+and needs a human at the keyboard.
+
+Compiles on 5.6, 5.8 and the game target. The reproduction is in `live-verify.mjs` because it is the
+only place that can prove it — create a variable, **wire it into a graph** so the retype is the
+destructive case the engine warns about, retype it, and require an answer. The assertion is simply
+that the call returned; before the guard it never did.

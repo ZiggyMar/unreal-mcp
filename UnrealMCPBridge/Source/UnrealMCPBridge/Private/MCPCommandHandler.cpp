@@ -1132,6 +1132,35 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 
 	TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
 
+	/**
+	 * No engine call may block this bridge on a modal dialog.
+	 *
+	 * Unreal's editor APIs ask for confirmation. Changing a variable's type when it would break pin
+	 * connections, overwriting an asset, some compile paths - each opens a window and waits. That
+	 * window blocks the GAME THREAD, and every bridge command runs on the game thread, so one dialog
+	 * stops the entire server: no command answers, not even ping, until a person clicks it.
+	 *
+	 * Which is exactly what happened. A set_variable_type call raised a confirmation, and from then
+	 * on the editor accepted TCP connections and answered nothing. An agent working unattended has no
+	 * way out of that: it cannot see the dialog, cannot click it, and cannot tell it apart from a
+	 * crash without probing the port.
+	 *
+	 * GIsRunningUnattendedScript makes FMessageDialog return a default instead of showing UI. This is
+	 * the same flag commandlets and build scripts run under, and it is scoped to this one command.
+	 *
+	 * ## The trade, stated plainly
+	 *
+	 * The default answer is the conservative one - it declines rather than proceeds. So an operation
+	 * that used to hang now DECLINES, and a caller may get "nothing changed" where it previously got
+	 * silence forever. That is worse than succeeding and far better than hanging: a failed command is
+	 * a result an agent can read, retry or report, while a blocked editor ends the session and needs
+	 * a human at the keyboard.
+	 *
+	 * Set once here rather than per handler for the reason written directly below about the write
+	 * guard: a guard with thirty call sites has thirty chances to be forgotten.
+	 */
+	TGuardValue<bool> UnattendedGuard(GIsRunningUnattendedScript, true);
+
 	// Checked once, here, rather than in each handler: a guard with thirty call sites is a guard
 	// with thirty chances to be forgotten, and this one is load-bearing.
 	FString WriteGuardError;

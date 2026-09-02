@@ -122,6 +122,40 @@ async function main() {
     return `${r.plugin} protocol ${r.protocolVersion}`;
   });
 
+  // --- Modal dialogs cannot reach the game thread ----------------------------------------------
+  //
+  // Unreal's editor APIs ask for confirmation, and a confirmation window blocks the GAME THREAD.
+  // Every bridge command runs on that thread, so one dialog stops the whole server - no command
+  // answers, not even ping, until a person clicks it.
+  //
+  // Which is what happened: a set_variable_type call raised a confirmation and the editor accepted
+  // TCP connections and answered nothing for the rest of the session. An agent has no way out of
+  // that. It cannot see the dialog, cannot click it, and cannot tell it from a crash without probing
+  // the port.
+  //
+  // Dispatch now runs under GIsRunningUnattendedScript, so FMessageDialog returns a default rather
+  // than showing UI. This is the only place that can prove it: retype a variable that is WIRED INTO
+  // A GRAPH, which is the case the engine asks about, and require an answer.
+  section("modal dialogs");
+  const dialogProbe = `${ROOT}/BP_MCPDialogProbe`;
+  const dialogObj = `${dialogProbe}.BP_MCPDialogProbe`;
+  await check("retyping a variable that is in use answers instead of hanging", async () => {
+    await bridge.send("create_blueprint", { packagePath: dialogProbe, parentClass: "Actor", save: false });
+    await bridge.send("add_variable", { path: dialogObj, variableName: "Wired", type: "int" });
+    // Put it in the graph, so changing its type is the destructive case the engine warns about.
+    await bridge.send("add_node", {
+      path: dialogObj,
+      graphName: "EventGraph",
+      nodeType: "VariableGet",
+      variableName: "Wired",
+    });
+    await bridge.send("set_variable_type", { path: dialogObj, variableName: "Wired", type: "string" });
+    // The assertion is that the line above RETURNED. Before the guard it never did.
+    const alive = await bridge.send("ping", {});
+    if (!alive.plugin) throw new Error("the editor stopped answering after the retype");
+    return "answered, and the editor still responds";
+  });
+
   // --- Overload resolution -------------------------------------------------------------------
   //
   // A function name with no class was answered with whichever module registered first, so the
