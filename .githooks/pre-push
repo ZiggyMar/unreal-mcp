@@ -24,7 +24,12 @@
 #
 # So a push that touches the plugin's C++ compiles it first, and a push that does not stays fast.
 # `--isolated` is what makes that affordable: RunUAT BuildPlugin against public engine APIs only, no
-# configured project, no binaries installed, nothing touched in anyone's game. About three minutes.
+# configured project, no binaries installed, nothing touched in anyone's game.
+#
+# About three and a half minutes, for the two DISTINCT engines in build-targets.json. It used to be
+# five and a half, for three targets - two of which are the same engine and differ only in the
+# project they install into, which --isolated does not do. That third build proved something already
+# proved, and it cost a real push: the hook ran past a ten-minute limit and was killed mid-run.
 #
 # ## Turning it on
 #

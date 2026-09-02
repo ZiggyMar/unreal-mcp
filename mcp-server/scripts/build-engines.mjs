@@ -146,7 +146,39 @@ if (!existsSync(CONFIG) && isolated) {
 const { targets } = globalThis.__discovered
   ? { targets: globalThis.__discovered }
   : JSON.parse(readFileSync(CONFIG, "utf8"));
-const chosen = only ? targets.filter((t) => t.name === only) : targets;
+const selected = only ? targets.filter((t) => t.name === only) : targets;
+
+/**
+ * One compile per ENGINE, not per target, when nothing is being installed.
+ *
+ * --isolated runs RunUAT BuildPlugin against an engine's public headers. The command it builds names
+ * the engine and the plugin and nothing else - `target.project` is never read on that path. So two
+ * targets pointing at the same engine compile the same source against the same headers and produce
+ * the same answer, twice.
+ *
+ * This configuration has exactly that: `5.6` and `game` are both M:/Unreal/UE_5.6, differing only in
+ * which project they install into, which --isolated does not do. A third of every C++ pre-push was
+ * proving something already proved - about a hundred seconds, on the hook that runs before every
+ * push that touches the plugin. It cost a push: the hook ran past a ten-minute limit and was killed.
+ *
+ * A normal (installing) build still visits every target, because there the project is the whole
+ * point - a project that is not a target never receives the plugin, and nothing says so.
+ */
+const chosen =
+  isolated && !only
+    ? selected.filter(
+        (t, i) => selected.findIndex((other) => other.engine.toLowerCase() === t.engine.toLowerCase()) === i
+      )
+    : selected;
+
+if (isolated && chosen.length < selected.length) {
+  const dropped = selected.filter((t) => !chosen.includes(t)).map((t) => t.name);
+  console.log(
+    `--isolated: ${dropped.join(", ")} share an engine with a target already being built, and this ` +
+      `mode installs nothing, so they would compile the same source against the same headers. Building ` +
+      `${chosen.map((t) => t.name).join(", ")}.\n`
+  );
+}
 
 if (chosen.length === 0) {
   console.error(`no target named "${only}". Available: ${targets.map((t) => t.name).join(", ")}`);
