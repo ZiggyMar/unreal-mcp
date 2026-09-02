@@ -7428,6 +7428,7 @@ anybody noticed.
 - [One rule, whole surface: the guidance goes first](#one-rule-whole-surface-the-guidance-goes-first)
 - [Importing the server started a server](#importing-the-server-started-a-server)
 - [Mutation testing the suite: seven breaks, six caught, one that did not matter](#mutation-testing-the-suite-seven-breaks-six-caught-one-that-did-not-matter)
+- [The one-off became `scripts/mutate.mjs`](#the-one-off-became-scriptsmutatemjs)
 
 <!-- INDEX:END -->
 
@@ -11854,3 +11855,34 @@ list of unrelated assets. It asserts the behaviour without caring which line pro
 
 Six of seven caught, and the seventh was not a hole. That is a better answer than any amount of
 reasoning about whether the tests are any good.
+
+### The one-off became `scripts/mutate.mjs`
+
+That round was seven hand-made edits, which is exactly the kind of thing that gets done once and never
+again. It is now a script, and the interesting decision was where the mutations come from.
+
+A curated list of "things worth breaking" would be a hand-maintained index, and this repo has watched
+four of those rot — the docs index, the profile figures, the param names, the node types all drifted
+from what they described until something started deriving them. So these are derived too: every
+comparison and boolean operator in a file is a decision, and flipping one is the smallest edit that
+changes behaviour. No list to update when the code moves.
+
+```
+node scripts/mutate.mjs src/matchTerms.ts            # every operator in one file, capped at 12
+node scripts/mutate.mjs src/audit.ts --max 4         # fewer, when the suite is slow
+```
+
+Each mutant costs a full `npm test`, so it is an on-demand check for code you just changed rather
+than part of the suite. It restores the file in a `finally` — a mutation script that leaves the tree
+broken is worse than no mutation script — and rebuilds `dist` at the end, because the last thing
+written is the original but `dist` still holds the last mutant.
+
+Two things it got right by having been wrong before. It reports `N of M possible (capped at 12)`
+rather than silently stopping, because a truncated audit that reads as complete is the exact failure
+this repo keeps finding in itself. And it treats green as *both* a zero exit code and a matching
+`# fail 0` line — trusting the exit code alone has already bitten the build script once.
+
+Its own first run was a bug: `--max 4` left a bare `4` in the file list, and the error was `ENOENT` on
+a file named `4` rather than a complaint about the flag. Dropping the flag *and* its value fixed it.
+Worth recording because it is the same shape as the defects being hunted — the failure was honest but
+pointed at the wrong thing, which is what makes it expensive.
