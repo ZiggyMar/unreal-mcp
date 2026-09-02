@@ -10257,3 +10257,38 @@ the caller is wrong.
 
 Found the ordinary way — by answering a question the previous commit had raised instead of moving on
 from it, and by reading five assets before writing a rule about them.
+
+### Thirteen variables marked Replicated that cannot replicate
+
+Class defaults turned out to be a productive place to look, so the same axis got a second question:
+does anything mark variables Replicated on an Actor that does not replicate? Ticking "Replicated" on
+a variable does nothing unless the Actor itself replicates — the editor allows both independently,
+warns about neither, and the variable keeps its replication icon, so the Blueprint reads as networked
+and is not.
+
+Scanned before writing anything. Nineteen Blueprints declare at least one replicated variable, and
+two of them do not replicate:
+
+```text
+BP_PlaceableBase   parent Actor                bReplicates false   4 replicated variables
+BP_Turret          parent BP_PlaceableBase_C   bReplicates false   9 replicated variables
+BP_Player          parent BP_BaseCharacter_C   bReplicates true    14      <- control
+BP_FireWall        parent Actor                bReplicates true    3       <- control
+```
+
+Thirteen variables that cannot reach a client — `Health`, `MaxHealth`, `bIsDead`, `DamageAmount`,
+`FireRate`, `TargetYaw` among them. Every change stays on whichever machine made it, which is
+indistinguishable from working when you test alone.
+
+**The controls are what make it a check rather than a guess.** `BP_FireWall`'s parent is a plain
+`Actor` and it replicates, so this is not flagging everything descended from `Actor`; `BP_Player`
+replicates with fourteen replicated variables and is silent. Two findings from nineteen candidates,
+and the fixture asserts both controls stay quiet.
+
+**The second one inherits the flag from the first**, so the finding says so and sends the fix to the
+parent: *"Fix BP_PlaceableBase rather than this — tick Replicates in its Class Defaults and every
+child inherits it."* Telling somebody to fix both would be telling them to do it twice.
+
+That detail is carried in `observed` rather than only in `fix`, and the reason is worth recording:
+`dedupeFixes` collapses fix text to one entry per check, so a per-instance fix would have been
+dropped for whichever finding was not first. The evidence belongs where evidence goes.

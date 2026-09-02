@@ -39,6 +39,7 @@ import { execTargets, type FlowNode } from "./execFlow.js";
 import { findDeadGraphs, type LivenessGraph } from "./systemLiveness.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
 import { findGameModeWiringFaults, type GameModeDefaults } from "./gameModeWiring.js";
+import { findReplicationFlagFaults, type ReplicationSubject } from "./replicationFlag.js";
 import { findNiagaraFaults } from "./niagaraAudit.js";
 import { explainGraph } from "./explainGraph.js";
 
@@ -84,6 +85,8 @@ const WHY_IT_COSTS: Record<string, string> = {
     "A LAN session is invisible to an online search and the reverse. Hosting succeeds, searching succeeds, the list is empty, and nothing anywhere reports an error.",
   "session-host-paths-disagree":
     "Menus grow more than one host button. Whichever one was pressed decides whether anybody can see the lobby, so the same build works and then does not.",
+  "replicated-vars-on-non-replicating-actor":
+    "Ticking Replicated on a variable does nothing unless the Actor replicates. The editor allows both independently and warns about neither, so the Blueprint reads as networked and is not - every value stays on whichever machine changed it.",
   "gamemode-has-no-pawn":
     "DefaultPawnClass decides what every joining player possesses. Left at the engine default it is ADefaultPawn - a grey flying sphere with no mesh and no game logic - and nothing warns, because a GameMode with an engine default is a valid GameMode.",
   "cast-every-frame": "Not free, and the answer does not change.",
@@ -311,6 +314,8 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   /** Variable type heads whose `subType` names a CLASS, so describe_class can answer about it. */
 const CLASS_VALUED_TYPES = new Set(["object", "class", "softobject", "softclass", "interface"]);
 
+/** Replicated variable names per Blueprint, kept from the read that already happens. */
+const replicatedByBlueprint = new Map<string, string[]>();
 const unresolvedClasses = new Set<string>();
   const widgetClasses = new Map<string, boolean>();
   const learn = async (className: string) => {
@@ -437,6 +442,13 @@ const unresolvedClasses = new Set<string>();
       // The class each object variable holds, so a Get of a GameMode reference is caught the same
       // way a cast to one is. The project reaches its GameMode through a cached variable far more
       // often than through a cast, and only the cast was ever checked.
+      // Kept here rather than re-read later: the replication-flag check needs these and this is
+      // the one place they are already loaded.
+      const replicatedHere = (review.variables ?? [])
+        .filter((v) => v.replicated === true || String(v.repNotify ?? "").length > 0)
+        .map((v) => v.name);
+      if (replicatedHere.length > 0) replicatedByBlueprint.set(bp.name, replicatedHere);
+
       const variableClasses = new Map<string, string>();
       for (const variable of review.variables ?? []) {
         const held = variable.subType;
@@ -775,6 +787,38 @@ const unresolvedClasses = new Set<string>();
 
   // These findings only ever come from the event graph - the map they are built from is the event
   // graphs - so the name is a constant rather than a guess, and one constant rather than two.
+  // Replication flag against replicated variables. Class defaults again, and only for Blueprints
+  // that actually declare a replicated variable - 19 of 339 here - so the cost is a handful of reads.
+  try {
+    const subjects: ReplicationSubject[] = [];
+    for (const [name, replicated] of replicatedByBlueprint) {
+      const path = pathOfBlueprint.get(name);
+      if (!path) continue;
+      const defaults = await bridge.send<{ replicates?: boolean }>("read_class_defaults", { path });
+      subjects.push({
+        name,
+        replicates: defaults.replicates,
+        replicatedVariables: replicated,
+        parentClass: eventGraphs.get(name)?.parentClass,
+      });
+    }
+    for (const finding of findReplicationFlagFaults(subjects)) {
+      findings.push({
+        path: pathOfBlueprint.get(finding.blueprint) ?? finding.blueprint,
+        blueprint: finding.blueprint,
+        graph: "(class defaults)",
+        check: finding.check,
+        severity: finding.severity,
+        cost: FINDING_COST[finding.check] ?? 1,
+        message: finding.message,
+        observed: finding.observed,
+        fix: finding.fix,
+      });
+    }
+  } catch (err) {
+    checksSkipped.push({ name: "replication-flag", why: reasonFor(err) });
+  }
+
   // GameMode wiring. Read from class defaults rather than from graphs, which is why it sits apart
   // from the per-graph passes: what a GameMode chooses is a property, not a node.
   //

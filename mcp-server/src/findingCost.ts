@@ -120,6 +120,10 @@ export const FINDING_COST: Record<string, number> = {
   // Every player who joins possesses the engine's grey flying sphere. It is not silent the way a
   // replication bug is - somebody will see it - but they will see it in a build rather than a
   // review, so it sits with the server-authority checks rather than the tidy-ups.
+  // Beside the other silent multiplayer defects. Marking a variable Replicated on an Actor that
+  // does not replicate sends nothing, shows no warning, and is invisible to anyone testing alone -
+  // the same shape as server-writes-unreplicated and priced with it.
+  "replicated-vars-on-non-replicating-actor": 95,
   "gamemode-has-no-pawn": 90,
   "empty-function": 50,
   "empty-event": 40,
