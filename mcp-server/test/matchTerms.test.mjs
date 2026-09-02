@@ -40,3 +40,11 @@ test("no filter matches everything, which is what an absent match means", () => 
 test("case and repeated whitespace are not the caller's problem", () => {
   assert.equal(matchesAllTerms("BP_ShopUpgrade", matchTerms("  SHOP   upgrade ")), true);
 });
+
+test("a two-word class name is why this matters for widgets", () => {
+  // list_widgets was the only list tool with no way to narrow: WBP_MorrisPopUp is 87 widgets and
+  // 2,654 tokens. A person asks for "size box" and the class is SizeBox - the exact shape that
+  // returned nothing before terms, and now returns 12 of 87 for 460 tokens.
+  assert.equal(matchesAllTerms("TimerSizeBox SizeBox", matchTerms("size box")), true);
+  assert.equal(matchesAllTerms("CanvasPanel_0 CanvasPanel", matchTerms("size box")), false);
+});

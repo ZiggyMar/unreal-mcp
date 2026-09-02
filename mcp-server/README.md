@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4251 | ten tools, fixed, for a small local model |
 | `core` | 13173 | the authoring spine |
 | `lazy` | 13481 | `core` plus deferred groups |
-| `full` | 46578 | everything, for a model that can afford it |
+| `full` | 46611 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -10010,3 +10010,37 @@ repetitive and are not — they are evidence-tiered, one saying *"nothing in thi
 either"* and another not, so collapsing them would flatten a real distinction. And `nextAction` does
 restate a finding's message verbatim, but both come from the same source and cannot drift, and the
 full sentence in one place is what the weaker profiles rely on. Redundancy, not inconsistency.
+
+### The last list with no way to narrow
+
+Having found `review_blueprint` missing a filter its sibling had, the obvious next question is which
+other large reply cannot be narrowed at all. Two tools took no filtering parameter:
+
+| | reply | verdict |
+|---|---:|---|
+| `list_input_mappings` | 75 tokens | nothing to fix — the whole thing is smaller than a filter's description |
+| `list_widgets` | **2,654 tokens** on `WBP_MorrisPopUp` | the gap |
+
+87 widgets, and no way to ask for some of them, while every other list tool takes a `match`. "Which
+buttons does this screen have" cost the whole tree.
+
+```text
+(no match)     2,654 tokens    87 widgets
+"text"           506           13 of 87
+"size box"       460           12 of 87
+"button"         102            0 of 87
+```
+
+The `"size box"` row is the interesting one. The class is `SizeBox`, one word — that query would have
+returned nothing before the term-matching fix two commits ago, and the two changes compound without
+either being written for the other.
+
+The `"button"` row matters more. **Zero matches still says "0 of 87"**, so a filtered reply cannot be
+read as "this widget is empty" — the same rule the review filter follows, and the same one that made
+`unlabelled-sections` and the parent-call coverage worth writing down.
+
+One limit is stated rather than left to be discovered: this filters a flat list, so a match's parent
+may not be in it. Each entry still names its parent, which is what `add_widget` and
+`set_widget_property` actually need.
+
+`full` grew 33 tokens to 46,611, inside the ceiling raised last commit; nothing else moved.

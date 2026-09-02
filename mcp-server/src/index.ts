@@ -4618,12 +4618,47 @@ register(
       "it. The field is absent when the widget has no animations.",
     inputSchema: {
       path: z.string().describe('Widget Blueprint path, e.g. "/Game/UI/W_HealthBar.W_HealthBar".'),
+      match: z
+        .string()
+        .optional()
+        .describe('Only widgets whose name or class contains every term, e.g. "button" or "text block".'),
     },
   },
-  async ({ path }) => {
+  async ({ path, match }) => {
     try {
-      const result = await bridge.send("list_widgets", { path });
-      return jsonResult(result);
+      const result = (await bridge.send("list_widgets", { path })) as {
+        widgets?: Array<{ name?: string; class?: string }>;
+        count?: number;
+        [key: string]: unknown;
+      };
+
+      /**
+       * A widget tree is one of the biggest replies here and was the only list with no way to narrow.
+       *
+       * Measured on this project: WBP_MorrisPopUp is 87 widgets and 2,654 tokens, WBP_HUD 1,343.
+       * Every other list tool takes a `match`; this one did not, so "which buttons does this screen
+       * have" cost the whole tree.
+       *
+       * The count is left describing the WHOLE tree and a `showing` line says what was withheld,
+       * for the reason the review filter records two commits ago: a filtered reply that looks like a
+       * complete one is worse than no filter.
+       *
+       * Honest limit, stated rather than discovered: this filters a flat list, so a match's parent
+       * may not be in it. Each entry still names its parent, which is what add_widget and
+       * set_widget_property need.
+       */
+      const terms = matchTerms(match);
+      if (terms.length === 0) return jsonResult(result);
+
+      const all = result.widgets ?? [];
+      const kept = all.filter((w) => matchesAllTerms(`${w.name ?? ""} ${w.class ?? ""}`, terms));
+      return jsonResult({
+        ...result,
+        widgets: kept,
+        showing:
+          `${kept.length} of ${all.length} widget(s) match "${match}"; the rest are still there, ` +
+          `and each entry names its parent even when the parent is not in this list.`,
+      });
     } catch (err) {
       return errorResult(err);
     }
