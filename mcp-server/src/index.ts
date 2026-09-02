@@ -693,7 +693,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_document_asset", "unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_rename_function", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
+  maintenance: ["unreal_undo", "unreal_document_asset", "unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_rename_function", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -7615,8 +7615,7 @@ register(
       "editor will actually give back. Show it to a user who is nervous about letting an agent edit their project, " +
       "or before doing something you would want reversed. Being able to say \"the last four entries are mine and " +
       "Ctrl+Z takes them back in order\" is worth more than any reassurance. " +
-      "This is a read. Undo itself is performed by a human in the editor, deliberately: an agent that can silently " +
-      "undo its own work can also silently undo yours.",
+      "This is a read; performing an undo is a separate tool and is not on every profile.",
     inputSchema: {
       maxResults: z.number().optional().describe("How many entries to return, newest first. Defaults to 20."),
     },
@@ -7625,6 +7624,40 @@ register(
     try {
       const result = await bridge.send("undo_history", { maxResults });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_undo",
+  {
+    title: "Undo what this bridge just did",
+    description:
+      "Steps back over transactions THIS bridge made, newest first, and stops dead at the first one it did not. " +
+      "Reach for it the moment a call did more than you meant - a cleanup that reformatted graphs you were not " +
+      "asked to touch, a build placed in the wrong Blueprint, a batch you would rather retry with different " +
+      "arguments. " +
+      "**It cannot undo a person's work.** The editor's undo stack is shared, so a human may have moved an actor or " +
+      "renamed a variable between two of your calls; those entries stop this immediately and it reports which one " +
+      "and why. That is the whole reason it is safe to call without asking, and why a bare undo would not be. " +
+      "Check unreal_undo_history first if you want to see what will go. " +
+      "One caveat worth knowing before you rely on it: undo restores the asset in MEMORY. If you already saved, " +
+      "save again afterwards or the file on disk keeps the change you just reversed.",
+    inputSchema: {
+      count: z
+        .number()
+        .optional()
+        .describe(
+          "How many of this bridge's transactions to reverse, newest first. Defaults to 1. It stops early at the " +
+            "first entry this bridge did not make, so asking for more than exists is safe."
+        ),
+    },
+  },
+  async ({ count }) => {
+    try {
+      return jsonResult(await bridge.send("undo", { count }));
     } catch (err) {
       return errorResult(err);
     }

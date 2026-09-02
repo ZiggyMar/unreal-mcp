@@ -204,9 +204,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2523 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
-| `core` | 13235 | the authoring spine |
-| `lazy` | 13542 | `core` plus deferred groups |
-| `full` | 46698 | everything, for a model that can afford it |
+| `core` | 13216 | the authoring spine |
+| `lazy` | 13524 | `core` plus deferred groups |
+| `full` | 47007 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -11060,3 +11060,45 @@ which looks complete and is not — `full` deliberately withholds `unreal_call_t
 tool is already listed there and dispatching would add a hop. That made `call_tool` invisible and
 turned a real allowance into a "stale" one it asked me to delete. It reads the **union** of all five
 profiles now: 134 tools, against the 133 `full` advertises.
+
+### There was no reverse gear, and I found out by needing one
+
+While building a feature in a real project I ran `unreal_cleanup_blueprint` to sweep eight dead nodes
+I had just orphaned. It swept them — and also laid out ten graphs and added comment boxes across a
+Blueprint the team shares. A legitimate operation, invoked too broadly, on a binary asset other people
+edit.
+
+Then: `unreal_undo_history` showed twenty MCP transactions sitting at the top of the stack, and there
+was **no tool to undo any of them.** Its description said why, and the reasoning was sound:
+
+> "Undo itself is performed by a human in the editor, deliberately: an agent that can silently undo
+> its own work can also silently undo yours."
+
+That risk is real. The editor's undo stack is **shared** — a person may have moved an actor or renamed
+a variable between two tool calls, and those entries sit in the same queue. An undo that pops the top
+would destroy human work, and the person would have no reason to suspect it.
+
+But it is avoidable rather than inherent. `unreal_undo` only ever undoes a transaction titled
+`MCP: ...`, **stops at the first one it did not make**, and reports which one and why it stopped.
+Refusing is the correct outcome when a human transaction is on top — the caller can see that and
+decide, which is a judgement a tool cannot make. So the objection is answered by construction, and a
+model that overreaches now has a way back that cannot reach past its own work.
+
+**Five separate guards caught something on the way in, which is the part worth reading:**
+
+1. `check:undo` — a command that changes the project and opens no transaction. Correct: it *is* the
+   undo, and transacting it would push an entry onto the stack it consumes. Exempted with that reason.
+2. `check:profilerefs` — `undo_history` is in `core`, `unreal_undo` is not, so a `core` model would
+   read about a tool it cannot call. This is the guard that was reading source comments until this
+   morning; on served descriptions it found a real stranding on its first outing.
+3. `doctor.test` — every bridge command must be probed or excused. **A probe sends no parameters, and
+   `undo` with no parameters performs an undo** — probing to find out whether it exists would do the
+   thing it was asking about. Explicitly unprobed.
+4. Tool reachability — it was in no group, so `enable_tools` could not reach it. Now in `maintenance`.
+5. `check:groups` — `maintenance` and `ALL_GROUPS_TOKENS` drifted the moment it joined. That is one of
+   the seven figures nobody was comparing until this morning.
+
+**And the ceiling rule from two commits ago got its first test.** `lazy` went 5 over — from prose I
+had just written into `undo_history`'s description. Having said "the moment a raise is for prose, it
+should be refused", I trimmed instead: 34 words to 11. `core` ended up 9 tokens *below* where it
+started, so the new tool cost no ceiling at all.

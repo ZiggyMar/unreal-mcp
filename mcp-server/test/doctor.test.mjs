@@ -14,6 +14,11 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  * that could act without parameters, or that costs real time, stays out.
  */
 const NOT_PROBED = new Set([
+  // A probe sends NO parameters, and `undo` with no parameters undoes one transaction. Probing it
+  // to find out whether it exists would perform the thing it is asking about - the same reason
+  // delete_asset is not probed, except that this one would be silent about it.
+  "undo",
+
   // Everything that already existed when this guard was written. They are covered generically by the
   // "plugin freshness" check, which compares the plugin's build time against the C++ source and so
   // catches a plugin missing ANY command at once. The probe list exists to name WHICH feature is

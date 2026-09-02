@@ -34,6 +34,11 @@ const journalPath = join(here, "..", "src", "journal.ts");
 // Write commands that cannot be undone, and why. Each reason has to be about the ENGINE, not about
 // the effort of writing the code.
 const NOT_UNDOABLE = {
+  // It IS the undo. Opening a transaction around it would push an entry onto the very stack it is
+  // consuming, and the second call would undo the first undo rather than the work. The editor's own
+  // redo is the inverse operation and already exists, which is why nothing is lost by exempting it.
+  undo: "it is the undo - transacting it would push an entry onto the stack it consumes; redo is the inverse",
+
   create_asset: "the editor cannot undo asset creation either - a new .uasset is a file on disk, not a transacted change",
   duplicate_asset: "same as create_asset: it makes a new package",
   rename_asset: "an asset rename fixes up references across packages and is not transacted in the editor either",

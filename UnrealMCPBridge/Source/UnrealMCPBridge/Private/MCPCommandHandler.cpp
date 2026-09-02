@@ -1570,6 +1570,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleUndoHistory(Params);
 	}
+	else if (Cmd == TEXT("undo"))
+	{
+		Response = HandleUndo(Params);
+	}
 	else if (Cmd == TEXT("project_health"))
 	{
 		Response = HandleProjectHealth(Params);
@@ -11756,6 +11760,90 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleUndoHistory(const TSharedPtr<F
 	Result->SetStringField(TEXT("note"),
 		TEXT("Newest first: undoPosition 1 is what the next Ctrl+Z in the editor will reverse. Entries titled "
 			"\"MCP: ...\" were made by this bridge. Undo is performed by a human in the editor; this is a read."));
+	return MakeOkResponse(Result);
+}
+
+
+/**
+ * Step back over this bridge's OWN transactions, and stop dead at anything else.
+ *
+ * undo_history has always been a read, and its note said so: "undo is performed by a human in the
+ * editor". That was a defensible default and it leaves a model with no reverse gear, which is not a
+ * theoretical gap - it was written after a cleanup_blueprint call did more than intended to a
+ * Blueprint a team shares, and the only routes back were asking a person to press Ctrl+Z twenty
+ * times or reverting the asset and losing the good work with the bad.
+ *
+ * ## Why this is safe to automate and a bare undo is not
+ *
+ * The editor's undo stack is SHARED. A person may have moved an actor, renamed a variable or edited
+ * a curve between two MCP calls, and those sit in the same queue. An undo that just pops the top
+ * would silently destroy human work, and the person would have no reason to suspect it: they did not
+ * run the tool.
+ *
+ * So this only ever undoes a transaction titled "MCP: ...", stops at the first one that is not, and
+ * says why it stopped. Refusing to act is the correct outcome when a human transaction is on top -
+ * the caller can see that in undo_history and decide, which is a judgement this cannot make.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleUndo(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor || !GEditor->Trans)
+	{
+		return MakeErrorResponse(TEXT("no_transaction_buffer: the editor has no undo buffer available"));
+	}
+
+	int32 Requested = 1;
+	double RawCount = 0;
+	if (Params.IsValid() && Params->TryGetNumberField(TEXT("count"), RawCount))
+	{
+		Requested = FMath::Clamp(static_cast<int32>(RawCount), 1, 100);
+	}
+
+	UTransactor* Transactor = GEditor->Trans;
+	TArray<TSharedPtr<FJsonValue>> Undone;
+	FString StoppedBecause;
+
+	for (int32 Step = 0; Step < Requested; ++Step)
+	{
+		const int32 QueueLength = Transactor->GetQueueLength();
+		const int32 UndoCount = Transactor->GetUndoCount();
+		const int32 TopIndex = QueueLength - UndoCount - 1;
+		if (TopIndex < 0)
+		{
+			StoppedBecause = TEXT("there is nothing left to undo");
+			break;
+		}
+
+		const FTransaction* Transaction = Transactor->GetTransaction(TopIndex);
+		const FString Title = Transaction ? Transaction->GetTitle().ToString() : FString();
+		if (!Title.StartsWith(TEXT("MCP:")))
+		{
+			StoppedBecause = FString::Printf(
+				TEXT("the next undo is \"%s\", which this bridge did not make. Nothing further was undone - ")
+				TEXT("undoing someone else's work is a decision for a person, not for a tool."),
+				*Title);
+			break;
+		}
+
+		if (!GEditor->UndoTransaction())
+		{
+			StoppedBecause = FString::Printf(TEXT("the editor refused to undo \"%s\""), *Title);
+			break;
+		}
+		Undone.Add(MakeShared<FJsonValueString>(Title));
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("undone"), Undone.Num());
+	Result->SetNumberField(TEXT("requested"), Requested);
+	Result->SetArrayField(TEXT("titles"), Undone);
+	if (!StoppedBecause.IsEmpty())
+	{
+		Result->SetStringField(TEXT("stopped"), StoppedBecause);
+	}
+	Result->SetStringField(TEXT("note"),
+		TEXT("Only transactions this bridge made are undone, newest first. An asset already saved to disk stays "
+			"saved: undo returns the in-memory asset to its previous state, so save it again to make the undo "
+			"stick."));
 	return MakeOkResponse(Result);
 }
 
