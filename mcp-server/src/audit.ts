@@ -80,7 +80,7 @@ const WHY_IT_COSTS: Record<string, string> = {
   "session-host-paths-disagree":
     "Menus grow more than one host button. Whichever one was pressed decides whether anybody can see the lobby, so the same build works and then does not.",
   "cast-every-frame": "Not free, and the answer does not change.",
-  "branch-dead-path": "One side of a decision does nothing. Often correct; often the bug.",
+  "branch-decides-nothing": "Both arms of a Branch reach the same node, so the condition is computed and thrown away. Whatever the guard was protecting runs either way.",
   "tick-heavy": "Runs every frame whether or not anything changed.",
 };
 

@@ -541,21 +541,48 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[], context: 
     });
   }
 
-  // --- Branches with a dead path. ---
-  const halfBranches = nodes.filter((node) => {
+  // --- Branches that decide nothing. ---
+  //
+  // This replaces a check that could never fire. It asked whether exactly one of the pins named
+  // "true"/"false" was connected; a K2Node_IfThenElse names its exec outputs `then` and `else` -
+  // measured on a real project, 229 `then` and 128 `else`, and not one "true" or "false". So the
+  // condition was `false !== false` at every Branch in every graph, and branch-dead-path has never
+  // produced a finding while sitting in the cost table at 60.
+  //
+  // Repairing it as written was the obvious move and it is the wrong one. On the same project, 147
+  // of 254 Branches have only one arm wired - 58%, and nearly all of them correctly, because "do
+  // this if the condition holds, otherwise nothing" is how a Branch is normally used. A check that
+  // fires on 58% of a construct is noise, and this project's own comments are full of the cost of
+  // that.
+  //
+  // What IS a defect, always, is a Branch whose arms go to the SAME node. The condition is computed
+  // and thrown away, which means a guard that was intended is not guarding. Three on that project,
+  // and one of them is BP_FireWall.TakeDamage:
+  //
+  //   Branch (IsBeingRepaired)  then -> Set Health
+  //                             else -> Set Health
+  //
+  // so CheckEndInteract runs on RepairingPlayerRef whether or not anybody is repairing, and the
+  // PIE log carries 40 "Accessed None" for exactly that, every session.
+  const pointlessBranches = nodes.filter((node) => {
     if (!/^K2Node_IfThenElse/.test(node.type)) return false;
-    const pins = connectedPinNames(node);
-    return pins.has("true") !== pins.has("false");
+    const wired = (node.connectedPins ?? []).filter(
+      (pin) => pin.direction === "out" && (pin.linkedTo ?? []).length > 0
+    );
+    if (wired.length !== 2) return false;
+    const targets = wired.map((pin) => (pin.linkedTo ?? [])[0]?.node);
+    return targets[0] !== undefined && targets[0] === targets[1];
   });
-  if (halfBranches.length > 0) {
+  for (const branch of pointlessBranches) {
     findings.push({
-      check: "branch-dead-path",
-      severity: "info",
-      message: `${halfBranches.length} Branch node(s) have only one of True/False wired.`,
+      check: "branch-decides-nothing",
+      severity: "warning",
+      message: `A Branch sends both True and False to the same node, so its condition changes nothing.`,
       fix:
-        "Confirm the unwired path is meant to do nothing. It often is, but it is also how a missing case hides " +
-        "in plain sight.",
-      nodeIds: halfBranches.map((node) => node.id),
+        "Either wire one arm somewhere else, or delete the Branch. It reads as a guard and is not one, so " +
+        "anything downstream that the condition was meant to protect runs unconditionally - which is usually " +
+        "how a null reference gets read.",
+      nodeIds: [branch.id],
     });
   }
 

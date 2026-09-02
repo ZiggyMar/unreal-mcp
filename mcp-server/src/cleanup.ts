@@ -70,8 +70,8 @@ const LEFT_ALONE: Record<string, string> = {
     "Splitting a graph into functions requires deciding where the seams are.",
   "long-exec-chain":
     "Extracting a function requires naming what it does.",
-  "branch-dead-path":
-    "An unwired branch path is often correct. Confirm the case is genuinely meant to do nothing.",
+  "branch-decides-nothing":
+    "Deciding whether the guard should route somewhere else or be deleted needs the intent behind it.",
 };
 
 export async function cleanupBlueprint(

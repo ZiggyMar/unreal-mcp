@@ -112,32 +112,59 @@ test("an event wired to nothing is reported as empty", () => {
   assert.deepEqual(finding.nodeIds, ["ev"]);
 });
 
-test("a Branch with only one path wired is info, not warning", () => {
+// Pin names here are "then" and "else", which is what a K2Node_IfThenElse actually calls them -
+// measured on a real project, 229 "then" and 128 "else", and not one "true" or "false".
+//
+// The tests these replace used "True"/"False", and that is why branch-dead-path passed its tests
+// for as long as it existed while never firing on a real graph once: the test encoded the same
+// false premise as the code, so it could only ever confirm it. A fixture invented alongside the
+// thing it tests is not evidence about anything outside the file.
+
+test("a Branch whose arms both reach the same node is flagged", () => {
+  // The condition is computed and thrown away. Whatever the guard was written to protect runs
+  // either way - which is how BP_FireWall reads a null RepairingPlayerRef 40 times a session.
   const nodes = [
     node("ev", "K2Node_Event", "Event BeginPlay", [["then", "out", "br", "execute"]]),
     node("br", "K2Node_IfThenElse", "Branch", [
       ["execute", "in", "ev", "then"],
-      ["True", "out", "x", "execute"],
+      ["then", "out", "x", "execute"],
+      ["else", "out", "x", "execute"],
     ]),
-    node("x", "K2Node_CallFunction", "Do Thing", [["execute", "in", "br", "True"]]),
+    node("x", "K2Node_CallFunction", "Do Thing", [["execute", "in", "br", "then"]]),
   ];
-  const finding = reviewGraph("EventGraph", nodes).findings.find((f) => f.check === "branch-dead-path");
-  assert.ok(finding);
-  assert.equal(finding.severity, "info");
+  const finding = reviewGraph("EventGraph", nodes).findings.find((f) => f.check === "branch-decides-nothing");
+  assert.ok(finding, "expected branch-decides-nothing");
+  assert.equal(finding.severity, "warning");
+  assert.deepEqual(finding.nodeIds, ["br"]);
 });
 
-test("a fully wired Branch is not flagged", () => {
+test("a Branch whose arms go to different nodes is not flagged", () => {
   const nodes = [
     node("ev", "K2Node_Event", "Event BeginPlay", [["then", "out", "br", "execute"]]),
     node("br", "K2Node_IfThenElse", "Branch", [
       ["execute", "in", "ev", "then"],
-      ["True", "out", "x", "execute"],
-      ["False", "out", "y", "execute"],
+      ["then", "out", "x", "execute"],
+      ["else", "out", "y", "execute"],
     ]),
-    node("x", "K2Node_CallFunction", "Do Thing", [["execute", "in", "br", "True"]]),
-    node("y", "K2Node_CallFunction", "Other Thing", [["execute", "in", "br", "False"]]),
+    node("x", "K2Node_CallFunction", "Do Thing", [["execute", "in", "br", "then"]]),
+    node("y", "K2Node_CallFunction", "Other Thing", [["execute", "in", "br", "else"]]),
   ];
-  assert.ok(!checks(reviewGraph("EventGraph", nodes)).includes("branch-dead-path"));
+  assert.ok(!checks(reviewGraph("EventGraph", nodes)).includes("branch-decides-nothing"));
+});
+
+test("a Branch with only one arm wired is not flagged", () => {
+  // Deliberately silent. 147 of 254 Branches on a real project have one arm wired, nearly all of
+  // them correctly - "do this if the condition holds, otherwise nothing" is how a Branch is used.
+  // A check that fires on 58% of a construct is noise, and noise is how a report stops being read.
+  const nodes = [
+    node("ev", "K2Node_Event", "Event BeginPlay", [["then", "out", "br", "execute"]]),
+    node("br", "K2Node_IfThenElse", "Branch", [
+      ["execute", "in", "ev", "then"],
+      ["then", "out", "x", "execute"],
+    ]),
+    node("x", "K2Node_CallFunction", "Do Thing", [["execute", "in", "br", "then"]]),
+  ];
+  assert.ok(!checks(reviewGraph("EventGraph", nodes)).includes("branch-decides-nothing"));
 });
 
 test("an oversized graph is flagged for extraction into functions", () => {

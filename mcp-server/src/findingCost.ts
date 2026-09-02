@@ -76,7 +76,12 @@ export const FINDING_COST: Record<string, number> = {
   "session-host-without-search": 45,
   "cast-every-frame": 70,
   "repnotify-does-nothing": 60,
-  "branch-dead-path": 60,
+  // Was branch-dead-path, which never fired - it tested for pins named "true"/"false" and a Branch
+  // names them "then"/"else". Renamed rather than repaired, because repairing it as written meant
+  // reporting 147 of 254 Branches. This one fires only when a Branch's two arms reach the same node,
+  // which is never correct: the condition is computed and discarded, so a guard that was written is
+  // not guarding. Runtime-confirmed on BP_FireWall.TakeDamage, 40 null reads a session.
+  "branch-decides-nothing": 60,
   "tick-heavy": 55,
   "level-sweep-maybe-repeating": 50,
   // Several Get All Actors Of Class in one graph: each walks the whole level, and if they are
