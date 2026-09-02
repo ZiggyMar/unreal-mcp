@@ -9076,15 +9076,27 @@ one diagnosis and it turns up here, in a tool written afterwards, with nobody co
 | | calls | tokens |
 |---|---:|---:|
 | by hand (describe_class, list_components, list_variables, list_blueprint_graphs, explain_graph, find_references) | 6 | 8,131 |
-| `unreal_document_asset` | 1 | 7,649 |
+| `unreal_document_asset`, as first written | 1 | 7,649 |
+| `unreal_document_asset`, after the duplication was found | 1 | **3,883** |
 
-Six percent. The tokens in the reply are the answer, and an answer does not get cheaper by being
+Six percent, on the first version. The tokens in the reply are the answer, and an answer does not get cheaper by being
 asked for differently - so anyone claiming a large saving here would be claiming to have deleted
 some of it. The saving that matters is the other column: six sequential calls are six turns, and
 every turn re-reads the whole conversation, so the round trips cost far more than the reply does.
 What is worth more again is that the six are always all six.
 
-Three sizes, because the graphs are the expensive half: `graphDetail: "none"` is 3,011 tokens,
-`"entries"` (the default, event graphs only) 7,649, `"all"` 11,317. And every truncation says so -
+**And then the reply was measured against itself.** 31,192 characters, of which `text` was 13,735
+and the arrays that `text` is *rendered from* were another 16,000. Seventy-eight percent of the
+largest reply this server sends was one set of facts said twice - the exact defect this project
+keeps deleting from other replies, in a tool written the same morning. The prose is the product; the
+structure it came from is not sent as well. Anything wanted as data has its own tool one call away,
+which answers it properly rather than as a by-product.
+
+One thing had to move first: the names of variables that do NOT replicate existed only in the
+structured array. Dropping it without adding them to the text would have been a quiet loss of 71
+names, not a compaction. They are a single `local (71): ...` line now.
+
+Three sizes, because the graphs are the expensive half: `graphDetail: "none"` is 1,100 tokens,
+`"entries"` (the default, event graphs only) 3,883, `"all"` 5,470 - each roughly half what it was. And every truncation says so -
 a list that quietly stops short reads as "this is all of them", which is the one thing a document
 must never get wrong.
