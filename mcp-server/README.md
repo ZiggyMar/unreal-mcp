@@ -9126,3 +9126,44 @@ reason, an exec pin has no value, and an empty one is not worth the characters.
 the whole audit read graph summaries constantly and none of them want pin literals. Switching this
 on for everyone would have grown the most-read reply on the surface to answer a question most callers
 are not asking. Measured with the flag off, the reply is byte-identical to what it was.
+
+### Guessing a path, and being told the real one
+
+Guessing an asset path is the most common way a call fails, and it is the only failure the server
+can just look the answer up for. Both of these were guessed while doing ordinary work on this
+project, minutes apart - the name was right each time and only the folders were invented:
+
+```
+/Game/Blueprints/Characters/BP_Player          -> blueprint_not_found
+/Game/AntiVirusSquad/_Core/GameModes/GM_Gameplay -> blueprint_not_found
+```
+
+What that used to cost, per wrong guess:
+
+| | tokens | round trips |
+|---|---:|---:|
+| the not-found error | 147 | 1 |
+| the `list_blueprints` it tells you to run | 104 | 1 |
+| the real call | 21 | 1 |
+| **total** | **272** | **3** |
+
+The error now ends with `Did you mean` and a real path, so the same work is two calls and the
+second one succeeds - 185 tokens, and one wasted round trip instead of two. Round trips are the
+larger saving: each one re-reads the whole conversation.
+
+The lookup happens inside the server. `list_blueprints` unfiltered is ~2,669 tokens and none of them
+reach the model; what reaches the model is one line naming one path. Nothing is spent on the happy
+path - the hook runs only on a reply that is already an error and already names a missing path, so
+successful replies are byte-identical to what they were.
+
+**An exact name match ends it.** `BP_Player` is a substring of `ABP_Player`, `WBP_PlayerDeath` and
+`WBP_PlayerInfo`; offering those beside the real answer would make a caller who is already confused
+choose between four paths when one is correct. Substring hits are the fallback for when nothing
+matched exactly, never a garnish on a hit, and a needle under three characters matches nothing at
+all.
+
+**When nothing matches, nothing is said.** A wrong "did you mean" lands on a caller who is already
+lost and carries more conviction than the error it decorated. The bridge's own error text stays
+intact underneath either way - it explains the path-repeats-the-name rule and the create-it-first
+case, neither of which a name match can answer, and an error that gets shorter when it gets smarter
+is a bad trade.

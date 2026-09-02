@@ -74,6 +74,13 @@ import type {
   SearchProjectResult,
   SetPinDefaultValueResult,
 } from "./types.js";
+import {
+  leafName,
+  notFoundPath,
+  rankCandidates,
+  suggestionLine,
+  type PathCandidate,
+} from "./suggestPath.js";
 
 const BRIDGE_HOST = process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1";
 const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
@@ -973,7 +980,7 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
   const guarded = (async (args: never, extra: never) => {
     const verdict = repeatGuard.record(name, args);
     const result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
-    return withRepeatNotice(result, verdict.notice);
+    return withRepeatNotice(await withPathSuggestion(result), verdict.notice);
   }) as never;
   // Swap the raw shape for a strict object of the same shape. It stays a ZodObject, so the SDK
   // still derives the advertised JSON schema from it exactly as before.
@@ -1094,6 +1101,45 @@ function explainUnknownCommand(message: string): string | undefined {
     `not a reason to stop. unreal_doctor lists every command affected and how out of date the build ` +
     `is; the cure is to close the editor, run \`npm run build:engines\`, and reopen.`
   );
+}
+
+/**
+ * Attach "Did you mean ...?" to a not-found error, by looking the name up instead of describing how.
+ *
+ * Runs ONLY on a reply that is already an error and already names a missing path, so the happy path
+ * pays nothing - no extra bridge call, no extra token, byte-identical replies. The lookup it does
+ * make is internal: `list_blueprints` unfiltered is ~2,669 tokens, and none of them reach the model.
+ * What reaches the model is one line naming a real path.
+ *
+ * A non-Blueprint asset - a Data Table, a texture - will not be in that list, so no match is found
+ * and the original error stands unchanged. That is the intended outcome rather than a gap to
+ * apologise for: a wrong suggestion is worse than none, and the error already teaches the fix.
+ */
+async function withPathSuggestion(result: unknown): Promise<unknown> {
+  const r = result as { isError?: boolean; content?: Array<{ type?: string; text?: string }> };
+  if (r?.isError !== true || !Array.isArray(r.content)) return result;
+
+  const block = r.content.find((c) => c?.type === "text" && typeof c.text === "string");
+  if (!block?.text) return result;
+
+  const missing = notFoundPath(block.text);
+  if (!missing) return result;
+  const needle = leafName(missing);
+  if (needle.length === 0) return result;
+
+  try {
+    const listed = await bridge.send<{ blueprints?: PathCandidate[] }>("list_blueprints", {});
+    const line = suggestionLine(rankCandidates(needle, listed.blueprints ?? []));
+    if (!line) return result;
+    return {
+      ...r,
+      content: r.content.map((c) => (c === block ? { ...c, text: `${c.text}\n\n${line}` } : c)),
+    };
+  } catch {
+    // A courtesy on a call that has already failed. If the bridge cannot answer the lookup, the
+    // original error is still the right answer and must not be replaced by a lookup failure.
+    return result;
+  }
 }
 
 function errorResult(err: unknown, hint?: string) {
