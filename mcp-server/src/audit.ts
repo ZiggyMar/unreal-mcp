@@ -167,7 +167,14 @@ export interface AuditResult {
   /** How much of the Data Table half actually ran, so no findings can be told from not looking. */
   dataTablesScanned: number;
   dataTableRowsScanned: number;
-  dataTableNulls: Array<{ table: string; rowName: string; field: string; rowStruct?: string }>;
+  dataTableNulls: Array<{
+    table: string;
+    rowName: string;
+    field: string;
+    rowStruct?: string;
+    /** How many assets reference this table. A finding in a table nothing reads is a different fact. */
+    referencedBy?: number;
+  }>;
   /**
    * Rows sharing a CLASS reference in a column where almost every other row has its own.
    *
@@ -176,7 +183,14 @@ export interface AuditResult {
    * the field is filled in and the value is a valid asset - nothing is null, nothing is broken, and
    * one row simply does someone else's job.
    */
-  dataTableDuplicateClasses: Array<{ table: string; field: string; value: string; rows: string[]; rowStruct?: string }>;
+  dataTableDuplicateClasses: Array<{
+    table: string;
+    field: string;
+    value: string;
+    rows: string[];
+    rowStruct?: string;
+    referencedBy?: number;
+  }>;
   truncated: boolean;
   /**
    * How many Blueprints the project has, against how many were looked at.
@@ -1080,11 +1094,42 @@ const unresolvedClasses = new Set<string>();
   //
   // Ordered after nulls rather than before: both are silent at runtime, and an empty reference does
   // nothing while a shared one does something plausible, so the empty one is the cheaper read.
+  /**
+   * How many assets reference each table a finding is about.
+   *
+   * A broken row in a table nothing reads and a broken row in a table six things read are different
+   * facts, and the audit could not tell them apart. Found the hard way on this project: it reported
+   * two empty UpgradeClass references and a shared one in DT_Upgrades, and that report was acted on
+   * as though DT_Upgrades were THE upgrade table. There are three - DT_Upgrades, DT_UpgradesBP and
+   * DT_UpgradesOld - with overlapping rows, and the referencing counts are 1, 6 and 3. The one the
+   * findings are in is the one almost nothing reads, and the one six assets read is clean.
+   *
+   * Only tables that already produced a finding are looked up, so a project with clean tables pays
+   * nothing for this.
+   */
+  const tablesWithFindings = [
+    ...new Set([...dataTableNulls, ...dataTableDuplicateClasses].map((d) => d.table)),
+  ];
+  const tableUsers = new Map<string, number>();
+  for (const table of tablesWithFindings) {
+    try {
+      const refs = await bridge.send<{ referencedBy?: unknown[] }>("find_references", { path: table });
+      tableUsers.set(table, (refs.referencedBy ?? []).length);
+    } catch {
+      // A reference lookup that fails must not cost the finding it was decorating.
+    }
+  }
+  for (const finding of [...dataTableNulls, ...dataTableDuplicateClasses]) {
+    const users = tableUsers.get(finding.table);
+    if (users !== undefined) (finding as { referencedBy?: number }).referencedBy = users;
+  }
+
   const dataTableLead: string[] = [];
   if (dataTableNulls.length > 0) {
     dataTableLead.push(
       `Start with ${dataTableNulls.length} empty Data Table reference(s), beginning with ` +
-        `${dataTableNulls[0].table} row "${dataTableNulls[0].rowName}" (${dataTableNulls[0].field}). ` +
+        `${dataTableNulls[0].table} row "${dataTableNulls[0].rowName}" (${dataTableNulls[0].field}` +
+        `${dataTableNulls[0].referencedBy !== undefined ? `, a table ${dataTableNulls[0].referencedBy} asset(s) reference` : ""}). ` +
         `The engine resolves an empty reference to null and whatever consumes it silently does ` +
         `nothing - no error, no log. Fix with unreal_set_data_table_row.`
     );

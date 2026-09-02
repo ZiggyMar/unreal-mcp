@@ -596,3 +596,49 @@ test("a project with no Data Tables reports zero rather than staying silent", as
   assert.equal(r.dataTablesScanned, 0);
   assert.equal(r.dataTableRowsScanned, 0);
 });
+
+test("a Data Table finding says how many assets read the table", async () => {
+  // A broken row in a table nothing reads and a broken row in a table six things read are different
+  // facts. Found the hard way: the audit reported two empty UpgradeClass references and a shared one
+  // in DT_Upgrades, and that was acted on as though DT_Upgrades were THE upgrade table. This project
+  // has three - DT_Upgrades, DT_UpgradesBP, DT_UpgradesOld - referenced by 1, 6 and 3 assets, with
+  // overlapping rows. The findings are in the one almost nothing reads; the one six assets read is
+  // clean.
+  const bridge = fakeBridge({
+    list_assets: () => ({ assets: ["/Game/Data/DT_Thing.DT_Thing"] }),
+    list_data_table_rows: () => ({
+      rows: [
+        { rowName: "A", values: { Ref: "/Script/Engine.BlueprintGeneratedClass'/G/BP_A.BP_A_C'" } },
+        { rowName: "B", values: { Ref: "" } },
+      ],
+    }),
+    find_references: () => ({ referencedBy: [{ package: "/Game/X" }, { package: "/Game/Y" }] }),
+  });
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTableNulls.length, 1);
+  assert.equal(r.dataTableNulls[0].referencedBy, 2);
+  // It has to reach nextAction, not just the payload - the ordering bug that shipped this the first
+  // time attached the count AFTER the sentence that reads it, so the field was right and the
+  // sentence never mentioned it.
+  assert.match(r.nextAction, /2 asset\(s\) reference/);
+});
+
+test("a reference lookup that fails does not cost the finding", async () => {
+  const bridge = fakeBridge({
+    list_assets: () => ({ assets: ["/Game/Data/DT_Thing.DT_Thing"] }),
+    list_data_table_rows: () => ({
+      rows: [
+        { rowName: "A", values: { Ref: "/Script/Engine.BlueprintGeneratedClass'/G/BP_A.BP_A_C'" } },
+        { rowName: "B", values: { Ref: "" } },
+      ],
+    }),
+    find_references: () => {
+      throw new Error("unknown_cmd: find_references");
+    },
+  });
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTableNulls.length, 1, "the finding survives");
+  assert.equal(r.dataTableNulls[0].referencedBy, undefined, "and says nothing rather than guessing");
+});

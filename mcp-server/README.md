@@ -10118,3 +10118,36 @@ older plugin.
 
 Two rounds, two defects, same method: not rereading the code, but calling the tools with inputs
 chosen to expose the boundary — nothing matched, and everything matched but capped.
+
+### The audit found the right rows in the wrong table
+
+Exercising `unreal_find_in_data_tables` for the first time turned up something the audit could not
+have told anyone. Searching for `BP_BulletSize` returned **three** hits when two were expected — and
+the third was in a table this project did not know existed.
+
+```text
+DT_Upgrades      referenced by  1 asset   (BP_ShopComponent)
+DT_UpgradesBP    referenced by  6 assets  (PC_Gameplay, GM_Gameplay, WB_ShopSlot, BP_ShopUpgrade, ...)
+DT_UpgradesOld   referenced by  3 assets
+```
+
+Three overlapping upgrade tables. Every Data Table finding this project has reported — two empty
+`UpgradeClass` references and a shared one — is in `DT_Upgrades`, the table **one** asset reads.
+`DT_UpgradesBP`, which six read, has six rows, six distinct upgrade classes, no empties and no
+duplicates. It is clean, and it uses a different row struct entirely: `S_UpgradeDef`, a Blueprint
+struct, rather than the C++ `FShopUpgradeDef` the earlier commit traced into `AC_ShopComponent.cpp`.
+
+The findings were right. The conclusion drawn from them — that these were *the* upgrade table's bugs
+— was not, and nothing in the reply could have corrected it.
+
+**So a Data Table finding now carries how many assets reference the table**, and the lead sentence
+says it: *"row \"Weapon_MachineGun\" (UpgradeClass, a table 1 asset(s) reference)"*. A broken row in
+a table nothing reads and a broken row in a table six things read are different facts, and they were
+being reported identically. Only tables that already produced a finding are looked up, so a clean
+project pays nothing.
+
+**The first version of this shipped the field and not the sentence.** The lookup was attached after
+`nextAction` had already been built, so `referencedBy: 1` was in the payload and the sentence never
+mentioned it — the reply would have looked correct to anyone reading the JSON and unchanged to anyone
+reading the text. Both are asserted now, and so is the case where the lookup fails: the finding
+survives and says nothing rather than guessing.
