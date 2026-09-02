@@ -7426,6 +7426,7 @@ anybody noticed.
 - [The workflow guide told models to trust the echo](#the-workflow-guide-told-models-to-trust-the-echo)
 - [The answer was in the last 9% of the reply](#the-answer-was-in-the-last-9-of-the-reply)
 - [One rule, whole surface: the guidance goes first](#one-rule-whole-surface-the-guidance-goes-first)
+- [Importing the server started a server](#importing-the-server-started-a-server)
 
 <!-- INDEX:END -->
 
@@ -11796,3 +11797,26 @@ it timed out. It lives in its own module now, which is where a pure function bel
 And the test that matters is not "is `nextAction` first". It is that the reordering is **free**: same
 keys, same values, same `JSON.stringify` length. That is the entire argument for doing it, so that is
 what is asserted — a version that quietly dropped a field would pass an ordering check and fail this one.
+
+### Importing the server started a server
+
+`main()` was called at module scope, so `import("../dist/index.js")` started a stdio server that never
+exits. A test reaching into that file for one pure function got a hung process — and hung for ten
+minutes with no output, because **a stdio server producing nothing looks exactly like a slow test**.
+
+That is a trap set for the reader most likely to spring it: someone writing a script or a test against
+this module rather than launching it. The pure function moved to its own file, which fixed that
+instance, and left the trap in place for the next one.
+
+It now starts only when `argv[1]` is this file — which every client and the test harness already do,
+since they all spawn `node dist/index.js`. Both paths verified: the harness still gets its five tools
+on `search`, `--print-config` still prints, and importing resolves cleanly with nothing started.
+
+**The guard runs in a child process, deliberately.** A test that imported the module directly to check
+this would *hang the whole suite* on a regression — the exact failure it is meant to catch, reproduced
+by the thing catching it. Spawning with a timeout turns that hang into a failed assertion with a
+sentence explaining what came back.
+
+And it asserts both directions. Making a module safe to import must not make it impossible to run, so
+the second test launches it and requires real output — otherwise "never starts a server" would pass
+perfectly by never starting one at all.

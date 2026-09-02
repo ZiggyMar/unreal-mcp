@@ -43,7 +43,7 @@ import { reviewStatePlacement } from "./statePlacement.js";
 import { allPolicies, resolveMode, DEFAULT_MODE } from "./mode.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { findSourceRoots, searchSource, modulesByName, matchesByFile } from "./nativeSource.js";
 import { verifyFeature } from "./verifyFeature.js";
 import { auditDataTables } from "./dataTableAudit.js";
@@ -8223,8 +8223,25 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("unreal-mcp-server: fatal error", err);
-  process.exit(1);
-});
+/**
+ * Start the server when RUN, not when imported.
+ *
+ * main() used to be called at module scope, so `import("../dist/index.js")` started a stdio server
+ * that never exits. Anything reaching into this file for a pure function got a hung process instead:
+ * a test importing one timed out after ten minutes with no output and no clue why, because a stdio
+ * server producing nothing is indistinguishable from a test that is simply slow.
+ *
+ * That is a trap for exactly the reader most likely to spring it - someone writing a script or a test
+ * against this module rather than launching it. The launch path is unchanged: the harness and every
+ * client spawn `node dist/index.js`, where argv[1] is this file and this is true.
+ */
+const launchedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (launchedDirectly) {
+  main().catch((err) => {
+    console.error("unreal-mcp-server: fatal error", err);
+    process.exit(1);
+  });
+}
 
