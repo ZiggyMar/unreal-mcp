@@ -10561,3 +10561,50 @@ line.
 
 Compile-verified in 77 seconds before committing — and from this commit on the pre-push hook would
 have done it anyway, which is the difference between remembering and not having to.
+
+### The guard was already there, eight lines up the call chain
+
+Two commits added an empty-asset-name guard, and the second one moved it into
+`EnsureAssetNameIsFree` so seven handlers would share it. Both were written on this claim:
+
+> Nine handlers derive an asset name this way and none of them checked it.
+
+**That was false.** `ValidateNewAssetPath` has always checked it:
+
+```cpp
+const FString AssetName = FPackageName::GetShortName(PackagePath);
+if (AssetName.IsEmpty())
+{
+    OutError = ... "has no asset name after the last slash";
+    return false;
+}
+```
+
+Every creation handler calls it, and every one calls it *first*:
+
+| handler | validates | ensures |
+|---|---:|---:|
+| `HandleCreateBlueprint` | 2279 | 2324 |
+| `HandleCreateStruct` | 10632 | 10682 |
+| `HandleCreateDataTable` | 10036 | 10069 |
+| `HandleCreateEnum` | 10815 | 10846 |
+| `HandleCreateMaterial` | 11065 | 11136 |
+| `HandleCreateMaterialInstance` | 11261 | 11286 |
+| `HandleCreateWidgetBlueprint` | 9192 | 9255 |
+| `HandleCreateLevel` | 5400 | — |
+
+`create_level`, which the previous commit named as the one handler still exposed, was never exposed.
+It validates like the rest; it simply has no reason to call the other function.
+
+Both guards are reverted. The C++ is byte-identical to what it was before either commit touched it,
+and it compiles.
+
+**How the mistake was made is the useful part.** The crash was real, the stack named
+`HandleCreateStruct`, and a grep for `GetShortName` found nine sites with no check *at those sites*.
+Every step was evidence-based, and the conclusion was still wrong, because "no check here" was read
+as "no check anywhere" without following the call chain up. The same file had a validator eight lines
+before the call, doing exactly the job being added.
+
+Two commits of defensive C++ against a crash whose cause is still, by the evidence, 166 Live Coding
+patches. The doctor's warning about that remains the only thing this episode produced that was
+actually missing.

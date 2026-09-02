@@ -2193,24 +2193,6 @@ static bool ValidateNewAssetPath(const FString& PackagePath, FString& OutError)
  */
 static bool EnsureAssetNameIsFree(UPackage* Package, const FString& AssetName, FString& OutError)
 {
-	// An empty name, before anything is asked of the engine.
-	//
-	// Every create path derives its name with FPackageName::GetShortName, which returns an empty
-	// string for a path that ends in a slash - and an empty FName then goes to a factory or to
-	// FStructureEditorUtils, which register types with the reflection system rather than validating
-	// their arguments. That is the shape of call that faults instead of returning, which is the exact
-	// failure this function's header is about.
-	//
-	// Here rather than in each handler because seven of them call this and none of them checked:
-	// create_blueprint, create_widget_blueprint, create_data_table, create_struct, create_enum,
-	// create_material, create_material_instance. One gate, one implementation.
-	if (AssetName.IsEmpty())
-	{
-		OutError = TEXT("bad_path: there is no asset name after the last slash. A path is a folder and ")
-			TEXT("then the name to create, as in /Game/Data/S_Item - not /Game/Data/.");
-		return false;
-	}
-
 	UObject* Existing = StaticFindObject(nullptr, Package, *AssetName);
 	if (!Existing)
 	{
