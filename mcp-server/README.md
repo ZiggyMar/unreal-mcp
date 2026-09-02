@@ -10221,3 +10221,39 @@ Checked first, as usual: `find_orphans` pairs actors in a level by proximity, an
 finds uncalled function graphs. Neither covers a gameplay-framework Blueprint no GameMode selects,
 which is still a gap worth its own check one day — this is the cheap half, built from a number the
 previous commit had already paid for.
+
+### A GameMode that runs gameplay and never says what the player is
+
+The previous commit named a gap and left it: nothing checked whether a gameplay-framework Blueprint
+was wired to anything. Reading all five GameModes' class defaults made the shape of the check obvious:
+
+```text
+GM_Gameplay              pawn BP_Player                 GS GS_PlacementManager
+GM_Lobby                 pawn BP_Player                 GS GS_Lobby
+BP_FirstPersonGameMode   pawn BP_FirstPersonCharacter   GS (engine default)
+GM_TutGameplay           pawn (engine default)          GS GS_PlacementManager
+GM_MainMenu              pawn (engine default)          GS (engine default)
+```
+
+`DefaultPawnClass` decides what every joining player possesses. Left at the engine default it is
+`ADefaultPawn` — the grey flying sphere with no mesh and no game logic — and nothing warns, because a
+GameMode with an engine default is a perfectly valid GameMode. It surfaces as *"the tutorial spawns
+me as a floating ball"*, usually from a player rather than a test.
+
+**Two of the five have no pawn and only one is a defect.** `GM_MainMenu` is a menu: no gameplay, no
+project GameState, nothing to possess. A check that flagged it would be the noise this project has
+spent several commits removing — `unlabelled-sections` at 41% of the audit, `branch-decides-nothing`
+at 67% false.
+
+The discriminator is the GameMode's **own other choices**. `GM_TutGameplay` picks a project GameState,
+so it has replicated match state and is running real gameplay, and then leaves the pawn at the
+engine's. That inconsistency is inside one asset, which is what makes it evidence rather than a guess
+about intent. One finding on this project, cost 90, and the fixture asserts the other four stay
+silent.
+
+Reported as what was observed, with the escape hatch stated: a GameMode can spawn and possess pawns
+in its own graph, and then the engine default is never used. The `fix` says so rather than assuming
+the caller is wrong.
+
+Found the ordinary way — by answering a question the previous commit had raised instead of moving on
+from it, and by reading five assets before writing a rule about them.

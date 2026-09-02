@@ -38,6 +38,7 @@ import { FINDING_COST } from "./findingCost.js";
 import { execTargets, type FlowNode } from "./execFlow.js";
 import { findDeadGraphs, type LivenessGraph } from "./systemLiveness.js";
 import { findAnimStateMachineFaults } from "./animAudit.js";
+import { findGameModeWiringFaults, type GameModeDefaults } from "./gameModeWiring.js";
 import { findNiagaraFaults } from "./niagaraAudit.js";
 import { explainGraph } from "./explainGraph.js";
 
@@ -83,6 +84,8 @@ const WHY_IT_COSTS: Record<string, string> = {
     "A LAN session is invisible to an online search and the reverse. Hosting succeeds, searching succeeds, the list is empty, and nothing anywhere reports an error.",
   "session-host-paths-disagree":
     "Menus grow more than one host button. Whichever one was pressed decides whether anybody can see the lobby, so the same build works and then does not.",
+  "gamemode-has-no-pawn":
+    "DefaultPawnClass decides what every joining player possesses. Left at the engine default it is ADefaultPawn - a grey flying sphere with no mesh and no game logic - and nothing warns, because a GameMode with an engine default is a valid GameMode.",
   "cast-every-frame": "Not free, and the answer does not change.",
   "branch-decides-nothing": "Both arms of a Branch reach the same node, so the condition is computed and thrown away. Whatever the guard was protecting runs either way.",
   "tick-heavy": "Runs every frame whether or not anything changed.",
@@ -772,6 +775,46 @@ const unresolvedClasses = new Set<string>();
 
   // These findings only ever come from the event graph - the map they are built from is the event
   // graphs - so the name is a constant rather than a guess, and one constant rather than two.
+  // GameMode wiring. Read from class defaults rather than from graphs, which is why it sits apart
+  // from the per-graph passes: what a GameMode chooses is a property, not a node.
+  //
+  // Only GameMode Blueprints are read, so this costs a handful of calls on any project - five here.
+  try {
+    const modes: GameModeDefaults[] = [];
+    for (const [name, child] of eventGraphs) {
+      if (!/GameMode/i.test(child.parentClass ?? "") && !/^GM_/.test(name)) continue;
+      const path = pathOfBlueprint.get(name);
+      if (!path) continue;
+      const defaults = await bridge.send<{ properties?: Array<{ name?: string; value?: string }> }>(
+        "read_class_defaults",
+        { path }
+      );
+      const value = (key: string) =>
+        (defaults.properties ?? []).find((p) => p.name === key)?.value ?? undefined;
+      modes.push({
+        name,
+        defaultPawnClass: value("DefaultPawnClass"),
+        gameStateClass: value("GameStateClass"),
+        playerControllerClass: value("PlayerControllerClass"),
+      });
+    }
+    for (const finding of findGameModeWiringFaults(modes)) {
+      findings.push({
+        path: pathOfBlueprint.get(finding.blueprint) ?? finding.blueprint,
+        blueprint: finding.blueprint,
+        graph: "(class defaults)",
+        check: finding.check,
+        severity: finding.severity,
+        cost: FINDING_COST[finding.check] ?? 1,
+        message: finding.message,
+        observed: finding.observed,
+        fix: finding.fix,
+      });
+    }
+  } catch (err) {
+    checksSkipped.push({ name: "gamemode-wiring", why: reasonFor(err) });
+  }
+
   const PARENT_CALL_GRAPH = "EventGraph";
 
   // A child against its parent. Both have to have been read, which is why this waits until here.
