@@ -9455,3 +9455,50 @@ assumption the code did — `then`/`else` both pointing at one node id, which lo
 in a fixture and is obviously right in a function graph. A fixture invented alongside the thing it
 tests can only confirm it. What caught this was running the check against a real Blueprint and then
 reading that Blueprint.
+
+### 41% of the audit was one note about comment boxes
+
+Measured across the whole project — 339 Blueprints, 834 findings:
+
+```text
+unlabelled-sections      344   41%   <- one info-level style note
+unhandled-cast-failure   105   13%
+long-exec-chain           89   11%
+debug-print-left-in       41
+graph-too-large           39
+...
+server-writes-unreplicated 21         <- the multiplayer checks, all of them
+cast-to-server-only-class  11            put together, are a fifth of the
+reads-server-only-variable  6            comment-box note
+```
+
+The condition was `2 or more chains and fewer comment boxes than chains`, which is very nearly every
+graph anyone has ever written. A seven-node function with two chains and no comment box is not hard
+to read; it is a seven-node function.
+
+This is the failure mode this file already names twice — a check that fires on ordinary correct
+practice is noise, and noise is how a report stops being read. It was drowning the findings that
+matter: every replication and server-authority finding in the project put together is a fifth of
+this one note.
+
+What the finding actually claims is that a reader cannot see the structure without tracing wires,
+and that is a property of **size**. So it is now gated on size: 40+ nodes, 3+ distinct chains, and
+**no** comment boxes at all. Any attempt at labelling silences it, because "you have one box and
+four chains" is advice nobody needs.
+
+| | before | after |
+|---|---:|---:|
+| `unlabelled-sections` | 344 | **14** |
+| whole-project findings | 834 | **504** |
+
+Every other check is unchanged — `unhandled-cast-failure` 105, `long-exec-chain` 89,
+`server-writes-unreplicated` 21 — so nothing else was disturbed to get this.
+
+Kept at `info` rather than raised or removed. It has no runtime consequence, and the one piece of
+direct human feedback this project has on the subject is that machine-added comment boxes were too
+big and too many. It should nudge at the extreme and stay quiet everywhere else.
+
+**Two tests had to be rewritten, and that is the tell.** Both asserted the old behaviour using
+four-node fixtures — graphs so small that the check firing on them was the bug. A fixture built
+alongside a check tests that the check still does what it does, not that what it does is right.
+Nothing in the suite could have caught this; only counting findings on a real project could.

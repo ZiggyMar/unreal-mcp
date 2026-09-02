@@ -179,17 +179,44 @@ test("an oversized graph is flagged for extraction into functions", () => {
   assert.ok(found.includes("long-exec-chain"));
 });
 
-test("unlabelled sections are reported only when chains outnumber comment boxes", () => {
+// Built big on purpose: this check is about a reader not being able to see the structure, which is
+// a property of size. `chains` distinct events, each with a run of plain call nodes after it.
+const bigGraph = (chains, perChain) => {
+  const out = [];
+  for (let c = 0; c < chains; c += 1) {
+    out.push(node(`ev${c}`, "K2Node_CustomEvent", `Event${c}`, [["then", "out", `n${c}_0`, "execute"]]));
+    for (let i = 0; i < perChain; i += 1) {
+      const links = [["execute", "in", i === 0 ? `ev${c}` : `n${c}_${i - 1}`, "then"]];
+      if (i < perChain - 1) links.push(["then", "out", `n${c}_${i + 1}`, "execute"]);
+      out.push(node(`n${c}_${i}`, "K2Node_CallFunction", `Do ${c}.${i}`, links));
+    }
+  }
+  return out;
+};
+
+test("a small graph with no comment boxes is not a finding", () => {
+  // The old threshold was "2+ chains and fewer boxes than chains", which is very nearly every graph
+  // ever written: 344 findings of 834 on a real project, 41% of the whole audit from one info-level
+  // note. A seven-node function with two chains is not hard to read; it is a seven-node function.
   const twoChains = [
     node("ev1", "K2Node_Event", "Event BeginPlay", [["then", "out", "a", "execute"]]),
     node("a", "K2Node_CallFunction", "Do A", [["execute", "in", "ev1", "then"]]),
     node("ev2", "K2Node_Event", "Event Tick", [["then", "out", "b", "execute"]]),
     node("b", "K2Node_CallFunction", "Do B", [["execute", "in", "ev2", "then"]]),
   ];
-  assert.ok(checks(reviewGraph("EventGraph", twoChains)).includes("unlabelled-sections"));
+  assert.ok(!checks(reviewGraph("EventGraph", twoChains)).includes("unlabelled-sections"));
+});
 
-  const boxed = [...twoChains, node("c1", "EdGraphNode_Comment", "A"), node("c2", "EdGraphNode_Comment", "B")];
-  assert.ok(!checks(reviewGraph("EventGraph", boxed)).includes("unlabelled-sections"));
+test("a large, many-chained graph with no labelling at all is a finding", () => {
+  const big = bigGraph(4, 12); // 4 chains, 52 nodes
+  assert.ok(checks(reviewGraph("EventGraph", big)).includes("unlabelled-sections"));
+});
+
+test("any attempt at labelling silences it", () => {
+  // "You have one box and four chains" is advice nobody needs, and the only human feedback this
+  // project has on the subject is that machine-added comment boxes were already too many.
+  const big = [...bigGraph(4, 12), node("c1", "EdGraphNode_Comment", "Setup")];
+  assert.ok(!checks(reviewGraph("EventGraph", big)).includes("unlabelled-sections"));
 });
 
 test("the score falls with severity and never goes below zero", () => {

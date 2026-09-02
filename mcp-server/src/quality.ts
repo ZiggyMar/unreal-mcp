@@ -486,11 +486,35 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[], context: 
   const chains = groupIntoChains(nodes);
 
   // --- Unlabelled sections. ---
-  if (chains.length >= 2 && commentBoxes.length < chains.length) {
+  //
+  // The threshold used to be "2 or more chains and fewer comment boxes than chains", which is very
+  // nearly every graph anyone has ever written. Measured across this project: 344 findings out of
+  // 834, so FORTY-ONE PERCENT of everything the audit said was this one info-level note about
+  // comment boxes - more than every multiplayer, replication and dead-logic check combined.
+  //
+  // That is the failure this file already names twice: a check that fires on ordinary correct
+  // practice is noise, and noise is how a report stops being read. A seven-node function with two
+  // chains and no comment box is not hard to read; it is a seven-node function.
+  //
+  // What the finding actually claims is that a reader cannot see the structure without tracing
+  // wires. That is a property of SIZE, so it is now gated on size: a big graph, several distinct
+  // chains, and no labelling at all. A graph that has made any attempt to label itself is left
+  // alone, because "you have four boxes and five chains" is advice nobody needs.
+  //
+  // Deliberately not raised to a warning. It has no runtime consequence, and the one piece of
+  // direct human feedback this project has on the subject is that machine-added comment boxes were
+  // too big and too many - so this should nudge at the extreme and stay quiet everywhere else.
+  const UNLABELLED_MIN_NODES = 40;
+  const UNLABELLED_MIN_CHAINS = 3;
+  if (
+    nodes.length >= UNLABELLED_MIN_NODES &&
+    chains.length >= UNLABELLED_MIN_CHAINS &&
+    commentBoxes.length === 0
+  ) {
     findings.push({
       check: "unlabelled-sections",
       severity: "info",
-      message: `${chains.length} execution chains but only ${commentBoxes.length} comment box(es).`,
+      message: `${nodes.length} nodes across ${chains.length} execution chains, with no comment boxes at all.`,
       fix:
         "Run unreal_auto_layout_graph, which wraps each execution chain in a comment box titled after its " +
         "event. A reader should be able to see the graph's structure without tracing a single wire.",

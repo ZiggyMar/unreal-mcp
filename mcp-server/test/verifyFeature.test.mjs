@@ -324,6 +324,30 @@ test("a trace that could not run says so instead of passing quietly", async () =
   assert.match(result.notReached[0].why, /missing_param/);
 });
 
+// A graph big enough for the style note to be a fair observation: several chains, no labelling at
+// all. It used to take four nodes, because the check fired on almost anything - which was 41% of a
+// real project's entire audit and is why the threshold moved. The point these tests make is
+// unchanged: an info finding is not a reason to call a finished feature unfinished.
+const unlabelledGraph = (chains = 4, perChain = 12) => {
+  const out = [];
+  for (let c = 0; c < chains; c += 1) {
+    out.push({
+      id: `ev${c}`,
+      type: "CustomEvent",
+      title: `Event${c}`,
+      connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: `n${c}_0`, pin: "execute" }] }],
+    });
+    for (let i = 0; i < perChain; i += 1) {
+      const pins = [
+        { pin: "execute", direction: "in", linkedTo: [{ node: i === 0 ? `ev${c}` : `n${c}_${i - 1}`, pin: "then" }] },
+      ];
+      if (i < perChain - 1) pins.push({ pin: "then", direction: "out", linkedTo: [{ node: `n${c}_${i + 1}`, pin: "execute" }] });
+      out.push({ id: `n${c}_${i}`, type: "CallFunction", title: `Do${c}_${i}`, connectedPins: pins });
+    }
+  }
+  return out;
+};
+
 test("a style note does not mean the feature is unfinished", async () => {
   // Measured on the flow this tool exists for: create a Blueprint, add one variable, ask whether
   // the feature is done -> verdict "fail", score 99, blocked on "3 execution chains but only 0
@@ -352,7 +376,7 @@ test("a style note does not mean the feature is unfinished", async () => {
       connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: event, pin: "then" }] }],
     },
   ];
-  const twoChains = [...chain("Event BeginPlay", "s1"), ...chain("Event EndPlay", "s2")];
+  const twoChains = unlabelledGraph();
   const result = await verifyFeature(fakeBridge({ "/Game/BP_New.BP_New": { compiles: true, nodes: twoChains } }), {
     paths: ["/Game/BP_New.BP_New"],
   });
@@ -381,7 +405,7 @@ test("the info finding is still reported, just not as a blocker", async () => {
       connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: event, pin: "then" }] }],
     },
   ];
-  const twoChains = [...wired("Event BeginPlay", "s1"), ...wired("Event EndPlay", "s2")];
+  const twoChains = unlabelledGraph();
   const result = await verifyFeature(fakeBridge({ "/Game/BP_New.BP_New": { compiles: true, nodes: twoChains } }), {
     paths: ["/Game/BP_New.BP_New"],
   });
