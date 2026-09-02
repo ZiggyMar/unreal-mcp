@@ -577,3 +577,28 @@ test("a server write something does read keeps the replication remedy", () => {
   assert.match(found[0].fix, /set_variable_replication/);
   assert.doesNotMatch(found[0].message, /reads it either/);
 });
+
+test("an unused RepNotify does not claim the variable is read by nobody", async () => {
+  // PS_Gameplay.bHasFinishedCutscene was reported as "dead state ... read by nobody". It is written
+  // by PC_Lobby and read by GM_Lobby - this check sees one Blueprint, and a PlayerState field
+  // written by one Blueprint and read by another is the normal shape of that class.
+  //
+  // The owner of that project has said "if it does nothing, delete it", so the sentence was one
+  // step from deleting a live variable.
+  const { reviewMultiplayer } = await import("../dist/multiplayer.js");
+  const findings = reviewMultiplayer(
+    [{ id: "e", type: "Event", title: "OnRep_bFlag", runsOn: [], connectedPins: [] }],
+    [{ name: "bFlag", replicated: true, repNotify: "OnRep_bFlag" }],
+    new Map([["OnRep_bFlag", 1]])
+  );
+  const finding = findings.find((f) => f.check === "repnotify-does-nothing");
+  assert.ok(finding, "an empty RepNotify handler is still worth reporting");
+
+  // The scoped observation is fine and stays.
+  assert.match(finding.message, /in this Blueprint/);
+  // The unscoped claim, and the tool that cannot answer it, must both be gone.
+  assert.doesNotMatch(finding.fix, /read by nobody/i);
+  assert.doesNotMatch(finding.fix, /find_references/);
+  // It has to name the tool that actually lists every Get and Set.
+  assert.match(finding.fix, /unreal_trace_variable/);
+});

@@ -136,8 +136,18 @@ function reviewRepNotifies(variables: MpVariable[], graphSizes: GraphSizes, node
     if ((graphSizes.get(handler) ?? 0) > 1) {
       continue;
     }
-    // Nothing in this Blueprint reads or writes it either, so there is no value to react TO. That
-    // is a different, easier finding: delete it rather than wire it.
+    // Nothing in THIS Blueprint reads or writes it either. That used to be reported as "dead state
+    // ... read by nobody", which is a claim this function cannot make: it sees one Blueprint, and a
+    // PlayerState or GameState field being written by one Blueprint and read by another is the
+    // normal shape of that class, not a defect.
+    //
+    // Measured on this project. PS_Gameplay.bHasFinishedCutscene was reported this way, and the
+    // variable is written by PC_Lobby and read by GM_Lobby - so the honest scope was one Blueprint
+    // and the sentence read as the whole project. The standing instruction from the owner of that
+    // project is "if it does nothing, delete it", which is exactly the action this would have
+    // produced on a live variable.
+    //
+    // The scoped observation is still worth having; it is the escalation that was wrong.
     const unused = !touched.has(variable.name.toLowerCase());
     findings.push({
       check: "repnotify-does-nothing",
@@ -152,9 +162,12 @@ function reviewRepNotifies(variables: MpVariable[], graphSizes: GraphSizes, node
         ? `${handler} has no nodes after its entry, and no Get or Set for ${variable.name} appears in this Blueprint.`
         : `${handler} has no nodes after its entry.`,
       fix: unused
-        ? `Dead state: it is replicated across the network, notified on arrival, and read by nobody. ` +
-          `Check nothing outside this Blueprint reads it - find_references - then delete the ` +
-          `variable. If something DOES need it, the missing piece is the write, not the handler.`
+        ? `Inside this Blueprint it is replicated, notified on arrival, and never read - but this ` +
+          `check only sees this Blueprint, and a PlayerState or GameState field written by one ` +
+          `Blueprint and read by another is normal. Settle it with unreal_trace_variable ` +
+          `"${variable.name}", which lists every Get and Set across the project. If it really is ` +
+          `read nowhere, delete the variable; if it is read elsewhere, the missing piece is the ` +
+          `handler, not the variable.`
         : `The value arrives on every client and nothing reacts to it. It does not error, does not ` +
           `warn, and surfaces much later as "the display never updates", by which point nobody is ` +
           `looking at replication. Either wire ${handler} to whatever should respond to the new ` +

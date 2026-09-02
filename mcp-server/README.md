@@ -9502,3 +9502,36 @@ big and too many. It should nudge at the extreme and stay quiet everywhere else.
 four-node fixtures — graphs so small that the check firing on them was the bug. A fixture built
 alongside a check tests that the check still does what it does, not that what it does is right.
 Nothing in the suite could have caught this; only counting findings on a real project could.
+
+### A finding that was one step from deleting a live variable
+
+`repnotify-does-nothing` fires 26 times on this project. Three were checked against the real
+Blueprints, node by node, and all three are true positives — `OnRep_CurrentRepairProgress`,
+`OnRep_bIsLoaded` and `OnRep_BulletScale` each contain exactly one node, the entry, and each
+variable really is `RepNotify`. The check is precise.
+
+The **wording** was not. One finding escalates when the Blueprint also never reads or writes the
+variable, and said:
+
+> Dead state: it is replicated across the network, notified on arrival, and **read by nobody**.
+> Check nothing outside this Blueprint reads it — `find_references` — then delete the variable.
+
+Both halves fail. `PS_Gameplay.bHasFinishedCutscene` is written by `PC_Lobby` and read by
+`GM_Lobby` — a PlayerState field written by one Blueprint and read by another is the *normal* shape
+of that class, not a defect. And `find_references` returns the AssetRegistry's **asset** dependency
+graph; it cannot tell you whether a variable is read. The tool that can is `unreal_trace_variable`,
+which is what `search_project` already points at for exactly this question.
+
+So the caveat named a tool that could not perform the check, two sentences after an unqualified
+claim that the variable was dead. The standing instruction from this project's owner is *"if it does
+nothing, delete it."*
+
+The scoped observation is still worth having and is unchanged — "nothing in **this Blueprint** reads
+or writes it" is true. What changed is the escalation: it now states its own scope, says outright
+that cross-Blueprint use is normal for PlayerState and GameState, and names `unreal_trace_variable`
+as the thing that settles it.
+
+**The pattern to take from this**: a check that examines one Blueprint must not phrase its finding
+as a fact about the project. The severity was right, the detection was right, and the sentence was
+still capable of causing damage no test would have caught — because every test fixture in this
+repo is a single Blueprint, which is precisely the scope the claim overstepped.
