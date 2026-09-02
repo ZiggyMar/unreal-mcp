@@ -7421,6 +7421,7 @@ anybody noticed.
 - [The escape hatch produced the failure it warned about](#the-escape-hatch-produced-the-failure-it-warned-about)
 - ["Delete blocked by 7" was the wrong number; the real one was 169](#delete-blocked-by-7-was-the-wrong-number-the-real-one-was-169)
 - [Suppressing the dialog turned a hang into a lie](#suppressing-the-dialog-turned-a-hang-into-a-lie)
+- [A regression net for "reported success, changed nothing"](#a-regression-net-for-reported-success-changed-nothing)
 
 <!-- INDEX:END -->
 
@@ -11496,8 +11497,17 @@ so a failing build can still be inspected, and swallowed individually because a 
 not delete is not a build result. Five stale fixed-path directories were sitting in temp from earlier
 runs; a clean run now leaves none.
 
-Two builds can safely run at once, which matters more than it sounds: the hook builds on every C++
-push, and an agent that keeps working while a push is in flight will collide with it every time.
+**Correction, found by hitting it again an hour later.** The per-run directory removes one collision;
+it does *not* make concurrent builds possible. AutomationTool takes a **global single-instance mutex**,
+so two RunUAT builds cannot run at once on a machine however their output is arranged. A package build
+started while a push was in flight failed with "a conflicting instance of AutomationTool is already
+running" — reported, before this was fixed, as a bare `build failed`, which again reads as broken code
+over source that compiles perfectly.
+
+`build-engines.mjs` now recognises that message and says what it means: another build is running, the
+pre-push hook is the usual culprit, nothing is wrong with the code, wait and re-run. The original fix
+was still worth having — it stopped two builds corrupting each other's output — but the claim that they
+could run simultaneously was wrong, and only the second failure said so.
 
 ### `force: true` meant "do not tell me", and it should have meant "I accept it"
 
@@ -11626,3 +11636,32 @@ Third instance of the same defect this session, and the pattern is the point:
 
 All three now read back what actually landed. A write that verifies costs one read; a write that
 reports success without checking can be wrong for hours across calls that each look fine.
+
+### A regression net for "reported success, changed nothing"
+
+Three commands were found in one session reporting success while changing nothing. Each was invisible
+for a different reason and all three had the same shape: **the reply echoed the request.** Nothing read
+the artifact back, so a caller building on the answer was building on a wish.
+
+Four checks in `live-verify.mjs` now close that class, and each reads back through a *different*
+command — a reply agreeing with itself proves nothing:
+
+```
+ok   a class pin keeps the class it was given            /Script/Engine.StaticMeshActor
+ok   set_pin_default_value survives being read back      /Script/Engine.PointLight
+ok   retyping an UNUSED variable really retypes it       string
+ok   retyping a WIRED variable says it did not           changed=false, type=int - reply and reality agree
+```
+
+The last one is the interesting assertion. It does not require the retype to succeed — it requires the
+**reply and the artifact to agree**. Running unattended, the engine's "this will break connections"
+prompt is declined, so the honest answer is `changed: false`; the bug was claiming otherwise. A test
+that demanded success would have forced the wrong fix.
+
+`95 passed, 0 failed` against a real editor.
+
+Writing them turned up two more things worth knowing: the bridge command behind `unreal_read_node_detail`
+is `read_blueprint_node_detail`, and `unreal_read_blueprint_summary` is `read_blueprint_graph_summary` —
+the tool names and the wire names differ, which is fine until you write a script against the wire. And
+`build_graph`'s raw reply gives `nodes.<ref>` as `{id, type, title}`; the flattening to `ref: id` happens
+in the tool layer.

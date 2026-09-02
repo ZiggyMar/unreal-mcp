@@ -405,6 +405,29 @@ for (const target of chosen) {
   // Each tool announces success in its own words. Trusting the exit code alone has bitten people
   // before, so both are required.
   const output = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+
+  /**
+   * "Another build is already running" is not a compile failure, and must not read as one.
+   *
+   * AutomationTool takes a GLOBAL single-instance mutex. Two RunUAT builds cannot run at once on a
+   * machine no matter how their output directories are arranged - which corrects something this
+   * script previously claimed. Giving each run its own package directory removed one collision; it
+   * did not make concurrent builds possible, and only the second one's failure said otherwise.
+   *
+   * It matters because the pre-push hook builds on every C++ push. Any build started while a push is
+   * in flight hits this, and the bare report is "build failed" over source that compiles perfectly -
+   * which sends you reading a diff instead of waiting ninety seconds.
+   */
+  if (/conflicting instance of AutomationTool is already running/i.test(output)) {
+    console.error(
+      `\n${target.name}: another Unreal build is already running on this machine, so this one never started.\n` +
+        `  AutomationTool holds a global lock - the pre-push hook builds too, so a push in flight will do this.\n` +
+        `  Nothing is wrong with the code. Wait for the other build and run this again.`
+    );
+    results.push({ target, ok: false, why: "another build was already running" });
+    continue;
+  }
+
   const claim = isolated || packageMode ? /BUILD SUCCESSFUL/i : /Result:\s*Succeeded/i;
   let succeeded = run.status === 0 && claim.test(output);
 

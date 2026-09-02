@@ -196,6 +196,111 @@ async function main() {
     return r.className;
   });
 
+  // --- Writes tell the truth about what landed -------------------------------------------------
+  //
+  // Three separate commands were found in one session reporting success while changing nothing:
+  //
+  //   set_pin_default_value on a class pin   {"set": true}       the pin was empty
+  //   build_graph pinDefaults                pinDefaultsSet: 5   one of the five kept nothing
+  //   set_variable_type                      to: object:Actor    still the old type
+  //
+  // Each was invisible for a different reason and all three had the same shape: the reply echoed the
+  // REQUEST. Nothing read the artifact back, so a caller building on the answer was building on a
+  // wish. One of them cost most of a feature - two class pins left empty, which compiles cleanly,
+  // because an empty class pin is legal and simply returns nothing at runtime.
+  //
+  // These are the regression net. Every case writes, then reads back through a DIFFERENT command, so
+  // a reply agreeing with itself proves nothing.
+  section("writes are verified, not asserted");
+  const writeProbe = `${ROOT}/BP_MCPWriteProbe`;
+  const writeObj = `${writeProbe}.BP_MCPWriteProbe`;
+
+  await check("a class pin keeps the class it was given", async () => {
+    await freshBlueprint(writeProbe, "BP_MCPWriteProbe");
+    const built = await bridge.send("build_graph", {
+      path: writeObj,
+      graphName: "EventGraph",
+      nodes: [
+        { ref: "ev", nodeType: "CustomEvent", eventName: "CE_ProbeClassPin" },
+        { ref: "all", nodeType: "CallFunction", functionName: "GetAllActorsOfClass", className: "GameplayStatics" },
+        { ref: "self", nodeType: "Self" },
+      ],
+      connections: [
+        { from: "ev.then", to: "all.execute" },
+        { from: "self.self", to: "all.WorldContextObject" },
+      ],
+      pinDefaults: [{ node: "all", pin: "ActorClass", value: "/Script/Engine.StaticMeshActor" }],
+    });
+    if (built.pinDefaultsNotLanded) throw new Error(built.pinDefaultsNotLanded);
+
+    const detail = await bridge.send("read_blueprint_node_detail", {
+      path: writeObj,
+      graphName: "EventGraph",
+      nodeId: built.nodes.all.id,
+    });
+    const pin = detail.pins.find((x) => x.name === "ActorClass");
+    if (!pin || !pin.defaultValue) {
+      throw new Error("build_graph reported the default set and the pin is empty - the exact bug this checks");
+    }
+    return pin.defaultValue;
+  });
+
+  await check("set_pin_default_value on a class pin survives being read back", async () => {
+    const found = await bridge.send("read_blueprint_graph_summary", {
+      path: writeObj,
+      graphName: "EventGraph",
+      match: "Get All Actors Of Class",
+    });
+    const node = found.nodes.find((n) => n.title.includes("Get All Actors"));
+    await bridge.send("set_pin_default_value", {
+      path: writeObj,
+      graphName: "EventGraph",
+      nodeId: node.id,
+      pinName: "ActorClass",
+      value: "/Script/Engine.PointLight",
+    });
+    const detail = await bridge.send("read_blueprint_node_detail", { path: writeObj, graphName: "EventGraph", nodeId: node.id });
+    const pin = detail.pins.find((x) => x.name === "ActorClass");
+    if (!pin.defaultValue.includes("PointLight")) {
+      throw new Error(`set reported success; the pin holds "${pin.defaultValue}"`);
+    }
+    return pin.defaultValue;
+  });
+
+  await check("retyping an UNUSED variable really retypes it", async () => {
+    await bridge.send("add_variable", { path: writeObj, variableName: "ProbeType", type: "int" });
+    const changed = await bridge.send("set_variable_type", { path: writeObj, variableName: "ProbeType", type: "string" });
+    if (changed.changed === false) throw new Error(`refused: ${changed.warning}`);
+    const listed = await bridge.send("list_variables", { path: writeObj, match: "ProbeType" });
+    const found = listed.variables.find((v) => v.name === "ProbeType");
+    if (!found || !found.type.includes("string")) {
+      throw new Error(`set_variable_type said it changed; list_variables says ${found && found.type}`);
+    }
+    return found.type;
+  });
+
+  await check("retyping a WIRED variable says it did not, rather than pretending", async () => {
+    // The honest-decline case, and the reason it exists. This bridge runs unattended, so the engine's
+    // "this will break connections" prompt returns its conservative default and the retype does not
+    // happen. Before, the reply asserted the new type anyway.
+    await bridge.send("add_variable", { path: writeObj, variableName: "ProbeWired", type: "int" });
+    await bridge.send("add_node", {
+      path: writeObj,
+      graphName: "EventGraph",
+      nodeType: "VariableGet",
+      variableName: "ProbeWired",
+    });
+    const result = await bridge.send("set_variable_type", { path: writeObj, variableName: "ProbeWired", type: "object:Actor" });
+    const listed = await bridge.send("list_variables", { path: writeObj, match: "ProbeWired" });
+    const actual = listed.variables.find((v) => v.name === "ProbeWired").type;
+    const claimed = result.changed !== false;
+    const reallyChanged = actual.includes("Actor");
+    if (claimed !== reallyChanged) {
+      throw new Error(`reply said changed=${claimed}, the variable is ${actual}`);
+    }
+    return `changed=${claimed}, type=${actual} - reply and reality agree`;
+  });
+
   // --- Structs -------------------------------------------------------------------------------
   section("structs");
   const structPath = `${ROOT}/S_MCPVerifyItem`;
