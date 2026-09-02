@@ -682,7 +682,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // reaches here, not for the cutscene tools. It is deliberately NOT in `core`, which has no room
   // and is the authoring spine rather than everything a Blueprint can hold.
   anim: [
-    "unreal_read_anim_blueprint",
+    "unreal_read_anim_blueprint", "unreal_deduplicate_anim_transitions",
     "unreal_read_timeline",
     "unreal_add_montage_notify",
     "unreal_remove_montage_notify",
@@ -3072,6 +3072,46 @@ register(
   async ({ path }) => {
     try {
       return jsonResult(await bridge.send("read_behavior_tree", { path }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_deduplicate_anim_transitions",
+  {
+    title: "Remove state-machine transitions that duplicate another exactly",
+    description:
+      "The fix for the anim-duplicate-transition finding. Two transitions out of one state, to the same state, " +
+      "on the same rule: only the first can ever fire, and the second is almost always a copy whose condition was " +
+      "meant to be edited and never was.\n\n" +
+      "**It cannot leave a state stranded.** Only a transition that has an identical twin is removed, so every " +
+      "(from, to, rule) that existed before still exists after - the machine does strictly less in the one way " +
+      "that changes nothing it could actually do. That is why this exists instead of a general delete-a-transition, " +
+      "which is the more capable tool and the one that turns a tidy-up into a state with no way out.\n\n" +
+      "Rules are compared with the same description unreal_read_anim_blueprint reports, so what you see there is " +
+      "what is compared here. Two transitions to one state on DIFFERENT rules are ordinary and are left alone. " +
+      "Pass dryRun to see what would go without changing anything.",
+    inputSchema: {
+      path: z.string().describe('The Anim Blueprint, e.g. "/Game/Characters/ABP_Player".'),
+      stateMachine: z
+        .string()
+        .optional()
+        .describe("Only this state machine, by name. Defaults to every state machine in the Blueprint."),
+      dryRun: z.boolean().optional().describe("Report what would be removed and change nothing."),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true."),
+    },
+  },
+  async ({ path, stateMachine, dryRun, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("deduplicate_anim_transitions", {
+        path,
+        stateMachine,
+        dryRun,
+      });
+      if (dryRun) return jsonResult(result);
+      return jsonResult(await savedAfter(result, path, save));
     } catch (err) {
       return errorResult(err);
     }

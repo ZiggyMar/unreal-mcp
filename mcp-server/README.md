@@ -206,7 +206,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4223 | ten tools, fixed, for a small local model |
 | `core` | 12987 | the authoring spine |
 | `lazy` | 13295 | `core` plus deferred groups |
-| `full` | 45630 | everything, for a model that can afford it |
+| `full` | 46032 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -422,6 +422,7 @@ One distinction the tools state explicitly because it is the classic level-editi
 | `unreal_remove_function` | `remove_function` | Remove a function graph, refusing while anything still calls it unless forced. |
 | `unreal_rename_variable` | `rename_variable` | Rename a variable and rebind every GET and SET node that reads it, in every graph. Editing the descriptor by hand breaks the Blueprint. |
 | `unreal_rename_function` | `rename_function` | Renames a function or macro graph, and rebinds any variable whose RepNotify handler it was - a rename that does only the graph half leaves clients silently not reacting. |
+| `unreal_deduplicate_anim_transitions` | `deduplicate_anim_transitions` | Removes state-machine transitions that duplicate another exactly. Always keeps one, so it cannot strand a state. |
 | `unreal_remove_variable` | `remove_variable` | Delete a variable, refusing while graph nodes still use it unless forced — and naming which graphs. |
 | `unreal_rename_asset` | `rename_asset` | Rename or move an asset through the editor's asset tools, so every reference to the old path is fixed up. Moving the `.uasset` yourself breaks them silently. |
 | `unreal_duplicate_asset` | `duplicate_asset` | Copy an asset — how you start "one more like that one" rather than rebuilding a near-identical asset from scratch. |

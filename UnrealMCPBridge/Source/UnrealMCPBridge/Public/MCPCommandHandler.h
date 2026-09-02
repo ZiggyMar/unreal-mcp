@@ -108,6 +108,7 @@ private:
 	/** Remove a field from a User Defined Struct; refuses while a Data Table is typed by it unless forced. */
 	/** Set a Niagara system's user parameter default. Scalars only; other types are refused by name. */
 	static TSharedRef<FJsonObject> HandleSetNiagaraUserParameter(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleDeduplicateAnimTransitions(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleRemoveStructField(const TSharedPtr<FJsonObject>& Params);
 	/** Rename a struct field, keeping the data and retyping the tables built on it. */
 	static TSharedRef<FJsonObject> HandleRenameStructField(const TSharedPtr<FJsonObject>& Params);

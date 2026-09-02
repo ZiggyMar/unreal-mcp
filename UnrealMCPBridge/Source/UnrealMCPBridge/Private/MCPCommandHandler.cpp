@@ -1373,6 +1373,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleSetNiagaraUserParameter(Params);
 	}
+	else if (Cmd == TEXT("deduplicate_anim_transitions"))
+	{
+		Response = HandleDeduplicateAnimTransitions(Params);
+	}
 	else if (Cmd == TEXT("remove_struct_field"))
 	{
 		Response = HandleRemoveStructField(Params);
@@ -6211,6 +6215,153 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetNiagaraUserParameter(const 
 			"change a component already in a level, which the Set Niagara Variable nodes do at runtime. "
 			"save_asset writes it."));
 	return MakeOkResponse(Result);
+}
+
+// Defined further down, beside the anim reader that also uses it. Declared here because the
+// deduplicate below compares rules with exactly the same function the reader and the
+// anim-duplicate-transition check use - two notions of "the same rule" would be one too many.
+static FString DescribeTransitionRule(UEdGraph* RuleGraph);
+
+/**
+ * Delete state-machine transitions that duplicate another one exactly.
+ *
+ * anim-duplicate-transition reports two transitions out of one state, to the same state, on the
+ * same rule: only the first can ever fire, and the second is almost always a copy whose condition
+ * was meant to be edited and was not. The check shipped without any way to act on it, which is the
+ * same gap rename_function was written to close - a finding whose remedy names something this
+ * bridge cannot do.
+ *
+ * ## Why this and not "delete a transition"
+ *
+ * A general delete is the more capable tool and the more dangerous one: removing the wrong
+ * transition is how a state ends up with no way out, which is the single most expensive animation
+ * bug there is and one this project already has a check for. This cannot cause that, by
+ * construction - it only ever removes a transition that has an identical twin, so every
+ * (from, to, rule) that existed before still exists after. The graph does strictly less, in the
+ * only way that changes nothing.
+ *
+ * Identity is (destination, rule text), compared with the same DescribeTransitionRule the reader
+ * and the check already use. Two transitions to the same state on DIFFERENT rules are ordinary -
+ * two ways of reaching one state - and are left alone.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeduplicateAnimTransitions(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path))
+	{
+		return MakeErrorResponse(TEXT("missing_param: path is required."));
+	}
+	FString MachineFilter;
+	Params->TryGetStringField(TEXT("stateMachine"), MachineFilter);
+
+	bool bDryRun = false;
+	Params->TryGetBoolField(TEXT("dryRun"), bDryRun);
+
+	UAnimBlueprint* AnimBlueprint = Cast<UAnimBlueprint>(StaticLoadObject(UObject::StaticClass(), nullptr, *Path));
+	if (!AnimBlueprint)
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("anim_blueprint_not_found: %s. list_assets with className \"AnimBlueprint\" lists them."), *Path));
+	}
+
+	TArray<UEdGraph*> AllGraphs;
+	AnimBlueprint->GetAllGraphs(AllGraphs);
+
+	TArray<UAnimStateTransitionNode*> Doomed;
+	TArray<TSharedPtr<FJsonValue>> Removed;
+
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph) continue;
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			UAnimGraphNode_StateMachine* MachineNode = Cast<UAnimGraphNode_StateMachine>(Node);
+			if (!MachineNode || !MachineNode->EditorStateMachineGraph) continue;
+
+			UAnimationStateMachineGraph* MachineGraph = MachineNode->EditorStateMachineGraph;
+			const FString MachineName = MachineGraph->GetName();
+			if (!MachineFilter.IsEmpty() && MachineName != MachineFilter) continue;
+
+			// Keyed on where a transition starts, where it goes, and what it tests. The FIRST of
+			// each key survives; every later one with the same key is a copy that can never fire.
+			TSet<FString> Seen;
+			for (UEdGraphNode* Inner : MachineGraph->Nodes)
+			{
+				UAnimStateTransitionNode* Transition = Cast<UAnimStateTransitionNode>(Inner);
+				if (!Transition) continue;
+
+				UAnimStateNodeBase* From = Transition->GetPreviousState();
+				UAnimStateNodeBase* To = Transition->GetNextState();
+				if (!From || !To) continue;
+
+				FString Rule;
+				if (Transition->bAutomaticRuleBasedOnSequencePlayerInState)
+				{
+					Rule = TEXT("automatic");
+				}
+				else if (Transition->BoundGraph)
+				{
+					Rule = DescribeTransitionRule(Transition->BoundGraph);
+				}
+
+				const FString Key = FString::Printf(
+					TEXT("%s\x1f%s\x1f%s"), *From->GetStateName(), *To->GetStateName(), *Rule);
+				if (!Seen.Contains(Key))
+				{
+					Seen.Add(Key);
+					continue;
+				}
+
+				Doomed.Add(Transition);
+				TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("stateMachine"), MachineName);
+				Entry->SetStringField(TEXT("from"), From->GetStateName());
+				Entry->SetStringField(TEXT("to"), To->GetStateName());
+				Entry->SetStringField(TEXT("rule"), Rule);
+				Removed.Add(MakeShared<FJsonValueObject>(Entry));
+			}
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetNumberField(TEXT("duplicatesFound"), Doomed.Num());
+	Result->SetArrayField(TEXT("transitions"), Removed);
+
+	if (Doomed.Num() == 0)
+	{
+		Result->SetNumberField(TEXT("removed"), 0);
+		Result->SetStringField(TEXT("next"),
+			TEXT("No transition in this Anim Blueprint duplicates another. Nothing to do."));
+		return MCPResponse::Ok(Result);
+	}
+
+	if (bDryRun)
+	{
+		Result->SetNumberField(TEXT("removed"), 0);
+		Result->SetStringField(TEXT("next"),
+			TEXT("dryRun: nothing was changed. Call again without it to remove these."));
+		return MCPResponse::Ok(Result);
+	}
+
+	const FScopedTransaction Transaction(
+		NSLOCTEXT("UnrealMCPBridge", "MCPDedupeAnimTransitions", "MCP: Remove Duplicate Transitions"));
+	AnimBlueprint->Modify();
+
+	for (UAnimStateTransitionNode* Transition : Doomed)
+	{
+		// DestroyNode rather than removing it from the array: a transition owns a BoundGraph holding
+		// its rule, and dropping the node alone would leave that graph behind in the Blueprint.
+		FBlueprintEditorUtils::RemoveNode(AnimBlueprint, Transition, true);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBlueprint);
+
+	Result->SetNumberField(TEXT("removed"), Doomed.Num());
+	Result->SetStringField(TEXT("next"),
+		TEXT("One of each duplicated transition was kept, so nothing the machine could do before it can no "
+			"longer do. compile_blueprint, then save_blueprint."));
+	return MCPResponse::Ok(Result);
 }
 
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveStructField(const TSharedPtr<FJsonObject>& Params)
