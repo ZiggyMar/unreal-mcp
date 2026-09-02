@@ -10655,6 +10655,26 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateStruct(const TSharedPtr<
 	}
 
 	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	// Defensive, and honest about why it is here.
+	//
+	// The editor crashed inside FStructureEditorUtils::CreateUserDefinedStruct below -
+	// EXCEPTION_ACCESS_VIOLATION, in module UnrealEditor-UnrealMCPBridge.patch_166.exe - on ordinary
+	// input. This guard is NOT known to be the cause; the evidence points at 166 Live Coding patches
+	// rather than at this source, and unreal_doctor now reports that depth for exactly that reason.
+	//
+	// It is still a real gap. A path that ends in a slash leaves GetShortName empty, and handing an
+	// empty FName to an engine function that goes on to register a type with the reflection system is
+	// the shape of call that faults rather than returns. Nine handlers in this file derive an asset
+	// name this way and none of them checked it. Refusing costs one comparison and turns a possible
+	// crash into a sentence.
+	if (AssetName.IsEmpty())
+	{
+		return MakeErrorResponse(FString::Printf(
+			TEXT("bad_path: %s has no asset name after the last slash. A struct path is a folder and ")
+			TEXT("then the name to create, as in /Game/Data/S_Item."),
+			*PackagePath));
+	}
+
 	UPackage* Package = CreatePackage(*PackagePath);
 	if (!Package)
 	{

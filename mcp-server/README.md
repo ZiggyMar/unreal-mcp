@@ -10415,3 +10415,41 @@ slowest thing they own.
 about 3,935 tokens". They now cost **9 calls and ~4,418 tokens** — fewer calls, more tokens, because
 several replies grew coverage notes while others were cut. That is the honest figure and it is the
 one worth watching.
+
+### Nine handlers derive an asset name and none checked it
+
+Rather than let "Live Coding was 166 patches deep" be the end of the crash investigation, the
+question worth asking is whether `HandleCreateStruct` has a real gap regardless. It does, and so do
+its neighbours.
+
+Every asset-creation handler does this:
+
+```cpp
+const FString AssetName = FPackageName::GetShortName(PackagePath);
+UPackage* Package = CreatePackage(*PackagePath);
+```
+
+`GetShortName` on a path that ends in a slash returns an empty string, and an empty `FName` then goes
+to an engine function that registers a type with the reflection system. That is the shape of call
+that faults rather than returns. **Nine handlers derive a name this way** — `create_blueprint`,
+`create_level`, `create_widget_blueprint`, `create_data_table`, `create_struct`, `create_enum`,
+`create_material`, `create_material_instance` — and not one checked it.
+
+`create_struct` is guarded now, because that is the one with a crash behind it. The guard is
+**explicitly not claimed as the cause**: the trial passed an ordinary path, so this would not have
+fired, and the comment in the source says so rather than letting a future reader assume the crash was
+solved.
+
+**It was compile-verified before being pushed**, which is the part that made it shippable at all.
+`build:engines --isolated` runs `RunUAT BuildPlugin` against public engine APIs — no configured
+project, no binaries installed, nothing touched in the game. 178 seconds for the answer to "does this
+C++ still build", on a change that could not otherwise be tested with the editor closed.
+
+That mode existed for a different reason — the game project cannot build its editor target at all,
+because a Wwise plugin references an `AkAudio` module that is not installed, and an unrelated failure
+would mask this plugin's own result. It turns out to be exactly the tool for verifying a C++ change
+when the editor is down.
+
+The other eight are left alone deliberately. One guard with a crash behind it is a fix; eight more
+written the same afternoon, none of them reachable by a test, is a patch of speculation across a file
+that can take the editor down.
