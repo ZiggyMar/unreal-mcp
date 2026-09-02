@@ -10044,3 +10044,41 @@ may not be in it. Each entry still names its parent, which is what `add_widget` 
 `set_widget_property` actually need.
 
 `full` grew 33 tokens to 46,611, inside the ceiling raised last commit; nothing else moved.
+
+### I filtered half a reply and left the other half alone
+
+Having built four filters that each report what they withheld, the obvious check is whether the rule
+actually holds everywhere. Eight filtering tools were called with a query that cannot match anything.
+Seven answered honestly. `explain_graph` did not — and the bug was mine, from the commit that added
+its `match`:
+
+| match | tokens | chains shown | entryIds | notes |
+|---|---:|---:|---:|---:|
+| *(none)* | 3,176 | all | 25 | 10 |
+| `"vacuum"` | 974 | **15** | 25 | 10 |
+| `"zzzznope"` | 516 | **0** | 25 | 10 |
+
+The chain text was filtered. `entryIds` and the *"X and Y run into the same nodes"* notes were not.
+So a search for something absent returned 516 tokens of ids and warnings about the chains it had
+just excluded, and a real search returned ten notes for fifteen shown chains out of ninety-nine.
+
+**Filtering half a reply is worse than not filtering it**, because the caller cannot tell which half
+they are holding. Both are scoped now:
+
+| match | tokens | shown | entryIds | notes |
+|---|---:|---:|---:|---:|
+| *(none)* | 3,177 | all | 25 | 10 |
+| `"vacuum"` | **671** | 15 | 2 | 4 |
+| `"zzzznope"` | **63** | 0 | 0 | 0 |
+
+**A note is kept when it names a shown chain, even if its other half is hidden.** *"Changing one
+changes both"* is a warning about reaching outside what you are looking at, which is exactly when
+filtering makes it matter most. Dropping those would have traded one silent failure for another.
+
+The unfiltered reply is unchanged at 3,177 — this only ever removes things the caller asked not to
+see.
+
+Worth noting how it was found: not by reading the code I had written, but by calling eight tools with
+a deliberately impossible query and looking at what came back. The `unreachable` list in that same
+function *was* correctly suppressed when filtering, with a comment explaining why — so the author
+understood the rule and applied it to one of the three things that needed it.

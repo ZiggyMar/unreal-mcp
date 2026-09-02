@@ -1512,8 +1512,16 @@ register(
       // roughly 880 tokens, about a quarter of this reply, for a string split against text that was
       // being sent regardless.
       const limit = Math.max(1, Math.min(maxChains ?? 25, 500));
+      // Ids for the chains actually written out, not for every chain in the graph.
+      //
+      // This was built from `explained.chains` while `text` showed a filtered subset, so
+      // match: "vacuum" returned fifteen chains and twenty-five ids - ten of them pointing at entry
+      // points the same reply had withheld. Filtering half a reply is worse than not filtering it:
+      // the caller cannot tell which half they are holding.
+      const shown = new Set(explained.shownEntries);
       const entryIds: Record<string, string> = {};
       for (const chain of explained.chains.slice(0, limit)) {
+        if (!shown.has(chain.entry)) continue;
         // First one wins. Two chains can share an entry name, and overwriting would leave an id
         // pointing at a node the caller did not mean.
         if (chain.entryId && !(chain.entry in entryIds)) entryIds[chain.entry] = chain.entryId;
@@ -1527,10 +1535,10 @@ register(
         // Named for what it is rather than what it replaced: the ids, so a chain in the prose can be
         // acted on. The steps themselves are in `text`, and all of them are, not the first 25.
         entryIds,
-        ...(explained.chains.length > Object.keys(entryIds).length
+        ...(shown.size > Object.keys(entryIds).length
           ? {
               entryIdsNote:
-                `${explained.chains.length} entry points; ids given for ${Object.keys(entryIds).length}. ` +
+                `${shown.size} entry points shown; ids given for ${Object.keys(entryIds).length}. ` +
                 `Every chain is written out in \`text\` regardless - raise maxChains only if you need ` +
                 `an id for one further down.`,
             }

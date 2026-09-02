@@ -64,6 +64,13 @@ export interface ExplainedChain {
 }
 
 export interface GraphExplanation {
+  /**
+   * The entry names actually written out, so a caller can scope its own fields to them.
+   *
+   * index.ts builds `entryIds` from the chain list and was building it from ALL chains while
+   * the text showed a filtered few - ids for entry points the reply had just withheld.
+   */
+  shownEntries: string[];
   path?: string;
   graphName?: string;
   nodeCount: number;
@@ -377,8 +384,19 @@ function runsOnTag(runsOn: string | undefined): string {
   // Reported once per pair rather than once per chain, so two entry points sharing a chain produce
   // one sentence and not two.
   const alreadySaid = new Set<string>();
+  // Kept only when the note is ABOUT something shown.
+  //
+  // These were unscoped while the chains above were filtered, so `match: "vacuum"` printed fifteen
+  // chains and then ten notes about entry points it had just withheld - and a match of nothing
+  // printed all ten with no chains at all, 516 tokens describing what the caller had excluded.
+  //
+  // A note that mentions a shown chain still earns its place even when the OTHER half is hidden:
+  // "changing one changes both" is a warning about reaching outside what you are looking at, which
+  // is exactly when it matters most.
+  const shownEntries = new Set(shownChains.map((chain) => chain.entry));
   for (const [entry, others] of sharedWith) {
     for (const other of others) {
+      if (terms.length > 0 && !shownEntries.has(entry) && !shownEntries.has(other)) continue;
       const key = [entry, other].sort().join(" | ");
       if (alreadySaid.has(key)) continue;
       alreadySaid.add(key);
@@ -399,6 +417,7 @@ function runsOnTag(runsOn: string | undefined): string {
   }
 
   return {
+    shownEntries: [...shownEntries],
     path: summary.path,
     graphName: summary.graphName,
     nodeCount: nodes.length,

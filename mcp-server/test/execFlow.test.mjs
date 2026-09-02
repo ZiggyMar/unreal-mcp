@@ -63,3 +63,35 @@ test("the source to reroute through a guard is the real node, not the wire", () 
   ];
   assert.deepEqual(execSources("cast", nodes, map(nodes)), [{ fromNode: "ev", fromPin: "then" }]);
 });
+
+test("a filtered explanation does not carry notes about chains it withheld", async () => {
+  // I added `match` to explain_graph earlier and narrowed only the chain text. Measured afterwards
+  // on BP_Player's event graph: match "vacuum" showed 15 chains and still returned 25 entryIds and
+  // 10 shared-node notes, and match "zzzznope" showed nothing and still returned all 25 and all 10 -
+  // 516 tokens describing exactly what the caller had excluded.
+  //
+  // Filtering half a reply is worse than not filtering it, because the caller cannot tell which half
+  // they are holding.
+  const nodes = [
+    n("a", "K2Node_Event", "Alpha", [out("then", ["shared", "execute"])]),
+    n("b", "K2Node_Event", "Beta", [out("then", ["shared", "execute"])]),
+    n("c", "K2Node_Event", "Gamma", [out("then", ["own", "execute"])]),
+    n("shared", "K2Node_CallFunction", "Shared Thing", []),
+    n("own", "K2Node_CallFunction", "Gamma Only", []),
+  ];
+
+  const all = explainGraph({ graphName: "EventGraph", nodes });
+  assert.equal((all.text.match(/^Note: /gm) ?? []).length, 1, "Alpha and Beta share a node");
+  assert.equal(all.shownEntries.length, 3);
+
+  // Filtered to a chain that shares nothing: the note about the other two must not come along.
+  const gamma = explainGraph({ graphName: "EventGraph", nodes }, { match: "Gamma" });
+  assert.deepEqual(gamma.shownEntries, ["Gamma"]);
+  assert.equal((gamma.text.match(/^Note: /gm) ?? []).length, 0, "that note is about two hidden chains");
+
+  // Filtered to one HALF of a sharing pair: the warning still earns its place, because reaching
+  // outside what you are looking at is exactly when it matters.
+  const alpha = explainGraph({ graphName: "EventGraph", nodes }, { match: "Alpha" });
+  assert.deepEqual(alpha.shownEntries, ["Alpha"]);
+  assert.equal((alpha.text.match(/^Note: /gm) ?? []).length, 1);
+});
