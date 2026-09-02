@@ -1,6 +1,6 @@
 # Competitive landscape: Unreal Engine MCP servers
 
-Survey date: 2026-08-07, with the first-party section re-checked 2026-08-31. Scope: the 9 third-party GitHub repos identified as of this date as
+Survey date: 2026-08-07, with the first-party section re-checked 2026-08-31 and again 2026-09-02 (nothing new: still Experimental, localhost-only, unauthenticated and Tools-only; the UEFN ship of 20 Aug remains the most recent move). Scope: the 9 third-party GitHub repos identified as of this date as
 competing/related "MCP server for Unreal Engine" projects, plus Epic's own first-party
 experimental plugin in UE 5.8 as a non-competitor comparison point.
 
