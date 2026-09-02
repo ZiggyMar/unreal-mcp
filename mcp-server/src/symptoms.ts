@@ -79,6 +79,37 @@ export const SYMPTOMS: SymptomEntry[] = [
       "trace_function_calls answers whether the thing you are looking at is reached at all.",
   },
   {
+    // The failure unreal_find_orphans actually finds, which is NOT "unused assets".
+    //
+    // Worth writing down because the obvious reading of the tool's name is wrong and I nearly routed
+    // it that way: find_orphans is about ACTORS IN A LEVEL that lost the partner they were placed
+    // with - a nav link and its door, a trigger and the thing it triggers, a spawn point and its
+    // volume. Delete one half and the other stays behind, still ticking, still handling events,
+    // pointing at nothing, and nothing warns, because an actor with a null reference is a perfectly
+    // legal actor.
+    //
+    // So the words that reach it are the words for that: something that worked before a deletion,
+    // or something that works for some instances and not others. The generic "nothing happens" entry
+    // covers the same sentence phrased without that history, which is correct - the history is the
+    // only thing that distinguishes this cause from every other cause of nothing happening.
+    says: [
+      "after i deleted",
+      "since i deleted",
+      "after deleting",
+      "stopped working after",
+      "some of them work",
+      "only some of them",
+      "half of them",
+      "worked before",
+    ],
+    tools: ["unreal_find_orphans", "unreal_audit_project"],
+    because:
+      "Actors placed in pairs break in a way nothing reports: delete one half and the other is still a valid " +
+      "actor holding a null. find_orphans pairs each actor of one class to its nearest of another BY POSITION " +
+      "- the reference is the broken thing, so it cannot be trusted to say what it should have pointed at - " +
+      "and reports the ones left standing alone, plus any partner nothing paired to.",
+  },
+  {
     // No bare "spawn". A caller asking "how do I spawn an actor" is asking how to BUILD something,
     // and this entry answers a question about what is WRONG - it would send them to project settings
     // to learn node syntax. Only the failure phrasings are listed, which is the difference between a
@@ -205,6 +236,35 @@ export const SYMPTOMS: SymptomEntry[] = [
     ],
     tools: ["unreal_read_niagara_system", "unreal_audit_project"],
     because: "read_niagara_system reports emitters that are disabled or have no spawn rate, which produce nothing and no error.",
+  },
+  {
+    // Materials had no entry at all, and unreal_list_material_parameters was reachable from nothing.
+    // "the material is the wrong colour" matched NOTHING; "the turret texture doesn't show up" was
+    // answered with the Data Table tools, because `doesn't show` is in the first entry and no word
+    // in the sentence pointed anywhere better.
+    //
+    // "texture doesn't show" is spelled out as a phrase deliberately: it has to outrank the generic
+    // `doesn't show` on word count, or the domain loses to the catch-all again.
+    says: [
+      "material",
+      "texture",
+      "shader",
+      "material parameter",
+      "texture doesn't show",
+      "texture does not show",
+      "wrong colour",
+      "wrong color",
+      "looks black",
+      "renders black",
+      "untextured",
+    ],
+    tools: ["unreal_list_material_parameters", "unreal_read_asset_properties", "unreal_audit_project"],
+    because:
+      "A material that renders wrong is usually an instance overriding a parameter that the parent does not " +
+      "expose, or a parameter name that is simply not on the asset. list_material_parameters returns every " +
+      "scalar, colour and texture parameter the material actually exposes, with its kind, and says whether " +
+      "the asset is an instance at all - which is what set_material_parameter has to be right about before " +
+      "it can change anything.",
   },
   {
     // A Timeline is a Blueprint node, not a cutscene, and unreal_read_timeline is its own tool.
@@ -348,6 +408,43 @@ const CHANGING = [
 const RENAMING = ["rename", "renaming", "call it", "name it", "should be called", "change the name"];
 const REMOVING = ["remove", "removing", "delete", "deleting", "get rid of", "take out", "no longer need"];
 
+/**
+ * An edit already made, mentioned as history - not an edit being asked for.
+ *
+ * "The door stopped working after I deleted the trigger" is a bug report whose most useful word is
+ * `deleted`, and the intent layer read it as an instruction: the reply came back with
+ * remove_variable, remove_function, remove_component and delete_asset - four ways to delete more
+ * things, offered to someone whose problem is that something was already deleted.
+ *
+ * This is the worst direction for a misread to go. Every other misroute in this file costs a wasted
+ * read; this one hands a caller the tools to make the damage bigger, and the sentence that triggers
+ * it is the single most common way people describe regressions.
+ *
+ * Past tense is the whole signal. "delete the old health variable" is a request; "I deleted",
+ * "after deleting", "since we removed" are all reports of something that already happened, and what
+ * follows them is the symptom, not the job. Renames get the same treatment for the same reason -
+ * "after I renamed FireRate everything broke" is not a request to rename anything.
+ */
+const ALREADY_DONE = [
+  "i deleted",
+  "we deleted",
+  "after deleting",
+  "since deleting",
+  "i removed",
+  "we removed",
+  "after removing",
+  "since removing",
+  "i renamed",
+  "we renamed",
+  "after renaming",
+  "since renaming",
+  "was deleted",
+  "was removed",
+  "was renamed",
+  "got deleted",
+  "used to be called",
+];
+
 /** Renaming reaches for the tool that rebinds what referenced the old name, not for a value setter. */
 const RENAME_TOOLS = ["unreal_rename_variable", "unreal_rename_asset", "unreal_rename_component", "unreal_search_project"];
 
@@ -461,8 +558,13 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
   // A rename or a removal is a change with its own tool, so those are checked first and lead. The
   // generic change route is for a VALUE change, and it answers a rename with four ways to find the
   // thing and no way to rename it.
-  const renameWord = RENAMING.find((phrase) => saysIt(said, phrase));
-  const removeWord = renameWord ? undefined : REMOVING.find((phrase) => saysIt(said, phrase));
+  // An edit already made is history, not an instruction. See ALREADY_DONE: reading "the door stopped
+  // working after I deleted the trigger" as a removal request answered it with four ways to delete
+  // more things. Only the rename and remove routes are suppressed - those are the two that hand back
+  // destructive tools. A change or build word alongside "I deleted" is still worth reading as intent.
+  const alreadyDone = ALREADY_DONE.some((phrase) => saysIt(said, phrase));
+  const renameWord = alreadyDone ? undefined : RENAMING.find((phrase) => saysIt(said, phrase));
+  const removeWord = renameWord || alreadyDone ? undefined : REMOVING.find((phrase) => saysIt(said, phrase));
   const changeWord = renameWord ?? removeWord ?? CHANGING.find((phrase) => saysIt(said, phrase));
   const buildWord = changeWord ? undefined : BUILDING.find((phrase) => saysIt(said, phrase));
   if (renameWord) {

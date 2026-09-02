@@ -434,3 +434,63 @@ test("ties still keep table order, which is where the ranking was argued", () =>
   // Both readings still offered - the sentence is genuinely ambiguous.
   assert.ok(found.tools.includes("unreal_read_behavior_tree"), "the AI reading is still there");
 });
+
+test("materials had no entry at all", () => {
+  // list_material_parameters existed and was reachable from nothing. "the material is the wrong
+  // colour" matched NOTHING; "the turret texture doesn't show up" was answered with the Data Table
+  // tools, because `doesn't show` is in the first entry and no word in the sentence pointed better.
+  for (const said of ["the material is the wrong colour", "the shader looks black in game"]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    assert.equal(tools[0], "unreal_list_material_parameters", `"${said}" -> ${tools.join(", ") || "nothing"}`);
+  }
+  // The domain has to survive the generic catch-all, which is why the phrase is spelled out.
+  const texture = matchSymptoms("the turret texture doesn't show up")?.tools ?? [];
+  assert.ok(texture.includes("unreal_list_material_parameters"), `-> ${texture.join(", ")}`);
+});
+
+test("find_orphans is routed by what it finds, not by what its name suggests", () => {
+  // The trap this entry was nearly written into. find_orphans is NOT "unused assets" - it finds
+  // ACTORS IN A LEVEL that lost the partner they were placed with: a nav link and its door, a
+  // trigger and the thing it triggers. Routing "clean up the unused assets" to it would have been a
+  // confident wrong answer, which is the failure this whole table is built to avoid.
+  for (const said of ["the door stopped working after I deleted the trigger", "only some of them work now"]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    assert.ok(tools.includes("unreal_find_orphans"), `"${said}" -> ${tools.join(", ") || "nothing"}`);
+  }
+  // And an asset-cleanup request must NOT reach it, because it cannot answer that.
+  const cleanup = matchSymptoms("clean up the unused assets before we ship")?.tools ?? [];
+  assert.ok(!cleanup.includes("unreal_find_orphans"), `-> ${cleanup.join(", ")}`);
+});
+
+test("an edit already made is history, not an instruction", () => {
+  // The worst direction a misread can go in this file.
+  //
+  // "the door stopped working after I deleted the trigger" was read as a REMOVAL REQUEST, because it
+  // contains "deleted". The reply came back with remove_variable, remove_function, remove_component
+  // and delete_asset - four ways to delete more things, handed to someone whose problem is that
+  // something was already deleted. Every other misroute here costs a wasted read; this one offers
+  // the tools to make the damage bigger, and it triggers on the commonest way people describe a
+  // regression.
+  const destructive = ["unreal_remove_variable", "unreal_remove_function", "unreal_remove_component", "unreal_delete_asset"];
+  for (const said of [
+    "the door stopped working after I deleted the trigger",
+    "since I removed the old spawner nothing spawns",
+    "after I renamed FireRate the upgrades broke",
+    "the volume was deleted and now the level is dark",
+  ]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    const offered = tools.filter((t) => destructive.includes(t));
+    assert.deepEqual(offered, [], `"${said}" was answered with ${offered.join(", ")}`);
+  }
+});
+
+test("an actual removal request still gets the removal tools", () => {
+  // The guard on the guard. Suppressing past tense must not suppress the present.
+  for (const said of ["delete the old health variable", "remove the unused component", "get rid of the debug print"]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    assert.ok(
+      tools.some((t) => t.startsWith("unreal_remove_") || t === "unreal_delete_asset"),
+      `"${said}" -> ${tools.join(", ") || "nothing"}`
+    );
+  }
+});

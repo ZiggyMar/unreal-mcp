@@ -10945,3 +10945,36 @@ outranks one matching fewer, and table position breaks ties.**
 do with specificity. A long word is not a specific one; two words are two words. Ties keep table
 order, which is almost every sentence, so everything argued for in that header still governs. The
 suite caught it on the first run, and there is now a test pinning both directions.
+
+### "After I deleted the trigger" was read as an instruction to delete something
+
+Two domains had no route at all, found by asking which reader tools no symptom entry can reach:
+
+- **Materials.** `list_material_parameters` existed and was reachable from nothing. "The material is
+  the wrong colour" matched *nothing*; "the turret texture doesn't show up" was answered with the Data
+  Table tools, because `doesn't show` sits in the first entry and no word in the sentence pointed
+  anywhere better. There is a materials entry now, and `texture doesn't show` is spelled out as a
+  phrase so the domain outranks the catch-all on word count.
+
+- **`find_orphans`.** Reachable from nothing, and the obvious route would have been wrong. The name
+  reads as "unused assets"; the tool finds **actors in a level that lost the partner they were placed
+  with** — a nav link and its door, a trigger and the thing it triggers. Routing "clean up the unused
+  assets" to it would have been a confident wrong answer of exactly the kind this table exists to
+  prevent. It is routed on the words for what it really finds: something that broke after a deletion,
+  or that works for some instances and not others.
+
+Writing that second entry surfaced something worse in the layer above it.
+
+**"The door stopped working after I deleted the trigger" was classified as a removal request.** The
+reply: `remove_variable`, `remove_function`, `remove_component`, `delete_asset` — four ways to delete
+more things, offered to someone whose problem is that something was already deleted.
+
+Every other misroute in this file costs a wasted read. This one hands back destructive tools, and it
+triggers on the single commonest way people describe a regression. Past tense is the whole signal:
+"delete the old health variable" is a request, "I deleted", "after deleting", "since we removed",
+"was renamed" are reports of something that already happened, and what follows them is the symptom.
+
+Rename and remove intents are now suppressed when the sentence describes an edit already made. Change
+and build are not — "I deleted the old one, now add a new one" is still a build request. Two tests:
+four regression sentences that must offer nothing destructive, and three real removal requests that
+must still work.
