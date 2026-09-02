@@ -203,10 +203,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2523 | five tools; hand it a sentence or a preset name |
-| `minimal` | 4251 | ten tools, fixed, for a small local model |
-| `core` | 13206 | the authoring spine |
-| `lazy` | 13513 | `core` plus deferred groups |
-| `full` | 46643 | everything, for a model that can afford it |
+| `minimal` | 4260 | ten tools, fixed, for a small local model |
+| `core` | 13235 | the authoring spine |
+| `lazy` | 13542 | `core` plus deferred groups |
+| `full` | 46698 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -11015,3 +11015,48 @@ question.
 Compiles on 5.6, 5.8 and the game target. Four cases are pinned in `live-verify.mjs`, including one
 asserting that asking for `SharedImageConstRefBlueprintFns` by name still gets it: this is engine
 reflection over every loaded module, so a fixture would prove nothing and only a running editor can.
+
+### Eight wrong parameter names in one session, by the model that wrote the tools
+
+Using this server to build a real feature, I got the parameter name wrong eight times on the first
+try. Two of those were not carelessness — they were the surface teaching one thing and then asking
+for another:
+
+| concept | majority | outlier |
+|---|---|---|
+| filter text | `match` — 10 tools | `query` — `search_project`, `find_node`, `find_in_data_tables`, `map_system` |
+| class filter | `className` — 4 tools | `classFilter` — `list_actors`, alone |
+
+That is exactly the rule `check:params` enforces, and it enforced nothing here. Its derived sweep
+groups spellings differing by a `Name`/`Path`/`Id` **suffix**, so it sees `variable`/`variableName`
+and is blind to two different **words** for one idea. It found the shape it was built to find. Worth
+writing down rather than quietly widening: a guard that only finds one shape should say so.
+
+All five tools take both spellings now, and both pairs are enforced going forward.
+
+**Cost: 29 standing tokens on `core`, which put it 15 over its ceiling — the second raise in one
+day.** 13,200 → 13,220 → 13,260. A ceiling that moves whenever something wants room is not a ceiling,
+so the note records the trend rather than the increment: each raise bought a removed round trip, a
+failed call and its recovery costs a few hundred tokens, and the session that found these mistyped
+twice. The trade holds only while what it buys is a round trip — *the moment a raise is for prose, it
+should be refused.*
+
+### A guard that reported on text nobody is served
+
+Adding those aliases made `check:profilerefs` fail: *"find_node's description names
+unreal_search_project, which minimal does not register."* The description said no such thing. I had
+added a one-line **source comment** — "see the note on unreal_search_project" — and the guard sliced
+`src/index.ts` from `register(` to the handler and grepped the whole span.
+
+Comments are not text a model reads. They cost no tokens and appear in no reply. Rewording mine would
+have silenced it and left the guard watching the wrong artifact — the third time today a check was
+reading source where the served output was available.
+
+It now starts the server per profile and reads `tools/list`, so a profile's tool set is just the list
+it advertises and a comment cannot appear in it. Both source parses are gone.
+
+**And it immediately caught a bug in its own rewrite.** I took "every tool" from the `full` profile,
+which looks complete and is not — `full` deliberately withholds `unreal_call_tool`, because every
+tool is already listed there and dispatching would add a hop. That made `call_tool` invisible and
+turned a real allowance into a "stale" one it asked me to delete. It reads the **union** of all five
+profiles now: 134 tools, against the 133 `full` advertises.

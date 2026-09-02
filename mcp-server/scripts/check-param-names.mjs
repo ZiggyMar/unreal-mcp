@@ -35,6 +35,18 @@ const SYNONYMS = [
   // `name` is on 34 tools, `nodeId` on 12, and connect_pins was the only tool of 126 spelling a
   // node id `sourceNodeId`.
   { odd: "functionName", common: "name" },
+  // Found by using this server for a real feature and getting the name wrong, twice, after having
+  // just read tools that spell it the other way. Ten tools take `match`; four took `query` and only
+  // `query`. Four take `className`; unreal_list_actors was the only tool in the project spelling it
+  // `classFilter`.
+  //
+  // Neither pair was visible to the derived sweep below, and that is worth writing down rather than
+  // quietly fixing: the sweep groups spellings that differ by a Name/Path/Id SUFFIX, so it can see
+  // variable/variableName and is blind to two different WORDS for one idea. It found the shape it
+  // was built to find. These two came from a model tripping over them, which is the other way this
+  // list is supposed to grow.
+  { odd: "query", common: "match" },
+  { odd: "classFilter", common: "className" },
   // connect_pins' source/target spelling is deliberately NOT here. This guard's argument is a
   // majority one - "a model that has read the other eighteen will type the common word" - and
   // source/target vs from/to is one tool against one tool, so there is no majority to appeal to.

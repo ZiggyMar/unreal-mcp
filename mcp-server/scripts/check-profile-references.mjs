@@ -17,12 +17,35 @@
 //
 // Run: npm run check:profilerefs  (also part of npm test)
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { startAndInitialize, listTools } from "./lib/mcpStdio.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const source = readFileSync(join(here, "..", "src", "index.ts"), "utf8");
+/**
+ * Read from the server, not from the source that produces it.
+ *
+ * This used to slice src/index.ts from the register() call to the handler below it and grep that
+ * whole span for tool names. The intent was right - title, description and schema are what a model
+ * reads - but a source span also contains SOURCE COMMENTS, and a comment is not text a model reads,
+ * costs no tokens, and appears in no reply.
+ *
+ * It fired on one. A note added inside find_node's schema said "see the note on
+ * unreal_search_project", and the guard reported find_node's DESCRIPTION as stranding a model on
+ * `minimal`. The description said no such thing. Rewording the comment would have silenced it and
+ * left the guard reporting on text nobody is served.
+ *
+ * Asking the server removes the category: it returns exactly the description and schema the client
+ * is sent, and a comment is not in it. It also removes the second source-parse, because a profile's
+ * tool set is simply the tool list it advertises.
+ */
+const textOf = (tool) => `${tool.description ?? ""} ${JSON.stringify(tool.inputSchema ?? {})}`;
+
+async function toolsOn(profile) {
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: profile }, "check-profile-refs");
+  try {
+    return (await listTools(server)).tools;
+  } finally {
+    server.child.kill();
+  }
+}
 
 /**
  * References that are deliberate, each with the reason it is not a defect.
@@ -57,38 +80,35 @@ const ALLOWED = {
   "core:unreal_list_tools->unreal_save_asset": "same",
 };
 
-const profileSet = (marker) => {
-  const i = source.indexOf(marker);
-  if (i < 0) return null;
-  return new Set([...source.slice(i, source.indexOf("]);", i)).matchAll(/"(unreal_[a-z0-9_]+)"/g)].map((m) => m[1]));
-};
+// Every tool this server has - the UNION of the profiles, because no single one advertises them all.
+//
+// `full` looks like the complete set and is not: it deliberately withholds unreal_call_tool, since
+// every tool is already listed there and dispatching would only add a hop. Taking `full` alone made
+// call_tool invisible, which silently turned a real allowance into a "stale" one and asked for it to
+// be deleted. The guard caught that itself, one run after being pointed at the server.
+const everyTool = new Set(
+  (await Promise.all(["full", "search", "lazy", "core", "minimal"].map(toolsOn))).flat().map((t) => t.name)
+);
 
 const PROFILES = {
-  core: profileSet("const CORE_PROFILE_TOOLS"),
-  minimal: profileSet("const MINIMAL_PROFILE_TOOLS"),
+  core: await toolsOn("core"),
+  minimal: await toolsOn("minimal"),
 };
-
-// Each registered tool paired with its config block - the title, description and schema a model
-// reads. The handler below it is code, not text, so it stops there.
-const registered = new Map();
-for (const m of source.matchAll(/register\(\s*"(unreal_[a-z0-9_]+)",\s*\{/g)) {
-  const handlerAt = source.indexOf("\n  async (", m.index);
-  registered.set(m[1], source.slice(m.index, handlerAt > 0 ? handlerAt : m.index + 4000));
-}
 
 const problems = [];
 const unusedAllowances = new Set(Object.keys(ALLOWED));
 
-for (const [profileName, tools] of Object.entries(PROFILES)) {
-  if (!tools) {
-    problems.push(`could not read the ${profileName} profile set - this guard has drifted from index.ts`);
+for (const [profileName, listed] of Object.entries(PROFILES)) {
+  if (!listed || listed.length === 0) {
+    problems.push(`the ${profileName} profile advertised no tools - this guard is looking at the wrong thing`);
     continue;
   }
-  for (const [tool, body] of registered) {
-    if (!tools.has(tool)) continue;
-    const mentioned = new Set([...body.matchAll(/`?(unreal_[a-z0-9_]+)`?/g)].map((m) => m[1]));
+  const has = new Set(listed.map((t) => t.name));
+  for (const entry of listed) {
+    const tool = entry.name;
+    const mentioned = new Set([...textOf(entry).matchAll(/unreal_[a-z0-9_]+/g)].map((m) => m[0]));
     for (const other of mentioned) {
-      if (other === tool || !registered.has(other) || tools.has(other)) continue;
+      if (other === tool || !everyTool.has(other) || has.has(other)) continue;
       const key = `${profileName}:${tool}->${other}`;
       if (key in ALLOWED) {
         unusedAllowances.delete(key);
@@ -119,9 +139,9 @@ if (problems.length > 0) {
 }
 
 const counts = Object.entries(PROFILES)
-  .map(([n, s]) => `${n} ${s.size}`)
+  .map(([n, listed]) => `${n} ${listed.length}`)
   .join(", ");
 console.log(
-  `profile references ok: ${registered.size} tools, profiles checked (${counts}), ` +
-    `${Object.keys(ALLOWED).length} deliberate reference(s) allowed`
+  `profile references ok: ${everyTool.size} tools across all profiles, descriptions read from the ` +
+    `server (${counts}), ${Object.keys(ALLOWED).length} deliberate reference(s) allowed`
 );

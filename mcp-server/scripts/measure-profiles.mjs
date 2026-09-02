@@ -122,7 +122,26 @@ export const PROFILES = [
     //
     // Twelve tokens, paid once and served from the prompt cache thereafter, against a failed call
     // and a recovery every time a model types the word fifteen other tools taught it.
-    ceilingTokens: 13_220,
+    //
+    // Raised again by 40 for the `match` and `className` aliases, measured at 29 tokens.
+    //
+    // Ten tools take `match`; search_project, find_node, find_in_data_tables and map_system took
+    // `query` and only `query`. list_actors was the only tool in the project spelling a class filter
+    // `classFilter` rather than `className`. Both were found the same way: a model using this server
+    // for a real feature typed the majority spelling and got a validation error.
+    //
+    // ## This is the second raise in one session, and that is worth saying out loud
+    //
+    // 13,200 -> 13,220 -> 13,260, sixty tokens in a day. A ceiling that moves whenever something
+    // wants room is not a ceiling, and the honest defence has to be that each raise bought something
+    // a trim could not.
+    //
+    // Both bought the same thing: a name a model has already been taught by the majority of this
+    // surface now works. A failed call and its recovery is a few hundred tokens, so at 29 standing
+    // tokens the `match` aliases repay themselves the first time any session mistypes once - and the
+    // session that found them mistyped twice. The trade only stays good while the thing bought is a
+    // removed round trip; the moment a raise is for prose, it should be refused.
+    ceilingTokens: 13_260,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {
