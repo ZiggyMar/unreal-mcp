@@ -149,3 +149,44 @@ test("the review and the audit rank findings from the same table", async () => {
   );
   assert.match(audit, /from "\.\/findingCost\.js"/, "and the audit imports the same one rather than owning a copy");
 });
+
+/** A bridge that answers with the graph and variable NAMES a test cares about, and nothing else. */
+const namedBridge = (graphNames, variables) => ({
+  async send(command) {
+    if (command === "list_blueprint_graphs") return { graphs: graphNames.map((name) => ({ name })) };
+    if (command === "list_variables") return { parentClass: "Character", variables };
+    if (command === "read_blueprint_graph_summary") return { nodes: [] };
+    throw new Error(`unexpected command ${command}`);
+  },
+});
+
+// --- Names with whitespace the editor does not show -----------------------------------------------
+//
+// Measured before this was written: 7 across 168 assets, 811 variables, 793 graphs and 18 anim
+// states on the real project - 0.4%, which is rare enough to mean something. A name that differs
+// from its own trim is never deliberate, and the editor renders it identically to the trimmed one.
+
+test("a variable whose name has a trailing space is reported", async () => {
+  const bridge = namedBridge(["EventGraph"], [{ name: "VacuumDragged " }]);
+  const review = await reviewBlueprint(bridge, "/Game/BP_X");
+  const finding = (review.blueprint ?? []).find((f) => f.check === "name-has-stray-whitespace");
+  assert.ok(finding, "expected the stray-whitespace finding");
+  assert.match(finding.message, /VacuumDragged/);
+  assert.match(finding.observed, /"VacuumDragged"/, "says what the name would be trimmed");
+});
+
+test("a graph whose name has a leading space is reported", async () => {
+  const bridge = namedBridge(["EventGraph", " VacuumDragged"], []);
+  const review = await reviewBlueprint(bridge, "/Game/BP_X");
+  const found = (review.blueprint ?? []).filter((f) => f.check === "name-has-stray-whitespace");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /graph/);
+});
+
+test("ordinary names are not reported", async () => {
+  // The check has to stay silent on the 99.6%. A name with an INTERNAL single space is normal in
+  // Unreal - display names routinely have them - and only leading, trailing or doubled ones count.
+  const bridge = namedBridge(["EventGraph", "Take Damage"], [{ name: "Health" }, { name: "Max Health" }]);
+  const review = await reviewBlueprint(bridge, "/Game/BP_X");
+  assert.equal((review.blueprint ?? []).filter((f) => f.check === "name-has-stray-whitespace").length, 0);
+});

@@ -36,6 +36,11 @@ export const FINDING_COST: Record<string, number> = {
   // break what is there - the first copy still fires - it means a case the author added a
   // transition FOR is not handled, which shows up as "it doesn't switch out of aiming when I jump"
   // rather than as a frozen pose.
+  // Low, and info severity, because nothing is broken right now. In this project all four spaced
+  // names are self-consistent - the variable, its repNotify field and the handler graph all carry
+  // the space - so the binding works. What it costs is the NEXT rename, the next search, and the
+  // next person who types the name correctly and finds nothing. A trap, not a fault.
+  "name-has-stray-whitespace": 10,
   "anim-duplicate-transition": 45,
   "anim-state-no-exit": 80,
   // A system that can render nothing, spawned by a Blueprint that looks correct.

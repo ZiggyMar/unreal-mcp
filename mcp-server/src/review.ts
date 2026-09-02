@@ -159,7 +159,46 @@ export async function reviewBlueprint(
     }),
     { errors: 0, warnings: 0, infos: 0 }
   );
-  const extraFindings = [...stateFindings, ...mpFindings];
+  // --- Names with whitespace the editor does not show --------------------------------------------
+  //
+  // A name that differs from its own trim is never deliberate, and it is invisible: the editor
+  // renders "VacuumDragged " exactly like "VacuumDragged". The only symptom is that everything
+  // matching by name quietly fails to match, which is the shape of bug somebody loses an afternoon
+  // to - "why can't I find it", "why doesn't the RepNotify fire".
+  //
+  // Measured before it was written, because a defect that occurs two hundred times is a convention
+  // and not a defect. Across 168 assets, 811 variables, 793 graphs and 18 anim states on the real
+  // project: 7 names, 0.4%. Rare enough to mean something.
+  //
+  //   BP_Player.VacuumDragged·           (variable)
+  //   BP_Player.OnRep_VacuumDragged·     (its RepNotify handler)
+  //   PC_Base.MenuState·
+  //   ABP_NewPlayer.·VacuumDragged       (an anim state, which surfaces here as a graph)
+  //
+  // The BP_Player pair is self-consistent - variable, repNotify field and graph all carry the
+  // space - so it works today. That is what makes it worth flagging rather than urgent: it is a
+  // trap set for the next rename, not a fault now.
+  const strayNames: Array<{ kind: string; name: string }> = [
+    // state.variables, not `variables` - that one is assigned inside the try/catch above, so a
+    // failure in an unrelated check would silently switch this one off rather than fail it.
+    ...(state.variables ?? []).map((v) => ({ kind: "variable", name: v.name })),
+    ...graphNames.map((n) => ({ kind: "graph", name: n })),
+  ].filter(({ name }) => typeof name === "string" && (name !== name.trim() || /\s{2,}/.test(name)));
+
+  const nameFindings = strayNames.map(({ kind, name }) => ({
+    check: "name-has-stray-whitespace",
+    severity: "info" as const,
+    message:
+      `The ${kind} "${name.replace(/ /g, "\u00b7")}" has leading, trailing or doubled whitespace in its name ` +
+      `(\u00b7 marks a space).`,
+    fix:
+      `Rename it without the stray space. Nothing in the editor shows this, and everything that matches by ` +
+      `name - search, a RepNotify binding, a Get Data Table Row, your own future rename - has to carry the ` +
+      `space exactly or silently miss.`,
+    observed: `Trimmed, the name would be "${name.trim().replace(/\s{2,}/g, " ")}".`,
+  }));
+
+  const extraFindings = [...stateFindings, ...mpFindings, ...nameFindings];
   summary.warnings += extraFindings.filter((f) => f.severity === "warning").length;
   summary.infos += extraFindings.filter((f) => f.severity === "info").length;
   const score = reports.length === 0 ? 100 : Math.min(...reports.map((report) => report.score));
