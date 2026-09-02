@@ -18,8 +18,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const SERVER_PATH = join(here, "..", "..", "dist", "index.js");
 const NEWLINE = String.fromCharCode(10);
 
-/** Tokens are estimated from characters; see measure-profiles.mjs for why that is honest enough. */
-export const estimateTokens = (chars) => Math.round(chars / 4);
+/**
+ * Tokens are estimated from characters; see measure-profiles.mjs for why that is honest enough.
+ *
+ * Takes a string OR a character count, because the name reads like it takes the thing you want
+ * measured and it used to take only the number. `estimateTokens(replyText)` returned NaN, and a NaN
+ * printed into a measurement table reads as a number that was measured - it has a value, it lines up
+ * in the column, and nothing anywhere says it failed. That cost a wrong reading in this repo before
+ * anyone noticed the output said "NaN tok".
+ *
+ * Accepting both is the fix rather than a rename, on the same argument the pre-push hook makes for
+ * itself: the mistake becomes impossible instead of discouraged, and every existing caller - all four
+ * of which correctly pass `.length` - keeps working untouched.
+ */
+export const estimateTokens = (input) =>
+  Math.round((typeof input === "string" ? input.length : input) / 4);
 
 /**
  * Start the server over stdio.

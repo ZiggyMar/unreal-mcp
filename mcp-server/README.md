@@ -10762,3 +10762,19 @@ first two were caught by disbelief, this one by the output being visibly `NaN`.
 
 Registry now: 11 figures, 6 watched by a live measurement, 4 re-measured by hand and dated, 1 with an
 honest note that drift can only understate it.
+
+### A measurement helper whose failure mode was a number
+
+`estimateTokens` took a character count and was named for the thing you want measured. So
+`estimateTokens(replyText)` returned `NaN` — and for a measurement helper that is the worst available
+failure. It does not throw. It has a value. It lines up in the column. A table of `NaN tok` reads as a
+run that happened, and it cost a wrong reading here before anyone looked hard at the output.
+
+It now accepts a string **or** a count. That is the fix rather than a rename, on the same argument the
+pre-push hook makes for itself: the mistake becomes impossible instead of discouraged, and all four
+existing callers — every one of which correctly passes `.length` — keep working untouched.
+
+Three tests hold it there, including one pinning `estimateTokens(6144) === 1536`. The `search`
+profile's 1,536 is quoted in the workflow guide, registered in `check-claims.mjs` and re-measured by
+`check:profiles` on every run; if the divisor moves, all of those move silently with it. Now that is a
+deliberate act with a failing test attached.
