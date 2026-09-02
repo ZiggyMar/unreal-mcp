@@ -1367,19 +1367,26 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe('Graph to explain. Defaults to "EventGraph".'),
+      match: z
+        .string()
+        .optional()
+        .describe(
+          "Only chains mentioning this, in their entry name or any step. The header says how many were " +
+            "left out."
+        ),
       maxChains: z
         .number()
         .optional()
         .describe("Entry-point chains listed in the structured result. Defaults to 25; the prose always covers every one."),
     },
   },
-  async ({ path, graphName, maxChains }) => {
+  async ({ path, graphName, maxChains, match }) => {
     try {
       const summary = await bridge.send("read_blueprint_graph_summary", {
         path,
         graphName: graphName ?? "EventGraph",
       });
-      const explained = explainGraph(summary as never);
+      const explained = explainGraph(summary as never, { match });
 
       // Measured on a real Blueprint: 13,294 tokens, of which the `chains` array was 7,296 across
       // 89 chains and the prose - the thing this tool exists to produce - was 2,043. The array

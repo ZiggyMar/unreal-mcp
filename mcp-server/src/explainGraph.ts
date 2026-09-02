@@ -89,10 +89,20 @@ const DEFAULT_MAX_STEPS_PER_CHAIN = 40;
 export interface ExplainOptions {
   /** Steps per chain to print before saying how many more there are. Defaults to 40. */
   maxStepsPerChain?: number;
+  /**
+   * Only chains that mention this, in their entry name or any step. Case-insensitive substring.
+   *
+   * A big event graph explains 99 chains and a question is almost never about all of them.
+   * Measured on BP_Player: 3,176 tokens for the whole thing, of which the fifteen vacuum chains
+   * somebody asked for were 17%. Filtering after the fact - which is what a caller does with the
+   * reply in hand - has already paid for the other 83%.
+   */
+  match?: string;
 }
 
 export function explainGraph(summary: GraphSummary, options: ExplainOptions = {}): GraphExplanation {
   const maxStepsPerChain = options.maxStepsPerChain ?? DEFAULT_MAX_STEPS_PER_CHAIN;
+  const needle = (options.match ?? "").trim().toLowerCase();
   const nodes = summary.nodes ?? [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
@@ -326,9 +336,29 @@ function runsOnTag(runsOn: string | undefined): string {
   return "";
 }
 
+  // Filtered here, not in the traversal. `visited` is built from every chain, so narrowing the walk
+  // would make the unreachable list wrong - it would report everything outside the filter as dead
+  // logic, which is the worst possible way to answer a narrower question.
+  const shownChains = needle
+    ? chains.filter(
+        (chain) =>
+          chain.entry.toLowerCase().includes(needle) ||
+          chain.steps.some((step) => step.toLowerCase().includes(needle))
+      )
+    : chains;
+  const hiddenByMatch = chains.length - shownChains.length;
+
   const lines: string[] = [];
-  lines.push(`${summary.graphName ?? "Graph"}: ${nodes.length} nodes, ${chains.length} entry point(s).`);
-  for (const chain of chains) {
+  lines.push(
+    `${summary.graphName ?? "Graph"}: ${nodes.length} nodes, ${chains.length} entry point(s).` +
+      // Said on the header line, because a filtered answer that does not admit it is filtered reads
+      // as the whole graph - and the next question ("so nothing else touches this?") would then be
+      // answered wrongly by silence.
+      (hiddenByMatch > 0
+        ? ` Showing the ${shownChains.length} that mention "${options.match}"; ${hiddenByMatch} other chain(s) not listed.`
+        : "")
+  );
+  for (const chain of shownChains) {
     if (chain.steps.length === 0) {
       lines.push(`- ${chain.entry}${runsOnTag(chain.runsOn)}: nothing wired to it.`);
       continue;
@@ -354,7 +384,10 @@ function runsOnTag(runsOn: string | undefined): string {
       lines.push(`Note: ${entry} and ${other} run into the same nodes - changing one changes both.`);
     }
   }
-  if (unreachable.length > 0) {
+  // Suppressed when filtering. This list is about the WHOLE graph, and printed beneath a handful
+  // of matched chains it reads as "these are the dead nodes of what you asked about" - which it
+  // is not, and which would be a confident wrong answer rather than a smaller right one.
+  if (!needle && unreachable.length > 0) {
     // Capped: a long tail of pure data nodes is normal and listing all of it would undo the point
     // of this tool.
     const shown = unreachable.slice(0, 12);
