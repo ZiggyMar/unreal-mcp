@@ -6345,9 +6345,13 @@ register(
       //
       // This reply used to end by recommending enable_tools({groups}) - the groups CONTAINING the
       // tools it had just named one by one. Measured on "the tutorial level doesn't spawn a player":
-      // naming the three suggested tools costs +1,120 standing tokens, asking for their two groups
-      // costs +18,201, and both answer the same question. Sixteen times the price, offered first,
+      // naming the three suggested tools costs +1,008 standing tokens, asking for their two groups
+      // costs +16,381, and both answer the same question. Sixteen times the price, offered first,
       // for the sentence this whole project exists to serve.
+      //
+      // Counted with estimateTokens, the counter the rest of this repo measures with. An earlier
+      // draft of this comment used an ad-hoc len/3.6 and ran about 10% high. The 16x ratio held and
+      // the absolutes did not, which is the argument for quoting the ratio.
       //
       // Counted rather than hardcoded, because it depends entirely on which groups got matched.
       const groupSize = [...toolCatalog.values()].filter((t) => groupsFor.includes(t.group)).length;

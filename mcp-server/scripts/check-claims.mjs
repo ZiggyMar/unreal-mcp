@@ -81,6 +81,37 @@ const CLAIMS = [
     what: "standing context after the same three journeys run by enabling groups, in the call_tool description",
     verifiedBy: "trial:workflows (prints standing after enables); measured 2026-09-01",
   },
+  // --- docs/AGENT_WORKFLOW.md, served verbatim to models by loadDoc() -----------------------------
+  //
+  // None of these were registered until the scan below was widened to the served guides. Two of them
+  // were also wrong: the guide said the `search` profile was "four tools, about 2,200 tokens" when
+  // check:profiles has it at five tools and 2,524.
+  {
+    figure: "2,524",
+    what: "the `search` profile's standing cost, quoted twice in the workflow guide",
+    verifiedBy: "check:profiles (measures every profile each run and fails outside its ceiling)",
+  },
+  {
+    figure: "1,008",
+    what: "enabling the three tools a symptom reply names, in the workflow guide",
+    verifiedBy:
+      "dispatch.test.mjs asserts the ADVICE (call_tool first, no groups:); the figure itself is " +
+      "not watched live - measured by hand 2026-09-02 on the search profile, exact",
+  },
+  {
+    figure: "16,381",
+    what: "enabling the two groups holding those three tools, the comparison in the workflow guide",
+    verifiedBy:
+      "not watched live - measured by hand 2026-09-02, exact. Drifts whenever core or scene gains a " +
+      "tool, and drift only widens the gap the sentence is making, so a stale figure here understates",
+  },
+  {
+    figure: "557",
+    what: "the larger of the two discovery-reply costs quoted in the workflow guide",
+    verifiedBy:
+      "not watched live - measured by hand 2026-09-02. Its partner 455 is invisible to this scan, " +
+      "which only sees comma-formatted figures, so this half is the one that can be registered",
+  },
 ];
 
 const problems = [];
@@ -96,6 +127,47 @@ for (const file of readdirSync(srcDir).filter((f) => f.endsWith(".ts"))) {
     if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue;
     for (const match of line.matchAll(/([0-9][0-9,]{2,6})\s*tokens?/g)) {
       found.push({ figure: match[1], file: `src/${file}`, line: index + 1, text: line.trim() });
+    }
+  }
+}
+
+// The guides count as text a model reads, because they are.
+//
+// This script's own header says "every token figure a model reads must have something watching it",
+// and it scanned src/ only. docs/AGENT_WORKFLOW.md is not a repo document: loadDoc() reads it off
+// disk and returns it verbatim as the body of unreal_guide, so every figure in it is quoted to a
+// model with exactly the authority of a figure in a tool description - and none of them were
+// registered here.
+//
+// Found by putting two figures into that guide and watching this guard pass. They were also 10% out,
+// from an ad-hoc estimator, which is precisely the drift the registry exists to catch.
+//
+// The file list is DERIVED, from the loadDoc calls in the server. A hardcoded list would rot the
+// moment a fourth guide was served, and this repo has learned four separate times that a
+// hand-maintained index rots. docs/ holds a dozen other files - status reports, audits, the
+// competitive landscape - which are full of figures and are read by people, not models. Those are
+// out of scope on purpose, and the way this list is built is what keeps that line honest rather
+// than asserted.
+const serverSource = readFileSync(join(srcDir, "index.ts"), "utf8");
+const servedDocs = [...new Set([...serverSource.matchAll(/loadDoc\(\s*"([A-Za-z0-9_]+\.md)"/g)].map((m) => m[1]))];
+if (servedDocs.length === 0) {
+  problems.push(
+    "no loadDoc() calls found in src/index.ts, so the served-guide scan below is checking nothing. " +
+      "Either the guides stopped being served that way, or this pattern needs updating."
+  );
+}
+const docsDir = join(here, "..", "..", "docs");
+for (const doc of servedDocs) {
+  let lines;
+  try {
+    lines = readFileSync(join(docsDir, doc), "utf8").split("\n");
+  } catch {
+    problems.push(`src/index.ts serves docs/${doc} to models, but it is not on disk.`);
+    continue;
+  }
+  for (const [index, line] of lines.entries()) {
+    for (const match of line.matchAll(/([0-9][0-9,]{2,6})\s*tokens?/g)) {
+      found.push({ figure: match[1], file: `docs/${doc}`, line: index + 1, text: line.trim() });
     }
   }
 }

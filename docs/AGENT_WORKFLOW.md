@@ -8,7 +8,7 @@ Skill, or CLAUDE.md section) when working on an Unreal project through this MCP 
 ## Starting from a sentence
 
 The golden path below assumes you already have the tools for the job switched on. If the session
-started on the `search` profile - four tools, about 2,200 tokens - or you have a request in the
+started on the `search` profile - five tools, 2,524 tokens - or you have a request in the
 user's words and no plan yet, this is the step before step 0.
 
 **`unreal_list_tools({ match: "<what the user actually said>" })`.** `match` searches tool names and
@@ -25,9 +25,15 @@ suggestion. It reads three intents, and they want different tools:
 | "delete the old health variable" | a removal | `remove_variable`, `remove_function`, `remove_component` |
 | "I edited the header file" | C++ | `find_source`, `compile_cpp`, `hot_reload_cpp` |
 
-Then `unreal_enable_tools({ groups: [...] })` with the groups it names, and continue below. Measured
-end to end on a real project: **three calls and about 1,600 tokens** from the sentence to the tool
-that finds the bug.
+Then `unreal_enable_tools({ tools: [...] })` with the tools the row names - **not their groups**.
+The row above names three; their groups hold about fifty between them, and measured on the `search`
+profile the difference is **1,008 tokens** against **16,381 tokens** for the same answer, with the extra
+forty-odd sitting in the prompt for the rest of the session. If you only need one call, skip enabling
+altogether: `unreal_call_tool({ tool, args })` runs it and leaves the tool list untouched.
+
+Measured on a real project: the `search` profile stands at **2,524 tokens**, one discovery reply
+costs **455-557 tokens** depending on how many tools match, and then you call the tool. Three calls
+from the sentence to the thing that finds the bug, and nothing enabled along the way.
 
 Two things this saves you from. A rename is not a value change - editing the thing directly leaves
 everything that referred to the old name pointing at nothing, and the rename tools rebind those
@@ -169,6 +175,9 @@ not working.
 The server may be running the `lazy` profile, which starts with the authoring path above and keeps
 the rest switched off until asked. Call `unreal_enable_tools` with the groups you need - `ui`,
 `data`, `scene`, `edit`, `maintenance` - in one call rather than discovering them one at a time.
+Groups are the right unit *here*, where you are about to author for a while and will call many of
+them; for two or three known tools, `tools: [...]` is far cheaper, and for exactly one, `call_tool`
+costs nothing at all.
 Everything in the golden path is always available without enabling anything.
 
 ## Sharp edges that remain

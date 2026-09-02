@@ -164,9 +164,13 @@ test("a symptom match points at the tools it named, not at the groups holding th
   //
   // Measured on the search profile, for the sentence "the tutorial level doesn't spawn a player":
   //
-  //   baseline                       5 tools,  1,707 tokens
-  //   enable the 3 tools it named    8 tools,  2,827 tokens   (+1,120)
-  //   enable the 2 groups it advised 51 tools, 19,908 tokens  (+18,201)
+  //   baseline                       5 tools,  1,536 tokens
+  //   enable the 3 tools it named    8 tools,  2,544 tokens   (+1,008)
+  //   enable the 2 groups it advised 51 tools, 17,917 tokens  (+16,381)
+  //
+  // Measured with the repo's own estimateTokens, not an ad-hoc len/3.6 - the first version of this
+  // comment carried figures about 10% high from a hand-rolled estimator. The 16x ratio is the same
+  // either way, which is exactly why a ratio is the safer thing to quote than an absolute.
   //
   // Same answer either way. The expensive one was recommended first, in the reply that serves the
   // one request this project exists for, and it stays in the prompt for the rest of the session.

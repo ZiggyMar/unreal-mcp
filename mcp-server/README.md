@@ -10721,3 +10721,44 @@ as the two tool counts, which are what was actually counted.
 A live test in `dispatch.test.mjs` drives the real server and asserts `call_tool` appears before
 `enable_tools` and that no `groups:` advice survives — in the file whose own header explains that a
 tool-list change invalidates the prompt cache for the whole conversation.
+
+### The guard that watches token claims was not looking at the guides
+
+`check-claims.mjs` opens with *"every token figure a model reads must have something watching it"*,
+and it scanned `src/` only. But `docs/AGENT_WORKFLOW.md` is not a repo document — `loadDoc()` reads it
+off disk and returns it verbatim as the body of `unreal_guide`. Every figure in it is quoted to a model
+with exactly the authority of a figure in a tool description, and not one of them was registered.
+
+Found the way these things should be found: I put two figures into that guide and watched the guard
+pass. Widening the scan turned up two more that had been sitting there unwatched — and both were wrong:
+
+> "If the session started on the `search` profile — **four tools, about 2,200 tokens**"
+
+`check:profiles` measures it every single run: **five tools, 2,524 tokens**. A number the project
+measures on every test run, quoted stale in the document that teaches models what things cost.
+
+The served-guide list is **derived from the `loadDoc()` calls in the server**, not hardcoded. `docs/`
+also holds status reports, audits and the competitive landscape — full of figures, read by people, not
+models — and those stay out of scope. Deriving the list is what keeps that line honest instead of
+asserted, and it means a fourth served guide is covered the day it is added rather than the day
+someone remembers.
+
+**My own numbers were the first thing it caught.** I had measured with an ad-hoc `len / 3.6`; the repo
+counts with `estimateTokens`, which is `chars / 4`. Everything I had published ran about 10% high:
+
+| | mine | the repo's |
+|---|---|---|
+| `search` baseline | 1,707 | **1,536** |
+| enable the 3 named tools | +1,120 | **+1,008** |
+| enable their 2 groups | +18,201 | **+16,381** |
+
+The 16× ratio survived the correction and the absolutes did not, which is the argument for quoting a
+ratio. All three are corrected in the source comment, the test, the guide and the section above.
+
+And a trap worth naming: `estimateTokens` takes a **character count**, not a string. Passing it the
+string returns `NaN`, and `NaN` printed straight into a report reads as a measurement that ran. That
+is the third time this session an estimator was misused into a confident-looking wrong number; the
+first two were caught by disbelief, this one by the output being visibly `NaN`.
+
+Registry now: 11 figures, 6 watched by a live measurement, 4 re-measured by hand and dated, 1 with an
+honest note that drift can only understate it.
