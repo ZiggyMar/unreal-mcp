@@ -88,8 +88,19 @@ not working.
    - **Follow `readingOrder`.** It puts the most depended-on assets first because they define the
      contracts everything else obeys.
 
+4b. **A problem with no asset named** — "something is broken", "clean this up before we ship" —
+   starts at `unreal_audit_project`, not at a Blueprint. It reads every Blueprint and every Data
+   Table, ranks findings by what each is likely to cost rather than by severity, and says what it
+   could NOT check: how many Blueprints a check reached, how many tables it read, which classes it
+   could not resolve. Pass `check` to get one kind back in full. `unreal_review_blueprint` is the
+   same job for one asset once you know which.
+
 5. **Find the details, don't enumerate.** `unreal_search_project` to locate specific functions and
    variables once the map has told you where to look. Never list everything and read through it.
+   **It matches a substring, and asset names contain no spaces:** search `"ShopUpgrade"`, never
+   `"shop upgrade"`, which returns an empty result that looks exactly like the project not having
+   one. `unreal_find_node` matches on words and is happy with either, which is why the two behave
+   differently on the same query - measured, and the reason this sentence exists.
 
 6. **Read tiered, narrow as you go.** `unreal_list_blueprint_graphs` for a Blueprint you will
    touch, then `unreal_read_blueprint_summary` for the one graph that matters. Do not pull full

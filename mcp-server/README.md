@@ -202,11 +202,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2503 | five tools; hand it a sentence or a preset name |
+| `search` | 2524 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4251 | ten tools, fixed, for a small local model |
-| `core` | 13173 | the authoring spine |
-| `lazy` | 13481 | `core` plus deferred groups |
-| `full` | 46611 | everything, for a model that can afford it |
+| `core` | 13194 | the authoring spine |
+| `lazy` | 13501 | `core` plus deferred groups |
+| `full` | 46631 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -10608,3 +10608,38 @@ before the call, doing exactly the job being added.
 Two commits of defensive C++ against a crash whose cause is still, by the evidence, 166 Live Coding
 patches. The doctor's warning about that remains the only thing this episode produced that was
 actually missing.
+
+### The flagship tool was named on one profile out of five
+
+`unreal_audit_project` answers the request this project exists for — *"something is wrong with my
+game, where do I look"*. Reading the instruction text the server actually sends:
+
+```text
+minimal   names it
+search    ABSENT      <- the profile --print-config emits
+core      ABSENT
+lazy      ABSENT
+full      ABSENT
+```
+
+And `docs/AGENT_WORKFLOW.md`, the long form of that same order, never mentioned it either. A model on
+any profile a person actually runs could reach it only by searching the tool list for something it had
+not been told existed.
+
+It is one line of standing text now, and a routing step in the workflow guide beside it.
+
+**Three measurements were wrong before one was right, and that is the part worth writing down.** The
+first grep bounded the instruction function by the next `\n}\n` and swept up unrelated code, so four
+tools looked present. The second bounded it properly but still counted comments as instructions. The
+third read the harness's return value under the wrong property name and reported 0 tokens for every
+profile, which should have been obviously impossible. Only the fourth — reading `server.instructions`,
+the text the client is actually sent — gave an answer worth acting on.
+
+That is the same failure as the C++ guard reverted two commits ago: **grepping source and reading the
+result as behaviour.** The fix is the same both times, and it is not "grep more carefully" — it is to
+measure the output rather than the input, which was available here the whole time.
+
+An existing guard caught the follow-on. `guideAgreement.test.mjs` asserts the workflow guide names
+every tool the instructions do, so the moment the instructions gained `unreal_audit_project` the suite
+refused the change until the guide did too. Eighteen tokens of standing text; `lazy` moved 13,500 →
+13,550 after the line had been trimmed three times.

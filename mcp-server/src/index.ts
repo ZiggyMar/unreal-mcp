@@ -435,6 +435,13 @@ function buildInstructions(profile: string): string {
   lines.push(
     "HOW TO WORK",
     "1. Anything broken: unreal_doctor. It names which half is wrong and the remedy.",
+    // Named here because it was named nowhere a model on this profile reads.
+    //
+    // Measured from the instruction text the server actually sends, after two source greps got it
+    // wrong: unreal_audit_project appeared only in the `minimal` branch, and not in search, core or
+    // full - the profile --print-config emits among them. It is the entry point for the single most
+    // common request this tool exists for, and nothing pointed at it.
+    "   A problem with no asset named is unreal_audit_project, ranked by likely cost.",
     "2. Orient before writing. unreal_get_project_overview, then unreal_search_project and",
     "   unreal_list_blueprints to find what already exists. Assume the project is to be extended,",
     "   not rebuilt: match what is there.",

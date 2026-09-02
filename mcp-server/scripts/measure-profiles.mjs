@@ -152,7 +152,17 @@ export const PROFILES = [
     // audit_project has taken a `check` since it was written; the per-asset half of the same job
     // never did, so a caller with a specific question had to take everything or narrow by graph and
     // hope the finding lived there. That asymmetry was the defect; this is its price.
-    ceilingTokens: 13_500,
+    // 13,500 -> 13,550 for one line of standing text naming unreal_audit_project.
+    //
+    // It was named in the `minimal` branch and nowhere else - not in search, core, lazy or full -
+    // so on every profile a person actually runs, the entry point for "something is wrong with my
+    // game" was reachable only by searching the tool list for it. Read from the instruction text the
+    // server sends, after two source greps got it wrong.
+    //
+    // Eighteen tokens, trimmed three times before asking for this, and it lands one token over. The
+    // line is the shortest sentence that still says what the tool is for; the alternative was to
+    // keep cutting words until a real route reads like a telegram.
+    ceilingTokens: 13_550,
     why: "the recommended default; the local-model benchmark result is measured with this",
   },
   {
