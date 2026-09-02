@@ -9341,3 +9341,38 @@ allowance for something that no longer happens teaches the next reader something
 
 Cost: `core` 13,078 → 13,088 and `full` 46,483 → 46,493. Ten tokens for text that stops sending
 constrained models to tools that are not there.
+
+### The suggestion that only worked on half the tools
+
+A wrong graph name is answered by the bridge with an **alphabetical** slice of what exists. On a real
+Blueprint that is twelve of fifty-eight graphs — and for `EventGrph` the list stopped at
+`EndVacuumObjects`, one entry before `EventGraph`. A list whose whole purpose was to contain the
+answer, sorted so that it did not.
+
+Ranking those by similarity is the same fix as the `didYouMean` re-ranking and reuses its scoring:
+
+```text
+EventGrph  ->  Did you mean `EventGraph`?
+CanShot    ->  Did you mean `CanShoot`?
+Nonsense   ->  (no suggestion; the original error stands)
+```
+
+**But wiring it up exposed something worse.** Nothing appeared. The pieces all worked in isolation,
+the branch was in the built output, and the lookup returned the right names — so the hook was not
+being reached at all. Instrumenting it rather than re-reading it found why:
+
+> Tools use **two** error shapes. Most catch and return `errorResult`. The rest let the bridge error
+> propagate and the SDK shapes it. The suggestion hook ran on the returned kind only.
+
+So the path suggestion shipped two commits earlier had been silently doing nothing on every throwing
+tool. `compile_blueprint` returns, so it worked and was verified working; `read_blueprint_summary`
+throws, so the identical mistake there got nothing. The verification that passed was real — it just
+covered one of two shapes, and nothing said there were two.
+
+Both shapes are handled now, in the same wrapper. The thrown one is **re-thrown**, not converted to
+a returned error: which shape a tool uses is checked by `check:envelopes` and the protocol tests, and
+quietly changing it here to make this easier would trade a real guarantee for a convenience.
+
+The lesson is about verification, not about errors. A feature verified on one example is verified on
+one example. What made this findable was that the second case looked identical from the outside and
+behaved differently.

@@ -87,8 +87,10 @@ import {
   notFoundPath,
   rankCandidates,
   suggestionLine,
+  notFoundGraph,
   type PathCandidate,
 } from "./suggestPath.js";
+import { rankNames } from "./didYouMean.js";
 
 const BRIDGE_HOST = process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1";
 const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
@@ -991,8 +993,16 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
   // tools already; fixing it per-tool fixed three symptoms and no causes.
   const guarded = (async (args: never, extra: never) => {
     const verdict = repeatGuard.record(name, args);
-    const result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
-    return withRepeatNotice(await withPathSuggestion(result), verdict.notice);
+    // Both shapes, because tools use both: most catch and return errorResult, the rest let the
+    // bridge error propagate. Hooking only the returned kind made this whole feature invisible on
+    // every throwing tool.
+    let result: unknown;
+    try {
+      result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
+    } catch (err) {
+      throw await enrichThrownError(err, args);
+    }
+    return withRepeatNotice(await withPathSuggestion(result, args), verdict.notice);
   }) as never;
   // Swap the raw shape for a strict object of the same shape. It stays a ZodObject, so the SDK
   // still derives the advertised JSON schema from it exactly as before.
@@ -1127,32 +1137,82 @@ function explainUnknownCommand(message: string): string | undefined {
  * and the original error stands unchanged. That is the intended outcome rather than a gap to
  * apologise for: a wrong suggestion is worse than none, and the error already teaches the fix.
  */
-async function withPathSuggestion(result: unknown): Promise<unknown> {
+/**
+ * The "did you mean" line for an error, or undefined when nothing certain can be said.
+ *
+ * Split out from the result-shaped wrapper because HALF THE TOOLS DO NOT RETURN THEIR ERRORS. Most
+ * catch and call errorResult; the rest let the bridge error propagate and the SDK shapes it. Both
+ * are errors a caller reads, and the first version of this hooked only the returned kind - so the
+ * path suggestion silently did nothing for every throwing tool, which is how a wrong graph name on
+ * read_blueprint_summary came back with no suggestion while the identical mistake on
+ * compile_blueprint got one. Found by instrumenting the hook rather than re-reading it.
+ */
+async function suggestionFor(text: string, args?: unknown): Promise<string | undefined> {
+  // A wrong graph name, which the bridge answers with an ALPHABETICAL slice of what exists. On a
+  // real Blueprint that was twelve of fifty-eight graphs, cut off one entry before `EventGraph` -
+  // the obvious answer, absent from a list whose whole job was to contain it. Ranking by similarity
+  // to what was asked is the same fix as the didYouMean re-ranking, and reuses its scoring.
+  const missingGraph = notFoundGraph(text);
+  if (missingGraph) {
+    const path = (args as { path?: string } | undefined)?.path;
+    if (typeof path !== "string" || path.length === 0) return undefined;
+    try {
+      const listed = await bridge.send<{ graphs?: Array<{ name?: string }> }>("list_blueprint_graphs", { path });
+      const names = (listed.graphs ?? []).map((g) => g?.name).filter((n): n is string => typeof n === "string");
+      return suggestionLine(rankNames(missingGraph, names));
+    } catch {
+      return undefined;
+    }
+  }
+
+  const missing = notFoundPath(text);
+  if (!missing) return undefined;
+  const needle = leafName(missing);
+  if (needle.length === 0) return undefined;
+  try {
+    const listed = await bridge.send<{ blueprints?: PathCandidate[] }>("list_blueprints", {});
+    return suggestionLine(rankCandidates(needle, listed.blueprints ?? []));
+  } catch {
+    // A courtesy on a call that has already failed. If the bridge cannot answer the lookup, the
+    // original error is still the right answer and must not be replaced by a lookup failure.
+    return undefined;
+  }
+}
+
+/** Append the suggestion to an error a tool RETURNED. */
+async function withPathSuggestion(result: unknown, args?: unknown): Promise<unknown> {
   const r = result as { isError?: boolean; content?: Array<{ type?: string; text?: string }> };
   if (r?.isError !== true || !Array.isArray(r.content)) return result;
 
   const block = r.content.find((c) => c?.type === "text" && typeof c.text === "string");
   if (!block?.text) return result;
 
-  const missing = notFoundPath(block.text);
-  if (!missing) return result;
-  const needle = leafName(missing);
-  if (needle.length === 0) return result;
-
-  try {
-    const listed = await bridge.send<{ blueprints?: PathCandidate[] }>("list_blueprints", {});
-    const line = suggestionLine(rankCandidates(needle, listed.blueprints ?? []));
-    if (!line) return result;
-    return {
-      ...r,
-      content: r.content.map((c) => (c === block ? { ...c, text: `${c.text}\n\n${line}` } : c)),
-    };
-  } catch {
-    // A courtesy on a call that has already failed. If the bridge cannot answer the lookup, the
-    // original error is still the right answer and must not be replaced by a lookup failure.
-    return result;
-  }
+  const line = await suggestionFor(block.text, args);
+  if (!line) return result;
+  return {
+    ...r,
+    content: r.content.map((c) => (c === block ? { ...c, text: `${c.text}\n\n${line}` } : c)),
+  };
 }
+
+/**
+ * The same suggestion on an error a tool THREW.
+ *
+ * Re-thrown rather than converted to a returned error: which shape a tool uses is checked by
+ * check:envelopes and the protocol tests, and quietly changing it here to make this easier would
+ * trade a real guarantee for a convenience.
+ */
+async function enrichThrownError(err: unknown, args?: unknown): Promise<unknown> {
+  if (!(err instanceof Error) || typeof err.message !== "string") return err;
+  try {
+    const line = await suggestionFor(err.message, args);
+    if (line) err.message = `${err.message}\n\n${line}`;
+  } catch {
+    // Never let the courtesy replace the failure it was decorating.
+  }
+  return err;
+}
+
 
 function errorResult(err: unknown, hint?: string) {
   const message = err instanceof Error ? err.message : String(err);

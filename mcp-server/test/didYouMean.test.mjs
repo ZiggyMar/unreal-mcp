@@ -83,3 +83,13 @@ test("a suggestion entry with no function name is skipped rather than crashing",
   const ranked = rankSuggestions("SpawnActor", [{ className: "/Script/Engine" }, ...SPAWN_ACTOR]);
   assert.equal(ranked[0].functionName, "SpawnActorFromClass");
 });
+
+test("plain names rank the same way, for lists the bridge prints as prose", async () => {
+  const { rankNames } = await import("../dist/didYouMean.js");
+  // The real case: a wrong graph name printed twelve of fifty-eight graphs alphabetically and cut
+  // off one entry before EventGraph, which was obviously what was meant.
+  const graphs = ["AddData", "CameraLineTrace", "CanAim", "CanShoot", "EndVacuumObjects", "EventGraph"];
+  assert.deepEqual(rankNames("EventGrph", graphs), ["EventGraph"]);
+  assert.deepEqual(rankNames("CanShot", graphs), ["CanShoot"]);
+  assert.deepEqual(rankNames("Nonsense", graphs), []);
+});

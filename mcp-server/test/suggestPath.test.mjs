@@ -77,3 +77,12 @@ test("a row without a path is skipped rather than crashing the lookup", () => {
     "/Game/AntiVirusSquad/_Core/Characters/Players/BP_Player",
   ]);
 });
+
+test("a graph_not_found names the graph it could not find", async () => {
+  const { notFoundGraph } = await import("../dist/suggestPath.js");
+  assert.equal(
+    notFoundGraph("UnrealMCPBridge error: graph_not_found: EventGrph. This Blueprint has 58 graphs, including: AddData"),
+    "EventGrph"
+  );
+  assert.equal(notFoundGraph("UnrealMCPBridge error: blueprint_not_found: /Game/X"), undefined);
+});

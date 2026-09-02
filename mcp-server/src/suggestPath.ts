@@ -93,3 +93,9 @@ export function suggestionLine(matches: string[]): string | undefined {
   if (matches.length === 1) return `Did you mean \`${matches[0]}\`?`;
   return `Did you mean one of these? ${matches.map((m) => `\`${m}\``).join(", ")}`;
 }
+
+/** The graph name a `graph_not_found` error is about, if that is what this error is. */
+export function notFoundGraph(errorText: string): string | undefined {
+  const m = /\bgraph_not_found:\s*([^\s.,]+)/.exec(errorText);
+  return m ? m[1].replace(/[.,;]+$/, "") : undefined;
+}

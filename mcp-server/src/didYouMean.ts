@@ -118,3 +118,23 @@ export function rankContextSuggestions(
   else next.didYouMean = ranked;
   return next;
 }
+
+/**
+ * The same ranking over plain names rather than suggestion objects.
+ *
+ * Used for the lists a bridge error prints as prose - graph names, pin names - where there is no
+ * `didYouMean` array to re-rank, only a wall of alphabetical candidates with the right one somewhere
+ * inside it. Measured: a wrong graph name on a real Blueprint printed twelve of fifty-eight graphs
+ * in alphabetical order and cut off one entry before `EventGraph`, which was obviously what was
+ * meant.
+ */
+export function rankNames(wanted: string, names: string[], limit = 3): string[] {
+  const scored: Array<{ name: string; s: number; i: number }> = [];
+  names.forEach((name, i) => {
+    if (typeof name !== "string" || name.length === 0) return;
+    const s = score(wanted, name);
+    if (s !== null) scored.push({ name, s, i });
+  });
+  scored.sort((a, b) => (b.s === a.s ? a.i - b.i : b.s - a.s));
+  return scored.slice(0, limit).map((x) => x.name);
+}
