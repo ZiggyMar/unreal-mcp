@@ -3,6 +3,19 @@ import assert from "node:assert/strict";
 
 import { startAndInitialize, listTools } from "../scripts/lib/mcpStdio.mjs";
 
+// Tests never talk to a real editor. This pins the bridge to a port nothing listens on.
+//
+// Without it they use the default 8765, and if an editor happens to be running they reach it. That
+// is not merely impure, it is slow in the worst way: an editor whose game thread is BLOCKED accepts
+// the connection and never answers, so every bridge-touching test waits the full timeout. Measured
+// with one blocked editor open, three tests took 181 seconds each and the suite went from 17 seconds
+// to six minutes - which then pushed the pre-push hook past its limit.
+//
+// A refused connection is instant and deterministic, and these tests are about what the SERVER does
+// with a request, not what an editor answers. The trial and live-verify scripts deliberately do the
+// opposite: they take the default because reaching the editor is their entire point.
+const DEAD_PORT = "8791";
+
 // unreal_call_tool exists for one reason: to run a tool WITHOUT changing the advertised tool list,
 // because that list sits ahead of everything else in a request and changing it invalidates the
 // prompt cache for the whole conversation.
@@ -22,7 +35,7 @@ const call = async (server, name, args = {}) => {
 };
 
 test("dispatching does not move the tool list, but enabling does", async () => {
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const before = await listTools(server);
     assert.ok(
@@ -56,7 +69,7 @@ test("dispatching does not move the tool list, but enabling does", async () => {
 });
 
 test("a disabled tool's schema can be read without switching it on", async () => {
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const before = await listTools(server);
     const described = await call(server, "unreal_list_tools", { schema: "unreal_guide" });
@@ -76,7 +89,7 @@ test("a disabled tool's schema can be read without switching it on", async () =>
 test("the dispatcher validates arguments exactly as the tool would", async () => {
   // Two ways to call one tool that disagree about its arguments is the defect class this project
   // keeps finding. A dispatcher is the easiest possible place to reintroduce it.
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const bad = await call(server, "unreal_call_tool", {
       tool: "unreal_guide",
@@ -92,7 +105,7 @@ test("the dispatcher validates arguments exactly as the tool would", async () =>
 });
 
 test("an unknown tool name suggests the near miss instead of a lecture", async () => {
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const miss = await call(server, "unreal_call_tool", { tool: "unreal_guid" });
     assert.match(miss.text, /unknown_tool/);
@@ -103,7 +116,7 @@ test("an unknown tool name suggests the near miss instead of a lecture", async (
 });
 
 test("the dispatcher refuses to call itself", async () => {
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const loop = await call(server, "unreal_call_tool", { tool: "unreal_call_tool" });
     assert.match(loop.text, /cannot call itself/);
@@ -115,7 +128,7 @@ test("the dispatcher refuses to call itself", async () => {
 test("registration stays the permission boundary on a fixed profile", async () => {
   // `minimal` promises a small surface. A dispatcher that quietly reached past it would turn a
   // documented tool budget into a suggestion, so the dispatcher is not registered there at all.
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "minimal" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "minimal", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const listed = await listTools(server);
     assert.equal(
@@ -133,7 +146,7 @@ test("the first dispatch to an authoring tool still delivers the exact pin names
   // context and handed over by enable_tools when an authoring tool switches on. Dispatching never
   // switches anything on, so without this the caller would guess pin names - which costs a failed
   // call each time, and is the exact expense unreal_call_tool exists to avoid.
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const res = await server.request("tools/call", {
       name: "unreal_call_tool",
@@ -174,7 +187,7 @@ test("a symptom match points at the tools it named, not at the groups holding th
   //
   // Same answer either way. The expensive one was recommended first, in the reply that serves the
   // one request this project exists for, and it stays in the prompt for the rest of the session.
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const { text } = await call(server, "unreal_list_tools", {
       match: "the tutorial level doesn't spawn a player",
@@ -202,7 +215,7 @@ test("a discovery reply explains itself once, then answers", async () => {
   //
   // What must NOT be dropped is anything the caller needs in order to act: which tools, how to run
   // them, and that the match was on keywords. Those ship every time.
-  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search", UNREAL_MCP_BRIDGE_PORT: DEAD_PORT }, "dispatch-test");
   try {
     const ask = async (match) => {
       const { text } = await call(server, "unreal_list_tools", { match });

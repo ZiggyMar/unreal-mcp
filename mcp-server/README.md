@@ -11404,3 +11404,30 @@ rather than becoming hyphens. A link built the obvious way looks correct and goe
 
 And the "140-odd" claim is gone rather than corrected. A number nobody reads is a number that rots;
 the sentence now points at the generated index instead of counting it.
+
+### The suite got five minutes slower and nothing had changed
+
+`npm test` went from ~17 seconds to **six minutes**. No test was added that round. Three of them took
+**181 seconds each** — suspiciously close to a round three-minute timeout.
+
+They were reaching a real editor. Four test files started the server without overriding
+`UNREAL_MCP_BRIDGE_PORT`, so they used the default 8765 — and there was an editor there whose game
+thread was blocked on a modal dialog. A blocked editor **accepts** the connection and never answers,
+so every bridge-touching test waited out the full timeout instead of failing instantly.
+
+That is worse than impurity. A refused connection is instant and deterministic; a blocked one is a
+three-minute stall, and it made the pre-push hook exceed its limit and get killed — so a hung editor
+was silently preventing pushes.
+
+The four are pinned to a dead port now. These tests are about what the **server** does with a
+request, not what an editor answers, and none of them wanted a bridge in the first place. The trial
+and `live-verify` scripts deliberately keep the default, because reaching the editor is their entire
+point.
+
+**6 minutes → 1 minute 13.** Same 885 tests, same assertions, and the result no longer depends on
+whether an editor happens to be open.
+
+This is the third time in two days that a check read live machine state it did not mean to: the
+doctor's port probe, `check:profilerefs` reading source comments, and now four test files reaching a
+real editor. The pattern is worth naming — *a test that can see the outside world will eventually
+depend on it*, and here the dependency showed up as five minutes rather than a wrong answer.
