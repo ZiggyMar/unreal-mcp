@@ -2560,8 +2560,17 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 			// a bare not-found gives it nothing to act on. Answer with near-misses from the
 			// reflection catalog so the failure is self-correcting without the caller having
 			// had to call find_node first.
+			// Says which class was searched AND how to search a different one.
+			//
+			// Naming the class was already the good half - it turns "not found" into "not found
+			// HERE" - and the missing half is that `className` is what changes where it looks.
+			// Calling a function on another Blueprint is routine (a GameMode calling something on
+			// the pawn it just spawned), and that failed here against AVSBaseGameMode while the
+			// function sat on BP_Player_C.
 			TSharedRef<FJsonObject> NotFound = MakeErrorResponse(FString::Printf(
-				TEXT("function_not_found: %s on %s"),
+				TEXT("function_not_found: %s was looked for on %s. If it belongs to another class, pass ")
+				TEXT("className with that class - e.g. className: \"BP_Player_C\" - and wire the object into ")
+				TEXT("the node's `self` pin."),
 				*FunctionName, OwnerClass ? *OwnerClass->GetName() : TEXT("(no class)")));
 
 			FMCPNodeCatalog& Catalog = FMCPNodeCatalog::Get();
@@ -2667,8 +2676,19 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 		}
 		if (!bFoundVar)
 		{
+			// Naming the parameter that fixes it, because the commonest cause is not a typo.
+			//
+			// Reading another object's state is ordinary Blueprint work - a pawn reads its
+			// PlayerState, a controller reads the GameState - and the variable then belongs to THAT
+			// class, not to the Blueprint the graph lives in. The old message described what was
+			// searched and left the reader to discover `ownerClass` from the schema. Measured on
+			// this project: building a pawn graph that reads PS_Gameplay::AssignedSkinID failed
+			// exactly this way and cost a round trip that the parameter name would have saved.
 			return MakeErrorResponse(FString::Printf(
-				TEXT("variable_not_found: %s (not a Blueprint variable, and no inherited property has that name)"),
+				TEXT("variable_not_found: %s is not a variable of this Blueprint and no inherited property has ")
+				TEXT("that name. If it belongs to ANOTHER class - reading a PlayerState, a GameState, a ")
+				TEXT("component - pass ownerClass with that class, e.g. ownerClass: \"PS_Gameplay_C\", and wire ")
+				TEXT("the object into the node's `self` pin."),
 				*VariableName));
 		}
 
