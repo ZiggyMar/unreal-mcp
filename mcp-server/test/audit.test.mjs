@@ -505,3 +505,46 @@ test("a struct or enum variable is not reported as an unresolvable class", async
     assert.ok(!unresolved.includes(notAClass), `${notAClass} is not a class and must not be listed as one`);
   }
 });
+
+test("a C++ row struct is named, so the consequence can be looked up rather than guessed", async () => {
+  // The generic wording says an empty reference means "whatever consumes it silently does nothing".
+  // On the real table that was wrong in the worse direction: FShopUpgradeDef.UpgradeClass is read by
+  // AC_ShopComponent.cpp to count ownership by class equality, so an empty one means the upgrade
+  // never registers as owned, never reaches MaxTiers, and can be bought forever.
+  //
+  // The audit cannot know that, and should not pretend to. What it can do is name the struct, which
+  // turns a guess into one find_source call.
+  const bridge = fakeBridge({
+    list_assets: () => ({ assets: ["/Game/Data/DT_Upgrades.DT_Upgrades"] }),
+    list_data_table_rows: () => ({
+      rowStruct: "/Script/MyGame.ShopUpgradeDef",
+      rows: [
+        { rowName: "A", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_A.BP_A_C'" } },
+        { rowName: "B", values: { UpgradeClass: "" } },
+      ],
+    }),
+  });
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTableNulls.length, 1);
+  assert.equal(r.dataTableNulls[0].rowStruct, "/Script/MyGame.ShopUpgradeDef", "the thread to the code");
+  assert.match(r.nextAction, /ShopUpgradeDef/);
+  assert.match(r.nextAction, /unreal_find_source/);
+});
+
+test("a Blueprint row struct gets no C++ pointer, because there is no C++ to point at", async () => {
+  const bridge = fakeBridge({
+    list_assets: () => ({ assets: ["/Game/Data/DT_Things.DT_Things"] }),
+    list_data_table_rows: () => ({
+      rowStruct: "/Game/Data/S_Thing.S_Thing",
+      rows: [
+        { rowName: "A", values: { Ref: "/Script/Engine.BlueprintGeneratedClass'/G/BP_A.BP_A_C'" } },
+        { rowName: "B", values: { Ref: "" } },
+      ],
+    }),
+  });
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTableNulls.length, 1);
+  assert.doesNotMatch(r.nextAction, /unreal_find_source/, "a Blueprint struct is not found with find_source");
+});

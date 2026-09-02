@@ -9649,3 +9649,36 @@ top six from it — the same judgement, made independently, before this was meas
 **Side effect worth recording**: cutting `unlabelled-sections` and the not-a-class caveat in the two
 previous commits took the whole-project audit from 3,206 to 2,968 tokens without anything being
 aimed at its size.
+
+### Following a Data Table finding into the C++ that reads it
+
+The audit reports an empty class reference as *"whatever consumes it silently does nothing — no
+error, no log."* That is true of an empty reference in the abstract. On the real table it was wrong
+in the worse direction.
+
+`DT_Upgrades` rows are instances of `FShopUpgradeDef`, a C++ struct. `unreal_find_source
+"ShopUpgradeDef"` resolves the missing `F` prefix, finds it at `AC_ShopComponent.h:24`, and names
+the two lines in the `.cpp` that read it. The consumer counts ownership by class equality:
+
+```cpp
+if (ItemDef->UpgradeClass) {
+  for (const TSubclassOf<AActor> &HeldClass : ActiveUpgrades) {
+    if (HeldClass == ItemDef->UpgradeClass) { bIsOwned = true; OwnedCount++; }
+  }
+}
+```
+
+So an **empty** `UpgradeClass` does not mean "nothing happens". It means the guard never runs, so
+`OwnedCount` stays 0 forever — the upgrade never registers as owned, never reaches `MaxTiers`, and
+can be bought an unlimited number of times. A **shared** `UpgradeClass` means two rows share one
+ownership counter: buying either tiers up both.
+
+The audit cannot know that, and should not pretend to. What it can do is hand over the thread. The
+row struct is now carried on both Data Table finding kinds, and when it is declared in C++ —
+`/Script/...` — `nextAction` says so and names `unreal_find_source`. A Blueprint-defined row struct
+gets no such pointer, because `find_source` reads C++ and would find nothing; both cases are pinned
+by a test.
+
+This is the join the project is meant to close — *"whether it's C++ or Blueprints or a Data Table"*.
+The finding starts in a Data Table, the explanation is in a `.cpp`, and until now nothing connected
+them.

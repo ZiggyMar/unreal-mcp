@@ -33,6 +33,17 @@ export interface NullReference {
   table: string;
   rowName: string;
   field: string;
+  /**
+   * The struct the row is an instance of, carried so a reader can reach the code that
+   * consumes the empty field rather than only the row that holds it.
+   *
+   * Measured on a real table: the finding said "whatever consumes it silently does nothing",
+   * which was generically true and specifically wrong. FShopUpgradeDef.UpgradeClass is read
+   * by AC_ShopComponent.cpp to COUNT ownership by class equality, so an empty one means the
+   * upgrade never registers as owned, never reaches MaxTiers, and can be bought forever. That
+   * is a worse bug than doing nothing, and the thread to it is the struct name.
+   */
+  rowStruct?: string;
   /** An example of the same field, filled in, from another row. Shows what it should look like. */
   exampleFromRow?: string;
   exampleValue?: string;
@@ -52,7 +63,14 @@ export interface DataTableAuditResult {
    * and nothing to do with survival or mobile agents. The empty-reference check walked straight past
    * it, because the field is filled in.
    */
-  duplicateReferences: Array<{ table: string; field: string; value: string; rows: string[]; ofFilled: number }>;
+  duplicateReferences: Array<{
+    table: string;
+    field: string;
+    value: string;
+    rows: string[];
+    ofFilled: number;
+    rowStruct?: string;
+  }>;
   /** Tables where every row was empty for some field, so nothing could be concluded. */
   undecidable: Array<{ table: string; field: string; why: string }>;
   unreadable: Array<{ table: string; why: string }>;
@@ -82,6 +100,8 @@ function isEmptyReference(value: string): boolean {
 interface DataTableRows {
   path?: string;
   rows?: Array<{ rowName: string; values: Record<string, string> }>;
+  /** The struct each row is an instance of. `/Script/...` means it is declared in C++. */
+  rowStruct?: string;
 }
 
 /**
@@ -181,7 +201,7 @@ export async function auditDataTables(
         // texture, material or sound means two rows look or sound alike, which is ordinary. Keeping
         // both would have made this check noise on its first outing.
         if (!/BlueprintGeneratedClass|\.Class'/.test(value)) continue;
-        duplicateReferences.push({ table, field, value, rows: rowNames, ofFilled: filled });
+        duplicateReferences.push({ table, field, value, rows: rowNames, ofFilled: filled, rowStruct: read.rowStruct });
       }
     }
 
@@ -193,6 +213,7 @@ export async function auditDataTables(
             table,
             rowName,
             field,
+            rowStruct: read.rowStruct,
             exampleFromRow: example.row,
             exampleValue: example.value,
           });

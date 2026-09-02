@@ -164,7 +164,7 @@ export interface AuditResult {
    * row is neither a Blueprint nor a graph. Filing it under one would be a lie of the same kind the
    * review already refuses to tell.
    */
-  dataTableNulls: Array<{ table: string; rowName: string; field: string }>;
+  dataTableNulls: Array<{ table: string; rowName: string; field: string; rowStruct?: string }>;
   /**
    * Rows sharing a CLASS reference in a column where almost every other row has its own.
    *
@@ -173,7 +173,7 @@ export interface AuditResult {
    * the field is filled in and the value is a valid asset - nothing is null, nothing is broken, and
    * one row simply does someone else's job.
    */
-  dataTableDuplicateClasses: Array<{ table: string; field: string; value: string; rows: string[] }>;
+  dataTableDuplicateClasses: Array<{ table: string; field: string; value: string; rows: string[]; rowStruct?: string }>;
   truncated: boolean;
   /**
    * How many Blueprints the project has, against how many were looked at.
@@ -984,10 +984,16 @@ const unresolvedClasses = new Set<string>();
   try {
     const tables = await auditDataTables(bridge, { pathPrefix: options.pathPrefix });
     for (const n of tables.nullReferences) {
-      dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field });
+      dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field, rowStruct: n.rowStruct });
     }
     for (const d of tables.duplicateReferences ?? []) {
-      dataTableDuplicateClasses.push({ table: d.table, field: d.field, value: d.value, rows: d.rows });
+      dataTableDuplicateClasses.push({
+        table: d.table,
+        field: d.field,
+        value: d.value,
+        rows: d.rows,
+        rowStruct: d.rowStruct,
+      });
     }
   } catch (err) {
     /* a bridge too old to read Data Tables must not lose the Blueprint half of the audit */
@@ -1058,6 +1064,24 @@ const unresolvedClasses = new Set<string>();
         `Table row(s) sharing a class reference: ${d.rows.join(" and ")} in ${d.table} both set ` +
         `${d.field} to the same class, so they do the same thing while claiming to be different. ` +
         `One of them is pointing at the wrong Blueprint. Fix with unreal_set_data_table_row.`
+    );
+  }
+
+  // A row struct declared in C++ is the thread from the table to the code that reads it, and the
+  // audit already knows the name. Worth one sentence: the generic "whatever consumes it silently
+  // does nothing" is true of an empty reference in the abstract and was WRONG about the real one -
+  // FShopUpgradeDef.UpgradeClass is read to count ownership by class equality, so an empty value
+  // means the upgrade never registers as owned, never reaches MaxTiers, and can be bought forever.
+  // Naming the struct lets a reader find that in one call instead of guessing at the consequence.
+  const cppStruct = [...dataTableNulls, ...dataTableDuplicateClasses]
+    .map((d) => d.rowStruct)
+    .find((rs) => typeof rs === "string" && rs.startsWith("/Script/"));
+  if (cppStruct && dataTableLead.length > 0) {
+    const shortName = cppStruct.split(".").pop() ?? cppStruct;
+    dataTableLead.push(
+      `These rows are instances of ${shortName}, which is declared in C++. ` +
+        `unreal_find_source "${shortName}" locates it and the code that reads these fields, which is ` +
+        `where the real consequence of an empty or shared value is decided.`
     );
   }
 
