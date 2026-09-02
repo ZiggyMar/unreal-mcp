@@ -3199,14 +3199,27 @@ register(
       "Reads a Blueprint's component hierarchy: each component's name, class, and parent, including components " +
       "inherited from a C++ or Blueprint parent class. Call this before unreal_add_component to pick a valid " +
       "parent, or before unreal_set_component_property to get the exact component name, rather than guessing " +
-      'names like "Mesh" or "Root".',
+      'names like "Mesh" or "Root".' +
+      " **Pass `component` to read that one component's actual property values** - the mesh it holds, whether " +
+      "it is visible, its collision setting. That is the only way to confirm what unreal_set_component_property " +
+      "wrote: nothing else reads a component back, so without it a write is trusted rather than checked.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
+      component: z
+        .string()
+        .optional()
+        .describe(
+          "Name of one component to describe in full, e.g. \"GuideSpline\". Omit to list the hierarchy only."
+        ),
+      match: z
+        .string()
+        .optional()
+        .describe("With `component`, only properties whose name contains this. Use it to ask about one, e.g. \"StaticMesh\"."),
     },
   },
-  async ({ path }) => {
+  async ({ path, component, match }) => {
     try {
-      const result = await bridge.send("list_components", { path });
+      const result = await bridge.send("list_components", { path, component, match });
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

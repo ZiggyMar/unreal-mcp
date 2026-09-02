@@ -7374,6 +7374,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListVariables(const TSharedPtr
 	return MakeOkResponse(Result);
 }
 
+// Defined below, next to read_class_defaults which was its first caller. Declared here so a component
+// can be described with the same code that describes a class default - two readers of the same shape
+// would drift, and the whole point of this addition is that what you set can be read back.
+static void DescribeEditableProperties(UObject* Object, const FString& MatchFilter,
+	TArray<TSharedPtr<FJsonValue>>& OutProperties, int32& OutTotal,
+	const UObject* CompareAgainst, int32* OutUnchanged);
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleListComponents(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;
@@ -7427,6 +7434,71 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleListComponents(const TSharedPt
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("components"), Components);
 	Result->SetArrayField(TEXT("inherited"), Inherited);
+
+	/**
+	 * One component's actual property values, when asked for by name.
+	 *
+	 * set_component_property could write a component's StaticMesh, visibility or collision and
+	 * nothing could read any of it back. list_components returned names and classes; there was no
+	 * read_component_property at all. So the only evidence a write had worked was the write saying
+	 * so - which is exactly the shape of the three commands found lying earlier in this session, and
+	 * this one could not even be checked.
+	 *
+	 * Found by needing it: setting a mesh and a visibility flag on sixteen components, and having no
+	 * way to confirm any of the thirty-two writes short of opening the editor and looking.
+	 *
+	 * Same DescribeEditableProperties the class-default reader uses, against the component TEMPLATE -
+	 * which is the object set_component_property writes to, so this reads what that wrote rather than
+	 * something adjacent to it.
+	 */
+	FString WantedComponent;
+	if (Params->TryGetStringField(TEXT("component"), WantedComponent) && !WantedComponent.IsEmpty())
+	{
+		UActorComponent* Template = nullptr;
+		if (Blueprint->SimpleConstructionScript)
+		{
+			for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+			{
+				if (Node && Node->GetVariableName().ToString().Equals(WantedComponent, ESearchCase::IgnoreCase))
+				{
+					Template = Node->ComponentTemplate;
+					break;
+				}
+			}
+		}
+		if (!Template)
+		{
+			Result->SetStringField(TEXT("componentNotFound"), FString::Printf(
+				TEXT("no component named \"%s\" on this Blueprint. The names above are what it has; an inherited "
+					"component is owned by the parent class and its defaults are read with read_class_defaults."),
+				*WantedComponent));
+		}
+		else
+		{
+			FString MatchFilter;
+			Params->TryGetStringField(TEXT("match"), MatchFilter);
+			TArray<TSharedPtr<FJsonValue>> Props;
+			int32 Total = 0;
+			int32 Unchanged = 0;
+			DescribeEditableProperties(Template, MatchFilter, Props, Total,
+				Template->GetClass()->GetDefaultObject(), &Unchanged);
+
+			TSharedRef<FJsonObject> Detail = MakeShared<FJsonObject>();
+			Detail->SetStringField(TEXT("component"), WantedComponent);
+			Detail->SetStringField(TEXT("class"), Template->GetClass()->GetName());
+			Detail->SetArrayField(TEXT("properties"), Props);
+			Detail->SetNumberField(TEXT("totalProperties"), Total);
+			Detail->SetNumberField(TEXT("inheritedUnchanged"), Unchanged);
+			if (Unchanged > 0 && MatchFilter.IsEmpty())
+			{
+				Detail->SetStringField(TEXT("note"), FString::Printf(
+					TEXT("%d properties are identical to a fresh %s and are not listed. Pass match=<name> to ask "
+						"about one by name."), Unchanged, *Template->GetClass()->GetName()));
+			}
+			Result->SetObjectField(TEXT("componentDetail"), Detail);
+		}
+	}
+
 	return MakeOkResponse(Result);
 }
 

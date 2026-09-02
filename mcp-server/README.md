@@ -209,7 +209,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
 | `core` | 13216 | the authoring spine |
 | `lazy` | 13524 | `core` plus deferred groups |
-| `full` | 47007 | everything, for a model that can afford it |
+| `full` | 47156 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -7422,6 +7422,7 @@ anybody noticed.
 - ["Delete blocked by 7" was the wrong number; the real one was 169](#delete-blocked-by-7-was-the-wrong-number-the-real-one-was-169)
 - [Suppressing the dialog turned a hang into a lie](#suppressing-the-dialog-turned-a-hang-into-a-lie)
 - [A regression net for "reported success, changed nothing"](#a-regression-net-for-reported-success-changed-nothing)
+- [You could write a component property and never read it back](#you-could-write-a-component-property-and-never-read-it-back)
 
 <!-- INDEX:END -->
 
@@ -11665,3 +11666,36 @@ is `read_blueprint_node_detail`, and `unreal_read_blueprint_summary` is `read_bl
 the tool names and the wire names differ, which is fine until you write a script against the wire. And
 `build_graph`'s raw reply gives `nodes.<ref>` as `{id, type, title}`; the flattening to `ref: id` happens
 in the tool layer.
+
+### You could write a component property and never read it back
+
+Auditing the write commands — writing with one, reading back with another — five of them told the
+truth. The sixth could not be checked at all: **`set_component_property` had no reader.**
+`list_components` returned names and classes; there was no `read_component_property`, and
+`read_class_defaults` describes the class, not a component on it. The only evidence a component write
+had worked was the write saying so.
+
+That is worse than the three commands found lying earlier this session, because those could at least
+be caught. Found by needing it: setting a mesh and a visibility flag across sixteen components and
+having no way to confirm any of the thirty-two writes short of opening the editor and looking.
+
+`unreal_list_components` now takes `component` and describes that one in full, using the same
+`DescribeEditableProperties` the class-default reader uses — against the component **template**, which
+is the object `set_component_property` writes to, so it reads what that wrote rather than something
+adjacent to it.
+
+Run against the components in question:
+
+```
+GuideArrow_00 | SplineMeshComponent
+    StaticMesh = /Engine/BasicShapes/Plane.Plane
+    bVisible   = False
+  total: 143 | unchanged: 141
+```
+
+**141 of 143 properties identical to a fresh `SplineMeshComponent`** — exactly the two that were set
+differ. That is the shape a good read has: it answers the question and shows the rest is untouched,
+rather than dumping 143 rows and leaving you to find the two that matter.
+
+The five that were already honest, for the record: `add_variable`, `set_class_default`,
+`add_component`, `rename_variable`, and `set_component_property` itself once it could be verified.
