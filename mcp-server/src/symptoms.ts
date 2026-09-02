@@ -157,7 +157,30 @@ export const SYMPTOMS: SymptomEntry[] = [
       "is usually a decorator on a key nothing ever sets.",
   },
   {
-    says: ["particle", "vfx", "niagara", "effect", "no effect appears", "fx"],
+    // No bare "effect". It is the loosest word in this table: "status effect", "side effect",
+    // "effective", "takes effect" are all ordinary English about things that are not particles.
+    //
+    // It cost a real misroute. "add a new C++ actor component for status effects" matched `effect`,
+    // this entry took one of the two answer slots, and the reply recommended read_niagara_system for
+    // a C++ build request - while `c++`, the most informative word in the sentence, lost its slot to
+    // it. A loose word does not merely add a wrong suggestion; it EVICTS a right one, because only
+    // two entries ever answer.
+    //
+    // The phrasings that survive either name the thing or pair the word with a visual verb.
+    says: [
+      "particle",
+      "vfx",
+      "niagara",
+      "fx",
+      "visual effect",
+      "particle effect",
+      "no effect appears",
+      "effect doesn't play",
+      "effect does not play",
+      "effect never plays",
+      "effect doesn't spawn",
+      "effect isn't showing",
+    ],
     tools: ["unreal_read_niagara_system", "unreal_audit_project"],
     because: "read_niagara_system reports emitters that are disabled or have no spawn rate, which produce nothing and no error.",
   },

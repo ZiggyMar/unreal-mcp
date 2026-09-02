@@ -10868,3 +10868,43 @@ and cached, against a failed call every time a model types the word fifteen othe
 A live test covers the half `check:params` cannot see: that the handler *reads* the alias. A tool that
 advertises `name`, accepts it, and then sends `undefined` to the bridge is worse than one that never
 offered it.
+
+### A loose word does not add a wrong answer, it evicts a right one
+
+The bug-report path was measured last round. This round the other two verbs the project promises —
+build a feature, make a change — went through the same wire measurement, across all three substrates:
+
+```
+CHANGE / data table   changing   find_in_data_tables, search_project, trace_variable, find_source
+CHANGE / c++          changing   find_in_data_tables, search_project, trace_variable, find_source
+CHANGE / rename       changing   rename_variable, rename_asset, rename_component, search_project
+BUILD  / feature      building   plan_feature, map_system
+BUILD  / ui           building   plan_feature, map_system, trace_variable, audit_project
+BUILD  / c++          building   plan_feature, map_system, read_niagara_system, audit_project   <-- ?
+```
+
+**`read_niagara_system`, for "add a new C++ actor component for status effects".** The VFX entry
+listed a bare `"effect"`, which caught "status effects".
+
+The interesting part is not the wrong suggestion. Only **two entries ever answer** — a cap added
+because six tools and two paragraphs cost 667 tokens for a sentence whose first three words already
+said where to look. So the VFX entry did not merely add a bad row: it took the slot that `c++` should
+have had. The single least informative word in the sentence displaced the single most informative one,
+and the reply came back with no C++ tool in it at all.
+
+`"effect"` is now gone. What replaced it either names the thing (`particle`, `niagara`, `vfx`, `fx`)
+or pairs the word with a visual verb (`effect never plays`, `effect doesn't spawn`, `visual effect`).
+"status effect", "side effect", "takes effect" are ordinary English about things that are not
+particles, and the entry's own standard is that it must identify *that* failure.
+
+That sentence now returns `plan_feature, map_system, find_source, compile_cpp`. Three tests hold it:
+the C++ build request, three innocent uses of the word, and four genuine particle questions that must
+still route.
+
+**One thing I nearly "fixed" and should not have.** A change request naming C++ gets the four generic
+finders, and `compile_cpp`/`hot_reload_cpp` are sliced off by the four-tool cap — which looked like the
+exact "editor still running the old code" failure the C++ entry exists to prevent. It is already
+handled, deliberately: a test records that "a CHANGE phrased around C++ takes the change route, so the
+advice has to carry it instead", and the `because` prose names both tools. Verified on the wire — all
+three appear in the reply. The considered decision and the oversight look identical from the outside;
+the difference was written down, which is the only reason I could tell.

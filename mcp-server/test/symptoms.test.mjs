@@ -348,3 +348,42 @@ test("asking how to spawn something is not a report that spawning is broken", ()
     );
   }
 });
+
+test("a loose word does not evict the precise one", () => {
+  // Only two entries ever answer, so a word that matches too easily does not merely add a wrong
+  // suggestion - it takes a slot away from a right one.
+  //
+  // "add a new C++ actor component for status effects" used to come back recommending
+  // read_niagara_system. The VFX entry listed a bare "effect", which caught "status effects", and it
+  // sits earlier in the table than the C++ entry - so the single most informative word in the
+  // sentence lost its place to the single least informative one.
+  const found = matchSymptoms("add a new C++ actor component for status effects");
+  assert.equal(found.intent, "building");
+  assert.ok(
+    !found.tools.includes("unreal_read_niagara_system"),
+    `a C++ build request was routed to the particle reader: ${found.tools.join(", ")}`
+  );
+  assert.ok(found.tools.includes("unreal_find_source"), "the C++ tools must survive the intent");
+});
+
+test("ordinary English containing \"effect\" is not a particle question", () => {
+  // The words that made "effect" unusable on its own. None of these is about VFX.
+  for (const said of ["add a status effect system", "the upgrade has no side effect", "make the change take effect"]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    assert.ok(!tools.includes("unreal_read_niagara_system"), `"${said}" -> ${tools.join(", ")}`);
+  }
+});
+
+test("a real particle question still reaches the particle reader", () => {
+  // The narrowing has to keep what it was for. Each of these names the thing, or pairs the word with
+  // a visual verb - which is the rule the surviving phrases follow.
+  for (const said of [
+    "the explosion effect never plays",
+    "the niagara system emits nothing",
+    "the hit particle doesn't show",
+    "the muzzle flash visual effect is missing",
+  ]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    assert.ok(tools.includes("unreal_read_niagara_system"), `"${said}" -> ${tools.join(", ") || "nothing"}`);
+  }
+});
