@@ -7417,6 +7417,7 @@ anybody noticed.
 - [The suite got five minutes slower and nothing had changed](#the-suite-got-five-minutes-slower-and-nothing-had-changed)
 - [Two class pins kept nothing, and everything reported success](#two-class-pins-kept-nothing-and-everything-reported-success)
 - [The hook said the plugin does not compile, about source that compiles](#the-hook-said-the-plugin-does-not-compile-about-source-that-compiles)
+- [`force: true` meant "do not tell me", and it should have meant "I accept it"](#force-true-meant-do-not-tell-me-and-it-should-have-meant-i-accept-it)
 
 <!-- INDEX:END -->
 
@@ -11494,3 +11495,33 @@ runs; a clean run now leaves none.
 
 Two builds can safely run at once, which matters more than it sounds: the hook builds on every C++
 push, and an agent that keeps working while a push is in flight will collide with it every time.
+
+### `force: true` meant "do not tell me", and it should have meant "I accept it"
+
+Deleting 15 unreferenced Blueprints from a real project, I passed `force: true`. The reply:
+
+```json
+{"requested": 15, "deleted": 15, "forced": true}
+```
+
+Complete success, by every word of it. One of the fifteen was the **parent** of a Blueprint outside
+the delete set. That Blueprint stopped compiling, and the error arrived minutes later during Play In
+Editor as a modal that blocked the entire editor — with nothing connecting it back to the delete.
+
+**The guard for this already existed and worked.** `unreal_delete_asset` blocks by default and returns
+the blocking referencers; it would have named the child and refused. I overrode it because my own
+analysis said the assets were unreferenced. That analysis was wrong — it filtered referrers to paths
+under the game folder, and the one that mattered lived in `/Game/Audio/`. **The override removed the
+one thing positioned to disagree with me.**
+
+That part is mine, not the tool's. What *is* the tool's: the referencer scan sat inside `if (!bForce)`,
+so a forced delete could not report what it broke — the information was never gathered. Force meant
+"skip the check" when it should mean "accept the consequence".
+
+The scan now runs always; only the *blocking* is conditional. A forced delete returns
+`brokenReferences` naming every outside reference it severed, and says plainly that those assets now
+point at None and will surface later as a compile error or a PIE modal rather than as a delete failure.
+One registry query per asset, which was already being paid on the non-forced path.
+
+All fifteen were restored with `dv reset -f` — uncommitted, so version control still had them — which
+is the only reason this cost minutes instead of a rebuild.

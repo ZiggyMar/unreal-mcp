@@ -6094,25 +6094,37 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 		}
 		ToDelete.Add(Asset);
 
-		if (!bForce)
+		/**
+		 * Scanned ALWAYS, including under force. Only the BLOCKING is conditional.
+		 *
+		 * This scan used to sit inside `if (!bForce)`, so a forced delete could not report what it
+		 * broke - the information was never gathered. The reply said {"deleted":15,"forced":true} and
+		 * nothing else, which reads as complete success.
+		 *
+		 * It was not. One of those fifteen was the parent of a Blueprint outside the delete set; that
+		 * Blueprint stopped compiling, and the error surfaced minutes later during Play In Editor as a
+		 * modal that blocked the whole editor. The referencer was known to the asset registry the
+		 * whole time and nothing asked it.
+		 *
+		 * `force` should mean "I accept the breakage", not "do not tell me about it". Gathering the
+		 * list costs one registry query per asset either way.
+		 */
+		TArray<FName> Referencers;
+		AssetRegistry.GetReferencers(Asset.PackageName, Referencers);
+		for (const FName& Ref : Referencers)
 		{
-			TArray<FName> Referencers;
-			AssetRegistry.GetReferencers(Asset.PackageName, Referencers);
-			for (const FName& Ref : Referencers)
+			const FString RefStr = Ref.ToString();
+			if (!DeleteSet.Contains(Ref) && !RefStr.StartsWith(TEXT("/Script/")))
 			{
-				const FString RefStr = Ref.ToString();
-				if (!DeleteSet.Contains(Ref) && !RefStr.StartsWith(TEXT("/Script/")))
-				{
-					TSharedRef<FJsonObject> B = MakeShared<FJsonObject>();
-					B->SetStringField(TEXT("asset"), P);
-					B->SetStringField(TEXT("referencedBy"), RefStr);
-					Blockers.Add(MakeShared<FJsonValueObject>(B));
-				}
+				TSharedRef<FJsonObject> B = MakeShared<FJsonObject>();
+				B->SetStringField(TEXT("asset"), P);
+				B->SetStringField(TEXT("referencedBy"), RefStr);
+				Blockers.Add(MakeShared<FJsonValueObject>(B));
 			}
 		}
 	}
 
-	if (Blockers.Num() > 0)
+	if (Blockers.Num() > 0 && !bForce)
 	{
 		TSharedRef<FJsonObject> Blocked = MakeErrorResponse(
 			TEXT("delete_blocked: live assets outside the delete set still reference these. Pass force:true to delete anyway (breaks those references to None)."));
@@ -6165,6 +6177,18 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 	Result->SetNumberField(TEXT("requested"), Paths.Num());
 	Result->SetNumberField(TEXT("deleted"), Deleted);
 	Result->SetBoolField(TEXT("forced"), bForce);
+	// What force actually cost, named. A forced delete that reports only a count is a delete whose
+	// consequences arrive later, from somewhere else, with nothing connecting them back to here.
+	if (bForce && Blockers.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("brokenReferences"), Blockers);
+		Result->SetStringField(TEXT("brokeReferences"),
+			FString::Printf(TEXT("force:true broke %d reference(s) from assets OUTSIDE the delete set, listed in ")
+				TEXT("brokenReferences. Those assets now point at None. A Blueprint that loses a parent or a ")
+				TEXT("function this way stops compiling, and you will meet it later as a compile error or a Play ")
+				TEXT("In Editor modal rather than as a delete failure. Check each one before moving on."),
+				Blockers.Num()));
+	}
 
 	// Deleting nothing is not success, and must not read like it.
 	//
