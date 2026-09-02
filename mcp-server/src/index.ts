@@ -1577,6 +1577,7 @@ register(
       "unreal_add_variable). Inherited variables from a parent class are not yet supported.\n" +
       '  - "Branch": an if/else on a bool. Pins: execute, Condition, then, else. No other params.\n' +
       '  - "Sequence": executes its output pins in order (then_0, then_1). No other params.\n' +
+      '  - "GetArrayItem": the "Get (a copy)" node - one element out of an array. No other params. It is pure, so it has no execution pins: wire the array into "Array", the index into "Dimension 1", and read the element from "Output".\n' +
       '  - "CallParent": the "Parent: BeginPlay" node - right-click an overridden event in the editor and ' +
       'choose "Add call to parent function". functionName required, written as the editor shows it on the ' +
       'event node ("BeginPlay", "Tick", "EndPlay") - the Receive- prefix is added for you. Adding an event to ' +
@@ -1594,7 +1595,7 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),
-      nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "Self"]),
+      nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "GetArrayItem", "Cast", "Macro", "CallParent", "Self"]),
       eventName: z.string().optional().describe("Required for nodeType Event or CustomEvent."),
       inputAction: z
         .string()
@@ -2225,7 +2226,7 @@ register(
         .array(
           z.object({
             ref: z.string().describe("Your short handle for this node, unique in the batch, no dots."),
-            nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "Cast", "Macro", "CallParent", "Self"]),
+            nodeType: z.enum(["Event", "CustomEvent", "EnhancedInputAction", "InputKey", "InputAxis", "CallFunction", "VariableGet", "VariableSet", "Branch", "Sequence", "GetArrayItem", "Cast", "Macro", "CallParent", "Self"]),
             eventName: z.string().optional(),
             // The four that were missing.
             //

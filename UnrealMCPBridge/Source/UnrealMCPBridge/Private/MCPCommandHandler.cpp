@@ -39,6 +39,7 @@
 #include "AnimStateNode.h"
 #include "AnimStateNodeBase.h"
 #include "AnimStateTransitionNode.h"
+#include "K2Node_GetArrayItem.h"
 #include "Algo/Reverse.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardData.h"
@@ -2662,6 +2663,22 @@ TSharedRef<FJsonObject> FMCPCommandHandler::AddNodeCore(UBlueprint* Blueprint, U
 	{
 		// Executes outputs in order. Allocates two output pins by default (then_0, then_1).
 		NewNode = NewObject<UK2Node_ExecutionSequence>(Graph);
+	}
+	else if (NodeType == TEXT("GetArrayItem"))
+	{
+		// The "Get (a copy)" node - an array and an index in, one element out. Pure, so it has no
+		// execution pins; wire its output into whatever consumes the element.
+		//
+		// Added because its absence blocked real work. Reading an element out of an array is one of
+		// the most ordinary things anybody does in a Blueprint, and there was no way to place one:
+		// it is not a CallFunction, so the KismetArrayLibrary route does not reach it (there is an
+		// Array_Set but no Array_Get - the getter is this dedicated node), and it was not in the
+		// nodeType list. The gap surfaced while wiring a skin index to a Data Table row name on a
+		// real project, which is exactly the sort of thing this server exists to be able to do.
+		//
+		// Pin names are "Array", "Dimension 1" for the index, and "Output" for the element, which
+		// is what read_blueprint_summary already reports for the ones a human placed.
+		NewNode = NewObject<UK2Node_GetArrayItem>(Graph);
 	}
 	else if (NodeType == TEXT("CallParent"))
 	{
