@@ -7423,6 +7423,7 @@ anybody noticed.
 - [Suppressing the dialog turned a hang into a lie](#suppressing-the-dialog-turned-a-hang-into-a-lie)
 - [A regression net for "reported success, changed nothing"](#a-regression-net-for-reported-success-changed-nothing)
 - [You could write a component property and never read it back](#you-could-write-a-component-property-and-never-read-it-back)
+- [The workflow guide told models to trust the echo](#the-workflow-guide-told-models-to-trust-the-echo)
 
 <!-- INDEX:END -->
 
@@ -11699,3 +11700,34 @@ rather than dumping 143 rows and leaving you to find the two that matter.
 
 The five that were already honest, for the record: `add_variable`, `set_class_default`,
 `add_component`, `rename_variable`, and `set_component_property` itself once it could be verified.
+
+### The workflow guide told models to trust the echo
+
+`docs/AGENT_WORKFLOW.md` — served verbatim to models by `unreal_guide` — carried this advice:
+
+> "Verify object-property sets took effect by **checking the echoed value**."
+
+Today proved that is exactly the wrong instruction. Three commands were found reporting success while
+changing nothing, and every one of them **echoed the request back**:
+
+```
+set_pin_default_value  {"set": true, "value": "/Script/Engine.SplineMeshComponent"}   pin was empty
+build_graph            pinDefaultsSet: 5                                             one kept nothing
+set_variable_type      to: object:Actor                                              still the old type
+```
+
+The echo told me the request was parsed. It could not tell me anything had changed, because it was
+built from the request rather than from the artifact. A model following that line would conclude the
+write had worked — which is what I did, for most of a feature.
+
+The guide now says the opposite, and names the tool to read back with for each case: `read_node_detail`
+for a pin, `list_variables` for a type, `list_components` with `component` for a component property,
+`explain_graph` for a chain. **A reply agreeing with itself proves nothing.**
+
+It also says why this matters more than it sounds: it bites hardest where an empty value is **legal**.
+An unset class pin compiles perfectly and returns nothing at runtime, so the failure never surfaces as
+an error — only as a feature that quietly does nothing.
+
+And it makes the point that the habit outlives the fixes. All three commands verify themselves now;
+the next command to grow this bug has not been found yet, and the reader is the only thing standing in
+front of it.

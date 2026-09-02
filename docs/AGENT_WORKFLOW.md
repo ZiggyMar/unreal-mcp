@@ -199,8 +199,22 @@ cost one failed call to discover:
 - **Re-runs are not free.** A script that dies mid-way and is re-run will re-create every
   CustomEvent it already made (auto-renamed `Name_0`, `Name_1`) and orphan the old chains as
   dead spaghetti. Before re-running authoring steps, read the graph and skip what already
-  exists, or clean up duplicates deliberately. Verify object-property sets took effect by
-  checking the echoed value; a path that fails to resolve is an error, not a success.
+  exists, or clean up duplicates deliberately.
+
+- **The echoed value is not evidence.** A reply that repeats what you asked for tells you the request
+  was parsed, not that anything changed. Three commands were found in one session reporting success
+  and changing nothing: a class pin that stayed empty while `set_pin_default_value` returned
+  `{"set": true, "value": "/Script/Engine.SplineMeshComponent"}`, a `build_graph` reporting
+  `pinDefaultsSet: 5` with one of the five kept nothing, and `set_variable_type` returning
+  `to: object:Actor` on a variable that was still its old type. All three now read the artifact back
+  and say what it holds - but **the habit is the protection, not the fix**, because the next command
+  to grow this bug will not have been found yet.
+  **Read it back with a DIFFERENT command.** `unreal_read_node_detail` for a pin, `unreal_list_variables`
+  for a type, `unreal_list_components` with `component` for a component property, `unreal_explain_graph`
+  for a chain. A reply agreeing with itself proves nothing.
+  This matters most where an empty value is LEGAL: an unset class pin compiles perfectly and returns
+  nothing at runtime, so the failure never appears as an error - only as a feature that quietly does
+  nothing.
 
 - **Exec pin names are not uniform.** Regular nodes use `execute` (in) and `then` (out). Branch
   outputs are `then`/`else`. Sequence outputs are `then_0`/`then_1`. **Macro nodes (ForEachLoop,
