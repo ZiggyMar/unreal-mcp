@@ -20,6 +20,9 @@ import { fileURLToPath } from "node:url";
 
 import type { BridgeLike } from "./autoLayout.js";
 import type { FindNodeResult, GetProjectOverviewResult, PingResult } from "./types.js";
+import { stat, open } from "node:fs/promises";
+import { logFileFor } from "./runtimeLog.js";
+import { patchDepthWarning } from "./livePatchDepth.js";
 
 /** The bridge protocol this server was written against. */
 const EXPECTED_PROTOCOL_VERSION = 1;
@@ -335,6 +338,46 @@ export async function runDoctor(
           detail: "The running plugin is built from the current C++ source.",
         });
       }
+    }
+  }
+
+  // 2a-ii. How far this editor has drifted from the binary it launched with.
+  //
+  // Live Coding is cumulative: each hot patch leaves the last one resident. Deep into a session the
+  // editor is running a stack of patched modules, and a crash there is much harder to attribute -
+  // which is exactly the situation this project found itself in when the editor died inside
+  // HandleCreateStruct at patch 166 on ordinary input.
+  //
+  // Only the tail of the log is read. It runs to tens of megabytes on a long session and the highest
+  // patch index is always near the end, so 512 KB is enough and a whole-file read would make the one
+  // tool people run when things are broken the slowest thing they own.
+  if (projectFile) {
+    try {
+      const logPath = logFileFor(projectFile);
+      const { size } = await stat(logPath);
+      const from = Math.max(0, size - 512 * 1024);
+      const handle = await open(logPath, "r");
+      let tail = "";
+      try {
+        const length = size - from;
+        const buffer = Buffer.alloc(Number(length));
+        await handle.read(buffer, 0, Number(length), from);
+        tail = buffer.toString("utf8");
+      } finally {
+        await handle.close();
+      }
+      const warning = patchDepthWarning(tail);
+      if (warning) {
+        checks.push({
+          name: "live coding depth",
+          status: "warn",
+          detail: warning.detail,
+          remedy: warning.remedy,
+        });
+      }
+    } catch {
+      // No log, no permission, no verdict. This is an advisory and must never be the reason the
+      // doctor itself fails.
     }
   }
 

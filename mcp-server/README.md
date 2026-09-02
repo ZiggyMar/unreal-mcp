@@ -210,7 +210,7 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
-would type — cost **14 calls and about 3,935 tokens of replies** together. `npm run trial:workflows`
+would type — cost **9 calls and about 4,418 tokens of replies** together. `npm run trial:workflows`
 prints that, and it is the number worth watching: it is what the work actually costs, rather than
 what the surface weighs.
 
@@ -10369,3 +10369,49 @@ client actually needs, including that `claude-code`'s output has *no* `mcpServer
 That is the fourth time in this project a test has agreed with the code instead of checking it, and
 the pattern is identical each time: the fixture was written from the implementation rather than from
 what the thing is for.
+
+### The editor crashed inside the bridge
+
+Running `npm run trial:workflows` — the three flagship journeys, which is the number this README
+quotes as "what the work actually costs" — the third journey timed out on `create_struct`, and the
+port went dead. The editor was gone.
+
+The log says what happened, and it is not a timeout:
+
+```text
+Unhandled Exception: EXCEPTION_ACCESS_VIOLATION reading address 0xffffffffffffffff
+  FMCPCommandHandler::HandleCreateStruct()   MCPCommandHandler.cpp:10671
+  FMCPTcpServer::ProcessClientSocket()       MCPTcpServer.cpp:645
+  FMCPTcpServer::Tick()                      MCPTcpServer.cpp:451
+```
+
+Line 10671 is the call into `FStructureEditorUtils::CreateUserDefinedStruct`. The input was ordinary
+— one package path, one `int` field named `Cost`.
+
+**The module in that stack is `UnrealEditor-UnrealMCPBridge.patch_166.exe`.** One hundred and
+sixty-six Live Coding hot patches deep, 686 Live Coding lines in the same log. Live Coding is
+cumulative: each patch leaves the last resident, so late in a session the editor is running a stack
+of patched modules rather than the binary it launched with. `CreateUserDefinedStruct` registers a new
+type with the engine's reflection system, which is exactly the sort of thing that goes wrong against
+hot-patched code.
+
+**That is a correlation with one witness and this does not claim more.** What can be said honestly is
+that the editor was in a state where a crash is very hard to attribute, and that a reader deserves to
+know before they go hunting a bug in C++ that may be fine.
+
+So `unreal_doctor` now says so:
+
+> **live coding depth** — Live Coding has hot-patched the bridge 166 times into this editor session,
+> so it is running patched modules rather than the binary it launched with. Restart the editor to get
+> back to a clean build before trusting a crash, a hang, or a command that behaves differently than
+> it did an hour ago. Nothing is wrong with the C++ on disk — this is about the process it has been
+> patched into.
+
+It fires at 25, so an ordinary afternoon of edits stays silent, and it reads the last 512 KB of a
+40 MB log rather than the whole thing — the tool people run when things are broken should not be the
+slowest thing they own.
+
+**The trial's own number was stale too.** This README said the three journeys cost "14 calls and
+about 3,935 tokens". They now cost **9 calls and ~4,418 tokens** — fewer calls, more tokens, because
+several replies grew coverage notes while others were cut. That is the honest figure and it is the
+one worth watching.
