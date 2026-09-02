@@ -250,6 +250,10 @@ export async function reviewBlueprint(
     path,
     score,
     summary,
+    // The one thing to do, before the findings it was derived from. It sat last, at 78% of a
+    // 13,000-character reply, which is the first thing a truncating reader loses - and the reader
+    // most in need of it. Key order is insertion order, so this costs nothing.
+    nextAction,
     // Graphs with findings in full; graphs without them by name only.
     //
     // BP_Player has 60 graphs and 13 of them have anything to say. The other 47 each carried a
@@ -285,6 +289,5 @@ export async function reviewBlueprint(
       // counted, in the totals and in the worstBlueprints ranking built on them.
       ...("variable" in rest && rest.variable ? { variable: rest.variable as string } : {}),
     })),
-    nextAction,
   };
 }

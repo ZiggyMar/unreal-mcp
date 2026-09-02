@@ -1424,6 +1424,13 @@ register(
       // for a sixth of the cost.
       return jsonResult(
         withCheaperForm(withFieldNote({
+        // Before the hundred rows it is advising you about. This sat last, at 97% of a 10,000-character
+        // reply - so the sentence explaining that the list is INCOMPLETE, and how to narrow it, was the
+        // part a truncating reader was guaranteed to miss.
+        next:
+          `${all.length} Blueprints in this project; ${limit} listed. Narrow with \`match\` (name, path ` +
+          `or parent class) or \`pathPrefix\`, use unreal_search_project to find one by what it contains, ` +
+          `or raise \`maxResults\`.`,
         ...result,
         blueprints: compact(filtered.slice(0, limit)),
         // `shown` used to sit here saying exactly what `count` now says. Two names for one number is
@@ -1433,10 +1440,6 @@ register(
         totalBlueprints: all.length,
         omitted: filtered.length - limit,
         truncated: true,
-        next:
-          `${all.length} Blueprints in this project; ${limit} listed. Narrow with \`match\` (name, path ` +
-          `or parent class) or \`pathPrefix\`, use unreal_search_project to find one by what it contains, ` +
-          `or raise \`maxResults\`.`,
         }), limit)
       );
     } catch (err) {

@@ -190,3 +190,27 @@ test("ordinary names are not reported", async () => {
   const review = await reviewBlueprint(bridge, "/Game/BP_X");
   assert.equal((review.blueprint ?? []).filter((f) => f.check === "name-has-stray-whitespace").length, 0);
 });
+
+test("the conclusion comes before the evidence it was drawn from", async () => {
+  // nextAction is the single thing to do about a Blueprint - the whole point of scoring one. It sat
+  // LAST, after every graph, every finding and every caveat: 78% of the way through a 13,288-character
+  // reply on BP_Player, and 91% on the project audit.
+  //
+  // That is the first thing a reader loses. A client that truncates, a context that fills, a person
+  // running `head -c 400` on the output - all of them keep the evidence and drop the verdict. The last
+  // of those is not hypothetical; it cost two wrong readings in the session that moved this.
+  //
+  // JSON key order is insertion order and JSON.stringify preserves it, so the fix costs nothing: the
+  // same reply, the same length, in the order a summary should arrive.
+  const review = await reviewBlueprint(fakeBridge([tickGraph("Busy", 8)]));
+  const keys = Object.keys(review);
+  const at = keys.indexOf("nextAction");
+  assert.ok(at >= 0, "nextAction is missing entirely");
+  assert.ok(
+    at < 5,
+    `nextAction is key ${at + 1} of ${keys.length}; it belongs near the front so a truncated read keeps it`
+  );
+
+  // And it must still be a real answer, not just early.
+  assert.ok(review.nextAction.length > 20, `nextAction is too short to act on: "${review.nextAction}"`);
+});

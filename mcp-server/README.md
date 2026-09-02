@@ -7424,6 +7424,7 @@ anybody noticed.
 - [A regression net for "reported success, changed nothing"](#a-regression-net-for-reported-success-changed-nothing)
 - [You could write a component property and never read it back](#you-could-write-a-component-property-and-never-read-it-back)
 - [The workflow guide told models to trust the echo](#the-workflow-guide-told-models-to-trust-the-echo)
+- [The answer was in the last 9% of the reply](#the-answer-was-in-the-last-9-of-the-reply)
 
 <!-- INDEX:END -->
 
@@ -11731,3 +11732,33 @@ an error — only as a feature that quietly does nothing.
 And it makes the point that the habit outlives the fixes. All three commands verify themselves now;
 the next command to grow this bug has not been found yet, and the reader is the only thing standing in
 front of it.
+
+### The answer was in the last 9% of the reply
+
+`nextAction` is the point of the whole audit — findings ranked by likely cost so one sentence can name
+the thing to do. Measured against a real project, here is where that sentence actually sat:
+
+| reply | field | position |
+|---|---|---|
+| `audit_project` | `nextAction` | **91%** of 13,106 chars |
+| `review_blueprint` | `nextAction` | **78%** of 13,288 chars |
+| `list_blueprints` | `next` | **97%** of 10,663 chars |
+
+The verdict came after every group, every caveat, every count and every row it was derived from —
+which makes it the **first thing a reader loses**. A client that truncates, a context that fills, a
+person running `head -c 400` on the output: all of them keep the evidence and drop the conclusion.
+
+That last one is not hypothetical. It happened twice in the session that found this — once on
+`unreal_start_pie`, whose `next` field named the exact flag needed, read only after wasting a round on
+the wrong theory.
+
+`list_blueprints` is the sharpest case: the sentence explaining that **the list is incomplete**, and
+how to narrow it, sat at 97%. A reader who stopped early got a hundred rows and no hint that there were
+more.
+
+All three now lead with it. **The replies are byte-identical in length** — 13,106, 13,288 and 10,663
+unchanged — because JSON key order is insertion order and `JSON.stringify` preserves it. Same content,
+same cost, arriving in the order a summary should: what to do, then why, then the evidence.
+
+A test pins `nextAction` within the first five keys of a review, and requires it to still be long
+enough to act on — early and empty would be a worse answer than late and useful.

@@ -1299,6 +1299,19 @@ const unresolvedClasses = new Set<string>();
         : "Nothing found worth reporting. Either the project is in good shape or the prefix matched nothing.";
 
   return {
+    /**
+     * The conclusion first, because the reply is 13,000 characters and this was at 91% of it.
+     *
+     * nextAction is the whole point of ranking findings by likely cost - it names the single thing to
+     * do. It sat last, after every group, every caveat and every count, which is the first thing a
+     * reader loses: a client that truncates, a context that fills, or a person running `head -c 400`
+     * on the output. That last one is not hypothetical; it cost two wrong readings in the session
+     * that moved this.
+     *
+     * JSON key order is insertion order and JSON.stringify preserves it, so this costs nothing. The
+     * same content arrives in the order a summary should: what to do, then why, then the evidence.
+     */
+    nextAction,
     ...(checkMissed
       ? {
           checkNotFound:
@@ -1387,6 +1400,5 @@ const unresolvedClasses = new Set<string>();
     dataTableNulls,
     dataTableDuplicateClasses,
     truncated: all.length > blueprints.length,
-    nextAction,
   };
 }
