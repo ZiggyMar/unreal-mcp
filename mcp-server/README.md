@@ -7414,6 +7414,7 @@ anybody noticed.
 - [A third of every C++ pre-push was proving something already proved](#a-third-of-every-c-pre-push-was-proving-something-already-proved)
 - [A comment edit stopped every push, and the error pointed forty lines away](#a-comment-edit-stopped-every-push-and-the-error-pointed-forty-lines-away)
 - [The index said 140 sections and there were 293](#the-index-said-140-sections-and-there-were-293)
+- [The suite got five minutes slower and nothing had changed](#the-suite-got-five-minutes-slower-and-nothing-had-changed)
 
 <!-- INDEX:END -->
 
