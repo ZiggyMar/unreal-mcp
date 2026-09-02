@@ -10082,3 +10082,39 @@ Worth noting how it was found: not by reading the code I had written, but by cal
 a deliberately impossible query and looking at what came back. The `unreachable` list in that same
 function *was* correctly suppressed when filtering, with a comment explaining why — so the author
 understood the rule and applied it to one of the three things that needed it.
+
+### `hitCount` counted what came back, not what matched
+
+The previous commit found a filter that only half-applied itself, by calling eight tools with a
+deliberately impossible query. The same method on a different axis — call six tools with a
+deliberately tiny cap and see whether the reply admits being cut — found something worse.
+
+```text
+find_node "get" maxResults 2    ->  hits 2,  hitCount 2
+find_node "get" maxResults 50   ->  hits 50, hitCount 50
+```
+
+Both replies claim to have counted, in a catalog of **15,234 functions**, and neither says the cap
+was hit. This is the tool the standing instructions point every model at before it writes a node —
+*"never guess a function name; a guess costs a failed call"* — so a caller told there are two matches
+for `"get"` may reasonably pick the better of two and never learn there were hundreds.
+
+Five of the six were honest. `search_project`, which does the same job over Blueprints, has always
+sent `truncated: Hits.Num() >= MaxResults`. `find_node` was never given it.
+
+```text
+find_node "get" maxResults 2         truncated: true   + "hitCount is what came back, not what matched"
+find_node "get" maxResults 50        truncated: true   + the same
+find_node "SpawnActorFromClass"      (nothing)         genuinely two hits, so nothing to say
+```
+
+The third line is the one that keeps it honest. A flag on every reply would be the same noise problem
+one level down, so it is emitted only when the cap was actually reached — and a search that really
+does match a handful stays clean.
+
+**No schema surface and no plugin rebuild.** The cap is the same arithmetic on this side of the wire,
+so all four ceilings are untouched and the fix reaches anyone running the current server against an
+older plugin.
+
+Two rounds, two defects, same method: not rereading the code, but calling the tools with inputs
+chosen to expose the boundary — nothing matched, and everything matched but capped.

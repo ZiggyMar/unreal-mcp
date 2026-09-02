@@ -2353,7 +2353,35 @@ register(
   async ({ query, maxResults }) => {
     try {
       const result = await bridge.send<FindNodeResult>("find_node", { query, maxResults });
-      return jsonResult(result);
+
+      /**
+       * `hitCount` is how many came BACK, not how many matched, and nothing said so.
+       *
+       *   find_node "get" maxResults 2   ->  hits 2,  hitCount 2
+       *   find_node "get" maxResults 50  ->  hits 50, hitCount 50
+       *
+       * Both replies claim to have counted, in a catalog of 15,234 functions. This is the tool the
+       * standing instructions point every model at before it writes a node - "never guess a function
+       * name" - so a caller told there are two matches for "get" may reasonably pick the better of
+       * two and never learn there were hundreds.
+       *
+       * search_project, which does the same job over Blueprints, has always sent
+       * `truncated: Hits.Num() >= MaxResults`. find_node was never given it. The cap is the same
+       * arithmetic on this side of the wire, so it needs no plugin rebuild.
+       *
+       * Emitted only when true, like the other flags in this file - absence is the common case and
+       * costs nothing to leave out.
+       */
+      const cap = Math.max(1, Math.min(maxResults ?? 20, 100));
+      const hits = (result as { hits?: unknown[] }).hits ?? [];
+      if (hits.length < cap) return jsonResult(result);
+      return jsonResult({
+        ...result,
+        truncated: true,
+        cappedNote:
+          `hitCount is what came back, not what matched - this reply hit the ${cap}-result cap. ` +
+          `Narrow the query or raise maxResults before concluding how many there are.`,
+      });
     } catch (err) {
       return errorResult(err);
     }
