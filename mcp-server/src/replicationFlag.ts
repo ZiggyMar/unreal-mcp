@@ -74,13 +74,29 @@ export function findReplicationFlagFaults(subjects: ReplicationSubject[]): Repli
       observed:
         `bReplicates is false; ${shown.join(", ")}${vars.length > shown.length ? `, and ${vars.length - shown.length} more` : ""} ` +
         `are marked Replicated.` +
-        (inherited ? ` The flag is inherited from ${parent}, which has the same problem.` : ""),
-      fix: inherited
-        ? `Fix ${parent} rather than this: tick "Replicates" in its Class Defaults and every child ` +
-          `inherits it, including this one. Fixing both would be doing it twice.`
-        : `Tick "Replicates" in Class Defaults, or drop the replication flags from the variables if ` +
-          `this Actor is genuinely local. Marking both ways round is the only combination that cannot ` +
-          `be right.`,
+        (inherited ? ` ${parent} has the same problem, and has to be fixed separately.` : ""),
+      /**
+       * Every class in the chain, not just the parent.
+       *
+       * This used to say: "Fix ${parent} rather than this - tick Replicates in its Class Defaults and
+       * every child inherits it. Fixing both would be doing it twice." That is wrong, and it was
+       * found by following it on a real project.
+       *
+       * BP_PlaceableBase was set to replicate and saved. BP_Turret and BP_DummyTurret, both direct
+       * children, still read `replicates: false` afterwards - and still did after the parent was
+       * recompiled. A child Blueprint's CDO carries its own serialized copy of the flag from the
+       * moment it was created; it does not follow the parent afterwards. All three had to be set.
+       *
+       * So the old advice sent a caller to fix one asset, told them the other two were done, and
+       * left the bug in place with a note saying it was handled. That is the worst shape a fix line
+       * can have: acting on it produces a confident, verifiable-looking, wrong report.
+       */
+      fix:
+        `Tick "Replicates" in Class Defaults - and do it on EVERY class here that reports this, ` +
+        `parent and children alike. A child's CDO holds its own copy of the flag, so setting the ` +
+        `parent does not change one already created, and recompiling the parent does not either. ` +
+        `The alternative is to drop the replication flags from the variables if this Actor is ` +
+        `genuinely local; marking both ways round is the only combination that cannot be right.`,
     });
   }
   return findings;
