@@ -262,6 +262,149 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameVariable(const TSharedPt
 	return MCPResponse::Ok(Result);
 }
 
+/**
+ * Rename a function, macro or event graph, and keep every RepNotify binding pointing at it.
+ *
+ * There was no way to rename a graph at all - rename_variable, rename_component, rename_asset,
+ * rename_struct_field and rename_enum_entry all existed, and the one a person does most often did
+ * not. It surfaced as a fix nobody could take: name-has-stray-whitespace tells a caller to rename
+ * "OnRep_VacuumDragged " and, for a graph, named an action this bridge could not perform.
+ *
+ * ## Why this also touches variables
+ *
+ * A RepNotify handler is bound BY NAME. FBPVariableDescription::RepNotifyFunc holds the function
+ * name as an FName, and nothing links it to the graph object - so renaming the graph on its own
+ * leaves the variable pointing at a function that no longer exists. The binding does not error. It
+ * simply stops firing, on clients only, which is the most expensive shape of bug this project knows
+ * about and exactly the one somebody would create while tidying up a name.
+ *
+ * So the rename updates any variable whose RepNotifyFunc named this graph, and reports how many.
+ * Doing half of this would be worse than doing none.
+ *
+ * Ubergraph pages are refused. "EventGraph" is not a function and renaming it is not the operation
+ * anybody means by "rename a function".
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRenameFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Path, OldName, NewName;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) ||
+		!Params->TryGetStringField(TEXT("functionName"), OldName) || OldName.IsEmpty())
+	{
+		return FailVar(Result, TEXT("missing_param"), TEXT("path and functionName are both required."));
+	}
+	if (!Params->TryGetStringField(TEXT("newName"), NewName) || NewName.IsEmpty())
+	{
+		return FailVar(Result, TEXT("missing_param"), TEXT("newName is required - what the function should be called."));
+	}
+
+	FString LoadError;
+	UBlueprint* Blueprint = LoadBlueprintByPath(Path, LoadError);
+	if (!Blueprint)
+	{
+		return FailVar(Result, TEXT("blueprint_not_found"), LoadError);
+	}
+
+	// Matched EXACTLY, including whitespace. The names this is most often reached for are the ones
+	// with a stray space in them, and a forgiving match would rename a different graph than the
+	// caller named while reporting success.
+	UEdGraph* Target = nullptr;
+	TArray<FString> Candidates;
+	auto Consider = [&](const TArray<TObjectPtr<UEdGraph>>& Graphs)
+	{
+		for (const TObjectPtr<UEdGraph>& Graph : Graphs)
+		{
+			if (!Graph) continue;
+			const FString Name = Graph->GetName();
+			Candidates.Add(Name);
+			if (Name.Equals(OldName, ESearchCase::CaseSensitive))
+			{
+				Target = Graph;
+			}
+		}
+	};
+	Consider(Blueprint->FunctionGraphs);
+	Consider(Blueprint->MacroGraphs);
+
+	if (!Target)
+	{
+		// An ubergraph page by that name is a different refusal from "no such graph", because the
+		// caller found a real name and this is declining to act on it.
+		for (const TObjectPtr<UEdGraph>& Graph : Blueprint->UbergraphPages)
+		{
+			if (Graph && Graph->GetName().Equals(OldName, ESearchCase::CaseSensitive))
+			{
+				return FailVar(Result, TEXT("not_a_function"),
+					FString::Printf(
+						TEXT("\"%s\" is an event graph, not a function or macro. Renaming it is not what ")
+						TEXT("\"rename a function\" means, and nothing has been changed."),
+						*OldName));
+			}
+		}
+		return FailVar(Result, TEXT("function_not_found"),
+			FString::Printf(
+				TEXT("No function or macro named \"%s\" on this Blueprint. It declares: %s. Names are matched ")
+				TEXT("exactly, including spaces - if the one you want has a stray space in it, pass it with the space."),
+				*OldName, Candidates.Num() > 0 ? *FString::Join(Candidates, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	if (NewName.Equals(OldName, ESearchCase::CaseSensitive))
+	{
+		return FailVar(Result, TEXT("no_change"),
+			FString::Printf(TEXT("\"%s\" is already its name. Nothing was done."), *OldName));
+	}
+	for (const FString& Existing : Candidates)
+	{
+		if (Existing.Equals(NewName, ESearchCase::CaseSensitive))
+		{
+			return FailVar(Result, TEXT("name_taken"),
+				FString::Printf(
+					TEXT("This Blueprint already has a graph called \"%s\". Nothing has been changed."), *NewName));
+		}
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPRenameFunction", "MCP: Rename Function"));
+	Blueprint->Modify();
+
+	FBlueprintEditorUtils::RenameGraph(Target, NewName);
+
+	if (!Target->GetName().Equals(NewName, ESearchCase::CaseSensitive))
+	{
+		return FailVar(Result, TEXT("rename_failed"),
+			FString::Printf(
+				TEXT("The editor did not rename \"%s\" - it is now called \"%s\". The usual cause is a collision ")
+				TEXT("with an inherited function or a reserved word."),
+				*OldName, *Target->GetName()));
+	}
+
+	// The half that makes this safe. See the note above the function.
+	int32 RepNotifiesRebound = 0;
+	TArray<TSharedPtr<FJsonValue>> ReboundList;
+	for (FBPVariableDescription& Variable : Blueprint->NewVariables)
+	{
+		if (Variable.RepNotifyFunc == FName(*OldName))
+		{
+			Variable.RepNotifyFunc = FName(*NewName);
+			RepNotifiesRebound += 1;
+			ReboundList.Add(MakeShared<FJsonValueString>(Variable.VarName.ToString()));
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	Result->SetStringField(TEXT("from"), OldName);
+	Result->SetStringField(TEXT("to"), NewName);
+	Result->SetNumberField(TEXT("repNotifiesRebound"), RepNotifiesRebound);
+	if (RepNotifiesRebound > 0)
+	{
+		Result->SetArrayField(TEXT("repNotifyVariables"), ReboundList);
+	}
+	Result->SetStringField(TEXT("next"),
+		TEXT("Callers of this function were rebound by the editor. compile_blueprint, then save_blueprint."));
+	return MCPResponse::Ok(Result);
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::HandleRemoveVariable(const TSharedPtr<FJsonObject>& Params)
 {
 	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();

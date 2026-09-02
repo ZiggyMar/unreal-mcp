@@ -663,7 +663,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ],
   // trace_variable sits with find_references because they are the same question asked of different
   // things - "where is this used" - and a caller reaching for one usually wants the other.
-  maintenance: ["unreal_document_asset", "unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
+  maintenance: ["unreal_document_asset", "unreal_asset_status", "unreal_find_references", "unreal_trace_variable", "unreal_trace_function_calls", "unreal_set_variable_type", "unreal_create_asset", "unreal_delete_asset", "unreal_rename_asset", "unreal_duplicate_asset", "unreal_rename_variable", "unreal_rename_function", "unreal_remove_variable", "unreal_rename_component", "unreal_remove_component", "unreal_remove_function", "unreal_refresh_blueprint"],
   // Only compile_cpp. find_source stays in `core`, and the reason is worth writing down because the
   // obvious tidy-up is wrong: enabling "core" enables CORE_PROFILE_TOOLS, not this table's `core`
   // entry, and find_source is in that set. Moving it here would have changed what unreal_list_tools
@@ -4677,6 +4677,39 @@ register(
         functionName: wanted,
         force,
       });
+      return jsonResult(await savedAfter(result, path, save));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_rename_function",
+  {
+    title: "Rename a function or macro, and keep its RepNotify binding",
+    description:
+      "Renames a function or macro graph. Callers are rebound by the editor, and - the part that matters - any " +
+      "variable whose RepNotify handler was this function is rebound too.\n\n" +
+      "**A RepNotify handler is bound by NAME.** The variable stores the handler as a string with no link to the " +
+      "graph, so renaming the graph alone leaves it pointing at a function that no longer exists. Nothing errors; " +
+      "the handler just stops firing, on clients only - the most expensive shape of bug there is, and an easy one " +
+      "to create while tidying a name. This does both halves and reports how many bindings moved.\n\n" +
+      "Names are matched EXACTLY, including whitespace, because the names this is most often needed for are the " +
+      "ones with a stray space (see the name-has-stray-whitespace finding) - pass the space if it has one. Event " +
+      "graphs are refused: \"EventGraph\" is not a function.",
+    inputSchema: {
+      path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
+      functionName: z
+        .string()
+        .describe('Current name, exactly as it is - e.g. "OnRep_VacuumDragged " with its trailing space.'),
+      newName: z.string().describe('New name, e.g. "OnRep_VacuumDragged".'),
+      save: z.boolean().optional().describe("Save afterwards. Defaults to true; an unsaved rename reverts on restart."),
+    },
+  },
+  async ({ path, functionName, newName, save }) => {
+    try {
+      const result = await bridge.send<Record<string, unknown>>("rename_function", { path, functionName, newName });
       return jsonResult(await savedAfter(result, path, save));
     } catch (err) {
       return errorResult(err);

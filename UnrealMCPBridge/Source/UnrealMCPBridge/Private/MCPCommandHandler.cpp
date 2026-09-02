@@ -1329,6 +1329,10 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleRenameVariable(Params);
 	}
+	else if (Cmd == TEXT("rename_function"))
+	{
+		Response = HandleRenameFunction(Params);
+	}
 	else if (Cmd == TEXT("remove_variable"))
 	{
 		Response = HandleRemoveVariable(Params);

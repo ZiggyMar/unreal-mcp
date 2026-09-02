@@ -133,6 +133,7 @@ private:
 	static TSharedRef<FJsonObject> HandleDuplicateAsset(const TSharedPtr<FJsonObject>& Params);
 	/** Rename a Blueprint variable, rebinding every GET and SET node that reads it. */
 	static TSharedRef<FJsonObject> HandleRenameVariable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleRenameFunction(const TSharedPtr<FJsonObject>& Params);
 	/** Remove a Blueprint variable, refusing while graph nodes still use it unless forced. */
 	static TSharedRef<FJsonObject> HandleRemoveVariable(const TSharedPtr<FJsonObject>& Params);
 	/** Rename a component through the SCS, so the graphs that reference it follow. */
