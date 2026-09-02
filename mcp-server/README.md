@@ -9747,3 +9747,40 @@ is now visible if a bigger one ever is.
 **A negative result is worth writing down too.** The sweep found one more instance and confirmed the
 other eight are fine. That is the useful output — not because anything was wrong with them, but
 because the next person to ask "where else is this happening" now has an answer instead of a search.
+
+### The planner told a model to extend a touch button for a movement upgrade
+
+Most of this project's recent work has been on finding bugs. The other half of the promise —
+*"I tell it a feature I want, it scans the current work, adapts to it, builds with it"* — is
+`unreal_plan_feature`, so it was worth running against a real request:
+
+> Add a Mobile Agent upgrade that makes the player faster and jump higher, sold in the shop like the
+> other upgrades
+
+Much of the plan is good. It finds the upgrade system (`BP_DamageUpgrade`, `BP_HealSpeedUpgrade`,
+`BP_ShopComponent`), and it flags `BP_Player` as high risk with 49 referencers. But it splits the
+request into words, and **"Mobile Agent" is a proper noun**:
+
+```text
+"upgrade" -> BP_ShopComponent (has function "HasUpgrade")        <- the real system
+"mobile"  -> W_ActionTouchButton_MobileOnly                      <- a touch-screen button
+```
+
+Both got the same sentence: *"already exists in this project … Extend it rather than adding a second
+one."* So the plan instructed a model to extend a touch control for a movement upgrade.
+
+Splitting proper nouns is the root cause and this does not fix it. What it fixes is presenting a
+name coincidence with the confidence of a finding. **The discriminator was already on the asset** —
+`reasons` records whether a match came from a function, a variable, a reference, or only the name —
+and nothing was reading it:
+
+> "mobile" appears in the NAME of 1 asset(s): W_ActionTouchButton_MobileOnly. Nothing else connects
+> them to this request, so that may be the same concept or a coincidence — read one before treating
+> it as the system to extend.
+
+`upgrade` and `jump` keep the strong wording, because they matched on functions and variables rather
+than on spelling. `player` keeps it too — a broad concept, but `has variable "PlayerName"` and
+`has function "DamagePlayer"` are real matches, and softening those would be the opposite mistake.
+
+The pattern is one this repo keeps arriving at from different directions: **the evidence for a claim
+was already recorded, and the claim was written without consulting it.**

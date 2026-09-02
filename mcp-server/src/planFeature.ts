@@ -267,10 +267,43 @@ export async function planFeature(
       readingOrder: map.readingOrder.slice(0, 4),
     });
 
+    /**
+     * How strong the evidence is, said in the advice rather than assumed.
+     *
+     * This used to assert "already exists ... extend it rather than adding a second one" for every
+     * concept with any direct match. Measured on "add a Mobile Agent upgrade that makes the player
+     * faster and jump higher":
+     *
+     *   "upgrade" -> BP_DamageUpgrade, BP_HealSpeedUpgrade, BP_ShopComponent (has function
+     *                "HasUpgrade")                                    <- the real system
+     *   "mobile"  -> W_ActionTouchButton_MobileOnly                   <- a touch-screen button
+     *
+     * Both got the same sentence, so the plan told a model to extend a touch control for a movement
+     * upgrade. "Mobile Agent" is a proper noun and splitting it into words destroyed the meaning -
+     * which this cannot fix - but it can stop presenting a coincidence with the confidence of a
+     * finding.
+     *
+     * The discriminator is already on the asset: `reasons` says whether a match came from a
+     * function, a variable, a reference, or only from the name. A concept whose every match is a
+     * name substring is a lead, not a system.
+     */
+    const nameOnly =
+      direct.length > 0 &&
+      direct.every((a) => {
+        const reasons = (a as { reasons?: string[] }).reasons ?? [];
+        return reasons.length > 0 && reasons.every((r) => /^name matches/.test(r));
+      });
+
     raiseWithUser.push(
-      `"${concept}" already exists in this project: ${direct.slice(0, 3).map((a) => a.name).join(", ")}` +
-        `${direct.length > 3 ? ` and ${direct.length - 3} more` : ""}. Extend it rather than adding a second one, ` +
-        `and confirm with the user if their request implies replacing it.`
+      nameOnly
+        ? `"${concept}" appears in the NAME of ${direct.length} asset(s): ` +
+          `${direct.slice(0, 3).map((a) => a.name).join(", ")}` +
+          `${direct.length > 3 ? ` and ${direct.length - 3} more` : ""}. Nothing else connects them to ` +
+          `this request, so that may be the same concept or a coincidence - read one before treating ` +
+          `it as the system to extend.`
+        : `"${concept}" already exists in this project: ${direct.slice(0, 3).map((a) => a.name).join(", ")}` +
+          `${direct.length > 3 ? ` and ${direct.length - 3} more` : ""}. Extend it rather than adding a second one, ` +
+          `and confirm with the user if their request implies replacing it.`
     );
 
     // "Already exists" and "already exists and is dead" lead to opposite plans.

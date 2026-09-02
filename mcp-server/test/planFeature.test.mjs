@@ -332,3 +332,39 @@ test("a noun that happens to be a verb elsewhere survives", async () => {
   assert.ok(extractConcepts("add a start menu").includes("start"));
   assert.ok(extractConcepts("add a run animation").includes("run"));
 });
+
+test("a name-only match is offered as a lead, not as the system to extend", async () => {
+  // Measured on a real project. "Add a Mobile Agent upgrade that makes the player faster and jump
+  // higher" split into words, and "mobile" matched W_ActionTouchButton_MobileOnly - a touch-screen
+  // button. It got the same sentence as "upgrade", which had matched BP_ShopComponent by its
+  // HasUpgrade function:
+  //
+  //   "mobile" already exists in this project: W_ActionTouchButton_MobileOnly. Extend it rather
+  //   than adding a second one.
+  //
+  // So the plan told a model to extend a touch control for a movement upgrade. Splitting a proper
+  // noun into words is what caused it and this cannot fix that, but it can stop presenting a name
+  // coincidence with the confidence of a finding. The discriminator is already on the asset:
+  // `reasons` says whether a match came from a function, a variable, a reference, or only a name.
+  const plan = await planFeature(
+    fakeBridge({
+      search_project: (params) =>
+        params.query === "door"
+          ? {
+              query: "door",
+              // kind "blueprint" is a name match and nothing else - no function, no variable.
+              hits: [{ kind: "blueprint", path: "/Game/BP/BP_Door.BP_Door", name: "BP_Door", context: "" }],
+              hitCount: 1,
+              truncated: false,
+            }
+          : { query: params.query, hits: [], hitCount: 0, truncated: false },
+    }),
+    "add a door opening sound"
+  );
+
+  const doorLine = (plan.raiseWithUser ?? []).find((r) => r.includes('"door"'));
+  assert.ok(doorLine, `expected a line about "door", got ${JSON.stringify(plan.raiseWithUser)}`);
+  assert.match(doorLine, /appears in the NAME/);
+  assert.match(doorLine, /coincidence/);
+  assert.doesNotMatch(doorLine, /Extend it rather than adding a second one/);
+});
