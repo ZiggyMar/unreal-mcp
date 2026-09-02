@@ -42,3 +42,38 @@ test("the parent-class tail is summarised, and the totals still add up", async (
     server.child.kill();
   }
 });
+
+test("a small index drift is one clause; a large one keeps the bridge's full warning", async () => {
+  // The bridge notices its cached index disagreeing with the editor and says so in 68 tokens. On
+  // this project the disagreement is 341 against 339 - 0.6%, present all session - and nothing a
+  // reader takes from this reply changes because of two Blueprints. A rounding error was being
+  // reported in a paragraph, on the first call of every session.
+  //
+  // Both branches matter: the trim must not apply when the cache really is stale, because then the
+  // advice about which tools are authoritative is worth its tokens.
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "full" }, "overview-drift-test");
+  try {
+    const res = await server.request("tools/call", { name: "unreal_get_project_overview", arguments: {} });
+    const text = res?.result?.content?.map((c) => c.text).join("\n") ?? "";
+    if (/UnrealMCPBridge error|not_connected|ECONNREFUSED/i.test(text)) return; // needs an editor
+    const overview = JSON.parse(text);
+    if (!overview.indexDrift) return; // no drift on this machine, nothing to assert about
+
+    const cached = overview.blueprintCount;
+    const inEditor = overview.blueprintCountInEditor ?? cached;
+    const ratio = Math.abs(cached - inEditor) / cached;
+
+    // Whichever branch ran, both numbers have to survive - a reader who cares about the exact
+    // disagreement must still be able to see it.
+    assert.match(String(overview.indexDrift), new RegExp(String(cached)));
+    assert.match(String(overview.indexDrift), new RegExp(String(inEditor)));
+
+    if (ratio < 0.02) {
+      assert.doesNotMatch(String(overview.indexDrift), /treat them as approximate/);
+    } else {
+      assert.match(String(overview.indexDrift), /authoritative/);
+    }
+  } finally {
+    server.child.kill();
+  }
+});

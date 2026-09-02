@@ -2098,8 +2098,47 @@ register(
         }
       }
 
+      /**
+       * The drift warning, sized to the drift.
+       *
+       * The bridge notices when its cached index and the editor disagree and says so in 68 tokens:
+       * "built from a cached index holding N Blueprints, and the editor currently has M ... treat
+       * them as approximate ... list_blueprints and list_assets read the editor directly and are
+       * authoritative."
+       *
+       * Every word of that is true and it is the right warning when the cache is badly out of date.
+       * On this project the disagreement is 341 against 339 - two Blueprints, 0.6% - and it has been
+       * there all session. Nothing anyone reads off this reply changes because of two: not the folder
+       * census, not the parent-class breakdown, not "is this project mostly widgets". So the full
+       * paragraph is paid on the first call of every session to report a rounding error.
+       *
+       * Under 2% it becomes one clause carrying the same two numbers, so a reader who cares can still
+       * see the exact disagreement. At or above 2% the bridge's own wording stands, because then the
+       * totals really might mislead and the advice about which tools are authoritative is worth its
+       * tokens.
+       *
+       * Sized here rather than in the C++ that writes it, for the usual reason: that would need a
+       * plugin rebuild before anyone benefits, and this is the layer that already trims this reply.
+       */
+      const overview = result as GetProjectOverviewResult & {
+        indexDrift?: string;
+        blueprintCountInEditor?: number;
+      };
+      const drift = typeof overview.indexDrift === "string" ? overview.indexDrift : undefined;
+      const cached = Number(result.blueprintCount ?? 0);
+      const inEditor = Number(overview.blueprintCountInEditor ?? cached);
+      const smallDrift =
+        drift !== undefined && cached > 0 && Math.abs(cached - inEditor) / cached < 0.02;
+
       return jsonResult({
         ...result,
+        ...(smallDrift
+          ? {
+              indexDrift:
+                `Cached index has ${cached} Blueprints, the editor has ${inEditor}; totals below are ` +
+                `the cache's. list_blueprints reads the editor.`,
+            }
+          : {}),
         byParentClass: kept,
         ...(tailClasses > 0
           ? {

@@ -9650,6 +9650,12 @@ top six from it — the same judgement, made independently, before this was meas
 previous commits took the whole-project audit from 3,206 to 2,968 tokens without anything being
 aimed at its size.
 
+It measures 3,171 today, and the difference is not drift. Two coverage notes were added deliberately
+afterwards — `parentCallNotChecked` at 190 tokens and the Data Table scan counts at 13 — because a
+check that ran on 13% of the project and a Data Table half that read nothing look identical to one
+that found nothing. That trade was made with the numbers in front of it: 203 tokens to stop three
+findings being read as a clean bill of health.
+
 ### Following a Data Table finding into the C++ that reads it
 
 The audit reports an empty class reference as *"whatever consumes it silently does nothing — no
@@ -9931,3 +9937,38 @@ fail is a guard nobody should believe.
 **It immediately caught my own miscount.** I had declared four allowances for `index.ts`; there are
 five, because `list_tools` tests a tool's name and its summary on separate lines. The first thing the
 guard did was contradict the person who wrote it.
+
+### A rounding error reported in a paragraph
+
+The bridge notices when its cached index and the editor disagree, and says so in 68 tokens: *"built
+from a cached index holding N Blueprints, and the editor currently has M … treat them as approximate
+… `list_blueprints` and `list_assets` read the editor directly and are authoritative."*
+
+Every word of that is true, and it is the right warning when the cache is badly out of date. On this
+project the disagreement is **341 against 339** — two Blueprints, 0.6%, present all session. Nothing
+anyone reads off this reply changes because of two: not the folder census, not the parent-class
+breakdown, not "is this project mostly widgets". The full paragraph was being paid on the first call
+of every session to report a rounding error.
+
+Under 2% it is now one clause carrying the same two numbers, so a reader who cares can still see the
+exact disagreement:
+
+> Cached index has 341 Blueprints, the editor has 339; totals below are the cache's.
+> `list_blueprints` reads the editor.
+
+At or above 2% the bridge's own wording stands, because then the totals really might mislead and the
+advice about which tools are authoritative earns its tokens. **Both branches are asserted** — the
+test checks that whichever fires, both numbers survive, and that the trim does *not* apply when the
+cache is genuinely stale. Sizing a warning to the thing it warns about is only an improvement if the
+big case still gets the big warning.
+
+The orientation call is now **377 tokens**, from 702 three commits ago.
+
+| | tokens |
+|---|---:|
+| `get_project_overview` originally | 702 |
+| after trimming the parent-class tail | 416 |
+| after sizing the drift note | **377** |
+
+Sized in the tool layer rather than in the C++ that writes it, for the usual reason: that needs a
+plugin rebuild before anyone benefits, and this is the layer already trimming this reply.
