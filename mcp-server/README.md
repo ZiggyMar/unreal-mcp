@@ -7413,6 +7413,7 @@ anybody noticed.
 - [One dialog stops the whole server, and a tool cannot click it](#one-dialog-stops-the-whole-server-and-a-tool-cannot-click-it)
 - [A third of every C++ pre-push was proving something already proved](#a-third-of-every-c-pre-push-was-proving-something-already-proved)
 - [A comment edit stopped every push, and the error pointed forty lines away](#a-comment-edit-stopped-every-push-and-the-error-pointed-forty-lines-away)
+- [The index said 140 sections and there were 293](#the-index-said-140-sections-and-there-were-293)
 
 <!-- INDEX:END -->
 
