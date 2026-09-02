@@ -9818,3 +9818,43 @@ nothing. Two layers, opposite matching rules, both correct for their own job.
 The feature was deleted rather than kept. It compiled, it was tested, and it did nothing — which is
 the same shape as the thrown-error path removed earlier in this project, found the same way: by
 checking whether the new code had actually changed the output, rather than whether it ran.
+
+### What this cannot do, and proof that the rest of it can
+
+Two questions worth answering with measurements rather than confidence: where does the tool surface
+actually stop, and does the flagship path still work end to end?
+
+**The boundary.** Of 108 bridge commands, exactly three subject areas are read-only:
+
+| | can read | can write |
+|---|---|---|
+| Level Sequence | `read_level_sequence` | — |
+| Behavior Tree | `read_behavior_tree` | — |
+| Timeline | `read_timeline` | — |
+
+Everything else that can be read can also be changed — Niagara has `set_niagara_user_parameter`,
+materials have `create_material` and `set_material_parameter`, input has `add_input_mapping` and
+`map_input_key`, widgets have `add_widget` and `set_widget_property`, montages have
+`add_montage_notify`. Closing the three needs new C++ in the bridge and a plugin rebuild, which is
+why they are listed rather than quietly missing.
+
+**The path.** Create a Blueprint with a variable, a component and event logic, then compile, review,
+verify and delete it — the sequence the standing instructions describe, run against a live editor:
+
+| step | tokens | |
+|---|---:|---|
+| `scaffold_blueprint` | 187 | Blueprint, variable, SphereComponent, BeginPlay chain, in one call |
+| `compile_blueprint` | 21 | 0 errors |
+| `review_blueprint` | 227 | score 96 |
+| `verify_feature` | 281 | **fail** |
+| `delete_asset` | 11 | |
+| | **727** | a whole feature built and checked |
+
+The `fail` is correct and worth keeping as the example. The scaffold's only action was a
+`Print String`, so `debug-print-left-in` fired: *"Remove them before calling the feature done, or
+confirm they are deliberate developer output."* A verifier that passed that would be worthless.
+
+**Also checked, and true**: `unreal_find_node` promises that `"Array Length"`, `"array_length"` and
+`"ArrayLength"` all find `Array_Length`. All three do. That promise is what makes the
+`search_project` space trap in the previous commit surprising — the two search surfaces genuinely
+behave differently, and only one of them says so.
