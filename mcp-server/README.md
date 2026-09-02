@@ -7418,6 +7418,7 @@ anybody noticed.
 - [Two class pins kept nothing, and everything reported success](#two-class-pins-kept-nothing-and-everything-reported-success)
 - [The hook said the plugin does not compile, about source that compiles](#the-hook-said-the-plugin-does-not-compile-about-source-that-compiles)
 - [`force: true` meant "do not tell me", and it should have meant "I accept it"](#force-true-meant-do-not-tell-me-and-it-should-have-meant-i-accept-it)
+- [The escape hatch produced the failure it warned about](#the-escape-hatch-produced-the-failure-it-warned-about)
 
 <!-- INDEX:END -->
 
@@ -11525,3 +11526,35 @@ One registry query per asset, which was already being paid on the non-forced pat
 
 All fifteen were restored with `dv reset -f` — uncommitted, so version control still had them — which
 is the only reason this cost minutes instead of a rebuild.
+
+### The escape hatch produced the failure it warned about
+
+`unreal_start_pie` refuses when any Blueprint has compile errors, saying PIE "stops on a modal that
+nothing here can dismiss". Its advice was:
+
+> "Pass `ignoreCompileErrors:true` to start anyway — that is the same choice the dialog offers a
+> person, and it is right when the broken Blueprints are unrelated to what you are testing."
+
+It is **not** the same choice. It skips *that pre-check*. It does not answer the engine's dialog, and
+the dialog is what stops PIE.
+
+Measured on a project with 15 broken Lyra front-end Blueprints, all unrelated to the level under test
+— the exact case the old wording called out as safe. PIE started, the log ran to the compile warnings,
+and stopped. Five minutes later the game thread was still blocked, and `unreal_doctor` confirmed the
+port was accepting while nothing answered. **The advice created the hang it was warning about.**
+
+Two things worth separating here.
+
+**The flag still has a legitimate use**, so it stays: a person watching the editor can click the
+dialog, and then it works exactly as described. What was wrong is offering it to a caller with no eyes
+on the screen without saying so. The advice now states what was measured, and points unattended
+callers at the real remedy — fix or remove the broken Blueprints, with `project_health` to list them
+and `delete_asset` *without* force to name what still references them.
+
+**And the refusal was right all along.** I doubted it, because PIE had run cleanly once — but that run
+was after the fifteen were deleted, which is precisely the condition the check exists to describe.
+The check was measuring something true; only its remedy was wrong.
+
+The diagnosis came from `unreal_doctor` correctly reporting "the editor is RUNNING and its game thread
+is blocked", which it could not have said before this session. A fix built four commits earlier
+identified the failure mode of a fix being built now.

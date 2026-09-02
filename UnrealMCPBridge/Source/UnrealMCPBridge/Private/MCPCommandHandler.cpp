@@ -5799,11 +5799,31 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleStartPie(const TSharedPtr<FJso
 					Names.Add(MakeShared<FJsonValueString>(Name));
 				}
 				Refusal->SetArrayField(TEXT("blueprintsWithErrors"), Names);
+				/**
+				 * What ignoreCompileErrors actually does, which is less than this used to promise.
+				 *
+				 * It said: "pass ignoreCompileErrors:true to start anyway - that is the same choice the
+				 * dialog offers a person". It is not. It skips THIS pre-check; it does not answer the
+				 * engine's dialog, and the dialog is what stops PIE.
+				 *
+				 * Measured on a project with 15 broken Lyra front-end Blueprints, all unrelated to the
+				 * level under test - the exact case the old wording called out as safe. PIE started,
+				 * the log ran to the compile warnings, and stopped. The editor's game thread was still
+				 * blocked five minutes later, and unreal_doctor confirmed the port was accepting while
+				 * nothing answered. The advice produced the failure it was warning about.
+				 *
+				 * So it is still offered, because a person watching the editor CAN click the dialog and
+				 * then it genuinely works - but a caller with no eyes on the screen has to be told that
+				 * up front rather than discovering it as a hung session.
+				 */
 				Refusal->SetStringField(TEXT("next"),
-					TEXT("Pass ignoreCompileErrors:true to start anyway - that is the same choice the dialog "
-						"offers a person, and it is right when the broken Blueprints are unrelated to what you are "
-						"testing. compile_blueprint on one reports the actual errors; project_health lists them "
-						"all under doesNotCompile."));
+					TEXT("ignoreCompileErrors:true skips THIS check - it does not dismiss the engine's dialog, "
+						"and that dialog is what stops PIE. Measured: with 15 unrelated Blueprints broken, PIE "
+						"started and the editor then sat blocked on the modal until it was killed. Use it only if "
+						"a person is watching the editor and can click through. Unattended, FIX or DELETE the "
+						"broken Blueprints first: project_health lists them under doesNotCompile, compile_blueprint "
+						"on one reports its actual errors, and delete_asset (without force) will name anything that "
+						"still references them."));
 				return MCPResponse::Fail(Refusal, TEXT("blueprints_do_not_compile"),
 					FString::Printf(TEXT("%d Blueprint(s) have compiler errors, so Play In Editor stops on a modal "
 						"that nothing here can dismiss. Starting anyway would report success and do nothing."),
