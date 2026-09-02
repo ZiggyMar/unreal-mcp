@@ -10333,3 +10333,39 @@ that the names are gone from the prose and that the meaning survived.
 Also probed this round and found nothing: Server RPCs on non-replicating Actors. That would be the
 same silent failure as the replicated-variable check, and the project has **zero** instances — so no
 check was written. A check with no evidence behind it is a guess with a cost.
+
+### The first instruction anyone follows did not match its own payload
+
+`--print-config` exists so nobody has to hand-write a client config. For Claude Code it printed:
+
+```text
+# Paste this into: run: claude mcp add-json unreal '<the JSON below>'
+
+{ "mcpServers": { "unreal": { "command": ..., "args": ..., "env": ... } } }
+```
+
+`claude mcp add-json unreal '<json>'` takes the **server object**. Handed the wrapper, it registers a
+server whose configuration is another configuration — and the failure arrives later, as a server that
+will not start, with nothing pointing back at the instruction that caused it.
+
+Claude Code now gets the object that command actually takes, and the file-editing clients keep the
+wrapper they need:
+
+```text
+claude-code       { "command": ..., "args": [...], "env": {...} }
+claude-desktop    { "mcpServers": { "unreal": { ... } } }
+cursor            { "mcpServers": { "unreal": { ... } } }
+```
+
+The guidance is per-client too, because the old text was written for a file: *"if the file already
+has an mcpServers block, add the unreal entry inside it"* is advice about a file that Claude Code
+users never open. They get the quoting note for PowerShell instead, `claude mcp list` to confirm it
+took, and the reminder that an open session keeps the tool list it started with.
+
+**The test was asserting the bug.** It checked `.mcpServers.unreal` for all three clients — the same
+assumption the code made — so it passed while the instruction was wrong. It now asserts what each
+client actually needs, including that `claude-code`'s output has *no* `mcpServers` key.
+
+That is the fourth time in this project a test has agreed with the code instead of checking it, and
+the pattern is identical each time: the fixture was written from the implementation rather than from
+what the thing is for.

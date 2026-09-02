@@ -295,15 +295,32 @@ test("--print-config emits a usable client config with absolute paths", async ()
   assert.match(out, /FULLY QUIT/i);
 });
 
-test("--print-config supports the clients people actually use", async () => {
+test("--print-config emits the shape each client actually takes", async () => {
+  // This asserted `.mcpServers.unreal` for all three, which is why the bug survived: the file
+  // clients edit a JSON file and need that wrapper, but `claude mcp add-json unreal '<json>'` takes
+  // the SERVER OBJECT on its own. The tool printed the wrapper to all three while telling Claude
+  // Code users to run that command, so following the instruction literally registered a server whose
+  // config was another config - and the test encoded the same mistake as the code.
   const { execFileSync } = await import("node:child_process");
-  for (const client of ["claude-desktop", "cursor", "claude-code"]) {
+  const configOf = (client) => {
     const out = execFileSync(process.execPath, [serverPath, "--print-config", "--client", client], {
       encoding: "utf8",
     });
-    assert.ok(JSON.parse(out.slice(out.indexOf("{"))).mcpServers?.unreal, `${client} produced no config`);
-    assert.match(out, /Paste this into|claude mcp add-json/);
+    return { out, json: JSON.parse(out.slice(out.indexOf("{"))) };
+  };
+
+  for (const client of ["claude-desktop", "cursor"]) {
+    const { out, json } = configOf(client);
+    assert.ok(json.mcpServers?.unreal?.command, `${client} edits a file and needs the mcpServers wrapper`);
+    assert.match(out, /Paste this into/);
   }
+
+  const { out, json } = configOf("claude-code");
+  assert.equal(json.mcpServers, undefined, "add-json takes the server object, not a config file");
+  assert.ok(json.command, "the server object needs a command");
+  assert.ok(Array.isArray(json.args) && json.args.length > 0, "and the path to this server");
+  assert.equal(json.env?.UNREAL_MCP_PROFILE, "search", "and the cheap profile, which is the point of emitting it");
+  assert.match(out, /claude mcp add-json/);
 });
 
 test("individual tools can be enabled by name, not only whole groups", async () => {

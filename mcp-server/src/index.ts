@@ -7961,10 +7961,22 @@ async function main() {
       },
     };
 
+    /**
+     * Claude Code takes the SERVER object; the file-editing clients take the wrapper.
+     *
+     * This printed `{ "mcpServers": { "unreal": ... } }` for all three while telling Claude Code
+     * users to run `claude mcp add-json unreal '<the JSON below>'`. That command takes the server
+     * object on its own, so following the instruction literally registers a server whose config is
+     * another config - and the failure arrives later, as a server that will not start, with nothing
+     * pointing back here.
+     *
+     * It is the first thing anyone does with this project, and it was the one instruction that did
+     * not match its own payload.
+     */
     const configs: Record<string, unknown> = {
       "claude-desktop": { mcpServers: { unreal: server } },
       cursor: { mcpServers: { unreal: server } },
-      "claude-code": { mcpServers: { unreal: server } },
+      "claude-code": server,
     };
     const chosen = configs[client] ?? configs["claude-desktop"];
 
@@ -7973,14 +7985,27 @@ async function main() {
         ? `%APPDATA%${BACKSLASH}Claude${BACKSLASH}claude_desktop_config.json`
         : "~/Library/Application Support/Claude/claude_desktop_config.json",
       cursor: isWindows ? `%USERPROFILE%${BACKSLASH}.cursor${BACKSLASH}mcp.json` : "~/.cursor/mcp.json",
-      "claude-code": "run: claude mcp add-json unreal '<the JSON below>'",
+      "claude-code": "claude mcp add-json unreal '<the JSON below>'",
     };
 
-    console.log(`# Paste this into: ${where[client] ?? where["claude-desktop"]}`);
-    console.log("#");
-    console.log("# Paths are absolute and already correct for this machine. If the file already has");
-    console.log('# an "mcpServers" block, add the "unreal" entry inside it rather than replacing it.');
-    console.log("# Then FULLY QUIT the client and reopen it - closing the window is not enough.");
+    if (client === "claude-code") {
+      console.log(`# Run: ${where["claude-code"]}`);
+      console.log("#");
+      console.log("# The JSON below is the server object that command expects - not a file to edit,");
+      console.log('# and not wrapped in "mcpServers". Paths are absolute and correct for this machine.');
+      console.log("#");
+      console.log("# On Windows PowerShell the single quotes above are not string delimiters: use");
+      console.log("#   claude mcp add-json unreal '<json>'   in Git Bash, or double the inner quotes");
+      console.log("#   in PowerShell. `claude mcp list` afterwards should show unreal.");
+      console.log("#");
+      console.log("# Start a NEW session to pick it up - an open one keeps the tool list it started with.");
+    } else {
+      console.log(`# Paste this into: ${where[client] ?? where["claude-desktop"]}`);
+      console.log("#");
+      console.log("# Paths are absolute and already correct for this machine. If the file already has");
+      console.log('# an "mcpServers" block, add the "unreal" entry inside it rather than replacing it.');
+      console.log("# Then FULLY QUIT the client and reopen it - closing the window is not enough.");
+    }
     console.log("");
     console.log(JSON.stringify(chosen, null, 2));
     process.exit(0);
