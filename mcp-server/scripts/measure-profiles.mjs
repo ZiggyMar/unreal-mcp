@@ -100,7 +100,17 @@ export const PROFILES = [
     // is never compacted anyway, so `verbose` is the ONLY way to see the passing detail through
     // the MCP at all. Removing it would have kept the ceiling untouched by quietly deleting an
     // ability, which is the trade this project is explicitly not making.
-    ceilingTokens: 13_150,
+    // Raised by 50 for review_blueprint's `check`, measured rather than nudged.
+    //
+    // The parameter costs 36 standing tokens, paid once and then served from the prompt cache. It
+    // buys a review of BP_Player at 1,201 tokens instead of 3,279 when the question is about one
+    // kind of finding - 2,078 saved - on the tool step 6 of the standing instructions makes every
+    // authoring session run, usually twice. Break-even is the first filtered call.
+    //
+    // audit_project has taken a `check` since it was written; the per-asset half of the same job
+    // never did, so a caller with a specific question had to take everything or narrow by graph and
+    // hope the finding lived there. That asymmetry was the defect; this is its price.
+    ceilingTokens: 13_200,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {
@@ -132,7 +142,17 @@ export const PROFILES = [
     // is never compacted anyway, so `verbose` is the ONLY way to see the passing detail through
     // the MCP at all. Removing it would have kept the ceiling untouched by quietly deleting an
     // ability, which is the trade this project is explicitly not making.
-    ceilingTokens: 13_450,
+    // Raised by 50 for review_blueprint's `check`, measured rather than nudged.
+    //
+    // The parameter costs 36 standing tokens, paid once and then served from the prompt cache. It
+    // buys a review of BP_Player at 1,201 tokens instead of 3,279 when the question is about one
+    // kind of finding - 2,078 saved - on the tool step 6 of the standing instructions makes every
+    // authoring session run, usually twice. Break-even is the first filtered call.
+    //
+    // audit_project has taken a `check` since it was written; the per-asset half of the same job
+    // never did, so a caller with a specific question had to take everything or narrow by graph and
+    // hope the finding lived there. That asymmetry was the defect; this is its price.
+    ceilingTokens: 13_500,
     why: "the recommended default; the local-model benchmark result is measured with this",
   },
   {
@@ -200,7 +220,11 @@ export const PROFILES = [
     // promises: `search` must cost less than the thing it discovers, `minimal` must fit a small
     // local model. Those are the numbers a frontier model actually pays - `search` is 2,205 - and
     // they have not moved while `full` doubled.
-    ceilingPerTool: 350,
+    // 350 -> 352 for the same `check` parameter. The number this guard is really about is whether
+    // DESCRIPTIONS are bloating, and they are not: the per-tool average of the tool definitions is
+    // 342 and flat. The overage is the fixed 1,029-token instruction block divided across 133 tools,
+    // which one new parameter tipped over a threshold it was already sitting on.
+    ceilingPerTool: 352,
     why: "everything, for frontier models that can afford it",
   },
 ];

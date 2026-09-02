@@ -203,10 +203,10 @@ table cannot quietly go stale the way the standing instructions did.
 | profile | standing tokens | what it is |
 |---|---:|---|
 | `search` | 2503 | five tools; hand it a sentence or a preset name |
-| `minimal` | 4216 | ten tools, fixed, for a small local model |
-| `core` | 13137 | the authoring spine |
-| `lazy` | 13446 | `core` plus deferred groups |
-| `full` | 46543 | everything, for a model that can afford it |
+| `minimal` | 4251 | ten tools, fixed, for a small local model |
+| `core` | 13173 | the authoring spine |
+| `lazy` | 13481 | `core` plus deferred groups |
+| `full` | 46578 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -9972,3 +9972,41 @@ The orientation call is now **377 tokens**, from 702 three commits ago.
 
 Sized in the tool layer rather than in the C++ that writes it, for the usual reason: that needs a
 plugin rebuild before anyone benefits, and this is the layer already trimming this reply.
+
+### `review_blueprint` can be asked one question now
+
+`unreal_audit_project` has taken a `check` since it was written — *"pass its `check` to get one kind
+of finding back in full"*. `unreal_review_blueprint`, the per-asset half of the same job and the tool
+step 6 of the standing instructions makes every authoring session run, never did. A caller with a
+specific question had two options: take everything, or narrow by graph and hope the finding lived
+there.
+
+| | tokens | |
+|---|---:|---|
+| whole review of `BP_Player` | 3,279 | |
+| `check: "server-writes-unreplicated"` | **1,201** | *"4 of 31 finding(s); the rest are other kinds"* |
+| `check: "branch-decides-nothing"` | 535 | names what it *did* find |
+
+**A filtered review must not read as a clean one.** This project has spent several commits on the
+difference between "nothing found" and "nothing looked", and a filter that simply returned fewer
+findings would be the same trap one level down — ask for `server-writes-unreplicated` on a Blueprint
+riddled with dead nodes and get back something short and reassuring.
+
+So the score and the counts still describe the **whole** review, the reply says outright how many it
+withheld, and a `check` that matched nothing is answered differently from one that is not a real
+check name — the same distinction `audit_project` draws with `checkNotFound`. All four are asserted.
+
+Filtered where the review is *serialised*, not where it is produced: `audit.ts` reads the unfiltered
+review off the same function in twelve places. Same rule as `dedupeFixes`, which sits two lines away
+for the same reason.
+
+The parameter costs 36 standing tokens and three ceilings moved for it — `core` 13,200, `lazy`
+13,500, `full` 352/tool. Break-even is the first filtered call. The number `full`'s ceiling is really
+about is whether descriptions are bloating, and they are not: the per-tool average is 342 and flat.
+
+**Two measurements this round found nothing worth changing**, which is worth recording so the next
+iteration does not repeat them. The seven `server-writes-unreplicated` messages on `BP_Player` look
+repetitive and are not — they are evidence-tiered, one saying *"nothing in this Blueprint reads it
+either"* and another not, so collapsing them would flatten a real distinction. And `nextAction` does
+restate a finding's message verbatim, but both come from the same source and cannot drift, and the
+full sentence in one place is what the weaker profiles rely on. Redundancy, not inconsistency.

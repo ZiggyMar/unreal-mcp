@@ -92,6 +92,7 @@ import {
 } from "./suggestPath.js";
 import { rankNames } from "./didYouMean.js";
 import { matchTerms, matchesAllTerms } from "./matchTerms.js";
+import { filterReviewByCheck, type ReviewLike } from "./filterReview.js";
 
 const BRIDGE_HOST = process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1";
 const BRIDGE_PORT = Number(process.env.UNREAL_MCP_BRIDGE_PORT ?? 8765);
@@ -4371,9 +4372,13 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe("Review only this graph. Omit to review every graph in the Blueprint."),
+      check: z
+        .string()
+        .optional()
+        .describe('One kind only, e.g. "server-writes-unreplicated". Score and counts still cover the whole review.'),
     },
   },
-  async ({ path, graphName }) => {
+  async ({ path, graphName, check }) => {
     try {
       // Compile first, and lead with it if it fails.
       //
@@ -4391,8 +4396,13 @@ register(
         .catch(() => null);
       // Deduped here, where the review is SERIALISED, not where it is produced: audit.ts reads
       // finding.fix in twelve places off the same function. See dedupeFixes.ts.
+      // Filtered here, where the review is SERIALISED, for the same reason dedupeFixes runs here:
+      // audit.ts reads the unfiltered review off the same function in twelve places.
       const result = withDisabledToolNote(
-        dedupeFixes(await reviewBlueprint(bridge, path, graphName)),
+        filterReviewByCheck(
+          dedupeFixes(await reviewBlueprint(bridge, path, graphName)) as unknown as ReviewLike,
+          check
+        ) as unknown as Record<string, unknown>,
         isToolEnabled
       );
 
