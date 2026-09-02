@@ -2193,6 +2193,24 @@ static bool ValidateNewAssetPath(const FString& PackagePath, FString& OutError)
  */
 static bool EnsureAssetNameIsFree(UPackage* Package, const FString& AssetName, FString& OutError)
 {
+	// An empty name, before anything is asked of the engine.
+	//
+	// Every create path derives its name with FPackageName::GetShortName, which returns an empty
+	// string for a path that ends in a slash - and an empty FName then goes to a factory or to
+	// FStructureEditorUtils, which register types with the reflection system rather than validating
+	// their arguments. That is the shape of call that faults instead of returning, which is the exact
+	// failure this function's header is about.
+	//
+	// Here rather than in each handler because seven of them call this and none of them checked:
+	// create_blueprint, create_widget_blueprint, create_data_table, create_struct, create_enum,
+	// create_material, create_material_instance. One gate, one implementation.
+	if (AssetName.IsEmpty())
+	{
+		OutError = TEXT("bad_path: there is no asset name after the last slash. A path is a folder and ")
+			TEXT("then the name to create, as in /Game/Data/S_Item - not /Game/Data/.");
+		return false;
+	}
+
 	UObject* Existing = StaticFindObject(nullptr, Package, *AssetName);
 	if (!Existing)
 	{
@@ -10655,26 +10673,6 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleCreateStruct(const TSharedPtr<
 	}
 
 	const FString AssetName = FPackageName::GetShortName(PackagePath);
-	// Defensive, and honest about why it is here.
-	//
-	// The editor crashed inside FStructureEditorUtils::CreateUserDefinedStruct below -
-	// EXCEPTION_ACCESS_VIOLATION, in module UnrealEditor-UnrealMCPBridge.patch_166.exe - on ordinary
-	// input. This guard is NOT known to be the cause; the evidence points at 166 Live Coding patches
-	// rather than at this source, and unreal_doctor now reports that depth for exactly that reason.
-	//
-	// It is still a real gap. A path that ends in a slash leaves GetShortName empty, and handing an
-	// empty FName to an engine function that goes on to register a type with the reflection system is
-	// the shape of call that faults rather than returns. Nine handlers in this file derive an asset
-	// name this way and none of them checked it. Refusing costs one comparison and turns a possible
-	// crash into a sentence.
-	if (AssetName.IsEmpty())
-	{
-		return MakeErrorResponse(FString::Printf(
-			TEXT("bad_path: %s has no asset name after the last slash. A struct path is a folder and ")
-			TEXT("then the name to create, as in /Game/Data/S_Item."),
-			*PackagePath));
-	}
-
 	UPackage* Package = CreatePackage(*PackagePath);
 	if (!Package)
 	{

@@ -10524,3 +10524,40 @@ Both branches were checked against real commits before this was trusted: `215b7b
 refusal naming `--no-verify`, not a quiet pass. A guard that succeeds when it could not do its job is
 the false confidence this repo has spent a dozen commits removing — and it would be worst here, on
 the half that can crash an editor.
+
+### One gate instead of nine, and the guard got smaller
+
+Two commits ago `create_struct` gained an empty-name guard and the other eight handlers with the same
+gap were deliberately left alone: *"eight more written the same afternoon, none of them reachable by
+a test, is a patch of speculation across a file that can take the editor down."*
+
+That was the right call for eight copies of a guard. It was the wrong shape of fix. Seven of those
+handlers already funnel through one function:
+
+```cpp
+static bool EnsureAssetNameIsFree(UPackage* Package, const FString& AssetName, FString& OutError)
+```
+
+whose own header says *"a tool that can crash the editor from a plain input mistake is worse than one
+missing the feature, so every create path checks this first."* It was already the designated
+crash-prevention gate; it simply did not check whether the name existed at all.
+
+The check moved there, and the `create_struct` copy came out with it:
+
+| | |
+|---|---|
+| handlers guarded | 1 → **7** |
+| lines of C++ | **−2** |
+
+`create_blueprint`, `create_widget_blueprint`, `create_data_table`, `create_struct`, `create_enum`,
+`create_material`, `create_material_instance` — one implementation, one message, no place for the
+seven to drift apart. Which matters more than the line count: eight copies of a rule is eight chances
+for one of them to be edited and the rest forgotten, and this project has spent a dozen commits
+removing exactly that.
+
+`create_level` still derives a name without passing through this gate. It is named here rather than
+patched, because a handler that does not use the shared path needs its own look rather than a copied
+line.
+
+Compile-verified in 77 seconds before committing — and from this commit on the pre-push hook would
+have done it anyway, which is the difference between remembering and not having to.
