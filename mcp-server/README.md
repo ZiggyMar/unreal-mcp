@@ -10184,3 +10184,40 @@ is the useful part; the judgement belongs to the caller.
 The failure case is asserted too: a bridge without `find_references` leaves the ranking intact and
 the field absent, rather than reporting zero — which would read as "nothing uses this" and mean the
 opposite.
+
+### Answering the question the last commit raised
+
+The previous commit reported that `PC_TutGameplay` and `GS_TutGameplay` sit third and eighth in the
+"what to fix" ranking with nothing referencing them, and left it there as a flag. That is an
+uncomfortable place to stop: a reader cannot act on "possibly unused". So the next step was to settle
+it, by reading the tutorial GameMode's class defaults:
+
+```text
+GM_TutGameplay.GameStateClass         GS_PlacementManager
+GM_TutGameplay.PlayerControllerClass  PC_Gameplay          <- not PC_TutGameplay
+GM_TutGameplay.PlayerStateClass       PS_Gameplay          <- not PS_TutGameplay
+GM_TutGameplay.DefaultPawnClass       (engine default)     <- GM_Gameplay sets BP_Player
+```
+
+The tutorial GameMode selects none of the tutorial classes. That is why the reference count is zero,
+and it also turned up something separate worth a look: `GM_TutGameplay` has no `DefaultPawnClass`
+while `GM_Gameplay` sets `BP_Player`.
+
+So the audit now states it rather than leaving the number to be interpreted:
+
+> Nothing references PC_TutGameplay (cost 890, 20 finding(s)), GS_TutGameplay (cost 515, 13
+> finding(s)). A place to look last, not a verdict: a class named in a level's World Settings or
+> chosen at runtime is real and shows nothing here. Confirm with `unreal_find_references` before
+> deleting anything.
+
+81 tokens, and only when it fires — a line that appears on every audit is a line nobody reads.
+
+**The hedge is not politeness.** `find_references` sees asset references; it does not see a class
+named in World Settings or resolved at runtime. This project has already walked back one confident
+"read by nobody", so the check names the assets, gives the evidence, and stops. Both branches are
+asserted, including the silent one.
+
+Checked first, as usual: `find_orphans` pairs actors in a level by proximity, and `possiblyReplaced`
+finds uncalled function graphs. Neither covers a gameplay-framework Blueprint no GameMode selects,
+which is still a gap worth its own check one day — this is the cheap half, built from a number the
+previous commit had already paid for.

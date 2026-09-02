@@ -672,3 +672,25 @@ test("a failed reference lookup leaves the ranking intact", async () => {
   assert.ok((r.worstBlueprints ?? []).length > 0, "the ranking survives");
   assert.equal((r.worstBlueprints ?? [])[0].referencedBy, undefined, "and says nothing rather than guessing");
 });
+
+test("ranked Blueprints nothing references are named, hedged, and not deleted for you", async () => {
+  // On this project PC_TutGameplay is third in the ranking at cost 890 and GS_TutGameplay eighth at
+  // 515, and nothing references either. Reading GM_TutGameplay's class defaults confirmed why: its
+  // PlayerControllerClass is PC_Gameplay and its GameStateClass is GS_PlacementManager, so the
+  // tutorial classes are wired to nothing.
+  //
+  // The hedge is not politeness. A class named in a level's World Settings, or picked at runtime,
+  // is real and shows nothing here - so this names them and stops.
+  const bridge = fakeBridge({ find_references: () => ({ referencedBy: [] }) });
+  const r = await auditProject(bridge, {});
+  assert.match(r.rankedButUnreferenced ?? "", /Nothing references/);
+  assert.match(r.rankedButUnreferenced ?? "", /BP_Messy/);
+  assert.match(r.rankedButUnreferenced ?? "", /not a verdict/);
+  assert.match(r.rankedButUnreferenced ?? "", /World Settings/);
+});
+
+test("nothing is said when everything is referenced", async () => {
+  const bridge = fakeBridge({ find_references: () => ({ referencedBy: [{ package: "/Game/A" }] }) });
+  const r = await auditProject(bridge, {});
+  assert.equal(r.rankedButUnreferenced, undefined, "a line that always fires is a line nobody reads");
+});

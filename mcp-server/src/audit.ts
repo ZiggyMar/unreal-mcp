@@ -1017,7 +1017,7 @@ const unresolvedClasses = new Set<string>();
     entry.findings += 1;
     costByBlueprint.set(finding.blueprint, entry);
   }
-  const worstBlueprints = [...costByBlueprint.entries()]
+  const worstBlueprints: AuditResult["worstBlueprints"] = [...costByBlueprint.entries()]
     .map(([name, entry]) => ({ name, ...entry }))
     .sort((a, b) => b.cost - a.cost)
     .slice(0, 10);
@@ -1048,7 +1048,7 @@ const unresolvedClasses = new Set<string>();
     if (!path) continue;
     try {
       const refs = await bridge.send<{ referencedBy?: unknown[] }>("find_references", { path });
-      (entry as { referencedBy?: number }).referencedBy = (refs.referencedBy ?? []).length;
+      entry.referencedBy = (refs.referencedBy ?? []).length;
     } catch {
       // A lookup that fails must not cost the ranking it was decorating.
     }
@@ -1232,6 +1232,18 @@ const unresolvedClasses = new Set<string>();
               .join(", ") +
             `. Overriding an engine parent is usually fine; one of your own C++ classes is worth a ` +
             `look with unreal_find_source.`,
+        }
+      : {}),
+    ...(worstBlueprints.some((w) => w.referencedBy === 0)
+      ? {
+          rankedButUnreferenced:
+            `Nothing references ${worstBlueprints
+              .filter((w) => w.referencedBy === 0)
+              .map((w) => `${w.name} (cost ${w.cost}, ${w.findings} finding(s))`)
+              .join(", ")}. ` +
+            `A place to look last, not a verdict: a class named in a level's World Settings or ` +
+            `chosen at runtime is real and shows nothing here. Confirm with unreal_find_references ` +
+            `before deleting anything.`,
         }
       : {}),
     ...(possiblyReplaced ? { possiblyReplaced } : {}),
