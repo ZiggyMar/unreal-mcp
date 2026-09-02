@@ -135,7 +135,17 @@ export interface AuditResult {
   /** Ranked by cost, most expensive first. */
   groups: AuditGroup[];
   /** The Blueprints worth opening first, by accumulated cost. */
-  worstBlueprints: Array<{ name: string; cost: number; findings: number }>;
+  worstBlueprints: Array<{
+    name: string;
+    cost: number;
+    findings: number;
+    /**
+     * How many assets reference this Blueprint. Reported, never re-ranked: zero is strong
+     * evidence and not proof, because a class chosen in World Settings or by name at runtime
+     * can be real and show nothing here.
+     */
+    referencedBy?: number;
+  }>;
   unreadable: Array<{ name: string; error: string }>;
   /**
    * Whole checks that could not run, and why.
@@ -1011,6 +1021,38 @@ const unresolvedClasses = new Set<string>();
     .map(([name, entry]) => ({ name, ...entry }))
     .sort((a, b) => b.cost - a.cost)
     .slice(0, 10);
+
+  /**
+   * How many assets reference each Blueprint in the ranking.
+   *
+   * The same fact the Data Table findings just gained, one level up, and it changes the ranking's
+   * meaning rather than decorating it. Measured on this project:
+   *
+   *   BP_Player        cost 1410, 33 findings, referenced by 49
+   *   PC_TutGameplay   cost  890, 20 findings, referenced by  0
+   *   GS_TutGameplay   cost  515, 13 findings, referenced by  0
+   *
+   * Third and eighth in "what to fix", and nothing references either - 1,405 cost and 33 findings
+   * aimed at assets no other asset mentions. A model told to start with PC_TutGameplay would spend
+   * a session there.
+   *
+   * Reported, NOT re-ranked. Zero referencers is strong evidence and not proof: a class set in a
+   * level's World Settings or picked at runtime by name can be real and show nothing here. Deciding
+   * that on the caller's behalf would be the same overreach as the "read by nobody" wording this
+   * project already had to walk back. The number is the useful part; the judgement is theirs.
+   *
+   * Only the ten already being reported are looked up.
+   */
+  for (const entry of worstBlueprints) {
+    const path = pathOfBlueprint.get(entry.name);
+    if (!path) continue;
+    try {
+      const refs = await bridge.send<{ referencedBy?: unknown[] }>("find_references", { path });
+      (entry as { referencedBy?: number }).referencedBy = (refs.referencedBy ?? []).length;
+    } catch {
+      // A lookup that fails must not cost the ranking it was decorating.
+    }
+  }
 
   // Data Tables are swept too, because "my game has bugs, where do I look" is exactly the question
   // this tool answers and the most expensive bug it has seen was not in a graph at all: a row's

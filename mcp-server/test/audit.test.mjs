@@ -642,3 +642,33 @@ test("a reference lookup that fails does not cost the finding", async () => {
   assert.equal(r.dataTableNulls.length, 1, "the finding survives");
   assert.equal(r.dataTableNulls[0].referencedBy, undefined, "and says nothing rather than guessing");
 });
+
+test("the worst-Blueprint ranking says how much each is used", async () => {
+  // Measured on this project: PC_TutGameplay is third in the ranking at cost 890 with 20 findings,
+  // GS_TutGameplay eighth at 515 with 13, and nothing references either. That is 1,405 cost aimed at
+  // assets no other asset mentions, and the ranking said nothing about it.
+  //
+  // Reported, not re-ranked. Zero referencers is strong evidence and not proof - a class set in a
+  // level's World Settings can be real and show nothing here - and deciding that for the caller
+  // would be the same overreach as the "read by nobody" wording this project already walked back.
+  const bridge = fakeBridge({
+    find_references: (params) =>
+      /BP_Messy/.test(params.path) ? { referencedBy: [{ package: "/Game/A" }] } : { referencedBy: [] },
+  });
+
+  const r = await auditProject(bridge, {});
+  const messy = (r.worstBlueprints ?? []).find((w) => w.name === "BP_Messy");
+  assert.ok(messy, "BP_Messy has the findings in this fixture");
+  assert.equal(messy.referencedBy, 1);
+});
+
+test("a failed reference lookup leaves the ranking intact", async () => {
+  const bridge = fakeBridge({
+    find_references: () => {
+      throw new Error("unknown_cmd: find_references");
+    },
+  });
+  const r = await auditProject(bridge, {});
+  assert.ok((r.worstBlueprints ?? []).length > 0, "the ranking survives");
+  assert.equal((r.worstBlueprints ?? [])[0].referencedBy, undefined, "and says nothing rather than guessing");
+});

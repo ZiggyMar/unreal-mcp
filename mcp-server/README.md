@@ -10151,3 +10151,36 @@ project pays nothing.
 mentioned it — the reply would have looked correct to anyone reading the JSON and unchanged to anyone
 reading the text. Both are asserted now, and so is the case where the lookup fails: the finding
 survives and says nothing rather than guessing.
+
+### Two of the top ten were assets nothing references
+
+The previous commit gave Data Table findings a reference count, because a broken row in a table one
+asset reads is a different fact from one in a table six read. The same question applies one level up,
+to the ranking a model is told to start from:
+
+```text
+BP_Player        cost 1410, 33 findings, referenced by 49
+PC_Gameplay      cost 1385, 28 findings, referenced by 30
+PC_TutGameplay   cost  890, 20 findings, referenced by  0
+BP_FireWall      cost  840, 16 findings, referenced by 12
+BP_Turret        cost  835, 14 findings, referenced by  1
+...
+GS_TutGameplay   cost  515, 13 findings, referenced by  0
+```
+
+Third and eighth, and nothing references either — **1,405 cost and 33 findings aimed at assets no
+other asset mentions.** A model told to start with `PC_TutGameplay` would spend a session there and
+the reply gave it no way to know.
+
+`worstBlueprints` now carries `referencedBy`, for 44 tokens across the whole ranking. Only the ten
+already being reported are looked up.
+
+**Reported, not re-ranked**, and the distinction is the whole point. Zero referencers is strong
+evidence and not proof: a class set in a level's World Settings, or picked at runtime by name, can be
+real and show nothing here. Sorting on it would bury a genuine finding on the strength of a
+heuristic, and this project has already had to walk back one confident "read by nobody". The number
+is the useful part; the judgement belongs to the caller.
+
+The failure case is asserted too: a bridge without `find_references` leaves the ranking intact and
+the field absent, rather than reporting zero — which would read as "nothing uses this" and mean the
+opposite.
