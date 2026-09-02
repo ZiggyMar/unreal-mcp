@@ -193,3 +193,38 @@ test("a symptom match points at the tools it named, not at the groups holding th
     server.child.kill();
   }
 });
+
+test("a discovery reply explains itself once, then answers", async () => {
+  // Measured over four discovery calls on `search`: 2,008 tokens of replies, 842 of them - 42% - the
+  // same `next` guidance repeated verbatim. The intent essay, the "keyword match, not understanding"
+  // paragraph and the argument for naming tools over enabling groups are worth reading once and are
+  // dead weight on the fourth call, on the profile --print-config emits.
+  //
+  // What must NOT be dropped is anything the caller needs in order to act: which tools, how to run
+  // them, and that the match was on keywords. Those ship every time.
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  try {
+    const ask = async (match) => {
+      const { text } = await call(server, "unreal_list_tools", { match });
+      return JSON.parse(text).next;
+    };
+
+    const first = await ask("the game crashes when I press play");
+    assert.match(first, /not an understanding of the sentence/, "the first reply must still explain itself");
+    assert.match(first, /Prefer that to groups/, "and still make the case for naming tools");
+
+    const second = await ask("add a shop upgrade that increases fire rate");
+    assert.ok(second.length * 3 < first.length, `second reply was ${second.length} vs first ${first.length}`);
+
+    // Everything needed to act, still present.
+    assert.match(second, /unreal_call_tool/, "the cheapest route must survive the trim");
+    assert.match(second, /unreal_enable_tools\(\{ tools: \[/, "with the tool names filled in");
+    assert.match(second, /unreal_plan_feature/, "and the actual tools named");
+    assert.match(second, /matchedSymptomWords/, "and the caveat that this was a keyword match");
+    // The intent READING survives even though its argument does not: a session can move from a bug
+    // report to a feature request, and the approach differs.
+    assert.match(second, /BUILD/, "the intent must still be stated");
+  } finally {
+    server.child.kill();
+  }
+});

@@ -233,6 +233,23 @@ const AUTHORING_TOOLS = [
 let groundTruthDelivered = false;
 
 /**
+ * Has a discovery reply already explained itself this session?
+ *
+ * Measured over four discovery calls on the `search` profile: 2,008 tokens of replies, of which 842
+ * - 42% - was the `next` guidance, repeated VERBATIM every time. The intent essay, the "this is a
+ * keyword match, not understanding" paragraph and the argument for naming tools over enabling groups
+ * are all worth reading once and are dead weight on the fourth call, on the profile --print-config
+ * emits and therefore on most sessions.
+ *
+ * So the reasoning ships once and the query-specific part ships every time: what was matched, and
+ * the two calls with the tool names already filled in. Nothing is withheld that a caller needs to
+ * act - only the argument for why, which does not change between calls.
+ *
+ * Same shape as groundTruthDelivered above, and the same reason.
+ */
+let discoveryGuidanceSent = false;
+
+/**
  * How many times this session has changed the advertised tool list.
  *
  * Each one re-reads the whole conversation at full price on the next turn, because the tool list
@@ -6404,6 +6421,55 @@ register(
       //
       // Counted rather than hardcoded, because it depends entirely on which groups got matched.
       const groupSize = [...toolCatalog.values()].filter((t) => groupsFor.includes(t.group)).length;
+
+      // The reasoning, once - then the answer, every time. See discoveryGuidanceSent.
+      const intentLong =
+        symptom?.intent === "building"
+          ? `No tool name or summary contains "${needle}", but it reads like a request to BUILD ` +
+            `something rather than a report of something broken, so these are the tools for that: ` +
+            `plan first against what the project already has, then the tools for the part of the ` +
+            `engine the request names.`
+          : symptom?.intent === "changing"
+            ? `No tool name or summary contains "${needle}", but it reads like a request to CHANGE ` +
+              `something that already exists rather than to build or to diagnose. The work is ` +
+              `finding the value before editing it, and it could be in a Data Table row, a ` +
+              `Blueprint class default, a literal wired into a graph, or a C++ default - so these ` +
+              `tools search all of those rather than assuming one.`
+            : `No tool name or summary contains "${needle}", but it reads like a description of a ` +
+              `symptom, so these are the tools that find that class of problem.`;
+
+      // Short form keeps the intent, because a session can move from a bug to a feature and the
+      // approach differs - it is the ARGUMENT for each that is dropped, not the reading.
+      const intentShort =
+        symptom?.intent === "building"
+          ? "Reads as a request to BUILD: plan against what exists first."
+          : symptom?.intent === "changing"
+            ? "Reads as a request to CHANGE: find the value before editing it."
+            : "Reads as a symptom.";
+
+      const callsLong =
+        known.length > 0
+          ? ` unreal_call_tool({ tool, args }) runs one of these now without changing the ` +
+            `tool list at all. If you expect several calls, ` +
+            `unreal_enable_tools({ tools: ${JSON.stringify(known)} }) adds exactly these ` +
+            `${known.length}. Prefer that to groups: these ${known.length} sit in groups ` +
+            `holding ${groupSize} tools between them, so asking by group buys the same answer ` +
+            `plus ${groupSize - known.length} tools you did not ask for, and every one of them ` +
+            `stays in the prompt for the rest of the session.`
+          : "";
+      const callsShort =
+        known.length > 0
+          ? ` unreal_call_tool({ tool, args }) to run one; ` +
+            `unreal_enable_tools({ tools: ${JSON.stringify(known)} }) for several.`
+          : "";
+
+      const discoveryNext = discoveryGuidanceSent
+        ? `${intentShort} Keyword match on matchedSymptomWords.${callsShort}`
+        : intentLong +
+          ` This is a keyword match on the words listed in matchedSymptomWords, not an ` +
+          `understanding of the sentence - check the suggestions against what you actually want.` +
+          callsLong;
+      if (known.length > 0) discoveryGuidanceSent = true;
       return jsonResult({
         matched: 0,
         of: toolCatalog.size,
@@ -6422,30 +6488,7 @@ register(
               why: symptom!.because,
               intent: symptom!.intent,
               next:
-                (symptom!.intent === "building"
-                  ? `No tool name or summary contains "${needle}", but it reads like a request to BUILD ` +
-                    `something rather than a report of something broken, so these are the tools for that: ` +
-                    `plan first against what the project already has, then the tools for the part of the ` +
-                    `engine the request names.`
-                  : symptom!.intent === "changing"
-                    ? `No tool name or summary contains "${needle}", but it reads like a request to CHANGE ` +
-                      `something that already exists rather than to build or to diagnose. The work is ` +
-                      `finding the value before editing it, and it could be in a Data Table row, a ` +
-                      `Blueprint class default, a literal wired into a graph, or a C++ default - so these ` +
-                      `tools search all of those rather than assuming one.`
-                    : `No tool name or summary contains "${needle}", but it reads like a description of a ` +
-                      `symptom, so these are the tools that find that class of problem.`) +
-                ` This is a keyword match on the words listed in matchedSymptomWords, not an ` +
-                `understanding of the sentence - check the suggestions against what you actually want.` +
-                (known.length > 0
-                  ? ` unreal_call_tool({ tool, args }) runs one of these now without changing the ` +
-                    `tool list at all. If you expect several calls, ` +
-                    `unreal_enable_tools({ tools: ${JSON.stringify(known)} }) adds exactly these ` +
-                    `${known.length}. Prefer that to groups: these ${known.length} sit in groups ` +
-                    `holding ${groupSize} tools between them, so asking by group buys the same answer ` +
-                    `plus ${groupSize - known.length} tools you did not ask for, and every one of them ` +
-                    `stays in the prompt for the rest of the session.`
-                  : ""),
+                discoveryNext,
             }
           : {
               next:

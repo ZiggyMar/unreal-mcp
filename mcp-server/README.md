@@ -11102,3 +11102,41 @@ model that overreaches now has a way back that cannot reach past its own work.
 had just written into `undo_history`'s description. Having said "the moment a raise is for prose, it
 should be refused", I trimmed instead: 34 words to 11. `core` ended up 9 tokens *below* where it
 started, so the new tool cost no ceiling at all.
+
+### 42% of every discovery reply was the same paragraph again
+
+The `search` profile is what `--print-config` emits, so most sessions discover tools by calling
+`unreal_list_tools({match})`. Measured over four such calls:
+
+```
+2,008 tokens of replies
+  842 of them (42%) was the `next` guidance, repeated VERBATIM every time
+```
+
+Three things made it up: the intent essay ("reads like a request to BUILD something rather than…"),
+the epistemics paragraph ("this is a keyword match, not an understanding of the sentence"), and the
+argument for naming tools instead of enabling their groups. Every one is worth reading. **None of them
+changes between calls**, and by the fourth the model has had them three times already.
+
+The reasoning now ships once per session; the answer ships every time.
+
+| | before | after |
+|---|---|---|
+| first reply | 557 tok | **557 tok** (byte-identical) |
+| each reply after | ~205 tok of guidance | **~57 tok** |
+| four calls | 2,008 tok | **1,541 tok** |
+
+**467 tokens saved across four calls, 23% of the total, with nothing withheld that a caller needs to
+act.** What still ships every time: the intent reading, the pointer to `matchedSymptomWords`, and both
+call forms with the tool names already filled in —
+
+> `Reads as a request to BUILD: plan against what exists first. Keyword match on matchedSymptomWords.`
+> `unreal_call_tool({ tool, args }) to run one; unreal_enable_tools({ tools: ["unreal_plan_feature","unreal_map_system"] }) for several.`
+
+What is dropped is the *argument*, not the *reading*. The intent survives the trim deliberately: a
+session can move from a bug report to a feature request, and the approach differs — it is only the
+case for each approach that does not need restating.
+
+Same mechanism as `groundTruthDelivered`, which already ships the unguessable Blueprint facts once per
+session. A test pins both halves: the first reply must still explain itself, the second must be under
+a third the length and still name the tools, both call forms and the caveat.
