@@ -11205,3 +11205,24 @@ Compiles on 5.6, 5.8 and the game target. The reproduction is in `live-verify.mj
 only place that can prove it — create a variable, **wire it into a graph** so the retype is the
 destructive case the engine warns about, retype it, and require an answer. The assertion is simply
 that the call returned; before the guard it never did.
+
+### A third of every C++ pre-push was proving something already proved
+
+The pre-push hook compiles the plugin whenever a push touches its C++, using `--isolated`: RunUAT
+BuildPlugin against public engine headers, no project configured, nothing installed. It walked all
+three entries in `build-targets.json`.
+
+**Two of them are the same engine.** `5.6` and `game` both point at `M:/Unreal/UE_5.6` and differ only
+in which project they install into — and `--isolated` installs into none. The command it builds names
+the engine and the plugin; `target.project` is never read on that path. So the third build compiled
+the same source against the same headers and reached the same answer, for about a hundred seconds.
+
+It cost a real push: the hook ran past a ten-minute limit and was **killed mid-run**, with the commit
+made and nothing sent.
+
+`--isolated` now compiles one build per distinct **engine**, and prints which targets it skipped and
+why. A normal installing build still visits every target, because there the project *is* the point —
+a project that is not a target never receives the plugin, and nothing says so.
+
+Five and a half minutes to three and a half. The hook's own note said "about three minutes" and was
+wrong in both directions; it now carries the measurement and the reason.
