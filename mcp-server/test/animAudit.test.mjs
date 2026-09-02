@@ -76,3 +76,70 @@ test("every finding says what to do, not just what is wrong", () => {
     assert.ok(finding.fix.length > 40, `a fix that does not say what to do is not a fix: ${finding.fix}`);
   }
 });
+
+// --- Two transitions, one destination, one rule ---------------------------------------------------
+//
+// Found on the real project: ABP_NewPlayer has AimingMovement -> Jump twice, both on "Get IsInAir".
+// Only the first can fire, so whatever the second was added for is handled nowhere - and the editor
+// draws two arrows between the same pair of states without comment.
+
+test("two transitions to the same state on the same rule are reported once", () => {
+  const findings = findAnimStateMachineFaults(
+    machine("Locomotion", [
+      { state: "Idle", transitions: [{ to: "Jump", rule: "Get IsInAir" }] },
+      {
+        state: "AimingMovement",
+        transitions: [
+          { to: "Jump", rule: "Get IsInAir" },
+          { to: "Jump", rule: "Get IsInAir" },
+        ],
+      },
+    ]),
+    "ABP_X"
+  );
+  const dupes = findings.filter((f) => f.check === "anim-duplicate-transition");
+  assert.equal(dupes.length, 1, "one finding for the pair, not one per copy");
+  assert.match(dupes[0].message, /2 transitions to "Jump"/);
+  assert.match(dupes[0].observed, /Get IsInAir/);
+});
+
+test("the destination survives a rule that has spaces in it", () => {
+  // The key joins destination and rule. Joined on a space and split back, the destination came out
+  // as "AND" - every rule in a real state machine is a sentence.
+  const findings = findAnimStateMachineFaults(
+    machine("Locomotion", [
+      { state: "Idle", transitions: [{ to: "Jump", rule: "x" }] },
+      {
+        state: "AimingMovement",
+        transitions: [
+          { to: "Jump", rule: "AND Boolean Get isAiming float > float Get Speed" },
+          { to: "Jump", rule: "AND Boolean Get isAiming float > float Get Speed" },
+        ],
+      },
+    ]),
+    "ABP_X"
+  );
+  const dupe = findings.find((f) => f.check === "anim-duplicate-transition");
+  assert.ok(dupe);
+  assert.match(dupe.message, /transitions to "Jump"/, "destination, not the first word of the rule");
+  assert.match(dupe.observed, /AND Boolean Get isAiming/, "the whole rule, not the first word");
+});
+
+test("two transitions to the same state on DIFFERENT rules are fine", () => {
+  // This is ordinary and correct: two ways to reach the same state. Flagging it would make the
+  // check fire on normal state machines, which is how a check stops being read.
+  const findings = findAnimStateMachineFaults(
+    machine("Locomotion", [
+      { state: "Idle", transitions: [{ to: "Jump", rule: "a" }] },
+      {
+        state: "AimingMovement",
+        transitions: [
+          { to: "Jump", rule: "Get IsInAir" },
+          { to: "Jump", rule: "Get IsDead" },
+        ],
+      },
+    ]),
+    "ABP_X"
+  );
+  assert.equal(findings.filter((f) => f.check === "anim-duplicate-transition").length, 0);
+});

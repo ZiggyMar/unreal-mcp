@@ -52,6 +52,8 @@ const WHY_IT_COSTS: Record<string, string> = {
     "Reads as 'it works for the host'. Nobody can reproduce it alone, which is why it survives to a showcase.",
   "server-writes-unreplicated-handle":
     "Usually fine: if the referenced Actor replicates itself, clients already see it and the variable is just the server's handle. Worth one look, not a rewrite.",
+  "anim-duplicate-transition":
+    "Two transitions from one state to the same state on the same rule. Only the first can fire, so the case the second was added for is handled nowhere.",
   "anim-state-no-exit":
     "The character enters the pose and stays in it. Reads as 'he freezes after the dodge', and nothing warns.",
   "row-name-not-in-table":

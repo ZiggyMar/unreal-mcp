@@ -32,6 +32,11 @@ export const FINDING_COST: Record<string, number> = {
   "server-writes-unreplicated-handle": 15,
   // A state nothing leaves freezes the character in one pose for the rest of the round, and the
   // machine looks finished in the editor because the state IS wired - just not outward.
+  // Below anim-state-no-exit, which freezes the character outright. A duplicate transition does not
+  // break what is there - the first copy still fires - it means a case the author added a
+  // transition FOR is not handled, which shows up as "it doesn't switch out of aiming when I jump"
+  // rather than as a frozen pose.
+  "anim-duplicate-transition": 45,
   "anim-state-no-exit": 80,
   // A system that can render nothing, spawned by a Blueprint that looks correct.
   // A name typed as text that names nothing. The Blueprint compiles and the call does nothing.

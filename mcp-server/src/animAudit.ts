@@ -68,6 +68,41 @@ export function findAnimStateMachineFaults(anim: AnimBlueprintLike, blueprintNam
         continue;
       }
 
+      // Two transitions out of one state, to the same place, on the same condition.
+      //
+      // Only the first can ever fire; the second is unreachable whatever happens at runtime. It is
+      // almost always a duplicated transition whose rule was meant to be edited and was not - which
+      // means the case the author added it for is not handled at all - and the editor draws two
+      // arrows between the same pair of states without comment.
+      //
+      // Found on the project this is developed on: ABP_NewPlayer has AimingMovement -> Jump twice,
+      // both on "Get IsInAir". One duplicate pair in 32 transitions, which is the frequency that
+      // makes a check worth having: rare enough to mean something, common enough to happen.
+      // Keyed with JSON rather than a separator character. A rule is a sentence with spaces in
+      // it - "Get IsInAir", "AND Boolean Get isAiming float > float Get Speed" - so joining on a
+      // space and splitting it back would report the destination as "Get" on every finding.
+      const timesSeen = new Map<string, number>();
+      for (const transition of state.transitions ?? []) {
+        const key = JSON.stringify([transition.to ?? "?", transition.rule ?? ""]);
+        timesSeen.set(key, (timesSeen.get(key) ?? 0) + 1);
+      }
+      for (const [key, count] of timesSeen) {
+        if (count < 2) continue;
+        const [to, rule] = JSON.parse(key) as [string, string];
+        findings.push({
+          check: "anim-duplicate-transition",
+          severity: "warning",
+          message:
+            `${blueprintName}: "${state.state}" has ${count} transitions to "${to}" in ` +
+            `${machine.stateMachine}, all on the same rule, so only the first can ever fire.`,
+          fix:
+            `Delete the extras, or give them the rules they were meant to have. A duplicated transition is ` +
+            `usually a copy whose condition was never changed, which means the case it was added for is not ` +
+            `handled anywhere.`,
+          observed: `Rule on all ${count}: ${rule || "(none)"}.`,
+        });
+      }
+
       for (const transition of state.transitions ?? []) {
         if (!/^empty\b/i.test(String(transition.rule ?? ""))) continue;
         findings.push({
