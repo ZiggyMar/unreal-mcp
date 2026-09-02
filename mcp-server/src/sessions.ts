@@ -82,7 +82,14 @@ async function lanFlagFor(
 ): Promise<{ lan?: boolean; via: string }> {
   const own = await readPins(graph.path, graph.graphName, node.id).catch(() => []);
   const ownLan = own.find((p) => LAN_PIN.test(String(p.name ?? "")));
-  if (ownLan) return { lan: truthy(ownLan.defaultValue), via: node.title };
+  // Only when the pin gave a DEFINITE answer.
+  //
+  // It used to return here whenever the pin merely existed. A wired pin has no usable default -
+  // the bridge no longer sends one at all - so that returned undefined and stopped, skipping the
+  // feeder search below, which is exactly the case the feeder search was written for. Finding the
+  // pin is not the same as learning its value, and only one of those is worth stopping on.
+  const ownValue = ownLan ? truthy(ownLan.defaultValue) : undefined;
+  if (ownValue !== undefined) return { lan: ownValue, via: node.title };
 
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const feeders = (node.connectedPins ?? [])
