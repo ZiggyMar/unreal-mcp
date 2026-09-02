@@ -7416,6 +7416,7 @@ anybody noticed.
 - [The index said 140 sections and there were 293](#the-index-said-140-sections-and-there-were-293)
 - [The suite got five minutes slower and nothing had changed](#the-suite-got-five-minutes-slower-and-nothing-had-changed)
 - [Two class pins kept nothing, and everything reported success](#two-class-pins-kept-nothing-and-everything-reported-success)
+- [The hook said the plugin does not compile, about source that compiles](#the-hook-said-the-plugin-does-not-compile-about-source-that-compiles)
 
 <!-- INDEX:END -->
 
@@ -11466,3 +11467,30 @@ kept nothing is precisely the report that let this run through an entire feature
 
 The lesson is not "use the right API". It is that a write which verifies costs one read, and a write
 that reports success without checking can be wrong for hours across a dozen calls that each look fine.
+
+### The hook said the plugin does not compile, about source that compiles
+
+A push was refused with:
+
+```
+pre-push: REFUSED - the plugin does not compile, so this push was not sent.
+```
+
+The same source, built by hand a minute later, compiled on both engines in under two minutes.
+
+`BuildPlugin` wrote to `<tmpdir>/mcp-plugin-<target>` — a **fixed path per target**. The pre-push hook
+compiles the plugin, so any build started while a push is in flight writes to the same directory as
+the hook's. I had done exactly that: a manual `--isolated` run overlapping the hook's.
+
+The symptom is the worst available one. It blamed the code, blocked a good push, and **passed on a
+re-run** — which is precisely the shape of failure that teaches people to re-run a guard until it goes
+green instead of reading what it said. A guard that is wrong sometimes is worse than no guard, because
+it spends the trust the correct failures depend on.
+
+The directory is per-run now (`-${process.pid}`) and removed at the end of the run — after the summary,
+so a failing build can still be inspected, and swallowed individually because a temp folder that will
+not delete is not a build result. Five stale fixed-path directories were sitting in temp from earlier
+runs; a clean run now leaves none.
+
+Two builds can safely run at once, which matters more than it sounds: the hook builds on every C++
+push, and an agent that keeps working while a push is in flight will collide with it every time.

@@ -33,8 +33,22 @@ const here = dirname(fileURLToPath(import.meta.url));
 const CONFIG = join(here, "..", "build-targets.json");
 const PLUGIN_SOURCE = join(here, "..", "..", "UnrealMCPBridge", "Source");
 
-/** Where BuildPlugin drops its output for a target. */
-const packageDir = (target) => join(tmpdir(), `mcp-plugin-${target.name}`);
+/**
+ * Where BuildPlugin drops its output for a target - one directory per RUN, not per target.
+ *
+ * This was `mcp-plugin-${target.name}`, a fixed path, and two builds of the same target therefore
+ * wrote to the same place. That is not hypothetical: the pre-push hook compiles the plugin, so any
+ * build started while a push is in flight collides with it.
+ *
+ * It happened, and the symptom was the worst available one. The hook reported "REFUSED - the plugin
+ * does not compile" for source that compiles perfectly, blocking a good push and blaming the code.
+ * Re-running the same build by hand a minute later passed, which is exactly the shape of failure that
+ * teaches people to re-run guards until they go green instead of reading them.
+ *
+ * The pid makes concurrent runs independent. Cleaned up at the end of the run, and left behind on a
+ * crash - a few megabytes in the system temp folder, which is what that folder is for.
+ */
+const packageDir = (target) => join(tmpdir(), `mcp-plugin-${target.name}-${process.pid}`);
 
 /**
  * Copy a packaged plugin's binaries into the target project.
@@ -433,6 +447,16 @@ for (const target of chosen) {
     }
   }
   results.push({ target, ok: succeeded, why: succeeded ? `${seconds}s` : "build failed" });
+}
+
+// The per-run package directories, gone. Kept until here so a failing run can still be inspected,
+// and swallowed individually because a temp folder that will not delete is not a build result.
+for (const target of chosen) {
+  try {
+    rmSync(packageDir(target), { recursive: true, force: true });
+  } catch {
+    /* left for the OS to reap; it is in the system temp folder */
+  }
 }
 
 console.log("");
