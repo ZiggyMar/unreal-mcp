@@ -10908,3 +10908,40 @@ handled, deliberately: a test records that "a CHANGE phrased around C++ takes th
 advice has to carry it instead", and the `because` prose names both tools. Verified on the wire — all
 three appear in the reply. The considered decision and the oversight look identical from the outside;
 the difference was written down, which is the only reason I could tell.
+
+### Three engine words that meant something else
+
+The `"effect"` misroute was one instance of a class, so I enumerated every single-word trigger in the
+symptom table — 60 of them — and looked for words with a *specific Unreal meaning* that differs from
+the entry they sit in. Three, all confirmed by measurement:
+
+| word | routed to | what it means in Unreal |
+|---|---|---|
+| `timeline` | `read_level_sequence` | a **Blueprint Timeline node**, and `unreal_read_timeline` exists |
+| `interface` | `list_widgets` | a **Blueprint Interface** — a class construct, no screen involved |
+| `key` | `list_input_mappings` | also a **blackboard key**, a map key, a curve key |
+
+`timeline` is the sharpest: the tool for the thing the word names already existed, was in the `anim`
+group, and nothing in the symptom table pointed at it. "The timeline never finishes" got the cutscene
+reader. It has its own entry now, above the cinematic one, and the cinematic entry keeps `cutscene`,
+`sequencer`, `camera`, `cinematic`.
+
+`interface` is gone from the widget entry, replaced by `user interface`. UI has plenty of unambiguous
+vocabulary here — widget, HUD, menu, on screen — and does not need to borrow the ambiguous one.
+
+`key` stays, because for a bug report it usually *is* the keyboard. `blackboard` was named in the AI
+entry's own `because` line and in none of its `says`, so the word that most reliably identifies an AI
+question could not reach the AI tool.
+
+**That last one needed a change to the ranking, not the table.** Only two entries ever answer, and
+the input entry sits earlier, so it led regardless. The header says "entries are ordered
+most-specific-first, so the earlier match is the better one" — true of the *entries*, and silent about
+the *phrase* that actually matched, which is where the evidence is. So: **a phrase matching more words
+outranks one matching fewer, and table position breaks ties.**
+
+**The first version ranked by character length and broke a documented decision.** It reordered
+"enemies don't take damage" to lead with the AI tools, because `enemies` is a longer word than
+`damage` — undoing the exact ranking this file's header records making, for a reason with nothing to
+do with specificity. A long word is not a specific one; two words are two words. Ties keep table
+order, which is almost every sentence, so everything argued for in that header still governs. The
+suite caught it on the first run, and there is now a test pinning both directions.

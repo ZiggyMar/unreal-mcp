@@ -387,3 +387,50 @@ test("a real particle question still reaches the particle reader", () => {
     assert.ok(tools.includes("unreal_read_niagara_system"), `"${said}" -> ${tools.join(", ") || "nothing"}`);
   }
 });
+
+test("a Timeline is a Blueprint node, and there is a tool for it", () => {
+  // unreal_read_timeline exists and reads exactly this. "timeline" sat in the cinematic entry, so
+  // every Timeline question was answered with read_level_sequence - a route pointing at the wrong
+  // tool while the right one was reachable by nothing at all. Two engine concepts share an English
+  // word and the table knew only the rarer one.
+  for (const said of ["the timeline never finishes", "add a timeline node to fade the light"]) {
+    const tools = matchSymptoms(said)?.tools ?? [];
+    assert.ok(tools.includes("unreal_read_timeline"), `"${said}" -> ${tools.join(", ")}`);
+    assert.ok(!tools.includes("unreal_read_level_sequence"), `"${said}" still reaches the sequence reader`);
+  }
+  // And the cinematic entry keeps everything that really is a cutscene.
+  for (const said of ["the cutscene plays nothing", "the sequencer shot is black"]) {
+    assert.ok((matchSymptoms(said)?.tools ?? []).includes("unreal_read_level_sequence"), said);
+  }
+});
+
+test("an interface is a class construct here, not a screen", () => {
+  // In Unreal the unqualified word almost always means a Blueprint Interface. "the interface isn't
+  // implemented on the turret" was answered with list_widgets.
+  const tools = matchSymptoms("the interface isn't implemented on the turret")?.tools ?? [];
+  assert.ok(!tools.includes("unreal_list_widgets"), `routed to the widget tools: ${tools.join(", ")}`);
+  // UI keeps its own vocabulary, including the qualified spelling.
+  for (const said of ["the user interface never appears", "the hud is blank", "the pause menu is empty"]) {
+    assert.ok((matchSymptoms(said)?.tools ?? []).includes("unreal_list_widgets"), said);
+  }
+});
+
+test("more of the sentence matched outranks table position", () => {
+  // "the blackboard key is never set" matches `key` in the input entry and `blackboard key` in the
+  // AI entry. Input sits earlier in the table, so it used to lead, and the reply opened with three
+  // keyboard tools for a Behavior Tree question. Both readings of `key` are real Unreal vocabulary;
+  // only one of them had two words behind it.
+  const found = matchSymptoms("the blackboard key is never set");
+  assert.equal(found.tools[0], "unreal_read_behavior_tree", `led with ${found.tools[0]}`);
+});
+
+test("ties still keep table order, which is where the ranking was argued", () => {
+  // The guard on the rule above. Ranking by CHARACTER length instead of word count reordered
+  // "enemies don't take damage" to lead with the AI tools, because `enemies` is a longer word than
+  // `damage` - undoing the decision this file's header records making, for a reason that has nothing
+  // to do with specificity. A long word is not a specific one.
+  const found = matchSymptoms("enemies don't take damage");
+  assert.equal(found.tools[0], "unreal_trace_variable", `led with ${found.tools[0]}`);
+  // Both readings still offered - the sentence is genuinely ambiguous.
+  assert.ok(found.tools.includes("unreal_read_behavior_tree"), "the AI reading is still there");
+});

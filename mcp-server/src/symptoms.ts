@@ -143,14 +143,36 @@ export const SYMPTOMS: SymptomEntry[] = [
       "whose condition can never be true looks exactly like a broken animation.",
   },
   {
-    says: ["widget", "ui", "hud", "menu", "on screen", "button on screen", "health bar", "interface"],
+    // "user interface", never bare "interface". In Unreal the unqualified word almost always means a
+    // Blueprint Interface - a class construct with no screen involved - and "the interface isn't
+    // implemented on the turret" was being answered with list_widgets. UI has its own vocabulary
+    // here (widget, HUD, menu, on screen) and does not need to borrow the ambiguous one.
+    says: ["widget", "ui", "hud", "menu", "on screen", "button on screen", "health bar", "user interface"],
     tools: ["unreal_list_widgets", "unreal_review_blueprint", "unreal_audit_project"],
     because:
       "A widget that never appears was usually created without being added to the viewport, or added on a " +
       "path nothing runs. The audit's client-sync checks cover the server-side half of this.",
   },
   {
-    says: ["ai", "enemy", "enemies", "behavior tree", "behaviour tree", "pathfinding", "won't move", "doesn't move", "stuck", "not attacking"],
+    // "blackboard" was named in this entry's own `because` line and in none of its `says`, so the
+    // word that most reliably identifies an AI question could not reach the AI tool. "the blackboard
+    // key is never set" matched the INPUT entry instead, on `key`, and came back with three input
+    // tools - `key` means a keyboard key there and a blackboard entry here, and only one of those
+    // readings was reachable.
+    says: [
+      "ai",
+      "enemy",
+      "enemies",
+      "behavior tree",
+      "behaviour tree",
+      "blackboard key",
+      "blackboard",
+      "pathfinding",
+      "won't move",
+      "doesn't move",
+      "stuck",
+      "not attacking",
+    ],
     tools: ["unreal_read_behavior_tree", "unreal_audit_project"],
     because:
       "read_behavior_tree reads the tree, its decorators and their blackboard keys - an AI that stands still " +
@@ -185,7 +207,25 @@ export const SYMPTOMS: SymptomEntry[] = [
     because: "read_niagara_system reports emitters that are disabled or have no spawn rate, which produce nothing and no error.",
   },
   {
-    says: ["cutscene", "sequence", "sequencer", "timeline", "camera", "cinematic"],
+    // A Timeline is a Blueprint node, not a cutscene, and unreal_read_timeline is its own tool.
+    //
+    // "timeline" sat in the cinematic entry below, so every sentence about a Blueprint Timeline was
+    // answered with read_level_sequence - a route pointing at the wrong tool while the right one
+    // existed and was reachable by nothing. Two engine concepts share an English word, and the table
+    // knew only the rarer of them.
+    //
+    // Above the cinematic entry deliberately: "the timeline never finishes" should reach the node
+    // that runs on a curve, not the sequence that plays a shot.
+    says: ["timeline", "curve doesn't play", "timeline never finishes", "timeline doesn't fire"],
+    tools: ["unreal_read_timeline", "unreal_audit_project"],
+    because:
+      "read_timeline reports what a Blueprint Timeline animates: its curves, their keys, and the length it " +
+      "actually runs for. A Timeline with no track, or a track whose curve has a single key, plays without " +
+      "error and changes nothing - and it is a different construct from a Level Sequence, which is what " +
+      "unreal_read_level_sequence reads.",
+  },
+  {
+    says: ["cutscene", "sequence", "sequencer", "camera", "cinematic"],
     tools: ["unreal_read_level_sequence", "unreal_audit_project"],
     because:
       "read_level_sequence reports the three silent failures: a binding with no tracks, a track with no " +
@@ -443,19 +483,49 @@ export function matchSymptoms(text: string): SymptomMatch | undefined {
     tools.push(...BUILD_TOOLS);
   }
 
+  /**
+   * Every entry that matched, strongest evidence first.
+   *
+   * Table position used to decide this outright: the loop took the first two entries it met and
+   * stopped. The ordering comment said "entries are ordered most-specific-first, so the earlier
+   * match is the better one", and that is true of the ENTRIES while saying nothing about the PHRASE
+   * that actually matched - which is the thing carrying the evidence.
+   *
+   * "The blackboard key is never set" is the case that separates them. It matches `key` in the input
+   * entry and `blackboard key` in the AI entry. Input sits earlier, so it led, and the reply opened
+   * with three keyboard tools for a question about a Behavior Tree. Both readings of `key` are real
+   * Unreal vocabulary; only one of them was two words long.
+   *
+   * So: a phrase matching MORE WORDS of the sentence outranks one matching fewer, and table position
+   * breaks ties.
+   *
+   * Word count, not character length. Character length was the first attempt and it is a bad proxy:
+   * it reordered "enemies don't take damage" to lead with the AI tools, because `enemies` is a longer
+   * word than `damage` - undoing the exact decision this file's header records making, for a reason
+   * that has nothing to do with specificity. A long word is not a specific one. Two words are two
+   * words.
+   *
+   * Ties keep table order, which is almost every sentence, so the ordering argued for above still
+   * governs everything except the case where one entry plainly has more of the sentence behind it.
+   */
+  const words = (phrase: string) => phrase.split(" ").length;
+  const hits: { entry: SymptomEntry; hit: string }[] = [];
   for (const entry of SYMPTOMS) {
     const hit = entry.says.find((phrase) => saysIt(said, phrase));
-    if (!hit) continue;
+    if (hit) hits.push({ entry, hit });
+  }
+  // Stable: Array.prototype.sort is specified stable, so equal word counts keep table order.
+  hits.sort((a, b) => words(b.hit) - words(a.hit));
+
+  // Two entries at most.
+  //
+  // "The game crashes when I open the menu" matches both `crash` and `menu`, and answering with
+  // both cost 667 tokens - six tools and two paragraphs - for a sentence whose first three words
+  // already said where to look. A suggestion list long enough to need reading is not a suggestion.
+  for (const { entry, hit } of hits.slice(0, 2)) {
     matched.push(hit);
     because.push(entry.because);
     for (const tool of entry.tools) if (!tools.includes(tool)) tools.push(tool);
-    // Two entries at most.
-    //
-    // "The game crashes when I open the menu" matches both `crash` and `menu`, and answering with
-    // both cost 667 tokens - six tools and two paragraphs - for a sentence whose first three words
-    // already said where to look. A suggestion list long enough to need reading is not a
-    // suggestion. Entries are ordered most-specific-first, so the earlier match is the better one.
-    if (matched.length >= 2) break;
   }
 
   if (tools.length === 0) return undefined;
