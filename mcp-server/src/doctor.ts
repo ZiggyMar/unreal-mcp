@@ -118,6 +118,7 @@ export const FEATURE_PROBE_LIST: Array<{ cmd: string; feature: string }> = [
     { cmd: "duplicate_asset", feature: "copying an asset" },
     { cmd: "rename_variable", feature: "renaming a variable and rebinding the nodes that read it" },
     { cmd: "rename_function", feature: "renaming a function and moving any RepNotify binding with it" },
+    { cmd: "deduplicate_anim_transitions", feature: "removing state-machine transitions that duplicate another exactly" },
     { cmd: "remove_variable", feature: "removing a variable" },
     { cmd: "rename_component", feature: "renaming a component" },
     { cmd: "remove_component", feature: "removing a component" },
