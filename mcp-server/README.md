@@ -10453,3 +10453,43 @@ when the editor is down.
 The other eight are left alone deliberately. One guard with a crash behind it is a fix; eight more
 written the same afternoon, none of them reachable by a test, is a patch of speculation across a file
 that can take the editor down.
+
+### "The connection is fine; the thread is busy" was wrong exactly once
+
+A command that times out gets a long, careful message: the connection is fine, the editor's game
+thread is busy or blocked, here is the modal dialog by title if one is open, wait and retry rather
+than assuming it failed. That message is right almost every time.
+
+It was wrong in the way that matters. The editor crashed inside the bridge mid-command; the socket
+stayed open while the process died; the call timed out at sixty seconds; and the reply explained that
+the connection was fine and the thread was busy. **Every remedy it offered was advice about an editor
+that no longer existed** — including "wait and retry the same call", which is the worst possible
+instruction when the thing you are waiting for is gone.
+
+The test that separates the two costs nothing:
+
+> A **busy** editor still accepts connections, because accepting happens below the game thread.
+> A **dead** one refuses.
+
+So on timeout the client now asks, once, before blaming the thread. If the port has stopped answering
+it says so instead:
+
+> The plugin did not answer 'create_struct' within 60s, and the port has stopped accepting
+> connections entirely — so the editor is GONE, not busy. It crashed or was closed while the command
+> was in flight. Nothing about this is worth retrying until the editor is open again. If it crashed,
+> `Saved/Logs` holds the stack: search for "Critical error". A crash whose stack names UnrealMCPBridge
+> is this tool's fault and worth reporting.
+
+**Only after a timeout.** Probing before every call would add a connection to every command to answer
+a question that is almost always "yes".
+
+This does not replace the connection-refused path, which was already correct: a port that never
+accepts produces "could not reach the plugin", with the checklist. The new message is for the case
+between them — connected, then hung, then gone — which is what a crash mid-command actually looks
+like from this side of the socket.
+
+The probe is tested both ways, including against a listener that accepts and never replies, because
+that is precisely the busy editor this must not accuse of being dead. The composed path needs an
+editor that dies mid-command to exercise end to end, and the honest note is that it has not been:
+what is verified is that the probe answers correctly, the message says the right things, and the
+whole thing compiles.

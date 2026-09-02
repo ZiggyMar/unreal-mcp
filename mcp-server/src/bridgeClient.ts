@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
 import { SessionTokenCache } from "./sessionToken.js";
 import { rankContextSuggestions } from "./didYouMean.js";
+import { portIsAccepting, editorGoneMessage } from "./editorGone.js";
 
 export interface BridgeRequest {
   cmd: string;
@@ -389,7 +390,18 @@ export class UnrealBridgeClient {
           return;
         }
         // We connected, so the bridge exists and the plugin is loaded. A silent socket past this
-        // point means the editor's game thread is busy or blocked, not that anything is misconfigured.
+        // point USUALLY means the editor's game thread is busy or blocked.
+        //
+        // Usually, not always. This message once told a caller the connection was fine and the game
+        // thread busy while the editor was crashing inside the bridge - every remedy it offered was
+        // advice about an editor that no longer existed. A busy editor still ACCEPTS connections,
+        // because accepting happens below the game thread; a dead one refuses. So ask, once, before
+        // blaming the thread. See editorGone.ts.
+        void portIsAccepting(this.host, this.port).then((stillListening) => {
+        if (!stillListening) {
+          fail(new Error(editorGoneMessage(cmd, describeSeconds(timeoutMs))));
+          return;
+        }
         const dialogTitle = blockingDialogTitle();
         fail(
           new Error(
@@ -418,6 +430,7 @@ export class UnrealBridgeClient {
               `(unreal_read_blueprint_summary, unreal_list_components, ...) before retrying a write, or you may apply it twice.`
           )
         );
+        });
       });
 
       socket.on("error", (err: NodeJS.ErrnoException) => {
