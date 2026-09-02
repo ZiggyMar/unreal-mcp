@@ -209,7 +209,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
 | `core` | 13216 | the authoring spine |
 | `lazy` | 13524 | `core` plus deferred groups |
-| `full` | 47156 | everything, for a model that can afford it |
+| `full` | 47516 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -386,6 +386,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_describe_class` | `describe_class` | A class's real ancestry, and whether it is server-only. Ask before casting in a networked game. |
 | `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
+| `unreal_trace_input` | *composite* | "What happens when the player presses Escape?" - key to context to action to every handler and what it does, in one call. |
 | `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
 | `unreal_read_timeline` | `read_timeline` | Read a Blueprint Timeline: length, loop/autoplay/**replicated**, and every float, vector, colour and event track with its curve shape. |
 | `unreal_set_niagara_user_parameter` | `set_niagara_user_parameter` | Set a Niagara system's exposed parameter default (float, int, bool). Refuses other types by name rather than writing something you did not mean. |
@@ -7429,6 +7430,7 @@ anybody noticed.
 - [Importing the server started a server](#importing-the-server-started-a-server)
 - [Mutation testing the suite: seven breaks, six caught, one that did not matter](#mutation-testing-the-suite-seven-breaks-six-caught-one-that-did-not-matter)
 - [The one-off became `scripts/mutate.mjs`](#the-one-off-became-scriptsmutatemjs)
+- ["You're assuming" — the filename that looked like the answer](#youre-assuming--the-filename-that-looked-like-the-answer)
 
 <!-- INDEX:END -->
 
@@ -11886,3 +11888,44 @@ Its own first run was a bug: `--max 4` left a bare `4` in the file list, and the
 a file named `4` rather than a complaint about the flag. Dropping the flag *and* its value fixed it.
 Worth recording because it is the same shape as the defects being hunted — the failure was honest but
 pointed at the wrong thing, which is what makes it expensive.
+
+### "You're assuming" — the filename that looked like the answer
+
+Asked which menu opens when the player presses Escape, the answer given was `WB_Pause`. It was found
+by listing assets whose name contained "pause" and picking the plausible one, and it was wrong.
+
+The user's correction is the whole design note:
+
+> *"I promise you. Search the project. See? This is bad. You're assuming. Right? You need to build
+> this into the MCP system. Never to assume. What does the pause menu entail? You press escape. So
+> when the player presses escape, what menu shows up? And then you find that widget."*
+
+On that project Escape runs through `IA_OpenPause` into `PC_Base`. `WB_Pause` was a filename that
+pattern-matched.
+
+**The tools to answer it properly all existed**, which is what makes this worth recording. Read the
+mapping context, find the action's referrers, read each referrer's graph — three chained calls plus
+knowing that the chain is the thing to walk. Listing files by name is one call. When the correct
+route costs three calls and a guess costs one, the guess wins often enough to matter, and it fails
+silently: a plausible filename produces a confident wrong answer with no error anywhere.
+
+So the chain became one call. `unreal_trace_input` takes a key and returns the contexts that bind it,
+the action it fires, every Blueprint that handles that action, and what each handler does in
+execution order — because "PC_Base handles it" is still an invitation to guess what PC_Base does.
+
+Two rules in it are there because the sloppy version of each is worse than useless:
+
+- **Keys match whole, never as substrings.** `E` is the most common interact key in Unreal and sits
+  inside `Escape`, `End`, `Enter` and `Equals`. A substring rule reports that pressing E opens the
+  pause menu.
+- **Actions match on word boundaries.** `IA_Open` must not claim `IA_OpenPause`'s chains, and one
+  Blueprint routinely handles several actions, so "every input event in PC_Base" is not the question
+  that was asked.
+
+Both are pure functions tested against reply shapes, the same way `inputChain` walks node shapes —
+the selection rules are where the bugs live, and they should fail in a unit test rather than against
+a running editor.
+
+The general lesson generalises past input: **when the cheap route and the correct route disagree, the
+cheap one gets taken.** The fix is not to warn a model against guessing, it is to make the correct
+answer the cheap call.

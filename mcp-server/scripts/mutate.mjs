@@ -84,8 +84,39 @@ function isProse(line) {
   return t === "" || t.startsWith("//") || t.startsWith("*") || t.startsWith("/*");
 }
 
+/**
+ * Which suite decides whether a mutant was caught.
+ *
+ * `test:unit` by default, not the full `npm test`. The full chain re-runs every consistency check -
+ * parity, docs, index, claims, profiles - and those check that the repo describes itself correctly,
+ * not that a comparison operator points the right way. Paying for them once per mutant made a
+ * ten-mutant run take about six times longer than the thing it was measuring.
+ *
+ * `--full` restores the whole chain, which is worth it when the mutated file feeds one of the
+ * generators (groupCosts, the profile figures) and a break would surface there rather than in a test.
+ */
+const FULL = process.argv.includes("--full");
+
+/**
+ * The mutation is in `src`, the tests import `dist`, so the compile is not optional.
+ *
+ * `npm test` begins with `emit` and hides this. `test:unit` is bare `node --test`, so running it
+ * alone would test the PREVIOUS build: every mutant would survive and the tool would report, with
+ * total confidence, that the suite catches nothing. Caught before it ran - which is the failure this
+ * script exists to find, in the script itself.
+ */
 function runSuite() {
-  const r = spawnSync("npm", ["test"], {
+  if (!FULL) {
+    const built = spawnSync("npm", ["run", "emit"], {
+      cwd: SERVER_DIR,
+      encoding: "utf8",
+      shell: true,
+      timeout: 5 * 60 * 1000,
+    });
+    // A mutant that does not COMPILE is caught in the only sense that matters: it cannot ship.
+    if (built.status !== 0) return false;
+  }
+  const r = spawnSync("npm", ["run", FULL ? "test" : "test:unit"], {
     cwd: SERVER_DIR,
     encoding: "utf8",
     shell: true,

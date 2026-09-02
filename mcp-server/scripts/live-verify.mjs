@@ -13,6 +13,8 @@
 // to run against a real project, though a scratch project is still the polite choice.
 
 import { UnrealBridgeClient } from "../dist/bridgeClient.js";
+import { describeTrace, keyOfMapping, traceInput } from "../dist/traceInput.js";
+import { explainGraph } from "../dist/explainGraph.js";
 
 const bridge = new UnrealBridgeClient({
   host: process.env.UNREAL_MCP_BRIDGE_HOST ?? "127.0.0.1",
@@ -1331,6 +1333,70 @@ async function main() {
       throw err;
     }
   });
+  // --- input tracing -------------------------------------------------------------------------
+  //
+  // trace_input is composed in the server rather than in C++, so there is no bridge command to aim
+  // at and it is called directly. That makes this the only check that exercises it end to end:
+  // read_input_context -> find_references -> read_blueprint_graph_summary, against real assets.
+  //
+  // Written to work on ANY project. It takes a key the open project actually binds rather than a
+  // key this script invents, because a trace of a key nothing uses proves only that empty replies
+  // are empty.
+  section("input tracing");
+  await check("a key the project binds traces to the Blueprints that handle it", async () => {
+    const listed = await bridge.send("list_assets", { className: "InputMappingContext", maxResults: 20 });
+    const contexts = listed.assets ?? [];
+    if (contexts.length === 0) return "skipped: this project has no InputMappingContext assets";
+
+    // Find a real key from a real context, so the trace has something to follow.
+    let sampleKey;
+    let sampleAction;
+    for (const ctx of contexts) {
+      const reply = await bridge.send("read_input_context", { path: ctx.path });
+      const actions = Object.keys(reply.actions ?? {});
+      if (actions.length === 0) continue;
+      sampleAction = actions[0];
+      const mappings = reply.actions[sampleAction] ?? [];
+      if (mappings.length === 0) continue;
+      sampleKey = keyOfMapping(mappings[0]);
+      break;
+    }
+    if (!sampleKey) return "skipped: no context in this project binds any key";
+
+    const trace = await traceInput(bridge, { key: sampleKey, maxHandlers: 3 }, (summary, opts) =>
+      explainGraph(summary, opts)
+    );
+
+    if (trace.actions.length === 0) {
+      throw new Error(
+        `${sampleKey} was read straight out of a mapping context, so tracing it must find at least ` +
+          `one action - got none`
+      );
+    }
+    const found = trace.actions.map((a) => a.action);
+    if (sampleAction && !found.includes(sampleAction)) {
+      throw new Error(`expected ${sampleKey} to reach ${sampleAction}, got ${found.join(", ")}`);
+    }
+
+    const handlers = trace.actions.reduce((n, a) => n + a.handlers.length, 0);
+    const prose = describeTrace(trace);
+    if (!prose.includes(sampleKey)) throw new Error(`the prose does not mention ${sampleKey}: ${firstLine(prose)}`);
+    return `${sampleKey} -> ${found.join(", ")} (${handlers} handler chain(s))`;
+  });
+
+  await check("an unbound key says so rather than returning nothing", async () => {
+    // F24 is a real engine key that no project binds. The answer "nothing is bound to this" is the
+    // useful one when a control does nothing, and an empty object is not that answer.
+    const trace = await traceInput(bridge, { key: "F24", maxHandlers: 1 }, (summary, opts) =>
+      explainGraph(summary, opts)
+    );
+    const prose = describeTrace(trace);
+    if (!/not bound to any Input Action/.test(prose)) {
+      throw new Error(`expected an explicit "not bound" answer, got: ${firstLine(prose)}`);
+    }
+    return "reported as unbound, in words";
+  });
+
   await check("the editor is still running afterwards", async () => {
     const r = await bridge.send("ping", {});
     return `still up, protocol ${r.protocolVersion}`;

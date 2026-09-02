@@ -26,6 +26,7 @@ import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
+import { describeTrace, traceInput } from "./traceInput.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -754,6 +755,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     // give you the one call that says "this project is on Enhanced Input, look elsewhere".
     "unreal_list_input_mappings",
     "unreal_read_input_context",
+    "unreal_trace_input",
     "unreal_map_input_key",
     "unreal_unmap_input_key",
   ],
@@ -4149,6 +4151,68 @@ register(
   async ({ path }) => {
     try {
       return jsonResult(await bridge.send("read_input_context", { path }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_trace_input",
+  {
+    title: "Trace a key press to the code that runs",
+    description:
+      'Answers "what happens when the player presses Escape" in one call: the contexts that bind the key, the ' +
+      "Input Action it fires, every Blueprint that handles it, and what each handler does in execution order.\n\n" +
+      "**Use this instead of guessing from asset names.** Reaching the same answer by hand is three chained calls, " +
+      "so the cheap move is to list assets whose name looks right - which gives a confident wrong answer. On a real " +
+      'project that produced "WB_Pause" for a key that actually routes through IA_OpenPause into the player ' +
+      "controller.\n\n" +
+      "Pass `key`, or `action` to skip the binding lookup. An unbound key says so, which is the answer when a " +
+      "control does nothing.",
+    inputSchema: {
+      key: z
+        .string()
+        .optional()
+        .describe('The key as the editor spells it: "Escape", "E", "SpaceBar", "Gamepad_FaceButton_Bottom".'),
+      action: z
+        .string()
+        .optional()
+        .describe('An InputAction name, e.g. "IA_OpenPause". Use instead of `key` to skip the binding lookup.'),
+      maxHandlers: z
+        .number()
+        .optional()
+        .describe("How many referring Blueprints to open. Defaults to 6; the reply says when it stopped early."),
+      detail: z
+        .boolean()
+        .optional()
+        .describe("Return the structured trace as well as the prose. Only worth it if you need exact paths and node ids."),
+    },
+  },
+  async ({ key, action, maxHandlers, detail }) => {
+    if (!key && !action) {
+      return errorResult(
+        new Error('unreal_trace_input needs a `key` ("Escape") or an `action` ("IA_OpenPause"). Nothing ran.')
+      );
+    }
+    try {
+      const trace = await traceInput(bridge, { key, action, maxHandlers }, (summary, opts) =>
+        explainGraph(summary as never, opts)
+      );
+      // Prose is the answer; the structure is the same facts with field names repeated per row.
+      // Same call the map_system and explain_graph measurements both landed on.
+      if (detail) return jsonResult({ text: describeTrace(trace), ...trace });
+
+      // The prose carries every fact the structure does. What survives alongside it is the handler
+      // COUNT - "nothing handles this" and "six things handle this" are different problems, and a
+      // caller skimming the text should not have to count lines to tell them apart.
+      const handlerCount = trace.actions.reduce((n, a) => n + a.handlers.length, 0);
+      return jsonResult({
+        text: describeTrace(trace),
+        actionCount: trace.actions.length,
+        handlerCount,
+        ...(trace.notes.length > 0 ? { notes: trace.notes } : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }

@@ -46,7 +46,10 @@ const aliases = new Map([
 // automation asynchronously and reports through the log, so there is no single bridge command
 // to match it against. Built this way deliberately - a new C++ command would have meant a plugin
 // rebuild and an editor restart before anyone could use it.
-const compositeTools = new Set(["run_tests", "document_asset", "call_tool", "verify_runtime", "read_runtime_errors", "auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature", "cleanup_blueprint", "add_event_handler", "scaffold_blueprint", "scaffold_widget", "explain_graph", "audit_project", "guard_with_authority", "list_tools", "guide", "find_source", "verify_feature", "check_data_tables", "find_in_data_tables", "find_orphans",
+// trace_input walks read_input_context -> find_references -> read_blueprint_graph_summary, for the
+// same reason: every step it needs already exists as a bridge command, so composing it in the server
+// costs no plugin rebuild and no editor restart.
+const compositeTools = new Set(["trace_input", "run_tests", "document_asset", "call_tool", "verify_runtime", "read_runtime_errors", "auto_layout_graph", "review_blueprint", "doctor", "enable_tools", "session_changes", "map_system", "plan_feature", "cleanup_blueprint", "add_event_handler", "scaffold_blueprint", "scaffold_widget", "explain_graph", "audit_project", "guard_with_authority", "list_tools", "guide", "find_source", "verify_feature", "check_data_tables", "find_in_data_tables", "find_orphans",
   // compile_cpp asks the bridge only where the engine and project are (ping) and then runs
   // UnrealBuildTool itself. It is deliberately NOT a bridge command: the compile must survive the
   // editor being busy, and a build that takes minutes has no business occupying the game thread.
