@@ -10684,3 +10684,40 @@ questions stay out.
 Recall for that sentence went from the 518-char generic answer to `get_game_settings, audit_project,
 read_class_defaults`. Cost: one entry, zero standing tokens — the index is consulted on a miss, not
 shipped in the prompt.
+
+### The discovery reply recommended the expensive route first
+
+Having named three tools one by one, the symptom reply ended like this:
+
+> `unreal_enable_tools({ groups: ["core","scene"] })` turns them on, or `unreal_call_tool({ tool, args })`
+> runs one without turning anything on.
+
+Two options, presented as equals, cheapest one second. They are not equals. Measured on the `search`
+profile for "the tutorial level doesn't spawn a player":
+
+| route | tool list | standing tokens |
+|---|---|---|
+| baseline (`search`) | 5 | 1,707 |
+| `enable_tools({tools})` — the three it named | 8 | 2,827 (+1,120) |
+| `enable_tools({groups})` — what it advised | 51 | 19,908 (+18,201) |
+| `call_tool` — one call, no enable | 5 | 1,707 (+0) |
+
+Same answer from any of them. The one that costs **sixteen times more** was offered first, in the
+reply that serves the single request this project exists for, and those 46 extra tools stay in the
+prompt for the rest of the session.
+
+`enable_tools` has always accepted `tools:` as well as `groups:`. The reply had the three tool names
+in hand — it printed them in `suggested` — and then advised enabling the groups containing them.
+
+Now: `call_tool` first, `enable_tools({tools: [...]})` second with the names filled in, and the count
+of what asking by group would drag along. That count is **derived from the catalogue, not hardcoded**,
+because it depends on which groups matched.
+
+**The first version of this fix stated the cost as "about 19x more standing tokens".** That number
+came from a formula — `(groupSize - known.length) * 0.4` — that has no basis in anything. The measured
+ratio is 16×; 19 was a coincidence of arithmetic wearing the costume of a measurement. It is now stated
+as the two tool counts, which are what was actually counted.
+
+A live test in `dispatch.test.mjs` drives the real server and asserts `call_tool` appears before
+`enable_tools` and that no `groups:` advice survives — in the file whose own header explains that a
+tool-list change invalidates the prompt cache for the whole conversation.

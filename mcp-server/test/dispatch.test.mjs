@@ -156,3 +156,36 @@ test("the first dispatch to an authoring tool still delivers the exact pin names
     server.child.kill();
   }
 });
+
+test("a symptom match points at the tools it named, not at the groups holding them", async () => {
+  // This file's own header says the dispatcher exists so a call does not change the tool list. The
+  // discovery reply that leads a caller here was arguing the other way: having named three tools by
+  // name, it ended with enable_tools({groups: [...]}) FIRST and call_tool second, as equals.
+  //
+  // Measured on the search profile, for the sentence "the tutorial level doesn't spawn a player":
+  //
+  //   baseline                       5 tools,  1,707 tokens
+  //   enable the 3 tools it named    8 tools,  2,827 tokens   (+1,120)
+  //   enable the 2 groups it advised 51 tools, 19,908 tokens  (+18,201)
+  //
+  // Same answer either way. The expensive one was recommended first, in the reply that serves the
+  // one request this project exists for, and it stays in the prompt for the rest of the session.
+  const server = await startAndInitialize({ UNREAL_MCP_PROFILE: "search" }, "dispatch-test");
+  try {
+    const { text } = await call(server, "unreal_list_tools", {
+      match: "the tutorial level doesn't spawn a player",
+    });
+    const next = JSON.parse(text).next;
+    assert.ok(next.includes("unreal_call_tool"), "the cheapest route is not offered at all");
+    assert.ok(
+      !/enable_tools\(\{\s*groups:/.test(next),
+      `a reply that named specific tools still advised enabling their groups: ${next}`
+    );
+    assert.ok(
+      next.indexOf("unreal_call_tool") < next.indexOf("unreal_enable_tools"),
+      "the route that changes nothing must be offered before the one that changes the tool list"
+    );
+  } finally {
+    server.child.kill();
+  }
+});

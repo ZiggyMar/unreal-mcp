@@ -6341,6 +6341,16 @@ register(
       const symptom = matchSymptoms(needle);
       const known = (symptom?.tools ?? []).filter((name) => toolCatalog.has(name));
       const groupsFor = [...new Set(known.map((name) => toolCatalog.get(name)!.group))].sort();
+      // How much the lazy answer would cost.
+      //
+      // This reply used to end by recommending enable_tools({groups}) - the groups CONTAINING the
+      // tools it had just named one by one. Measured on "the tutorial level doesn't spawn a player":
+      // naming the three suggested tools costs +1,120 standing tokens, asking for their two groups
+      // costs +18,201, and both answer the same question. Sixteen times the price, offered first,
+      // for the sentence this whole project exists to serve.
+      //
+      // Counted rather than hardcoded, because it depends entirely on which groups got matched.
+      const groupSize = [...toolCatalog.values()].filter((t) => groupsFor.includes(t.group)).length;
       return jsonResult({
         matched: 0,
         of: toolCatalog.size,
@@ -6374,9 +6384,14 @@ register(
                       `symptom, so these are the tools that find that class of problem.`) +
                 ` This is a keyword match on the words listed in matchedSymptomWords, not an ` +
                 `understanding of the sentence - check the suggestions against what you actually want.` +
-                (groupsFor.length > 0
-                  ? ` unreal_enable_tools({ groups: ${JSON.stringify(groupsFor)} }) turns them on, or ` +
-                    `unreal_call_tool({ tool, args }) runs one without turning anything on.`
+                (known.length > 0
+                  ? ` unreal_call_tool({ tool, args }) runs one of these now without changing the ` +
+                    `tool list at all. If you expect several calls, ` +
+                    `unreal_enable_tools({ tools: ${JSON.stringify(known)} }) adds exactly these ` +
+                    `${known.length}. Prefer that to groups: these ${known.length} sit in groups ` +
+                    `holding ${groupSize} tools between them, so asking by group buys the same answer ` +
+                    `plus ${groupSize - known.length} tools you did not ask for, and every one of them ` +
+                    `stays in the prompt for the rest of the session.`
                   : ""),
             }
           : {
