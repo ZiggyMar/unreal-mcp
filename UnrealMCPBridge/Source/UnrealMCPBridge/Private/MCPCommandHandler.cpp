@@ -6147,8 +6147,79 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleDeleteAsset(const TSharedPtr<F
 	if (Blockers.Num() > 0 && !bForce)
 	{
 		TSharedRef<FJsonObject> Blocked = MakeErrorResponse(
-			TEXT("delete_blocked: live assets outside the delete set still reference these. Pass force:true to delete anyway (breaks those references to None)."));
+			TEXT("delete_blocked: live assets outside the delete set still reference these."));
 		Blocked->SetArrayField(TEXT("blockers"), Blockers);
+
+		/**
+		 * The WHOLE set, not just the first ring of it.
+		 *
+		 * Direct blockers alone make the real scope arrive one round at a time. Deleting fifteen
+		 * abandoned Blueprints from a real project reported one blocker; adding it reported seven
+		 * more; each of those has referencers of its own. A caller iterating that is discovering the
+		 * shape of a connected cluster by repeatedly being told "no", and the obvious escape - force -
+		 * is how live content gets orphaned.
+		 *
+		 * So the closure is computed here and handed back: add these and the delete succeeds, or look
+		 * at the count and decide it is not what you wanted. Both are better answers than another
+		 * round trip.
+		 *
+		 * Capped, and honest about the cap. A closure that runs away is itself the finding: an asset
+		 * whose removal takes 300 others with it is load-bearing, whatever its name suggests.
+		 */
+		const int32 ClosureCap = 200;
+		TSet<FName> Closure = DeleteSet;
+		TArray<FName> Frontier;
+		for (const FName& Seed : DeleteSet)
+		{
+			Frontier.Add(Seed);
+		}
+		bool bCapped = false;
+		while (Frontier.Num() > 0 && !bCapped)
+		{
+			const FName Current = Frontier.Pop();
+			TArray<FName> Referencers;
+			AssetRegistry.GetReferencers(Current, Referencers);
+			for (const FName& Ref : Referencers)
+			{
+				const FString RefStr = Ref.ToString();
+				if (RefStr.StartsWith(TEXT("/Script/")) || Closure.Contains(Ref))
+				{
+					continue;
+				}
+				Closure.Add(Ref);
+				Frontier.Add(Ref);
+				if (Closure.Num() >= ClosureCap)
+				{
+					bCapped = true;
+					break;
+				}
+			}
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Extra;
+		for (const FName& Member : Closure)
+		{
+			if (!DeleteSet.Contains(Member))
+			{
+				Extra.Add(MakeShared<FJsonValueString>(Member.ToString()));
+			}
+		}
+		Extra.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
+		{
+			return A->AsString() < B->AsString();
+		});
+		Blocked->SetArrayField(TEXT("alsoNeeded"), Extra);
+		Blocked->SetStringField(TEXT("next"),
+			bCapped
+				? FString::Printf(TEXT("Deleting these together would take AT LEAST %d more assets - the walk was ")
+					TEXT("stopped at %d. A set that large is the answer to the question: these are not debris, they ")
+					TEXT("are a connected part of the project. Delete something smaller, or decide deliberately that ")
+					TEXT("the whole cluster goes."), Extra.Num(), ClosureCap)
+				: FString::Printf(TEXT("Pass all %d together - the %d requested plus the %d in alsoNeeded - and ")
+					TEXT("nothing outside the set is left pointing at None. force:true deletes only what was asked ")
+					TEXT("and breaks the rest, which surfaces later as a compile error or a Play In Editor modal ")
+					TEXT("rather than as a delete failure."),
+					DeleteSet.Num() + Extra.Num(), DeleteSet.Num(), Extra.Num()));
 		return Blocked;
 	}
 

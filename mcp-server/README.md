@@ -7419,6 +7419,7 @@ anybody noticed.
 - [The hook said the plugin does not compile, about source that compiles](#the-hook-said-the-plugin-does-not-compile-about-source-that-compiles)
 - [`force: true` meant "do not tell me", and it should have meant "I accept it"](#force-true-meant-do-not-tell-me-and-it-should-have-meant-i-accept-it)
 - [The escape hatch produced the failure it warned about](#the-escape-hatch-produced-the-failure-it-warned-about)
+- ["Delete blocked by 7" was the wrong number; the real one was 169](#delete-blocked-by-7-was-the-wrong-number-the-real-one-was-169)
 
 <!-- INDEX:END -->
 
@@ -11558,3 +11559,31 @@ The check was measuring something true; only its remedy was wrong.
 The diagnosis came from `unreal_doctor` correctly reporting "the editor is RUNNING and its game thread
 is blocked", which it could not have said before this session. A fix built four commits earlier
 identified the failure mode of a fix being built now.
+
+### "Delete blocked by 7" was the wrong number; the real one was 169
+
+`delete_asset` reported the assets directly referencing what you asked to remove. That makes the real
+scope arrive one round at a time: fifteen abandoned Blueprints reported **one** blocker, adding it
+reported **seven** more, and each of those has referencers of its own. A caller iterating that is
+learning the shape of a connected cluster by being told "no" repeatedly — and the obvious escape,
+`force`, is how live content gets orphaned. That is exactly the path I took, and it broke a Blueprint.
+
+The refusal now computes the **transitive closure** and hands it back: add these and the delete
+succeeds, or read the count and decide it was never a good idea.
+
+Run against the real case — 15 Lyra front-end Blueprints that looked like debris:
+
+```
+direct blockers:                    7
+alsoNeeded (transitive closure):  154
+next: Pass all 169 together ...
+```
+
+And the closure names `BP_MomBase`, `BP_Shop`, `BP_BaseCharacter`, `BP_VirusData`, `BP_BaseEnemy`,
+`BP_TutorialDataSpawner`. **Removing those fifteen reaches the entire game.** They are not debris; they
+are woven in through shared base classes. The answer to "can I delete these" is no, and it took one
+call to say so instead of three rounds and a mistake.
+
+The walk is capped at 200, and the cap is itself an answer rather than a truncation: *"a set that large
+is the answer to the question — these are not debris, they are a connected part of the project."* An
+asset whose removal takes hundreds of others with it is load-bearing whatever its name suggests.
