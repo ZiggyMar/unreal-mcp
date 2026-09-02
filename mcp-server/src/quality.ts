@@ -570,7 +570,21 @@ export function reviewGraph(graphName: string, allNodes: LayoutNode[], context: 
       (pin) => pin.direction === "out" && (pin.linkedTo ?? []).length > 0
     );
     if (wired.length !== 2) return false;
-    const targets = wired.map((pin) => (pin.linkedTo ?? [])[0]?.node);
+    // Node AND pin, not node alone. Comparing only the node calls every boolean function in the
+    // project a defect: a function's Outputs is ONE tunnel node, so `then -> Outputs.Cannot` and
+    // `else -> Outputs.Can` are two arms landing on the same node and deciding everything.
+    //
+    // Found by reading BP_Player/CanShoot after this check flagged it - a Branch on
+    // (EnergyCooldown OR isVaccuming OR inCutscene) feeding Cannot and Can, which is exactly how
+    // the construct is meant to look. This check was written in this repo to replace an earlier one
+    // that fired on 58% of Branches, and it had the same defect in a narrower form.
+    //
+    // The real case still fires: BP_FireWall.TakeDamage sends both arms into Set Health's single
+    // `execute` pin, so node and pin both match.
+    const targets = wired.map((pin) => {
+      const link = (pin.linkedTo ?? [])[0];
+      return link ? `${link.node}.${link.pin}` : undefined;
+    });
     return targets[0] !== undefined && targets[0] === targets[1];
   });
   for (const branch of pointlessBranches) {

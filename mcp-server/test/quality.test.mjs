@@ -438,3 +438,42 @@ test("a function with a body is not reported", () => {
   const report = reviewGraph("Heal", nodes);
   assert.equal(report.findings.find((f) => f.check === "empty-function"), undefined);
 });
+
+test("a boolean function's two output pins are not 'the same node'", () => {
+  // The false positive this check shipped with, found by reading the graph it accused rather than
+  // trusting it. BP_Player/CanShoot is
+  //
+  //   Branch (EnergyCooldown OR isVaccuming OR inCutscene)  then -> Outputs.Cannot
+  //                                                         else -> Outputs.Can
+  //
+  // A function's Outputs is ONE tunnel node, so comparing node identity alone calls every boolean
+  // function in the project a defect. Two of the three findings on a real project were this.
+  const nodes = [
+    node("in", "K2Node_Tunnel", "Inputs", [["Exec", "out", "br", "execute"]]),
+    node("br", "K2Node_IfThenElse", "Branch", [
+      ["execute", "in", "in", "Exec"],
+      ["then", "out", "out", "Cannot"],
+      ["else", "out", "out", "Can"],
+    ]),
+    node("out", "K2Node_Tunnel", "Outputs", [
+      ["Cannot", "in", "br", "then"],
+      ["Can", "in", "br", "else"],
+    ]),
+  ];
+  assert.ok(!checks(reviewGraph("CanShoot", nodes)).includes("branch-decides-nothing"));
+});
+
+test("same node AND same pin is still flagged", () => {
+  // The precision fix must not cost recall. BP_FireWall.TakeDamage sends both arms into Set
+  // Health's single `execute` pin, so node and pin both match and it stays caught.
+  const nodes = [
+    node("ev", "K2Node_Event", "TakeDamage", [["then", "out", "br", "execute"]]),
+    node("br", "K2Node_IfThenElse", "Branch", [
+      ["execute", "in", "ev", "then"],
+      ["then", "out", "set", "execute"],
+      ["else", "out", "set", "execute"],
+    ]),
+    node("set", "K2Node_VariableSet", "Set Health", [["execute", "in", "br", "then"]]),
+  ];
+  assert.ok(checks(reviewGraph("TakeDamage", nodes)).includes("branch-decides-nothing"));
+});

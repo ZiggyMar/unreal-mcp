@@ -9418,3 +9418,40 @@ One guard caught the change honestly. `check:replies` bounds the doctor report a
 the case *"run when nothing works"* — and it keys on a string the compact form no longer contains.
 It now asks for `verbose: true`, because the report it exists to bound is the one you get when
 something is wrong, and that report is always full.
+
+### Two of three `branch-decides-nothing` findings were wrong
+
+This check was written in this repo to replace `branch-dead-path`, which fired on 58% of Branches
+and was pure noise. The replacement was narrower and looked safe: *a Branch whose two arms reach the
+same node has computed a condition and thrown it away*. On a real project it found three.
+
+Reading the graphs it accused — rather than trusting it — showed two of the three were correct code.
+`BP_Player/CanShoot` is:
+
+```text
+Branch (EnergyCooldown OR isVaccuming OR inCutscene)   then -> Outputs.Cannot
+                                                       else -> Outputs.Can
+```
+
+That decides everything. A function's `Outputs` is **one tunnel node**, so both arms land on the
+same node by construction — which means comparing node identity alone calls *every boolean function
+in the project* a defect. `BP_AntlineCable` was the same shape.
+
+The fix is one line: compare `node.pin`, not `node`.
+
+| | before | after |
+|---|---:|---:|
+| findings on this project | 3 | 1 |
+| of those, real | 1 | 1 |
+| precision | 33% | **100%** |
+
+`BP_FireWall.TakeDamage` still fires, which is the half that matters — it sends both arms into
+`Set Health`'s single `execute` pin, so node and pin both match. Recall is unchanged; only the
+false positives are gone.
+
+**The same mistake in a narrower form.** The comment above this check already explains that its
+predecessor fired on ordinary correct practice, and the tests written beside it encoded the same
+assumption the code did — `then`/`else` both pointing at one node id, which looked obviously wrong
+in a fixture and is obviously right in a function graph. A fixture invented alongside the thing it
+tests can only confirm it. What caught this was running the check against a real Blueprint and then
+reading that Blueprint.
