@@ -7420,6 +7420,7 @@ anybody noticed.
 - [`force: true` meant "do not tell me", and it should have meant "I accept it"](#force-true-meant-do-not-tell-me-and-it-should-have-meant-i-accept-it)
 - [The escape hatch produced the failure it warned about](#the-escape-hatch-produced-the-failure-it-warned-about)
 - ["Delete blocked by 7" was the wrong number; the real one was 169](#delete-blocked-by-7-was-the-wrong-number-the-real-one-was-169)
+- [Suppressing the dialog turned a hang into a lie](#suppressing-the-dialog-turned-a-hang-into-a-lie)
 
 <!-- INDEX:END -->
 
@@ -11587,3 +11588,41 @@ call to say so instead of three rounds and a mistake.
 The walk is capped at 200, and the cap is itself an answer rather than a truncation: *"a set that large
 is the answer to the question — these are not debris, they are a connected part of the project."* An
 asset whose removal takes hundreds of others with it is load-bearing whatever its name suggests.
+
+### Suppressing the dialog turned a hang into a lie
+
+`unreal_set_variable_type` reported success and changed nothing:
+
+```json
+{"variable":"GuideTargetData","from":"object","to":"object:Actor",
+ "compiled":{"errorCount":0,"warningCount":0},"next":"Compile this Blueprint and check..."}
+```
+
+Every field in that reply is true except the one that matters. The variable was still
+`BP_VirusData_C` afterwards.
+
+`ChangeMemberVariableType` asks for confirmation when a retype would break existing pin connections.
+This bridge now runs under `GIsRunningUnattendedScript` — added earlier this session so an engine
+dialog could not hang the editor — and that makes the prompt return its conservative default, which
+**declines**. So the retype quietly did not happen, and the reply asserted the requested type because
+nothing ever checked.
+
+**That is the other half of the unattended guard, and it is worth stating as a rule.** Suppressing a
+dialog stops the editor hanging; on its own it converts a hang into a false success, which is harder
+to catch — a hang is at least obvious. *Any command that can be silently declined has to look
+afterwards.*
+
+It now compares the variable's actual `FEdGraphPinType` against the requested one and returns
+`changed: true|false`, with a warning that names the real remedy: disconnect the nodes that use it,
+retype, rewire — or do it by hand in the editor.
+
+Third instance of the same defect this session, and the pattern is the point:
+
+| | reported | reality |
+|---|---|---|
+| `set_pin_default_value` on a class pin | `{"set": true}` | pin empty |
+| `build_graph` pinDefaults | `pinDefaultsSet: 5` | one kept nothing |
+| `set_variable_type` | `to: object:Actor` | still `BP_VirusData_C` |
+
+All three now read back what actually landed. A write that verifies costs one read; a write that
+reports success without checking can be wrong for hours across calls that each look fine.

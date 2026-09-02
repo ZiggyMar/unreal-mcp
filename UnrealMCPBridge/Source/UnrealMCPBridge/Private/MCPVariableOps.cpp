@@ -171,9 +171,46 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleSetVariableType(const TSharedP
 	FBlueprintEditorUtils::ChangeMemberVariableType(Blueprint, FName(*Name), NewPinType);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
+	/**
+	 * Did it actually change? Asked, rather than assumed.
+	 *
+	 * This reported `to: <what you asked for>` unconditionally. It is wrong often enough to matter:
+	 * ChangeMemberVariableType asks for confirmation when the retype would break existing pin
+	 * connections, and since this bridge runs under GIsRunningUnattendedScript that dialog now
+	 * returns its conservative default - which DECLINES. So the retype silently does not happen and
+	 * the reply says it did.
+	 *
+	 * Measured: retyping a wired GuideTargetData from BP_VirusData_C to Actor returned
+	 * {"from":"object","to":"object:Actor","compiled":{"errorCount":0}} and the variable was still
+	 * BP_VirusData_C afterwards. Every field in that reply was true except the one that mattered.
+	 *
+	 * That is the other half of the unattended guard. Suppressing the dialog stops the editor
+	 * hanging; without this, it converts a hang into a lie. A command that can be declined has to
+	 * look afterwards.
+	 */
+	bool bActuallyChanged = false;
+	for (const FBPVariableDescription& Desc : Blueprint->NewVariables)
+	{
+		if (Desc.VarName == FName(*Name))
+		{
+			bActuallyChanged = (Desc.VarType == NewPinType);
+			break;
+		}
+	}
+
 	Result->SetStringField(TEXT("variable"), Name);
 	Result->SetStringField(TEXT("from"), OldType);
 	Result->SetStringField(TEXT("to"), NewType);
+	Result->SetBoolField(TEXT("changed"), bActuallyChanged);
+	if (!bActuallyChanged)
+	{
+		Result->SetStringField(TEXT("warning"),
+			FString::Printf(TEXT("%s is STILL its old type - the retype did not take. The engine asks for ")
+				TEXT("confirmation when a retype would break existing pin connections, and this bridge runs ")
+				TEXT("unattended, so that prompt is declined rather than shown. Disconnect the nodes that use ")
+				TEXT("%s first, retype, then rewire - or make the change by hand in the editor."),
+				*Name, *Name));
+	}
 	// Said plainly because it is the whole risk of this command: a retype can leave nodes that were
 	// valid before wired to a pin that no longer accepts them, and the compiler is what reports it.
 	Result->SetStringField(TEXT("next"),
