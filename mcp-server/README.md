@@ -9613,3 +9613,39 @@ to skip — and skipping it costs them the twelve.
 **Nothing about this was a bug in the detection.** The check ran correctly, the note was accurate as
 written, and every count it reported was true. The defect was that a true statement had been made
 useless by including things it was never about.
+
+### The orientation call spent 64% of itself on a long tail
+
+`unreal_get_project_overview` is what the standing instructions send a model to **first**, to get its
+bearings in an unfamiliar project. Measured here, that reply was 702 tokens, and 452 of them were the
+parent-class census below the top eight:
+
+```text
+79 parent classes
+43 of them have exactly one Blueprint
+```
+
+"One Blueprint inherits from `BP_BillboardVariant_C`" orients nobody. What orients is that this
+project is 88 widgets and 71 actors. And the question the tail could answer — which Blueprints sit
+under class X — is answered properly by `unreal_list_blueprints`, which reads the editor rather than
+a cached index.
+
+| | before | after |
+|---|---:|---:|
+| overview reply | 702 | **416** |
+| parent classes listed | 79 | 21 |
+
+The cut is **by count, not by rank**: every class with three or more Blueprints survives whatever the
+project looks like, so a project of forty evenly sized hierarchies keeps all forty. A top-N cut would
+have told a different lie about a differently shaped project.
+
+The tail is counted, never dropped — *"58 more parent class(es) account for 73 Blueprint(s)"* — and
+the test asserts `kept + hidden == blueprintCount`, so the reply can never quietly disagree with its
+own census.
+
+`planFeature` reads the bridge's untouched shape rather than this reply, and already took only the
+top six from it — the same judgement, made independently, before this was measured.
+
+**Side effect worth recording**: cutting `unlabelled-sections` and the not-a-class caveat in the two
+previous commits took the whole-project audit from 3,206 to 2,968 tokens without anything being
+aimed at its size.

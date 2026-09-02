@@ -2060,9 +2060,48 @@ register(
       // The census as a map rather than a list of two-key objects. Same information, and the words
       // "parentClass" and "count" stop being sent 79 times. planFeature and everything else internal
       // read the bridge's own shape, which is untouched.
+      const parents = asCountMap(result.byParentClass as never, "parentClass", "count") as Record<string, number>;
+
+      /**
+       * The long tail of parent classes is an inventory, not an orientation.
+       *
+       * Measured on this project: 79 parent classes, 43 of them with exactly one Blueprint, and
+       * everything below the top eight costs 452 of the reply's 702 tokens - 64% of the call the
+       * instructions tell every model to make FIRST, to get its bearings.
+       *
+       * "One Blueprint inherits from BP_BillboardVariant_C" orients nobody. What orients is that
+       * this project is 88 widgets and 71 actors. And the question the tail could answer - which
+       * Blueprints are under class X - is answered properly by unreal_list_blueprints, which reads
+       * the editor rather than a cached index.
+       *
+       * The cut is by COUNT, not by rank, so it does not lie about shape: every class with three or
+       * more Blueprints survives whatever the project looks like, and a project of forty evenly
+       * sized hierarchies keeps all forty. planFeature already took only the top six from the
+       * bridge's own copy, which is the same judgement made independently.
+       */
+      const KEEP_AT_LEAST = 3;
+      const kept: Record<string, number> = {};
+      let tailClasses = 0;
+      let tailBlueprints = 0;
+      for (const [name, count] of Object.entries(parents)) {
+        if (count >= KEEP_AT_LEAST) kept[name] = count;
+        else {
+          tailClasses += 1;
+          tailBlueprints += count;
+        }
+      }
+
       return jsonResult({
         ...result,
-        byParentClass: asCountMap(result.byParentClass as never, "parentClass", "count"),
+        byParentClass: kept,
+        ...(tailClasses > 0
+          ? {
+              otherParentClasses:
+                `${tailClasses} more parent class(es) account for ${tailBlueprints} Blueprint(s), ` +
+                `fewer than ${KEEP_AT_LEAST} each. unreal_list_blueprints with \`match\` set to a class ` +
+                `name lists the Blueprints under it, from the editor rather than this cached index.`,
+            }
+          : {}),
       });
     } catch (err) {
       return errorResult(err);
