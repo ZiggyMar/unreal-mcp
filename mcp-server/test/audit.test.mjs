@@ -570,3 +570,29 @@ test("a native parent is reported as uncovered, not as a finding", async () => {
   assert.match(r.parentCallNotChecked ?? "", /AVSActivatableWidget/);
   assert.match(r.parentCallNotChecked ?? "", /unreal_find_source/);
 });
+
+test("the Data Table half says how much it read", async () => {
+  // Without this, a project with no Data Tables and a project with fifty clean ones produce an
+  // identical reply and neither says which it is. The absence of findings is not evidence until you
+  // know what was read - the same reason parent-event-not-called now reports its coverage.
+  const bridge = fakeBridge({
+    list_assets: () => ({ assets: ["/Game/Data/DT_A.DT_A", "/Game/Data/DT_B.DT_B"] }),
+    list_data_table_rows: () => ({
+      rows: [
+        { rowName: "one", values: { Ref: "/Script/Engine.BlueprintGeneratedClass'/G/BP_A.BP_A_C'" } },
+        { rowName: "two", values: { Ref: "/Script/Engine.BlueprintGeneratedClass'/G/BP_B.BP_B_C'" } },
+      ],
+    }),
+  });
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTablesScanned, 2);
+  assert.equal(r.dataTableRowsScanned, 4, "two tables of two rows");
+  assert.deepEqual(r.dataTableNulls, [], "nothing wrong with these, which is the point");
+});
+
+test("a project with no Data Tables reports zero rather than staying silent", async () => {
+  const r = await auditProject(fakeBridge({ list_assets: () => ({ assets: [] }) }), {});
+  assert.equal(r.dataTablesScanned, 0);
+  assert.equal(r.dataTableRowsScanned, 0);
+});

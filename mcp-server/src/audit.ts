@@ -164,6 +164,9 @@ export interface AuditResult {
    * row is neither a Blueprint nor a graph. Filing it under one would be a lie of the same kind the
    * review already refuses to tell.
    */
+  /** How much of the Data Table half actually ran, so no findings can be told from not looking. */
+  dataTablesScanned: number;
+  dataTableRowsScanned: number;
   dataTableNulls: Array<{ table: string; rowName: string; field: string; rowStruct?: string }>;
   /**
    * Rows sharing a CLASS reference in a column where almost every other row has its own.
@@ -999,10 +1002,19 @@ const unresolvedClasses = new Set<string>();
   // this tool answers and the most expensive bug it has seen was not in a graph at all: a row's
   // class reference cleared to None, resolved to null by the engine and silently ignored by the
   // thing that consumed it. An audit that reads only Blueprints looks straight past it.
+  let dataTablesScanned = 0;
+  let dataTableRowsScanned = 0;
   const dataTableNulls: AuditResult["dataTableNulls"] = [];
   const dataTableDuplicateClasses: AuditResult["dataTableDuplicateClasses"] = [];
   try {
     const tables = await auditDataTables(bridge, { pathPrefix: options.pathPrefix });
+    // What the Data Table half actually looked at.
+    //
+    // Without it, a project with no Data Tables and a project with fifty clean ones produce an
+    // identical reply, and neither says which it is. Same shape as the parent-call gap above: the
+    // absence of findings is not evidence until you know what was read.
+    dataTablesScanned = tables.tablesScanned;
+    dataTableRowsScanned = tables.rowsScanned;
     for (const n of tables.nullReferences) {
       dataTableNulls.push({ table: n.table, rowName: n.rowName, field: n.field, rowStruct: n.rowStruct });
     }
@@ -1177,6 +1189,8 @@ const unresolvedClasses = new Set<string>();
     groups,
     worstBlueprints,
     unreadable,
+    dataTablesScanned,
+    dataTableRowsScanned,
     dataTableNulls,
     dataTableDuplicateClasses,
     truncated: all.length > blueprints.length,

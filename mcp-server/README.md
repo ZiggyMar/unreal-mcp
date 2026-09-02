@@ -9719,3 +9719,31 @@ The list is there so the reader can spot their own classes, which they do instan
 **A coverage number is not a finding, and this project keeps discovering it needs both.** Three
 findings from a check that ran on 13% of the project is a different fact from three findings, and
 nothing in the reply distinguished them.
+
+### Sweeping for the rest of the silent skips
+
+The parent-call gap in the previous commit was one instance of a shape: work the audit does not do,
+reported nowhere. Worth checking whether it was the only one, so the next iteration does not go
+looking again.
+
+`audit.ts` has nine `continue` statements. Seven are accounted for:
+
+| | |
+|---|---|
+| dispatcher graphs | deliberate — without it `empty-function` reports every event dispatcher |
+| non-class variable types | added two commits ago, with the reason recorded |
+| the parent-call skip | now reports coverage |
+| four in the dedup pass | collapsing duplicate findings, not skipping work |
+
+The one thing left was the Data Table half. `auditDataTables` computes `tablesScanned` and
+`rowsScanned` and the audit never passed them on, so **a project with no Data Tables and a project
+with fifty clean ones produced an identical reply**, and neither said which it was. The absence of
+findings is not evidence until you know what was read.
+
+Both numbers are now returned — `dataTablesScanned: 20, dataTableRowsScanned: 128` on this project,
+for 13 tokens. There is a 200-table cap on the scan; this project is nowhere near it, but the count
+is now visible if a bigger one ever is.
+
+**A negative result is worth writing down too.** The sweep found one more instance and confirmed the
+other eight are fine. That is the useful output — not because anything was wrong with them, but
+because the next person to ask "where else is this happening" now has an answer instead of a search.
