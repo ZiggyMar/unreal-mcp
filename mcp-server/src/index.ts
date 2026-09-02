@@ -2775,7 +2775,19 @@ register(
       '("bool", "int", "float", "string", "vector", "object:<Class>", "struct:<Struct>", "enum:<Enum>", ...).',
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
-      functionName: z.string().describe('Name for the new function, e.g. "HandleDamage". Fails if a graph with this name exists.'),
+      functionName: z
+        .string()
+        .optional()
+        .describe('Name for the new function, e.g. "HandleDamage". Fails if a graph with this name exists.'),
+      /**
+       * Fifteen tools call the thing they act on `name`, and this one names exactly one thing.
+       *
+       * add_node, call_parent_function and rename_function deliberately do NOT take it: each
+       * declares two or more `*Name` parameters, and a generic word standing among six of them adds
+       * a guess rather than removing one. check:params derives that distinction rather than keeping
+       * a list of exceptions.
+       */
+      name: z.string().optional().describe("Same as `functionName`."),
       inputs: z
         .array(z.object({ name: z.string(), type: z.string() }))
         .optional()
@@ -2786,7 +2798,13 @@ register(
         .describe('Function return values, e.g. [{"name":"bDied","type":"bool"}].'),
     },
   },
-  async ({ path, functionName, inputs, outputs }) => {
+  async ({ path, functionName: functionNameRaw, name, inputs, outputs }) => {
+    const functionName = functionNameRaw ?? name;
+    if (!functionName) {
+      return errorResult(
+        new Error("unreal_create_function needs a function name: pass `functionName` (or `name`). Nothing ran.")
+      );
+    }
     try {
       // Same translation as add_variable. A function signature is where a model is MOST likely to
       // write the C++ spelling, because it usually has the native declaration in front of it.

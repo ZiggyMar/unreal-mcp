@@ -110,7 +110,19 @@ export const PROFILES = [
     // audit_project has taken a `check` since it was written; the per-asset half of the same job
     // never did, so a caller with a specific question had to take everything or narrow by graph and
     // hope the finding lived there. That asymmetry was the defect; this is its price.
-    ceilingTokens: 13_200,
+    //
+    // Raised by 20 for unreal_create_function's `name` alias, measured at 12 tokens.
+    //
+    // Fifteen tools call the thing they act on `name`; create_function was the only tool naming
+    // exactly one thing that would not answer to it, and check:params found that only once it was
+    // reading the schemas the server sends rather than a regex over the source. The alternative to
+    // paying the 12 was trimming a description to make room, and this repo has already measured that
+    // road and refused it: descriptions are 41% of the payload and they are the teaching a weaker
+    // model relies on, so buying ceiling with clarity is the trade that is not being made here.
+    //
+    // Twelve tokens, paid once and served from the prompt cache thereafter, against a failed call
+    // and a recovery every time a model types the word fifteen other tools taught it.
+    ceilingTokens: 13_220,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {

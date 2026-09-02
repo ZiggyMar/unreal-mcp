@@ -204,9 +204,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2523 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4251 | ten tools, fixed, for a small local model |
-| `core` | 13194 | the authoring spine |
-| `lazy` | 13501 | `core` plus deferred groups |
-| `full` | 46631 | everything, for a model that can afford it |
+| `core` | 13206 | the authoring spine |
+| `lazy` | 13513 | `core` plus deferred groups |
+| `full` | 46643 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -10819,3 +10819,52 @@ inline (`ALL_GROUPS_TOKENS`, every preset, `GROUP_COST_TOKENS.core`), so regener
 live measurement and refused the push over the one-token difference — which is exactly the coupling
 worth having, since the figure is also quoted twice in the workflow guide and registered in
 `check-claims.mjs`. All four now agree at 2,523.
+
+### The parameter guard was reading a regex where the schema was
+
+`check:params` exists because I got a parameter name wrong three times in one session on my own
+tools. Its rule: when several tools call one thing by a common name, a tool spelling it differently
+has to accept the common one too.
+
+It parsed `src/index.ts` for keys indented six spaces. Two things followed from that:
+
+**It missed real parameters.** A derived sweep for concepts spelled more than one way found
+`event`/`eventName` when it asked the live server, and found nothing at all when it asked the source.
+
+**It hallucinated aliases.** The "does this tool also accept `name`?" test searched the whole
+`register(...)` block for `name: z.`. `unreal_create_function` has `inputs: [{ name, type }]` and
+`outputs: [{ name, type }]` — nested fields, in an array of objects, that are not parameters of the
+tool at all. The guard read them as the alias and passed. Four tools were in that position.
+
+It now reads `inputSchema.properties` from the server on the `full` profile — the exact set of names
+a model can type. Nesting stops being something to detect: a field inside an array is simply not a
+property.
+
+**Of the four it then flagged, one was real.** The rest are exempt under a rule that is *derived*
+rather than a list of names — **a tool declaring two or more `*Name` parameters has no single referent
+for a generic `name`**:
+
+| tool | `*Name` parameters | |
+|---|---|---|
+| `add_node` | eventName, axisName, functionName, variableName, macroName, graphName | exempt |
+| `call_parent_function` | graphName, functionName | exempt |
+| `rename_function` | functionName, newName | exempt |
+| `create_function` | functionName | **aliased** |
+
+Adding `name` to `add_node` would not remove a guess, it would add one. On `rename_function`, `name`
+beside `newName` reads as the new name at least as easily as the old.
+
+`SYNONYMS` is also no longer the only input. Its own comment records being widened once after "four
+more misses in one working session" — a table that has been too narrow once will be again, and nothing
+could notice. Every multi-spelled concept must now be **either aliased or waived with a reason**, and a
+waiver for a concept that stopped being split is itself an error.
+
+**The alias cost 12 standing tokens and put `core` 6 over its ceiling.** The alternative was trimming a
+description to make room, and this repo has measured that road and refused it — descriptions are 41% of
+the payload and they are the teaching a weaker model relies on. So the ceiling moved 13,200 → 13,220
+with the argument recorded, which is what its own failure message asks for. Twelve tokens, paid once
+and cached, against a failed call every time a model types the word fifteen other tools taught it.
+
+A live test covers the half `check:params` cannot see: that the handler *reads* the alias. A tool that
+advertises `name`, accepts it, and then sends `undefined` to the bridge is worse than one that never
+offered it.
