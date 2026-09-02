@@ -476,3 +476,32 @@ test("a duplicate class reference reaches nextAction, not just the payload", asy
   assert.match(r.nextAction, /sharing a class reference/);
   assert.match(r.nextAction, /Move and Size/);
 });
+
+test("a struct or enum variable is not reported as an unresolvable class", async () => {
+  // describe_class cannot resolve Vector, and no class check could ever apply to it - but a struct
+  // variable carries its own name in subType, so every one of them was landing in "class name(s)
+  // could not be resolved". Measured: 52 names on a real project, ~38 of them structs and enums.
+  // That teaches a reader to discount the note, which costs the names that genuinely matter.
+  const bridge = fakeBridge({
+    list_variables: () => ({
+      parentClass: "Actor",
+      variables: [
+        { name: "Loc", type: "Struct", subType: "Vector" },
+        { name: "Tint", type: "Struct", subType: "LinearColor" },
+        { name: "Align", type: "Byte", subType: "EHorizontalAlignment" },
+        { name: "Thing", type: "Object", subType: "BP_MissingThing_C" },
+      ],
+    }),
+    describe_class: (params) => {
+      throw new Error(`class_not_found: ${params?.className}`);
+    },
+  });
+
+  const r = await auditProject(bridge, {});
+  const unresolved = r.classesNotResolved ?? [];
+  // The one real class reference is still reported: recall must not be traded for quiet.
+  assert.ok(unresolved.includes("BP_MissingThing_C"), "an unresolvable OBJECT class is still worth saying");
+  for (const notAClass of ["Vector", "LinearColor", "EHorizontalAlignment"]) {
+    assert.ok(!unresolved.includes(notAClass), `${notAClass} is not a class and must not be listed as one`);
+  }
+});

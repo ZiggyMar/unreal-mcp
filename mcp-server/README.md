@@ -9576,3 +9576,40 @@ does nothing while a shared one does something plausible, so the empty one is th
 The lesson is narrower than "test your checks". Every part of this worked: detection, wording, the
 payload field, the tests. What nothing checked was whether a finding could travel from where it is
 produced to where it is read.
+
+### The honesty note was padded with things that are not classes
+
+The audit ends with a caveat naming every class it could not resolve, so a reader knows
+`cast-to-server-only-class` did not run for those names — *"absent from the findings because nothing
+is known about them, not because they are clean."* On this project it named **52**.
+
+Most of them were never classes:
+
+```text
+Vector  Rotator  Transform  LinearColor  SlateBrush  TimerHandle  GameplayTag
+IntPoint  Margin  SlateColor  SoftObjectPath  S_SkinData  ST_FeedEntry  ...     <- structs
+EHorizontalAlignment  ETextJustify  E_GameConclusion  E_InputDevice  ...        <- enums
+```
+
+A struct or enum variable carries its own name in `subType` exactly as an object variable does, so
+every one of them was handed to `describe_class`, failed, and was recorded as an unresolvable class.
+No class check could ever apply to `Vector`.
+
+The fix is to ask only about things that *are* classes — the raw type head is `Object`, `Class`,
+`SoftObject`, `SoftClass` or `Interface`, and everything else is skipped before the lookup rather
+than after it.
+
+| | before | after |
+|---|---:|---:|
+| names in the caveat | 52 | **12** |
+| `cast-to-server-only-class` found | 11 | 11 |
+| whole-project findings | 504 | 504 |
+
+The twelve that remain are coherent and real — three `B_Lyra*` Blueprints and nine `W_*` touch
+widgets, which are exactly the assets that do not compile in this project. That is a caveat worth
+reading. Fifty-two, three quarters of it `Vector` and `EHorizontalAlignment`, is one a reader learns
+to skip — and skipping it costs them the twelve.
+
+**Nothing about this was a bug in the detection.** The check ran correctly, the note was accurate as
+written, and every count it reported was true. The defect was that a true statement had been made
+useless by including things it was never about.

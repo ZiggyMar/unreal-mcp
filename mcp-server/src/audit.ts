@@ -278,7 +278,10 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
   const pathOfBlueprint = new Map(all.map((bp) => [bp.name, bp.path]));
   const serverOnly = new Map<string, boolean>();
   /** Classes the engine could not resolve, so the checks that depend on them could not run. */
-  const unresolvedClasses = new Set<string>();
+  /** Variable type heads whose `subType` names a CLASS, so describe_class can answer about it. */
+const CLASS_VALUED_TYPES = new Set(["object", "class", "softobject", "softclass", "interface"]);
+
+const unresolvedClasses = new Set<string>();
   const widgetClasses = new Map<string, boolean>();
   const learn = async (className: string) => {
     if (serverOnly.has(className) && widgetClasses.has(className)) return;
@@ -409,6 +412,24 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         const held = variable.subType;
         if (!held) continue;
         variableClasses.set(variable.name, held);
+        // Only ASK about things that are classes.
+        //
+        // A struct or enum variable carries its own name in `subType` too, and describe_class
+        // cannot resolve either - so every one of them was landing in "class name(s) could not be
+        // resolved". Measured on this project: 52 unresolved names, of which roughly 38 are structs
+        // and enums that no class check could ever apply to - Vector, Rotator, Transform,
+        // LinearColor, SlateBrush, TimerHandle, GameplayTag, every S_ and ST_ struct, every E_ enum.
+        //
+        // That inflated a real caveat into a scarier one. The note exists so a reader knows
+        // cast-to-server-only-class could not run for a name; padding it with Vector teaches them to
+        // discount the whole note, which costs exactly the fourteen names that genuinely matter.
+        //
+        // `type` is the raw head the bridge sends - Object, Class, Struct, Byte - before
+        // asTypeDescriptor folds it into "object:Thing". Interface and the soft forms are included
+        // because they are class references too, and a name this does not recognise is left alone
+        // rather than guessed at.
+        const heldKind = String((variable as { type?: unknown }).type ?? "").toLowerCase();
+        if (!CLASS_VALUED_TYPES.has(heldKind)) continue;
         await learn(held);
       }
 
