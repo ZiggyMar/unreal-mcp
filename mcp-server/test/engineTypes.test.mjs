@@ -100,3 +100,29 @@ test("a lowercase typo gets no invented hint", () => {
   assert.equal(typeHint("flaot"), undefined);
   assert.equal(typeHint(""), undefined);
 });
+
+test("C++ container spellings are translated, not just hinted at", () => {
+  // Measured against a live editor: TArray<FName> is refused outright by the bridge, and it is the
+  // spelling in front of anyone who just read a header through unreal_find_source.
+  assert.equal(normaliseEngineType("TArray<FVector>"), "vector[]");
+  assert.equal(normaliseEngineType("TSet<FName>"), "name<set>");
+  assert.equal(normaliseEngineType("TMap<FName,int32>"), "map<name,int32>");
+});
+
+test("a nested container splits on the top-level comma only", () => {
+  assert.equal(normaliseEngineType("TMap<FName,TArray<int32>>"), "map<name,int32[]>");
+});
+
+test("container translation is case- and space-tolerant, like the rest of this file", () => {
+  assert.equal(normaliseEngineType("TArray< FString >"), "string[]");
+});
+
+test("an element the table does not know is passed through, not mangled", () => {
+  // The bridge then refuses "Foo[]" by its own rules and names it. Guessing a prefix here would be
+  // the bare-class-name mistake this file already refuses to make.
+  assert.equal(normaliseEngineType("TArray<Foo>"), "Foo[]");
+});
+
+test("a TMap with no comma is left for the bridge to refuse properly", () => {
+  assert.equal(normaliseEngineType("TMap<FName>"), "TMap<FName>");
+});

@@ -27,6 +27,11 @@
  * the time and silent when it was. It gets a hint on the error instead, which teaches without
  * deciding.
  *
+ * Container spellings are the exception, added later: `TArray<FVector>` becomes `vector[]` and
+ * `TMap<FName,int32>` becomes `map<name,int32>`. Those ARE translated rather than hinted because
+ * nothing about them is ambiguous - the guess that stops a bare class name being rewritten has no
+ * equivalent for a container.
+ *
  * An unknown F-name is left alone too. `FMyGameplayStruct` is a real struct and belongs as
  * `struct:MyGameplayStruct`, but stripping the F blindly would also turn `FooBar` into `ooBar`. Only
  * the engine's own core types are listed, and they are a closed set.
@@ -75,6 +80,44 @@ export function normaliseEngineType(type: string): string {
   if (typeof type !== "string") return type;
   const trimmed = type.trim();
   if (trimmed.length === 0 || PREFIXED.test(trimmed)) return trimmed;
+
+  // C++ container spellings, which the suffix handling below cannot reach: it splits `FVector[]`,
+  // this splits `TArray<FVector>`. Measured on a live editor - `TArray<FName>` is refused outright,
+  // and it is the spelling sitting in front of anyone who just read a header through
+  // unreal_find_source, which is the same join this whole file exists to close.
+  //
+  // TRANSLATED rather than hinted, unlike a bare class name. There is nothing to guess here: a
+  // TArray is an array and a TMap is a map. The ambiguity that stops `StaticMesh` being rewritten -
+  // object or class - has no equivalent, so the call can simply succeed.
+  //
+  // Recursive, so the container spelling and the element spelling are fixed together rather than
+  // costing two round trips to discover one at a time.
+  const cppContainer = /^T(Array|Set|Map)\s*<(.+)>$/i.exec(trimmed);
+  if (cppContainer) {
+    const kind = cppContainer[1].toLowerCase();
+    const inner = cppContainer[2];
+    if (kind !== "map") {
+      const element = normaliseEngineType(inner);
+      return kind === "array" ? `${element}[]` : `${element}<set>`;
+    }
+    // Split on the top-level comma only, so TMap<FName, TArray<int32>> survives.
+    let depth = 0;
+    let split = -1;
+    for (let i = 0; i < inner.length; i += 1) {
+      if (inner[i] === "<") depth += 1;
+      else if (inner[i] === ">") depth -= 1;
+      else if (inner[i] === "," && depth === 0) {
+        split = i;
+        break;
+      }
+    }
+    // No comma means it is not a map after all. Left alone for the bridge to refuse by its own
+    // rules, which say a map needs a key and a value - a better error than anything guessed here.
+    if (split < 0) return trimmed;
+    const key = normaliseEngineType(inner.slice(0, split));
+    const value = normaliseEngineType(inner.slice(split + 1));
+    return `map<${key},${value}>`;
+  }
 
   // Split off a container suffix so the base name can be looked up on its own.
   const container = /(\[\]|<set>|<map>)$/.exec(trimmed);

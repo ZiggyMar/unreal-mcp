@@ -1874,6 +1874,33 @@ both readings and decides neither. And an unknown `F`-name is left alone: `FMyGa
 be `struct:MyGameplayStruct`, but stripping the `F` blindly would also turn `FooBar` into `ooBar`.
 Only the engine's own core types are listed, and they are a closed set.
 
+**The containers were the half left undone.** Mining a full working session's transcript for what
+actually failed put `unknown_type` second only to the wrong-path error - 22 against 27 - and the
+suffix handling above turns out to close only half of it. `FVector[]` was translated; `TArray<FVector>`
+was refused, and the second is the spelling sitting in front of anyone who just read a header. Same
+join, same session, and confirmed against a live editor rather than reasoned about:
+
+```text
+TArray<FName>       ->  refused        ->  now  name[]
+TMap<FName,int32>   ->  refused        ->  now  map<name,int32>
+TSet<FName>         ->  refused        ->  now  name<set>
+```
+
+These are **translated, not hinted**. The ambiguity that stops `StaticMesh` being rewritten - object
+or class - has no equivalent here: a `TArray` is an array. So the call simply succeeds instead of
+failing with better advice, which is the difference between a good error and no error. It recurses,
+so `TMap<FName,TArray<int32>>` resolves in one call rather than teaching one mistake per round trip,
+and an element the table does not know is passed through untouched - `TArray<Foo>` becomes `Foo[]`
+and the bridge refuses it by its own rules, because guessing a prefix there would be the bare-class
+mistake this file already declines to make.
+
+Worth recording how this nearly went in: it was first built as a separate `suggestType.ts` that
+attached a hint to the error, complete with its own copy of the C++ spelling table. That is two
+places describing one thing - the exact drift this repo keeps finding - and it was only caught by
+checking why `FVector` succeeded live when the C++ resolver has no such case. The duplicate was
+deleted and the one genuinely missing piece folded into the module that already owned the job, which
+also moved it from a hint to a fix.
+
 ### `{ Cost: 500 }` was rejected by the schema, not by the engine
 
 With the value findable, the other half of "finds it and changes it" was tried end to end — and the
