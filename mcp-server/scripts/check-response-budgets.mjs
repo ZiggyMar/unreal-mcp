@@ -115,9 +115,13 @@ const CASES = [
     why: "one section of prose, not the document",
   },
   {
-    label: "doctor, no editor",
+    label: "doctor, full report",
     tool: "unreal_doctor",
-    args: {},
+    // verbose, because this case bounds the report you get when something is WRONG, and a report
+    // that is not "ready" is always returned in full. Against a live editor the healthy reply is
+    // compacted to about 195 tokens, which would measure the wrong thing - and this ran green for
+    // exactly that reason until the compaction removed the string it keys on.
+    args: { verbose: true },
     mustContain: "bridge reachable",
     ceiling: 1200,
     why: "run when nothing works, so it must stay readable rather than becoming another problem",

@@ -202,11 +202,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2471 | five tools; hand it a sentence or a preset name |
+| `search` | 2503 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4216 | ten tools, fixed, for a small local model |
-| `core` | 13088 | the authoring spine |
-| `lazy` | 13396 | `core` plus deferred groups |
-| `full` | 46493 | everything, for a model that can afford it |
+| `core` | 13120 | the authoring spine |
+| `lazy` | 13428 | `core` plus deferred groups |
+| `full` | 46525 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -9379,3 +9379,42 @@ The dead branch has been removed and this section rewritten. The graph ranking i
 the explanation that shipped beside it was not. The ordering that would have prevented it is the one
 that eventually settled it: instrument first, conclude second. A theory that explains the symptom is
 not evidence, especially when it is the first one to arrive.
+
+### A healthy doctor said "fine" eleven times
+
+The standing instructions make `unreal_doctor` step 1 — *"anything broken: unreal_doctor"* — so
+nearly every session pays for it. On a working setup it cost **413 tokens**, and most of that was
+prose confirming that things which are fine are fine: `protocol 1`, `27 probed commands are all
+implemented`, `source control not enabled`, `ping round trip 9ms`.
+
+This repo already applies "count the passes, name the failures" in the audit and in
+`unreal_run_tests`. The diagnostic that gets run first was the one place still doing the opposite.
+
+| | tokens |
+|---|---:|
+| healthy report, before | 413 |
+| healthy report, now | **195** |
+| `verbose: true`, or anything not `ready` | 413 |
+
+Three of the eleven checks carry facts worth keeping when nothing is wrong — **which** editor this
+is talking to, the engine version, and how much of the project is indexed. Those orient a caller
+rather than reassure it. The rest becomes `checksPassed: 10`.
+
+**A degraded report is never compacted.** The entire value of this tool is the detail on the check
+that failed, and a diagnostic that gets terser exactly when something breaks would be worse than
+none. That invariant is the one pinned by a test, and it is the half that needs no editor to check:
+pointed at a port nothing is listening on, the reply keeps every check and never grows a
+`checksPassed`.
+
+`verbose` was kept rather than making compaction unconditional, because a failed report is already
+full — so `verbose` is the only way to see the *passing* detail through the MCP at all. Removing it
+would have kept three ceilings untouched by quietly deleting an ability.
+
+Those ceilings moved instead: `search` 2,500 → 2,550, `core` 13,100 → 13,150, `lazy` 13,400 →
+13,450. Thirty-two standing tokens, paid once and then cached, against 218 saved on a call made in
+every session.
+
+One guard caught the change honestly. `check:replies` bounds the doctor report at 1,200 tokens for
+the case *"run when nothing works"* — and it keys on a string the compact form no longer contains.
+It now asks for `verbose: true`, because the report it exists to bound is the one you get when
+something is wrong, and that report is always full.

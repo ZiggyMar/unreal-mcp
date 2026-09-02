@@ -4345,14 +4345,60 @@ register(
       "`nextAction`. It never throws: if the editor cannot be reached at all, that IS the answer, and the remedy " +
       "is the ordered checklist for fixing it. Relay the remedy to the user in plain language; most of these are " +
       "things only they can fix, in the editor.",
-    inputSchema: {},
+    inputSchema: {
+      verbose: z
+        .boolean()
+        .optional()
+        .describe("Every check in full even when nothing is wrong. A degraded report is always full."),
+    },
   },
-  async () => {
+  async ({ verbose }) => {
     try {
       const report = await runDoctor(rawBridge, { host: BRIDGE_HOST, port: BRIDGE_PORT, expectedProject: EXPECT_PROJECT });
       // Which mode is active changes what every build costs and how much feedback comes back
       // unasked, so it belongs in the one call people run when something seems off.
-      return jsonResult({ ...report, mode: MODE.mode, modeMeans: MODE.description });
+      const full = { ...report, mode: MODE.mode, modeMeans: MODE.description };
+
+      /**
+       * A healthy report says the same thing eleven times.
+       *
+       * The standing instructions make this step 1 - "anything broken: unreal_doctor" - so nearly
+       * every session pays for it, and on a working setup 413 of those tokens are prose confirming
+       * that a thing which is fine is fine: "protocol 1", "27 probed commands are all implemented",
+       * "source control not enabled", "ping round trip 9ms".
+       *
+       * Three of the eleven carry facts worth keeping even when nothing is wrong - WHICH editor
+       * this is talking to, and how much of it is indexed - because those orient a caller rather
+       * than reassure it. The rest becomes a count.
+       *
+       * A degraded report is never compacted. The whole value of this tool is the detail on the
+       * check that failed, and a diagnostic that gets terser when things go wrong would be worse
+       * than useless. `verbose` is there for the case where someone wants the passing detail too.
+       */
+      if (verbose === true || report.verdict !== "ready") return jsonResult(full);
+
+      const detailOf = (name: string) => report.checks.find((c) => c.name === name)?.detail;
+      return jsonResult({
+        verdict: report.verdict,
+        host: report.host,
+        port: report.port,
+        // The engine version lives in the "bridge reachable" detail, which is otherwise dropped.
+        // Worth carrying: it decides whether an engine feature is even available to this project,
+        // and looking it up separately means reading a .uproject off disk.
+        editing: [
+          detailOf("which project")?.replace(/\.\s*$/, ""),
+          /UE [0-9][^.\s]*(\.[0-9]+)*/.exec(detailOf("bridge reachable") ?? "")?.[0],
+        ]
+          .filter(Boolean)
+          .join(" on "),
+        indexed: detailOf("project index"),
+        catalog: detailOf("node catalog"),
+        checksPassed: report.checks.length,
+        nextAction: report.nextAction,
+        mode: MODE.mode,
+        modeMeans: MODE.description,
+        detail: "All checks passed; pass verbose:true for the per-check detail.",
+      });
     } catch (err) {
       return errorResult(err);
     }

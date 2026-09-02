@@ -55,7 +55,17 @@ export const PROFILES = [
     // stopped being what it claims to be and the saving it exists for is gone.
     // Of this, 990 is instructions and only ~1,240 is tools. The instructions are what make four
     // tools usable at all, so they are the last thing to cut; 2,500 is still ~1% of a 200k window.
-    ceilingTokens: 2_500,
+    // Raised by 50 for unreal_doctor's `verbose`, measured and argued rather than nudged.
+    //
+    // The parameter costs 32 standing tokens here. It buys a healthy doctor report that is 195
+    // tokens instead of 413 - 218 saved - on the call the standing instructions make step 1 of
+    // every session, so it is paid back the first time anyone runs it and every time after.
+    //
+    // The parameter is kept rather than making compaction unconditional because a degraded report
+    // is never compacted anyway, so `verbose` is the ONLY way to see the passing detail through
+    // the MCP at all. Removing it would have kept the ceiling untouched by quietly deleting an
+    // ability, which is the trade this project is explicitly not making.
+    ceilingTokens: 2_550,
     why: "the frontier default: everything reachable, almost nothing standing",
   },
   {
@@ -80,7 +90,17 @@ export const PROFILES = [
     //
     // 13,100 and not 13,400: enough for this, not enough to stop the next addition having to make
     // its own case. A ceiling that moves to fit whatever arrives has stopped being one.
-    ceilingTokens: 13_100,
+    // Raised by 50 for unreal_doctor's `verbose`, measured and argued rather than nudged.
+    //
+    // The parameter costs 32 standing tokens here. It buys a healthy doctor report that is 195
+    // tokens instead of 413 - 218 saved - on the call the standing instructions make step 1 of
+    // every session, so it is paid back the first time anyone runs it and every time after.
+    //
+    // The parameter is kept rather than making compaction unconditional because a degraded report
+    // is never compacted anyway, so `verbose` is the ONLY way to see the passing detail through
+    // the MCP at all. Removing it would have kept the ceiling untouched by quietly deleting an
+    // ability, which is the trade this project is explicitly not making.
+    ceilingTokens: 13_150,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {
@@ -102,7 +122,17 @@ export const PROFILES = [
     //
     // Re-run before raising this again: node scripts/bench-local-model.mjs --model qwen2.5-coder:7b
     //   --task graph --runs 3
-    ceilingTokens: 13_400,
+    // Raised by 50 for unreal_doctor's `verbose`, measured and argued rather than nudged.
+    //
+    // The parameter costs 32 standing tokens here. It buys a healthy doctor report that is 195
+    // tokens instead of 413 - 218 saved - on the call the standing instructions make step 1 of
+    // every session, so it is paid back the first time anyone runs it and every time after.
+    //
+    // The parameter is kept rather than making compaction unconditional because a degraded report
+    // is never compacted anyway, so `verbose` is the ONLY way to see the passing detail through
+    // the MCP at all. Removing it would have kept the ceiling untouched by quietly deleting an
+    // ability, which is the trade this project is explicitly not making.
+    ceilingTokens: 13_450,
     why: "the recommended default; the local-model benchmark result is measured with this",
   },
   {
