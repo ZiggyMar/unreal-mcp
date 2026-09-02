@@ -1007,16 +1007,42 @@ export async function auditProject(bridge: BridgeLike, options: AuditOptions = {
         };
 
   const worst = groups[0];
-  // A null reference leads, whatever the graph findings say. It is not a matter of taste: those are
-  // things that make a Blueprint worse, and this is a thing that does not happen at all at runtime,
-  // with no error to notice.
-  const nextAction =
-    dataTableNulls.length > 0
-      ? `Start with ${dataTableNulls.length} empty Data Table reference(s), beginning with ` +
+
+  // Data Table findings lead, whatever the graph findings say. It is not a matter of taste: the
+  // graph findings are things that make a Blueprint worse, and these are things that are already
+  // wrong at runtime with no error to notice.
+  //
+  // Duplicates were being FOUND and never RANKED. The check exists, its comment records the exact
+  // bug it caught on this project - "Survival_MobileAgent" and "Stat_BulletSize" both pointing at
+  // BP_BulletSize, so buying the movement upgrade applies the bullet-size one - and the result sat
+  // in `dataTableDuplicateClasses` where nothing pointed at it. `nextAction` named only the nulls
+  // and `groups` never carried it, so the one field a model is told to act on could not reach it.
+  // A check whose finding cannot reach the ranking is the same defect as a tool nothing can enable.
+  //
+  // Ordered after nulls rather than before: both are silent at runtime, and an empty reference does
+  // nothing while a shared one does something plausible, so the empty one is the cheaper read.
+  const dataTableLead: string[] = [];
+  if (dataTableNulls.length > 0) {
+    dataTableLead.push(
+      `Start with ${dataTableNulls.length} empty Data Table reference(s), beginning with ` +
         `${dataTableNulls[0].table} row "${dataTableNulls[0].rowName}" (${dataTableNulls[0].field}). ` +
         `The engine resolves an empty reference to null and whatever consumes it silently does ` +
-        `nothing - no error, no log. Fix with unreal_set_data_table_row.` +
-        (worst ? ` Then ${worst.check} (${worst.count} found).` : "")
+        `nothing - no error, no log. Fix with unreal_set_data_table_row.`
+    );
+  }
+  if (dataTableDuplicateClasses.length > 0) {
+    const d = dataTableDuplicateClasses[0];
+    dataTableLead.push(
+      `${dataTableLead.length > 0 ? "Then" : "Start with"} ${dataTableDuplicateClasses.length} Data ` +
+        `Table row(s) sharing a class reference: ${d.rows.join(" and ")} in ${d.table} both set ` +
+        `${d.field} to the same class, so they do the same thing while claiming to be different. ` +
+        `One of them is pointing at the wrong Blueprint. Fix with unreal_set_data_table_row.`
+    );
+  }
+
+  const nextAction =
+    dataTableLead.length > 0
+      ? dataTableLead.join(" ") + (worst ? ` Then ${worst.check} (${worst.count} found).` : "")
       : worst
         ? `Start with ${worst.check} (${worst.count} found). ${worst.fix}`
         : "Nothing found worth reporting. Either the project is in good shape or the prefix matched nothing.";

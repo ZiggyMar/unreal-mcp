@@ -9535,3 +9535,44 @@ as the thing that settles it.
 as a fact about the project. The severity was right, the detection was right, and the sentence was
 still capable of causing damage no test would have caught — because every test fixture in this
 repo is a single Blueprint, which is precisely the scope the claim overstepped.
+
+### A real bug the audit found and never mentioned
+
+Cutting `unlabelled-sections` down changed what the audit leads with, so it was worth looking at
+what it now says first. It says this:
+
+> Start with 2 empty Data Table reference(s) — `DT_Upgrades` row `Weapon_MachineGun`
+> (`UpgradeClass`)…
+
+Both are real: `Weapon_MachineGun` and `Vacuum_VirusController` have no `UpgradeClass`, so buying
+either upgrade does nothing at all. Every other row in the table names its own upgrade Blueprint.
+
+Reading the rest of the table turned up a second bug the ranking never mentioned:
+
+```text
+Weapon_MachineGun         (EMPTY)
+Survival_MobileAgent      BP_BulletSize      <- "extremely fast, jump higher, unlocks sprint"
+Vacuum_VirusController    (EMPTY)
+Stat_BulletDamage         BP_DamageUpgrade
+Stat_BulletSize           BP_BulletSize      <- the same class
+Stat_VacuumSpeed          BP_VacuumSpeedUpgrade
+...
+```
+
+Buying "Mobile Agent" instantiates the bullet-size upgrade.
+
+**The check for this already existed and had already caught it.** `dataTableAudit.ts` looks for two
+rows sharing a class reference, and its own comment names this exact pair as the case that justified
+writing it. The result was in the reply, under `dataTableDuplicateClasses`.
+
+It was never *ranked*. `nextAction` — the one field the tool tells a model to act on — named only
+the nulls, and `groups` never carried Data Table findings at all. So the finding existed, was
+correct, was documented, and could not reach the caller. That is the same defect as a tool no
+profile can enable: a route with nothing pointing down it.
+
+Both kinds now lead the ranking, nulls first — both are silent at runtime, but an empty reference
+does nothing while a shared one does something plausible, so the empty one is the cheaper read.
+
+The lesson is narrower than "test your checks". Every part of this worked: detection, wording, the
+payload field, the tests. What nothing checked was whether a finding could travel from where it is
+produced to where it is read.

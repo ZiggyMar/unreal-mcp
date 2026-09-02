@@ -443,3 +443,36 @@ test("the project audit reports Blueprint-level findings, not only graph ones", 
   assert.equal(group.count, 1, "a Blueprint-level finding must be counted once");
   assert.equal(group.examples.length, 1, "and appear once in the examples");
 });
+
+test("a duplicate class reference reaches nextAction, not just the payload", async () => {
+  // It was found and never ranked. The check exists and had already caught the real one on this
+  // project - Survival_MobileAgent and Stat_BulletSize both pointing at BP_BulletSize, so buying
+  // the movement upgrade applies the bullet-size one - and the result sat in
+  // dataTableDuplicateClasses where nothing pointed at it. nextAction named only the nulls.
+  //
+  // Six filled rows so the check's own gates pass: it needs 4+ filled and 70% distinct values
+  // before it will call a repeat suspicious, because two rows sharing an icon is what icons are for.
+  const rows = [
+    { rowName: "Move", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_Size.BP_Size_C'" } },
+    { rowName: "Size", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_Size.BP_Size_C'" } },
+    { rowName: "Dmg", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_Dmg.BP_Dmg_C'" } },
+    { rowName: "Speed", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_Speed.BP_Speed_C'" } },
+    { rowName: "Heal", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_Heal.BP_Heal_C'" } },
+    { rowName: "Health", values: { UpgradeClass: "/Script/Engine.BlueprintGeneratedClass'/G/BP_HP.BP_HP_C'" } },
+  ];
+  const bridge = {
+    async send(cmd) {
+      if (cmd === "list_blueprints") return { blueprints: [] };
+      if (cmd === "list_assets") return { assets: ["/Game/Data/DT_Upgrades.DT_Upgrades"] };
+      if (cmd === "list_data_table_rows") return { rows };
+      throw new Error(`unknown_cmd: ${cmd}`);
+    },
+  };
+
+  const r = await auditProject(bridge, {});
+  assert.equal(r.dataTableDuplicateClasses.length, 1, "the check must still find it");
+  assert.deepEqual(r.dataTableDuplicateClasses[0].rows, ["Move", "Size"]);
+  // The point of the fix: it has to be in the field a model is told to act on.
+  assert.match(r.nextAction, /sharing a class reference/);
+  assert.match(r.nextAction, /Move and Size/);
+});
