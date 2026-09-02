@@ -204,9 +204,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2503 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4216 | ten tools, fixed, for a small local model |
-| `core` | 13120 | the authoring spine |
-| `lazy` | 13428 | `core` plus deferred groups |
-| `full` | 46525 | everything, for a model that can afford it |
+| `core` | 13137 | the authoring spine |
+| `lazy` | 13446 | `core` plus deferred groups |
+| `full` | 46543 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -9784,3 +9784,37 @@ than on spelling. `player` keeps it too — a broad concept, but `has variable "
 
 The pattern is one this repo keeps arriving at from different directions: **the evidence for a claim
 was already recorded, and the claim was written without consulting it.**
+
+### A space in a search returns nothing, and looks like an answer
+
+Chasing the proper-noun problem from the previous commit turned up something plainer and worse.
+`unreal_search_project` matches a **substring**, and asset names contain no spaces:
+
+```text
+search_project "shop upgrade"   ->  0 hits
+search_project "ShopUpgrade"    ->  BP_ShopUpgrade, BP_ShopUpgradeTier, ...
+```
+
+An empty result is indistinguishable from "this project has no such thing". A model asking the most
+natural question — the feature's name as a person would write it — gets a confident nothing and may
+build a second copy of a system that already exists. The description now says so, in 26 tokens.
+
+**The attempted fix was reverted, and that is the more useful half of this entry.**
+
+The plan was to make `plan_feature` search two-word phrases so "Mobile Agent" stayed one concept.
+Written, typechecked, wired in — and it never fired once. `systemMap` deliberately overrides the
+substring search:
+
+```ts
+// The bridge searches by substring. That is right for a search box and wrong for
+// "this system already exists" - see matchesAsWord.
+if (!matchesAsWord(matched, query)) { substringOnly += 1; continue; }
+```
+
+It requires the query to appear as a **word**. `shopupgrade` is not a word in `BP_ShopUpgrade`, so
+concatenating — the very thing that makes `search_project` work — guarantees `mapSystem` finds
+nothing. Two layers, opposite matching rules, both correct for their own job.
+
+The feature was deleted rather than kept. It compiled, it was tested, and it did nothing — which is
+the same shape as the thrown-error path removed earlier in this project, found the same way: by
+checking whether the new code had actually changed the output, rather than whether it ran.
