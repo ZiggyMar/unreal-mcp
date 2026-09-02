@@ -1350,11 +1350,18 @@ const unresolvedClasses = new Set<string>();
     ...(unresolvedClasses.size > 0
       ? {
           classesNotResolved: [...unresolvedClasses].sort(),
+          // The names live in `classesNotResolved` beside this and are not repeated here.
+          //
+          // They were in both: 12 names, 74 tokens as an array and 70 more spelled out inside this
+          // sentence. Unlike nextAction restating a finding - which is kept, because the weaker
+          // profiles rely on the whole answer being in one place - these two fields sit in the same
+          // object and a reader has both or neither. There is no reading in which the repetition
+          // buys anything.
           classesNotResolvedNote:
             `${unresolvedClasses.size} class name(s) could not be resolved, so the checks that ask ` +
             `what a class inherits from - cast-to-server-only-class above all - could not run for ` +
-            `them: ${[...unresolvedClasses].sort().join(", ")}. They are absent from the findings ` +
-            `because nothing is known about them, not because they are clean.`,
+            `them; they are listed in classesNotResolved. They are absent from the findings because ` +
+            `nothing is known about them, not because they are clean.`,
         }
       : {}),
     blueprintsScanned: blueprints.length,

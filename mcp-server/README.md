@@ -10292,3 +10292,44 @@ child inherits it."* Telling somebody to fix both would be telling them to do it
 That detail is carried in `observed` rather than only in `fix`, and the reason is worth recording:
 `dedupeFixes` collapses fix text to one entry per check, so a per-instance fix would have been
 dropped for whichever finding was not first. The evidence belongs where evidence goes.
+
+### Checking what six commits of additions cost
+
+Six commits have added to the audit — two new checks, three coverage notes, two reference counts.
+Adding without re-measuring is how a reply grows into a problem, so this one is the measurement.
+
+```text
+audit total   3,364 tokens   findingCount 507
+
+  2,033  groups                    the findings themselves, 60%
+    244  nextAction
+    193  possiblyReplaced
+    169  worstBlueprints
+    134  classesNotResolvedNote
+    103  dataTableNulls
+     88  dataTableDuplicateClasses
+     87  parentCallNotChecked
+     75  rankedButUnreferenced
+     74  classesNotResolved
+```
+
+Healthy: 60% is findings, and the additions are 325 tokens for two checks that found three real
+defects and four notes that say what was not checked.
+
+One line was not healthy. `classesNotResolved` holds 12 names for 74 tokens, and
+`classesNotResolvedNote` spelled the same 12 out again inside its sentence — 70 of its 134 tokens
+were a restatement of the array directly beside it.
+
+**This is the same shape as `nextAction` restating a finding, and it gets the opposite answer.** That
+one is kept: the weaker profiles rely on the whole answer being in one place, and a model reading
+`nextAction` alone still gets a complete instruction. These two fields sit in the same object — a
+reader has both or neither — so the repetition buys nothing at all. The note now points at the array
+and says what it means.
+
+**3,364 → 3,303**, and the note still carries the part that matters: *"absent from the findings
+because nothing is known about them, not because they are clean."* The test asserts both halves —
+that the names are gone from the prose and that the meaning survived.
+
+Also probed this round and found nothing: Server RPCs on non-replicating Actors. That would be the
+same silent failure as the replicated-variable check, and the project has **zero** instances — so no
+check was written. A check with no evidence behind it is a guess with a cost.

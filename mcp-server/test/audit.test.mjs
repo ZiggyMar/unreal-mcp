@@ -694,3 +694,27 @@ test("nothing is said when everything is referenced", async () => {
   const r = await auditProject(bridge, {});
   assert.equal(r.rankedButUnreferenced, undefined, "a line that always fires is a line nobody reads");
 });
+
+test("the unresolved-class names are said once, not in the array and the note both", async () => {
+  // 12 names cost 74 tokens as an array and 70 more spelled out inside the sentence beside it.
+  // Unlike nextAction restating a finding - kept, because the weaker profiles rely on the whole
+  // answer being in one place - these two fields are in the same object and a reader has both or
+  // neither.
+  const bridge = fakeBridge({
+    list_variables: () => ({
+      parentClass: "Actor",
+      variables: [{ name: "Thing", type: "Object", subType: "BP_MissingThing_C" }],
+    }),
+    describe_class: (params) => {
+      throw new Error(`class_not_found: ${params?.className}`);
+    },
+  });
+
+  const r = await auditProject(bridge, {});
+  const names = r.classesNotResolved ?? [];
+  assert.ok(names.includes("BP_MissingThing_C"), "the array still carries the names");
+  assert.doesNotMatch(r.classesNotResolvedNote ?? "", /BP_MissingThing_C/, "the note must not repeat them");
+  // The note still has to say what it means, or trimming it would have cost the reader the point.
+  assert.match(r.classesNotResolvedNote ?? "", /classesNotResolved/);
+  assert.match(r.classesNotResolvedNote ?? "", /not because they are clean/);
+});
