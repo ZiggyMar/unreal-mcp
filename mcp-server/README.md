@@ -11226,3 +11226,33 @@ a project that is not a target never receives the plugin, and nothing says so.
 
 Five and a half minutes to three and a half. The hook's own note said "about three minutes" and was
 wrong in both directions; it now carries the measurement and the reason.
+
+### A comment edit stopped every push, and the error pointed forty lines away
+
+Editing a **comment** in `.githooks/pre-push` broke it:
+
+```
+.githooks/pre-push: line 69: syntax error near unexpected token `('
+error: failed to push some refs
+```
+
+Line 69 was untouched. The cause was invisible in a diff: my edit helper rewrites files as CRLF,
+which is correct for every TypeScript, JavaScript and Markdown file in this Windows-developed repo —
+and fatal for a shell script. `/bin/sh` treats the carriage return as part of the token, so parsing
+dies at the first line of real code, nowhere near the change.
+
+It turned "refuse to push a red suite" into **"refuse every push"**, and cost two pushes before the
+cause was obvious. The suite was green the whole time.
+
+Two fixes, because they catch different halves:
+
+- **`.gitattributes`** pins `.githooks/*` and `*.sh` to `text eol=lf`, so git normalises them on
+  checkout regardless of `core.autocrlf` — right even on a fresh clone on Windows. It cannot help a
+  file written wrong in the working copy.
+- **`shellScripts.test.mjs`** does that half: every hook must contain zero carriage returns and must
+  pass `sh -n`. Verified against the real bug — reintroducing CRLF fails it with "103 carriage
+  return(s)", and the parse check is the one that would have found this in a second rather than two
+  pushes.
+
+The parse check skips rather than fails where no POSIX shell exists: a machine without one cannot run
+the hook either, and a false failure there teaches people to ignore the file.

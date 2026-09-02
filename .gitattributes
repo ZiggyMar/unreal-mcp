@@ -1,0 +1,15 @@
+# Shell scripts must keep LF endings, on every machine, forever.
+#
+# This repo is developed on Windows and its TypeScript, JavaScript and Markdown are CRLF. A helper
+# that rewrites a file therefore converts to CRLF by default, which is correct for all of those and
+# fatal for a shell script: /bin/sh treats the carriage return as part of the token, so the first
+# line of real code fails with "syntax error near unexpected token" and the script never runs.
+#
+# It happened to .githooks/pre-push after an edit that only touched a COMMENT. The hook stopped
+# parsing entirely, so the guard that refuses to push a red suite silently became a guard that
+# refused every push - and the error named a line 40 lines away from anything that had changed.
+#
+# `text eol=lf` makes git normalise these on checkout regardless of core.autocrlf, so the working
+# copy is right even on a fresh clone on Windows.
+.githooks/* text eol=lf
+*.sh text eol=lf
