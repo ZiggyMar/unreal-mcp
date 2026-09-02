@@ -322,3 +322,29 @@ test("the short-word rule still holds for letters", async () => {
   assert.deepEqual(domain("explain the chain"), [], "ai must not match inside chain");
   assert.deepEqual(domain("change the flag"), [], "lag must not match inside flag");
 });
+
+test("a spawn that never happens is routed to the two places that decide it", () => {
+  // unreal_get_game_settings already said this in its own description - "reach for this when the
+  // wrong thing spawns, or nothing does" - and the symptom index did not carry a single spawn word,
+  // so the sentence fell through to the generic answer every unmatched sentence gets. A tool that
+  // names its own symptom and cannot be reached by it is a route with nothing pointing down it.
+  //
+  // The sentence is a bug that exists in this project: GM_TutGameplay leaves DefaultPawnClass at the
+  // engine default, so the tutorial opens on a floating camera.
+  const found = matchSymptoms("the tutorial level doesn't spawn a player");
+  assert.ok(found, "the sentence matched nothing");
+  assert.equal(found.tools[0], "unreal_get_game_settings", `led with ${found.tools[0]}`);
+});
+
+test("asking how to spawn something is not a report that spawning is broken", () => {
+  // The reason the entry lists no bare "spawn". Both sentences contain the word; only one of them is
+  // a complaint. Routing a build question to project settings answers a question nobody asked, and
+  // the caller has no way to tell that the table matched a word rather than understood a sentence.
+  for (const asking of ["how do I spawn an actor", "spawn actor node", "add a spawn point"]) {
+    const tools = matchSymptoms(asking)?.tools ?? [];
+    assert.ok(
+      !tools.includes("unreal_get_game_settings"),
+      `"${asking}" is a build question and was routed to project settings`
+    );
+  }
+});

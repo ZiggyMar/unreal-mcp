@@ -79,6 +79,21 @@ export const SYMPTOMS: SymptomEntry[] = [
       "trace_function_calls answers whether the thing you are looking at is reached at all.",
   },
   {
+    // No bare "spawn". A caller asking "how do I spawn an actor" is asking how to BUILD something,
+    // and this entry answers a question about what is WRONG - it would send them to project settings
+    // to learn node syntax. Only the failure phrasings are listed, which is the difference between a
+    // symptom table and a keyword table that happens to contain the word.
+    says: ["doesn't spawn", "does not spawn", "don't spawn", "won't spawn", "will not spawn", "not spawning", "nothing spawns", "never spawns", "no player", "no pawn", "no character", "wrong pawn", "wrong character", "wrong gamemode", "wrong game mode", "spawns as", "possess", "not possessed", "no controller"],
+    tools: ["unreal_get_game_settings", "unreal_audit_project", "unreal_read_class_defaults"],
+    because:
+      "Whether anything spawns is decided in two places that disagree freely: the project's default " +
+      "GameMode, and a World Settings override on the level you actually opened. get_game_settings " +
+      "reports both, because the answer in project settings is often not the one in force. If the " +
+      "GameMode is right, the next question is what it points at - a GameMode that names a GameState " +
+      "and a Controller but leaves DefaultPawnClass at the engine default spawns a floating camera " +
+      "with no character, which audit_project reports as gamemode-has-no-pawn.",
+  },
+  {
     says: ["crash", "crashes", "crashed", "freeze", "freezes", "hang", "hangs", "locks up", "closes itself", "quits"],
     tools: ["unreal_read_runtime_errors", "unreal_project_health", "unreal_watch_runtime"],
     because:

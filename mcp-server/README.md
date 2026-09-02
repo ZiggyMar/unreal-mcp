@@ -10643,3 +10643,44 @@ An existing guard caught the follow-on. `guideAgreement.test.mjs` asserts the wo
 every tool the instructions do, so the moment the instructions gained `unreal_audit_project` the suite
 refused the change until the guide did too. Eighteen tokens of standing text; `lazy` moved 13,500 →
 13,550 after the line had been trimmed three times.
+
+### Measuring the plain-text path instead of reading it
+
+The premise of this project is that you describe a bug in a sentence and the model finds it. On the
+`search` profile — the one `--print-config` emits — that sentence goes to `unreal_list_tools({match})`,
+so tool discovery *is* the product. Nine real sentences, measured through the wire:
+
+| what a person types | where it lands |
+|---|---|
+| "upgrades aren't showing up in the shop" | `check_data_tables`, `list_data_table_rows`, `audit_project` |
+| "the game crashes when I press play" | `read_runtime_errors`, `project_health`, `watch_runtime` |
+| "only the host can see the turret" | `audit_project`, `guard_with_authority`, `map_system` |
+| "my enemies don't take damage" | `trace_variable`, `map_system`, `read_behavior_tree` |
+| "the fire wall does nothing when damaged" | `trace_variable`, `map_system`, `audit_project` |
+| "clean this up before we ship" | `audit_project` |
+| "something is wrong with my game" | the generic fallback, 518 chars |
+
+That is a healthy index and most of it needed nothing. Two sentences did not land, and they are
+worth separating because only one of them was a defect.
+
+**"the turret shoots through walls" → nothing specific, and that is correct.** No tool in this server
+reads collision channels. An entry for it would have to route to `audit_project`, which the fallback
+already returns — a second path to the same answer, dressed as a specific one. The file's own rule is
+that an entry earns its place by naming a tool that finds *that* failure; this one has no such tool,
+so the honest answer is the generic one. Not adding it is the change.
+
+**"the tutorial level doesn't spawn a player" → the fallback, and that was a defect.**
+`unreal_get_game_settings` describes itself as *"reach for this when the wrong thing spawns, or nothing
+does"* — the symptom index carried no spawn word at all, so a tool that names its own symptom could not
+be reached by it. The sentence is also a real bug in the project this was built against: `GM_TutGameplay`
+leaves `DefaultPawnClass` at the engine default, so the tutorial opens on a floating camera.
+
+The entry lists **no bare `spawn`**. "How do I spawn an actor" contains the word and is not a
+complaint; routing it to project settings answers a question nobody asked, and a keyword table that
+did so would look exactly like understanding. Only the failure phrasings are listed — `doesn't spawn`,
+`nothing spawns`, `no pawn`, `wrong gamemode`, `not possessed` — and a test asserts all three build
+questions stay out.
+
+Recall for that sentence went from the 518-char generic answer to `get_game_settings, audit_project,
+read_class_defaults`. Cost: one entry, zero standing tokens — the index is consulted on a miss, not
+shipped in the prompt.
