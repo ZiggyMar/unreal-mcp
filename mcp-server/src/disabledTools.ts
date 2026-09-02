@@ -109,7 +109,17 @@ export function disabledToolNote(reply: unknown, isEnabled: IsEnabled): Disabled
     // the whole difference between advice and nagging.
     toolsNotEnabledNote: canDispatch
       ? `Not listed this session: ${off.join(", ")}. Reach them with unreal_call_tool; no need to enable.`
-      : `${off.length} tool(s) named above are switched off in this session: ${off.join(", ")}. ` +
+      : // The names appear once here, inside the call. They used to appear twice - listed in prose
+        // and again inside unreal_enable_tools({...}) on the next clause - and the prose copy
+        // carried nothing the call does not, while the call is the half somebody can paste.
+        //
+        // `toolsNotEnabled` beside this still repeats them a third time, and is deliberately left
+        // alone: it is 75 characters and it is the machine-readable half. That is a different trade
+        // from the one made in document_asset, where the prose and the structure it was rendered
+        // from were the same 16,000 characters. Removing structure to save nineteen tokens is not
+        // that trade, and applying the pattern mechanically wherever it appears is how a good rule
+        // turns into a bad one.
+        `${off.length} tool(s) named above are switched off in this session. ` +
         `unreal_enable_tools({ tools: [${off.map((n) => `"${n}"`).join(", ")}] }) turns on exactly those, ` +
         `which costs far less than a whole group.`,
   };
