@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Refuse to push what has not passed.
+#
+# Twice in one session I ran `npm test` and `git commit` in the same command, read the tail of the
+# output, and pushed a failing suite to main:
+#
+#   59d49bae  a liveCoding test asserting a clean patch adds no `next` field
+#   f2176bbb  the doctor's guard that every bridge command is probed or excused
+#
+# Both times the guard worked and I did not read it. Both times the fix was a one-line follow-up
+# commit that should never have been needed. Writing "be more careful next time" in a commit message
+# is not a fix; this is. The mistake is now impossible rather than discouraged, which is the same
+# argument every other guard in this repo makes for itself.
+#
+# ## Turning it on
+#
+# Hooks are not carried by a clone, so this needs one command per working copy:
+#
+#     git config core.hooksPath .githooks
+#
+# ## When it is in the way
+#
+# `git push --no-verify` skips it. That is deliberate and it should feel like a decision - pushing a
+# red suite to main is sometimes right (a WIP branch, a revert that fixes it two commits later) and
+# always worth being deliberate about.
+#
+# The suite is about a minute. That is the whole cost, and it is paid per push rather than per
+# commit, which is roughly once per finished piece of work.
+
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root/mcp-server" || exit 0
+
+if [ ! -d node_modules ]; then
+  echo "pre-push: mcp-server/node_modules is missing, so the suite cannot run."
+  echo "          Run 'npm ci' in mcp-server, or push with --no-verify if you meant to."
+  exit 1
+fi
+
+echo "pre-push: running the guard suite (about a minute)..."
+if npm test; then
+  echo "pre-push: green."
+  exit 0
+fi
+
+echo ""
+echo "pre-push: REFUSED - the suite is red, so this push was not sent."
+echo "          Fix it, or push with --no-verify if the red is deliberate."
+exit 1
