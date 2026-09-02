@@ -993,15 +993,7 @@ const register: typeof server.registerTool = ((name: string, config: never, hand
   // tools already; fixing it per-tool fixed three symptoms and no causes.
   const guarded = (async (args: never, extra: never) => {
     const verdict = repeatGuard.record(name, args);
-    // Both shapes, because tools use both: most catch and return errorResult, the rest let the
-    // bridge error propagate. Hooking only the returned kind made this whole feature invisible on
-    // every throwing tool.
-    let result: unknown;
-    try {
-      result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
-    } catch (err) {
-      throw await enrichThrownError(err, args);
-    }
+    const result = await (handler as unknown as (a: never, b: never) => Promise<unknown>)(args, extra);
     return withRepeatNotice(await withPathSuggestion(result, args), verdict.notice);
   }) as never;
   // Swap the raw shape for a strict object of the same shape. It stays a ZodObject, so the SDK
@@ -1140,12 +1132,13 @@ function explainUnknownCommand(message: string): string | undefined {
 /**
  * The "did you mean" line for an error, or undefined when nothing certain can be said.
  *
- * Split out from the result-shaped wrapper because HALF THE TOOLS DO NOT RETURN THEIR ERRORS. Most
- * catch and call errorResult; the rest let the bridge error propagate and the SDK shapes it. Both
- * are errors a caller reads, and the first version of this hooked only the returned kind - so the
- * path suggestion silently did nothing for every throwing tool, which is how a wrong graph name on
- * read_blueprint_summary came back with no suggestion while the identical mistake on
- * compile_blueprint got one. Found by instrumenting the hook rather than re-reading it.
+ * Kept separate from the wrapper that attaches it so the lookup can be read and tested on its own -
+ * it is the part with the bridge call in it, and the wrapper is the part with the result shape.
+ *
+ * 129 of 134 handlers catch their errors and return them through errorResult. The five that do not
+ * are local composites - list_tools, enable_tools, find_source, guide, session_changes - none of
+ * which can produce a not-found error, because none of them look an asset up. So every error this
+ * can say anything about arrives as a RETURNED result, and there is no second path to handle.
  */
 async function suggestionFor(text: string, args?: unknown): Promise<string | undefined> {
   // A wrong graph name, which the bridge answers with an ALPHABETICAL slice of what exists. On a
@@ -1195,23 +1188,6 @@ async function withPathSuggestion(result: unknown, args?: unknown): Promise<unkn
   };
 }
 
-/**
- * The same suggestion on an error a tool THREW.
- *
- * Re-thrown rather than converted to a returned error: which shape a tool uses is checked by
- * check:envelopes and the protocol tests, and quietly changing it here to make this easier would
- * trade a real guarantee for a convenience.
- */
-async function enrichThrownError(err: unknown, args?: unknown): Promise<unknown> {
-  if (!(err instanceof Error) || typeof err.message !== "string") return err;
-  try {
-    const line = await suggestionFor(err.message, args);
-    if (line) err.message = `${err.message}\n\n${line}`;
-  } catch {
-    // Never let the courtesy replace the failure it was decorating.
-  }
-  return err;
-}
 
 
 function errorResult(err: unknown, hint?: string) {

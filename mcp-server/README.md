@@ -9342,10 +9342,10 @@ allowance for something that no longer happens teaches the next reader something
 Cost: `core` 13,078 → 13,088 and `full` 46,483 → 46,493. Ten tokens for text that stops sending
 constrained models to tools that are not there.
 
-### The suggestion that only worked on half the tools
+### Ranking the graph names, and a diagnosis that was wrong
 
 A wrong graph name is answered by the bridge with an **alphabetical** slice of what exists. On a real
-Blueprint that is twelve of fifty-eight graphs — and for `EventGrph` the list stopped at
+Blueprint that is twelve of fifty-eight graphs - and for `EventGrph` the list stopped at
 `EndVacuumObjects`, one entry before `EventGraph`. A list whose whole purpose was to contain the
 answer, sorted so that it did not.
 
@@ -9357,22 +9357,25 @@ CanShot    ->  Did you mean `CanShoot`?
 Nonsense   ->  (no suggestion; the original error stands)
 ```
 
-**But wiring it up exposed something worse.** Nothing appeared. The pieces all worked in isolation,
-the branch was in the built output, and the lookup returned the right names — so the hook was not
-being reached at all. Instrumenting it rather than re-reading it found why:
+**The part worth recording is what happened next.** After wiring it up, the suggestion appeared to
+be missing. From that I concluded that tools use two error shapes - some returning errors, some
+throwing them - and that the hook only ran on the returned kind. I built a second path for thrown
+errors, shipped it, and wrote the lesson up here as fact.
 
-> Tools use **two** error shapes. Most catch and return `errorResult`. The rest let the bridge error
-> propagate and the SDK shapes it. The suggestion hook ran on the returned kind only.
+It was wrong. Instrumenting the catch branch afterwards showed it is **never reached**:
 
-So the path suggestion shipped two commits earlier had been silently doing nothing on every throwing
-tool. `compile_blueprint` returns, so it worked and was verified working; `read_blueprint_summary`
-throws, so the identical mistake there got nothing. The verification that passed was real — it just
-covered one of two shapes, and nothing said there were two.
+| | |
+|---|---|
+| handlers that catch and return their errors | 129 of 134 |
+| handlers that do not | `list_tools`, `enable_tools`, `find_source`, `guide`, `session_changes` |
+| ...of those, ones that can produce a not-found error | none — none of them look an asset up |
 
-Both shapes are handled now, in the same wrapper. The thrown one is **re-thrown**, not converted to
-a returned error: which shape a tool uses is checked by `check:envelopes` and the protocol tests, and
-quietly changing it here to make this easier would trade a real guarantee for a convenience.
+So there is no second path, and there never was. The most likely reason the suggestion looked absent
+is that the shell command used to check it was `tail -3 | head -2`, which cuts off the last line of a
+reply - and the appended line is the last line. **I diagnosed a bug in the code from a truncated view
+of the output, and built a fix for it.**
 
-The lesson is about verification, not about errors. A feature verified on one example is verified on
-one example. What made this findable was that the second case looked identical from the outside and
-behaved differently.
+The dead branch has been removed and this section rewritten. The graph ranking is real and verified;
+the explanation that shipped beside it was not. The ordering that would have prevented it is the one
+that eventually settled it: instrument first, conclude second. A theory that explains the symptom is
+not evidence, especially when it is the first one to arrive.
