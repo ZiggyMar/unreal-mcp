@@ -15,8 +15,10 @@ error if the editor/bridge isn't up.
 ## Contents
 
 Everything up to *Tools exposed* is what you need to run this. Everything after it is reference and
-the reasoning behind the design — 140-odd sections of it, because every non-obvious decision here was
-written down next to the measurement that caused it.
+the reasoning behind the design, because every non-obvious decision here was written down next to the
+measurement that caused it. The post-mortems are indexed under
+[Design notes](#design-notes), from the headings themselves —
+this sentence used to say "140-odd sections" and there were 293 by the time anyone counted.
 
 **Getting it running**
 [Prerequisites](#prerequisites) · [Setup](#setup) · [Configuration](#configuration) ·
@@ -45,7 +47,8 @@ written down next to the measurement that caused it.
 
 
 **Reference and rationale**
-[Tools exposed](#tools-exposed) — the full tool table, then the design notes. Start with
+[Tools exposed](#tools-exposed) · [Design notes](#design-notes) —
+the full tool table, then the design notes. Start with
 *Tool profiles: paying only for what you use* if you care about context cost, *Security* if you are
 deciding whether to run it, and the profile table above if you just want the numbers.
 
@@ -7295,6 +7298,124 @@ Unable to perform hot reload with multiple targets.
 Live Coding was holding the compiler in the running editor. None of it reached the caller, because
 `extractFailureReason` decides which lines get through and matched none of them.
 
+## Design notes
+
+One section per thing that was wrong. Everything below is a post-mortem. Each section is a defect found in this project, what it cost, and
+what was changed - written next to the measurement that caused it, because the reasoning is the part
+that stops it recurring.
+
+They are in the order they were found, which is also roughly the order they mattered. The index is
+GENERATED from the headings by `npm run check:index`; a hand-maintained one in this repo has rotted
+four separate times, and the count in the Contents block above had drifted from 140 to 293 before
+anybody noticed.
+
+<!-- INDEX:BEGIN -->
+
+- [A guidance branch is only as reachable as the pattern that feeds it](#a-guidance-branch-is-only-as-reachable-as-the-pattern-that-feeds-it)
+- [The symptom that pointed at the wrong thing](#the-symptom-that-pointed-at-the-wrong-thing)
+- [The dialog that blocks the bridge before it ever answers](#the-dialog-that-blocks-the-bridge-before-it-ever-answers)
+- [Reaping that only runs after the thing it was written to survive](#reaping-that-only-runs-after-the-thing-it-was-written-to-survive)
+- [The trial that agreed with the bug, again](#the-trial-that-agreed-with-the-bug-again)
+- [One engine compiled it, and only through a header that no longer exists](#one-engine-compiled-it-and-only-through-a-header-that-no-longer-exists)
+- [The gate that was in the graph the whole time](#the-gate-that-was-in-the-graph-the-whole-time)
+- [The C++ leg, end to end, on a bug the Blueprint leg could not fix](#the-c-leg-end-to-end-on-a-bug-the-blueprint-leg-could-not-fix)
+- [The cheap read left out the only thing worth reading](#the-cheap-read-left-out-the-only-thing-worth-reading)
+- [The guard that kept its own copy of the number it guarded](#the-guard-that-kept-its-own-copy-of-the-number-it-guarded)
+- [A pair that could only be compared below the cap](#a-pair-that-could-only-be-compared-below-the-cap)
+- [The same empty brush, exported twenty-eight times](#the-same-empty-brush-exported-twenty-eight-times)
+- [Four near-misses in one session, all the same mistake](#four-near-misses-in-one-session-all-the-same-mistake)
+- [Checking whether the last saving generalises, and finding it does not](#checking-whether-the-last-saving-generalises-and-finding-it-does-not)
+- [Fourteen percent of a reply was node ids nobody can use](#fourteen-percent-of-a-reply-was-node-ids-nobody-can-use)
+- [The test for the boring case caught the real bug](#the-test-for-the-boring-case-caught-the-real-bug)
+- [The expensive half of a row, and the note that said not to touch the cheap one](#the-expensive-half-of-a-row-and-the-note-that-said-not-to-touch-the-cheap-one)
+- [Two reads measured and left alone](#two-reads-measured-and-left-alone)
+- [Six trial steps that had never run](#six-trial-steps-that-had-never-run)
+- [What a whole task costs, and where dispatch stops paying](#what-a-whole-task-costs-and-where-dispatch-stops-paying)
+- [Fixing the same four lines twice is how they got wrong in the first place](#fixing-the-same-four-lines-twice-is-how-they-got-wrong-in-the-first-place)
+- [What the replication trial was always meant to print](#what-the-replication-trial-was-always-meant-to-print)
+- [Running all of them, which nobody had done at once](#running-all-of-them-which-nobody-had-done-at-once)
+- [A stale check fails exactly like a broken tool](#a-stale-check-fails-exactly-like-a-broken-tool)
+- ["NewEnumerator2" is true and useless](#newenumerator2-is-true-and-useless)
+- [The note that recommended the expensive route on the cheap profile](#the-note-that-recommended-the-expensive-route-on-the-cheap-profile)
+- [A one-time cost charged to every run](#a-one-time-cost-charged-to-every-run)
+- [The last recurring difference was a paragraph nobody needed twice](#the-last-recurring-difference-was-a-paragraph-nobody-needed-twice)
+- [`force: true` skipped our check and then didn't force](#force-true-skipped-our-check-and-then-didnt-force)
+- [The index dropped every change made before anyone asked for it](#the-index-dropped-every-change-made-before-anyone-asked-for-it)
+- [Three project-wide searches were blind to a third of the project](#three-project-wide-searches-were-blind-to-a-third-of-the-project)
+- [Sweeping the defect, then sweeping what made it findable](#sweeping-the-defect-then-sweeping-what-made-it-findable)
+- [The audit reported 468 findings and had not opened half the project](#the-audit-reported-468-findings-and-had-not-opened-half-the-project)
+- [The most expensive check could not tell a Server RPC from a name](#the-most-expensive-check-could-not-tell-a-server-rpc-from-a-name)
+- [The same defect, counted twice, in the class that costs most](#the-same-defect-counted-twice-in-the-class-that-costs-most)
+- [Two defects wearing one shape, with opposite remedies](#two-defects-wearing-one-shape-with-opposite-remedies)
+- [Following the audit's own advice, and finding what it could not see](#following-the-audits-own-advice-and-finding-what-it-could-not-see)
+- ["The machine gun upgrade does nothing" — walking the sentence to the cause](#the-machine-gun-upgrade-does-nothing--walking-the-sentence-to-the-cause)
+- [Animation could be read and never touched](#animation-could-be-read-and-never-touched)
+- [Pairing every read with the write that edits the same thing](#pairing-every-read-with-the-write-that-edits-the-same-thing)
+- [Does supporting more cost more? Measured, and mostly no](#does-supporting-more-cost-more-measured-and-mostly-no)
+- [A parameter named without its value](#a-parameter-named-without-its-value)
+- ["Tell me everything about BP_Player"](#tell-me-everything-about-bpplayer)
+- [Reading a literal off sixteen nodes](#reading-a-literal-off-sixteen-nodes)
+- [Guessing a path, and being told the real one](#guessing-a-path-and-being-told-the-real-one)
+- [The near-miss list was ranked by prefix, so the right answer came third](#the-near-miss-list-was-ranked-by-prefix-so-the-right-answer-came-third)
+- [What Epic's own MCP plugin has, and what it does not](#what-epics-own-mcp-plugin-has-and-what-it-does-not)
+- [`unreal_run_tests`, without a plugin rebuild](#unrealruntests-without-a-plugin-rebuild)
+- [A description must not name a tool the profile does not have](#a-description-must-not-name-a-tool-the-profile-does-not-have)
+- [Ranking the graph names, and a diagnosis that was wrong](#ranking-the-graph-names-and-a-diagnosis-that-was-wrong)
+- [A healthy doctor said "fine" eleven times](#a-healthy-doctor-said-fine-eleven-times)
+- [Two of three `branch-decides-nothing` findings were wrong](#two-of-three-branch-decides-nothing-findings-were-wrong)
+- [41% of the audit was one note about comment boxes](#41-of-the-audit-was-one-note-about-comment-boxes)
+- [A finding that was one step from deleting a live variable](#a-finding-that-was-one-step-from-deleting-a-live-variable)
+- [A real bug the audit found and never mentioned](#a-real-bug-the-audit-found-and-never-mentioned)
+- [The honesty note was padded with things that are not classes](#the-honesty-note-was-padded-with-things-that-are-not-classes)
+- [The orientation call spent 64% of itself on a long tail](#the-orientation-call-spent-64-of-itself-on-a-long-tail)
+- [Following a Data Table finding into the C++ that reads it](#following-a-data-table-finding-into-the-c-that-reads-it)
+- [A cost-95 check was running on 13% of the project, silently](#a-cost-95-check-was-running-on-13-of-the-project-silently)
+- [Sweeping for the rest of the silent skips](#sweeping-for-the-rest-of-the-silent-skips)
+- [The planner told a model to extend a touch button for a movement upgrade](#the-planner-told-a-model-to-extend-a-touch-button-for-a-movement-upgrade)
+- [A space in a search returns nothing, and looks like an answer](#a-space-in-a-search-returns-nothing-and-looks-like-an-answer)
+- [What this cannot do, and proof that the rest of it can](#what-this-cannot-do-and-proof-that-the-rest-of-it-can)
+- [The space trap was the whole `match` convention, not one tool](#the-space-trap-was-the-whole-match-convention-not-one-tool)
+- [A guard for the trap that nothing could have caught](#a-guard-for-the-trap-that-nothing-could-have-caught)
+- [A rounding error reported in a paragraph](#a-rounding-error-reported-in-a-paragraph)
+- [`review_blueprint` can be asked one question now](#reviewblueprint-can-be-asked-one-question-now)
+- [The last list with no way to narrow](#the-last-list-with-no-way-to-narrow)
+- [I filtered half a reply and left the other half alone](#i-filtered-half-a-reply-and-left-the-other-half-alone)
+- [`hitCount` counted what came back, not what matched](#hitcount-counted-what-came-back-not-what-matched)
+- [The audit found the right rows in the wrong table](#the-audit-found-the-right-rows-in-the-wrong-table)
+- [Two of the top ten were assets nothing references](#two-of-the-top-ten-were-assets-nothing-references)
+- [Answering the question the last commit raised](#answering-the-question-the-last-commit-raised)
+- [A GameMode that runs gameplay and never says what the player is](#a-gamemode-that-runs-gameplay-and-never-says-what-the-player-is)
+- [Thirteen variables marked Replicated that cannot replicate](#thirteen-variables-marked-replicated-that-cannot-replicate)
+- [Checking what six commits of additions cost](#checking-what-six-commits-of-additions-cost)
+- [The first instruction anyone follows did not match its own payload](#the-first-instruction-anyone-follows-did-not-match-its-own-payload)
+- [The editor crashed inside the bridge](#the-editor-crashed-inside-the-bridge)
+- [Nine handlers derive an asset name and none checked it](#nine-handlers-derive-an-asset-name-and-none-checked-it)
+- ["The connection is fine; the thread is busy" was wrong exactly once](#the-connection-is-fine-the-thread-is-busy-was-wrong-exactly-once)
+- [The C++ half had no guard at all](#the-c-half-had-no-guard-at-all)
+- [One gate instead of nine, and the guard got smaller](#one-gate-instead-of-nine-and-the-guard-got-smaller)
+- [The guard was already there, eight lines up the call chain](#the-guard-was-already-there-eight-lines-up-the-call-chain)
+- [The flagship tool was named on one profile out of five](#the-flagship-tool-was-named-on-one-profile-out-of-five)
+- [Measuring the plain-text path instead of reading it](#measuring-the-plain-text-path-instead-of-reading-it)
+- [The discovery reply recommended the expensive route first](#the-discovery-reply-recommended-the-expensive-route-first)
+- [The guard that watches token claims was not looking at the guides](#the-guard-that-watches-token-claims-was-not-looking-at-the-guides)
+- [A measurement helper whose failure mode was a number](#a-measurement-helper-whose-failure-mode-was-a-number)
+- [Seven recorded numbers nobody was comparing](#seven-recorded-numbers-nobody-was-comparing)
+- [The parameter guard was reading a regex where the schema was](#the-parameter-guard-was-reading-a-regex-where-the-schema-was)
+- [A loose word does not add a wrong answer, it evicts a right one](#a-loose-word-does-not-add-a-wrong-answer-it-evicts-a-right-one)
+- [Three engine words that meant something else](#three-engine-words-that-meant-something-else)
+- ["After I deleted the trigger" was read as an instruction to delete something](#after-i-deleted-the-trigger-was-read-as-an-instruction-to-delete-something)
+- [The answer depended on module load order, not on the question](#the-answer-depended-on-module-load-order-not-on-the-question)
+- [Eight wrong parameter names in one session, by the model that wrote the tools](#eight-wrong-parameter-names-in-one-session-by-the-model-that-wrote-the-tools)
+- [A guard that reported on text nobody is served](#a-guard-that-reported-on-text-nobody-is-served)
+- [There was no reverse gear, and I found out by needing one](#there-was-no-reverse-gear-and-i-found-out-by-needing-one)
+- [42% of every discovery reply was the same paragraph again](#42-of-every-discovery-reply-was-the-same-paragraph-again)
+- ["Not connected" about an editor holding 7 GB of RAM](#not-connected-about-an-editor-holding-7-gb-of-ram)
+- [One dialog stops the whole server, and a tool cannot click it](#one-dialog-stops-the-whole-server-and-a-tool-cannot-click-it)
+- [A third of every C++ pre-push was proving something already proved](#a-third-of-every-c-pre-push-was-proving-something-already-proved)
+- [A comment edit stopped every push, and the error pointed forty lines away](#a-comment-edit-stopped-every-push-and-the-error-pointed-forty-lines-away)
+
+<!-- INDEX:END -->
+
 ### A guidance branch is only as reachable as the pattern that feeds it
 
 That is the general lesson, and the first version of this section overstated it. It claimed the
@@ -11256,3 +11377,29 @@ Two fixes, because they catch different halves:
 
 The parse check skips rather than fails where no POSIX shell exists: a machine without one cannot run
 the hook either, and a false failure there teaches people to ignore the file.
+
+### The index said 140 sections and there were 293
+
+This README is the project's memory: one section per defect, written next to the measurement that
+caused it. That only works if you can find one.
+
+Roughly 4,000 lines of it — **102 post-mortems** — sat below the last `##` heading in the document,
+with no parent section and no index. The Contents block described the file as "140-odd sections of
+it" when `grep -c '^### '` said 293, and not one of the sections appended over recent sessions
+appeared in it. Nobody noticed, because nothing could.
+
+The `##` level was never the problem: `check:docs` has always required every top-level heading to be
+listed, and it caught the new one within a run. It was the `###` level, where nothing was watching,
+and a hardcoded count that had no way to stay true.
+
+Now: a `## Design notes` section owns the run, and `check:index` **generates** the list from the
+headings and fails when the file disagrees. Adding a section is enough; indexing it is not something
+anyone has to remember. It also refuses duplicate headings, because two identical ones produce two
+identical anchors and every link but the first goes somewhere wrong — cheap to catch here, confusing
+to debug in a browser.
+
+The anchor rule is GitHub's, not a naive slugify: backticks, quotes, colons and em dashes **vanish**
+rather than becoming hyphens. A link built the obvious way looks correct and goes nowhere.
+
+And the "140-odd" claim is gone rather than corrected. A number nobody reads is a number that rots;
+the sentence now points at the generated index instead of counting it.
