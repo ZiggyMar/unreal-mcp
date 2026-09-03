@@ -60,7 +60,8 @@
     "check:params": "node scripts/check-param-names.mjs",
     "check:groups": "node scripts/measure-groups.mjs",
     "check:index": "node scripts/check-readme-index.mjs",
-    "measure:layout": "node scripts/measure-layout.mjs"
+    "measure:layout": "node scripts/measure-layout.mjs",
+    "measure:pipeline": "node scripts/measure-pipeline.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
