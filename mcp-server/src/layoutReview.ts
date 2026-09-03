@@ -404,6 +404,12 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   //
   // A box holding only other boxes is NOT empty - that is the nesting convention, an outer box whose
   // parts each have their own.
+  //
+  // A DUPLICATE box title is deliberately not checked, having been measured and rejected. Seven
+  // exist across three graphs, and none is a fault: WB_ShopSlot's three pairs are each offset by
+  // exactly +1296, a copied UI block, and BP_Player's "Vaccum"/"Vacuum Push" pairs are separate
+  // populated systems that happen to share a name. Emptiness is the signal that actually separates
+  // leftover from real - the one duplicate worth removing was empty, and this check already had it.
   for (const b of sized) {
     const title = (b.text ?? "").split("\n")[0].trim();
     if (!title) continue; // untitled boxes are reported below, and one finding per box is enough
