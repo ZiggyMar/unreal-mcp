@@ -7767,6 +7767,7 @@ register(
         const totals: Record<string, number> = {};
         const p90s: number[] = [];
         const style: StyleSample[] = [];
+        let boxesReady = 0;
 
         for (const p of paths) {
           try {
@@ -7781,6 +7782,12 @@ register(
             const faults: Record<string, number> = {};
             for (const f of rep.findings) faults[f.kind] = (faults[f.kind] ?? 0) + 1;
             for (const [k, v] of Object.entries(faults)) totals[k] = (totals[k] ?? 0) + v;
+            // Findings are not the number anyone acts on. One unboxed finding can carry several
+            // ready-to-draw boxes - GM_Gameplay's three carry thirteen - and 39 of the project's 100
+            // carry none at all. Reporting only the finding count invites reading it as coverage,
+            // which is exactly the mistake made when "99 boxes" was repeated as "99 of 100
+            // clusters": that was boxes divided by findings, and the real coverage is 61 of 100.
+            for (const f of rep.findings) boxesReady += (f.suggest ?? []).length;
             p90s.push(rep.stats.wireP90);
             rows.push({
               path: p,
@@ -7864,12 +7871,17 @@ register(
           nextAction:
             dirty.length === 0
               ? `All ${rows.length} graphs are clean.`
-              : `${dirty.length} of ${rows.length} graphs have layout faults. Worst first below; review one with path to see the detail.`,
+              : `${dirty.length} of ${rows.length} graphs have layout faults. Worst first below; review one with path to see the detail.` +
+                (boxesReady > 0
+                  ? ` ${boxesReady} comment box(es) are already computed and safe to draw: review a graph by path, then pass a finding's suggest entries straight to add_comment_box.`
+                  : ""),
           graphs: rows.length,
           clean: clean.length,
           // Not a fault and not a pass: nothing to check. Named so the clean count means something.
           ...(unchecked.length > 0 ? { noBoxesToCheck: unchecked.length } : {}),
           totals,
+          // What could be drawn right now, already checked against every box and node in its graph.
+          ...(boxesReady > 0 ? { boxesReady } : {}),
           // The project's own baseline, so a caller can tell "long for this project" from "long".
           wireP90Median: medianP90,
           conventions,
