@@ -124,10 +124,38 @@ export function placeNewNodes(
     originX = Math.max(...anchors.map((a) => a.x)) + columnGap;
     originY = Math.round(anchors.reduce((t, a) => t + a.y, 0) / anchors.length);
   } else {
-    // Nothing to attach to. Below everything, where there is certainly room - the same rule a person
-    // follows when they "go out into the void" to build something new.
-    originX = existing.length ? Math.min(...existing.map((n) => n.x as number)) : 0;
-    originY = existing.length ? Math.max(...existing.map((n) => n.y as number)) + 1200 : 0;
+    // Nothing to attach to: out into clear canvas, the rule a person follows when they build a new
+    // system. But BELOW everything, every time, builds a column - and that is not a hypothetical.
+    //
+    // Six systems placed this way turned the guide feature into a strip 4120 wide and 9664 TALL,
+    // which its owner opened and said was still not organised. Fixing it by hand meant relaying the
+    // six stages into two rows of three; the same shape his own code has, where 756 nodes sit in
+    // 17264 x 12692 rather than in a ribbon.
+    //
+    // So a batch goes to the RIGHT of the last row while that row is still shorter than the work is
+    // tall, and drops to a new row when it is not. Wrapping like text, which is what "reads like a
+    // book" means when there is more than one paragraph.
+    const xsAll = existing.map((n) => n.x as number);
+    const ysAll = existing.map((n) => n.y as number);
+    const left = existing.length ? Math.min(...xsAll) : 0;
+    const right = existing.length ? Math.max(...xsAll) : 0;
+    const bottom = existing.length ? Math.max(...ysAll) : 0;
+    const width = right - left;
+    const height = bottom - (existing.length ? Math.min(...ysAll) : 0);
+
+    // Everything sharing the bottom row, so a new batch can sit beside it rather than under it.
+    const rowBand = 1200;
+    const inBottomRow = existing.filter((n) => (n.y as number) >= bottom - rowBand);
+    const rowRight = inBottomRow.length ? Math.max(...inBottomRow.map((n) => n.x as number)) : right;
+    const rowTop = inBottomRow.length ? Math.min(...inBottomRow.map((n) => n.y as number)) : bottom;
+
+    if (existing.length > 0 && width < height) {
+      originX = rowRight + columnGap * 3;
+      originY = rowTop;
+    } else {
+      originX = left;
+      originY = bottom + 1200;
+    }
   }
 
   // Left to right in the order the caller declared them, which is the order they were reasoned about

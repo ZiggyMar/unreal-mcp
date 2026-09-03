@@ -77,13 +77,20 @@ possible: move the box back over the nodes it still lists, rather than deleting 
 
 ## How to rebuild
 
-**Compile it first, without going near the project.** This source has never been built, and copying
-unverified C++ into a project's `Plugins/` folder risks the editor failing to open next time —
-Unreal tries to rebuild a changed plugin on startup, and a compile error there is a locked door.
+**Compile it first, without going near the project.** Copying unverified C++ into a project's
+`Plugins/` folder risks the editor failing to open next time — Unreal rebuilds a changed plugin on
+startup, and a compile error there is a locked door.
 
 ```
 npm run check:engines          # RunUAT BuildPlugin, public engine APIs only, no project touched
 ```
+
+**Done, 2026-09-03: both changes compile.** `node scripts/build-engines.mjs --only 5.6 --isolated`
+returned `5.6 ok (131s)` with the `resize_comment_box` action and the `NodesUnderComment` read in
+place. So the remaining risk is not "does this build" but "does it behave", which is what the
+verification steps below are for. Reading the engine header rather than guessing is what got it
+there: the first draft iterated `TSoftObjectPtr` and called `.Get()`, and `FCommentNodeSet` is a
+`TArray<UObject*>`.
 
 **Then copy it in.** A project does not read this repo; the plugin is *copied* into
 `<Project>/Plugins/UnrealMCPBridge`, and that copy is what builds and runs. This step was missing

@@ -18,11 +18,46 @@ test("nodes built into an existing chain land beside it, not at the origin", () 
 });
 
 test("a batch attached to nothing goes to clear canvas, not the origin", () => {
+  // Asserted as "below everything" until batches learned to wrap into rows, and that was the
+  // mechanism rather than the point. The point is clear canvas: away from the origin, and clear of
+  // every node already placed. Which DIRECTION it goes is the layout's business.
   const theirs = [n("a", 0, 0), n("b", 500, 900), n("c", -300, 1500)];
   const fresh = n("fresh", 0, 0);
   const out = placeNewNodes([...theirs, fresh], ["fresh"]);
   const p = at(out, "fresh");
-  assert.ok(p.y > 1500, `expected clear space below everything, got y=${p.y}`);
+  assert.ok(!(p.x === 0 && p.y === 0), "must not land on the origin");
+  for (const o of theirs) {
+    const apart = Math.max(Math.abs(o.x - p.x), Math.abs(o.y - p.y));
+    assert.ok(apart >= 60, `landed ${apart} from ${o.id}`);
+  }
+});
+
+test("batches wrap into rows instead of building a column", () => {
+  // Six systems placed one below the next turned a real feature into a strip 4120 wide and 9664
+  // TALL, which its owner opened and said was still not organised. Relaying it by hand into two rows
+  // of three is what fixed it - so the placement wraps like text now, and the same six systems come
+  // out near-square instead of as a ribbon.
+  let graph = [n("seed", 0, 0)];
+  for (let s = 0; s < 6; s++) {
+    const fresh = Array.from({ length: 8 }, (_, i) => n(`s${s}n${i}`, 0, 0));
+    const out = placeNewNodes([...graph, ...fresh], fresh.map((f) => f.id));
+    for (const p of out) {
+      const f = fresh.find((x) => x.id === p.nodeId);
+      f.x = p.x;
+      f.y = p.y;
+    }
+    graph = [...graph, ...fresh];
+  }
+  const xs = graph.map((v) => v.x), ys = graph.map((v) => v.y);
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  assert.ok(w / h > 0.5, `expected something readable, got ${w}x${h}`);
+  // And nothing may land on anything, however it wrapped.
+  for (let i = 0; i < graph.length; i++) {
+    for (let j = i + 1; j < graph.length; j++) {
+      const apart = Math.max(Math.abs(graph[i].x - graph[j].x), Math.abs(graph[i].y - graph[j].y));
+      assert.ok(apart >= 60, `${graph[i].id} and ${graph[j].id} only ${apart} apart`);
+    }
+  }
 });
 
 test("nothing already in the graph is moved", () => {
