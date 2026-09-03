@@ -193,6 +193,9 @@ export function describeTrace(trace: InputTrace): string {
 /** Reading every referrer's graph is the expensive half, so it is capped and the cap is reported. */
 const DEFAULT_MAX_HANDLERS = 6;
 
+/** A Blueprint with more graphs than this is pathological; reading them all would cost more than it finds. */
+const MAX_GRAPHS_PER_BLUEPRINT = 6;
+
 interface AssetRow {
   name?: string;
   path?: string;
@@ -203,6 +206,40 @@ interface AssetRow {
 
 const rowName = (r: AssetRow): string => r.name ?? r.assetName ?? "";
 const rowPath = (r: AssetRow): string => r.path ?? r.package ?? "";
+
+/**
+ * Graphs that can hold an input event, named as this Blueprint actually spells them.
+ *
+ * Input events live in an ubergraph, and "EventGraph" is only the DEFAULT name for one - a project
+ * that split its events across several, or renamed the first, has them elsewhere. Reading the default
+ * name and stopping produces "nothing handles this key", which is the most confidently wrong answer
+ * this tool can give.
+ *
+ * Falls back to the default name when the graph list cannot be read, so a bridge that does not answer
+ * degrades to the old single-graph behaviour rather than to no answer at all.
+ */
+export async function eventGraphNames(bridge: BridgeLike, path: string): Promise<string[]> {
+  try {
+    const listed = await bridge.send<{ graphs?: Array<{ name?: string; kind?: string }> }>(
+      "list_blueprint_graphs",
+      { path }
+    );
+    // The reply marks delegate graphs with `kind` and nothing else, so function graphs look like
+    // ubergraphs here. Rather than guess which is which, read them all and drop only what CANNOT
+    // hold an input event: a delegate graph is a bound event's body, and the construction script runs
+    // at spawn. Reading a function graph that has no input event costs a call and returns no chains,
+    // which is cheap and honest; guessing wrong costs the whole answer.
+    const names = (listed.graphs ?? [])
+      .filter((g) => g.name && !g.kind && g.name !== "UserConstructionScript")
+      .map((g) => g.name as string);
+    if (names.length === 0) return ["EventGraph"];
+    // Put the conventional name first so the common case answers on the first read.
+    names.sort((a, b) => Number(b === "EventGraph") - Number(a === "EventGraph"));
+    return names.slice(0, MAX_GRAPHS_PER_BLUEPRINT);
+  } catch {
+    return ["EventGraph"];
+  }
+}
 
 /**
  * Trace a key (or an action directly) to the Blueprints that handle it and what they do.
@@ -291,11 +328,17 @@ export async function traceInput(
       }
       read++;
       try {
-        const summary = await bridge.send("read_blueprint_graph_summary", {
-          path,
-          graphName: "EventGraph",
-        });
-        const chains = chainsForAction(explain(summary, { match: hit.action }), hit.action);
+        // Every event graph, not just the one called "EventGraph".
+        //
+        // A Blueprint can hold several, and input events live in whichever one somebody put them in.
+        // Reading only the default name finds nothing in a project that split its graphs up, and
+        // "nothing handles this key" is the most confidently wrong answer this tool can give.
+        const chains: ExplainedChain[] = [];
+        for (const graphName of await eventGraphNames(bridge, path)) {
+          const summary = await bridge.send("read_blueprint_graph_summary", { path, graphName });
+          chains.push(...chainsForAction(explain(summary, { match: hit.action }), hit.action));
+        }
+
         if (chains.length === 0) {
           trace.referencedByWithoutHandler.push(rowName(cand) || path);
           continue;

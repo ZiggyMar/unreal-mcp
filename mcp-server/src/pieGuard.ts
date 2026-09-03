@@ -13,12 +13,18 @@
  * the caller loses the edit AND every other unsaved change in the session, then pays a restart. A
  * warning in a reply is read after the fact.
  *
- * ## Why the belief is confirmed before refusing
+ * ## Why it always asks the editor
  *
- * This server knows PIE is running because it started it. That belief goes stale the moment a person
- * clicks Stop in the editor, and a tool that refuses to compile because of something it remembers
- * from ten minutes ago is worse than no guard - it blocks real work and cannot be argued with. So the
- * belief only decides whether to ASK; the editor decides the answer.
+ * The first version tracked whether this server had started PIE and only asked when it believed the
+ * game was running - one saved round trip per compile. It was wrong in the direction that matters.
+ * A person clicking Play in the editor starts a session this server never hears about, so the belief
+ * is false exactly when the danger is real, and a guard that misses the crash it exists to prevent
+ * is barely a guard.
+ *
+ * The round trip is also cheaper than it looks: the `pie_status` reply is consumed here and never
+ * returned, so the caller pays no tokens for it, only about a tenth of a second against a compile
+ * that already takes seconds. Latency was the wrong thing to optimise against a crash that loses the
+ * whole session.
  */
 
 /** What `pie_status` reports back. Only the fields the guard reads. */

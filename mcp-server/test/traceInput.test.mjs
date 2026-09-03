@@ -7,6 +7,7 @@ import {
   describeTrace,
   keyOfMapping,
   traceInput,
+  eventGraphNames,
 } from "../dist/traceInput.js";
 
 const ctx = (context, actions) => ({ context, reply: { context, actions } });
@@ -247,4 +248,65 @@ test("an action that nothing handles reads as a finding, not as success", async 
   const { bridge } = stubBridge({ find_references: () => ({ referencedBy: [] }) });
   const trace = await traceInput(bridge, { key: "Escape" }, explainStub);
   assert.match(describeTrace(trace), /Nothing handles it/);
+});
+
+// --- which graphs get read -------------------------------------------------------------------
+
+test("every ubergraph is read, not just the one called EventGraph", async () => {
+  // A Blueprint can hold several event graphs and input events live in whichever one somebody put
+  // them in. Reading only the default name reports "nothing handles this key", which is the most
+  // confidently wrong answer this tool can give.
+  const bridge = {
+    async send(cmd) {
+      if (cmd === "list_blueprint_graphs") {
+        return { graphs: [{ name: "EventGraph" }, { name: "Menus" }, { name: "Pressed Any Key", kind: "delegate" }] };
+      }
+      throw new Error("unused");
+    },
+  };
+  const names = await eventGraphNames(bridge, "/Game/BP_Thing");
+  assert.deepEqual(names, ["EventGraph", "Menus"]);
+});
+
+test("delegate graphs and the construction script are skipped", async () => {
+  // Neither can hold an input event: a delegate graph is a bound event's body, and the construction
+  // script runs at spawn.
+  const bridge = {
+    async send() {
+      return {
+        graphs: [
+          { name: "UserConstructionScript" },
+          { name: "Pressed Any Key", kind: "delegate" },
+          { name: "EventGraph" },
+        ],
+      };
+    },
+  };
+  assert.deepEqual(await eventGraphNames(bridge, "/Game/BP_Thing"), ["EventGraph"]);
+});
+
+test("the conventional name is read first so the common case answers immediately", async () => {
+  const bridge = {
+    async send() {
+      return { graphs: [{ name: "Combat" }, { name: "Movement" }, { name: "EventGraph" }] };
+    },
+  };
+  const names = await eventGraphNames(bridge, "/Game/BP_Thing");
+  assert.equal(names[0], "EventGraph");
+});
+
+test("an unreadable graph list falls back to the default name, not to nothing", async () => {
+  // Degrading to the old single-graph behaviour still answers; degrading to no graphs answers
+  // "nothing handles this", which is worse than the limitation it replaced.
+  const bridge = {
+    async send() {
+      throw new Error("bridge said no");
+    },
+  };
+  assert.deepEqual(await eventGraphNames(bridge, "/Game/BP_Thing"), ["EventGraph"]);
+});
+
+test("a Blueprint with no graphs at all still yields the default name", async () => {
+  const bridge = { async send() { return { graphs: [] }; } };
+  assert.deepEqual(await eventGraphNames(bridge, "/Game/BP_Thing"), ["EventGraph"]);
 });
