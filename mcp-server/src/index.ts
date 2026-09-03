@@ -3045,18 +3045,24 @@ register(
     description:
       "Graph-organization actions, so generated graphs read like a careful human built them:\n" +
       '  - "set_node_comment": nodeId + comment. Sets/clears the comment bubble on one node.\n' +
-      '  - "add_comment_box": text + x/y/width/height. Adds a comment box; place it so it visually groups related ' +
-      "nodes (boxes render behind nodes covering their area).\n" +
+      '  - "add_comment_box": text + x/y/width/height. Boxes render behind the nodes they cover, and a box OWNS ' +
+      "what is inside it - drag the box and those nodes move. So never let two boxes half-overlap: nest one fully " +
+      "inside the other, or separate them.\n" +
       '  - "move_node": nodeId + x/y. Repositions a node.\n' +
-      "Use comment boxes to group each logical section of a graph and node comments to explain non-obvious choices. " +
-      "Positions are cosmetic to the compiler but matter to the human who opens the graph next.",
+      "**Match the graph you are in** - unreal_review_layout with `pathPrefix` measures a project's own conventions, " +
+      "so you need not invent any. Typical: a box holds ~7 nodes, its title is a two-word NAME rather than a " +
+      "sentence (`Movement`, `Aim Server`), caps are rare, and a big system nests - an outer box naming it, inner " +
+      "boxes naming its parts. Prose goes under the title or on a node comment, never in the name.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph to organize."),
       action: z.enum(["set_node_comment", "add_comment_box", "move_node"]),
       nodeId: z.string().optional().describe("Required for set_node_comment and move_node."),
       comment: z.string().optional().describe("set_node_comment: the comment text (empty string clears it)."),
-      text: z.string().optional().describe("add_comment_box: the box's title text."),
+      text: z
+        .string()
+        .optional()
+        .describe("add_comment_box: the box's name on its first line; any prose about the system goes on the lines after it."),
       x: z.number().optional().describe("Position X (add_comment_box, move_node)."),
       y: z.number().optional().describe("Position Y (add_comment_box, move_node)."),
       width: z.number().optional().describe("add_comment_box: box width. Defaults to 400."),
