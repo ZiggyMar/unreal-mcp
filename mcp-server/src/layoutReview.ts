@@ -57,6 +57,19 @@ export interface LayoutReport {
     commentBoxes: number;
     execWires: number;
     backwardWires: number;
+    /**
+     * Wire lengths, because a single threshold turned out to be the wrong shape of answer.
+     *
+     * Measured on a graph a person maintains by hand: 849 wires, median 272, p90 608, max 3632. The
+     * max alone would fail any fixed limit, and that graph is the standard. What actually separated
+     * the hand-built code from the generated code was the p90 - 608 against 1068 - which says the
+     * generated layout is uniformly more spread out, not that it has one bad wire.
+     *
+     * So the numbers are reported and the caller compares. Only genuine canvas-crossers are flagged.
+     */
+    wireMedian: number;
+    wireP90: number;
+    wireMax: number;
   };
 }
 
@@ -95,7 +108,10 @@ function targetsOf(line: string): string[] {
 export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): LayoutReport {
   const minY = options.minY ?? -Infinity;
   const maxY = options.maxY ?? Infinity;
-  const maxWire = options.maxWire ?? 1600;
+  // 2000, from measuring a hand-maintained graph rather than from taste: its wires run to 3632, so a
+  // tighter limit would fail the very code being used as the standard. Length alone is not a fault -
+  // the p90 in the stats is the number that separates a tidy layout from a sprawling one.
+  const maxWire = options.maxWire ?? 2000;
   const tooClose = options.tooClose ?? 40;
 
   const placed = nodes.filter(
@@ -108,6 +124,7 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   const findings: LayoutFinding[] = [];
   let execWires = 0;
   let backwardWires = 0;
+  const wireLengths: number[] = [];
 
   const name = (n: LayoutNode | undefined) => (n?.title ?? n?.id ?? "?").slice(0, 40);
 
@@ -133,10 +150,16 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
         const dx = Math.abs((t.x as number) - (n.x as number));
         const dy = Math.abs((t.y as number) - (n.y as number));
         const len = Math.max(dx, dy);
+        wireLengths.push(len);
         if (len > maxWire) {
           findings.push({
             kind: "longWire",
-            detail: `${name(n)} -> ${name(t)} runs ${len} across the canvas. A call through a custom event costs no wire at all.`,
+            // The remedy differs by wire kind, and the first version gave the exec answer for both.
+            // You cannot route a data wire through a custom event - a value needs a variable, or the
+            // source node moved nearer whatever reads it.
+            detail: isExec
+              ? `${name(n)} runs on to ${name(t)} ${len} away. A call through a custom event costs no wire at all.`
+              : `${name(n)} feeds ${name(t)} from ${len} away. Move it beside what reads it, or carry the value in a variable.`,
             nodes: [n.id ?? "", t.id ?? ""],
           });
         }
@@ -192,8 +215,19 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
     }
   }
 
+  const sortedWires = [...wireLengths].sort((a, b) => a - b);
+  const at = (p: number) => (sortedWires.length === 0 ? 0 : sortedWires[Math.min(sortedWires.length - 1, Math.floor(sortedWires.length * p))]);
+
   return {
     findings,
-    stats: { nodes: real.length, commentBoxes: boxes.length, execWires, backwardWires },
+    stats: {
+      nodes: real.length,
+      commentBoxes: boxes.length,
+      execWires,
+      backwardWires,
+      wireMedian: at(0.5),
+      wireP90: at(0.9),
+      wireMax: sortedWires[sortedWires.length - 1] ?? 0,
+    },
   };
 }

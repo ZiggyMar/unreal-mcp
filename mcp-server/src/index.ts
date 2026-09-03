@@ -2602,6 +2602,26 @@ register(
     },
   },
   async ({ path, graphName, nodes, connections, pinDefaults, compile, autoLayout }) => {
+    // Coordinates passed into an existing graph are the single most expensive habit this tool has
+    // seen. Sixty nodes went into a 982-node graph at guessed x/y, spread over four regions and
+    // interleaved with 154 of the owner's nodes; it compiled, it ran, and the owner's verdict was
+    // "it's like taking headphones and you scramble the wires".
+    //
+    // A guessed coordinate cannot land in a gap in a full graph, because there are no gaps - it
+    // lands on somebody's system. Omitted, the tool places each node beside whatever it connects to,
+    // which is both correct and free.
+    //
+    // Said BEFORE the call, not after: the point is to stop the placement, not to describe it.
+    const placed = (nodes ?? []).filter(
+      (n) => typeof (n as { x?: number }).x === "number" || typeof (n as { y?: number }).y === "number"
+    ).length;
+    const coordinateWarning =
+      placed > 0
+        ? `${placed} of ${(nodes ?? []).length} node(s) carried x/y. Omit them and each node is placed beside what ` +
+          `it connects to; a guessed coordinate lands on existing work rather than in a gap. ` +
+          `unreal_review_layout checks the result.`
+        : undefined;
+
     try {
       const result = await bridge.send<BuildGraphResult>("build_graph", {
         path,
@@ -2628,6 +2648,8 @@ register(
             pinDefaultsSet: result.pinDefaultsSet,
             compile: result.compile,
           };
+      // Carried on every reply path below, so the advice cannot be lost to whichever branch returns.
+      if (coordinateWarning) (buildPart as Record<string, unknown>).warning = coordinateWarning;
 
       // Layout is cosmetic and must never turn a successful build into a failed tool call, so a
       // layout error is reported alongside the build result rather than thrown over it.
