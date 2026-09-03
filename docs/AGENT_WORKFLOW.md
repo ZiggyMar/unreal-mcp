@@ -151,8 +151,19 @@ not working.
      `maxY` scope, which moves nothing outside it, and box your own system with
      `unreal_organize_graph add_comment_box`.
    - **Then check it:** `unreal_review_layout` reports what a compile cannot - chains running
-     leftward, stacked nodes, canvas-crossing wires, nodes in no comment box. Measured on a real
-     project, hand-written code ran 306 execution wires with 0 backwards; generated code ran 4 in 44.
+     leftward, stacked nodes, canvas-crossing wires, nodes in no comment box, boxes that
+     half-overlap, boxes left holding nothing. Measured on a real project, hand-written code ran 306
+     execution wires with 0 backwards; generated code ran 4 in 44.
+   - **Do not invent box geometry.** An `unboxed` finding carries `suggest`: rectangles already
+     cleared against every existing box and node, one per system, ready for `add_comment_box`. The
+     two ways a box goes wrong are both silent - padding past a neighbour's edge makes a partial
+     overlap that corrupts both when either is dragged, and a box a little too wide adopts somebody
+     else's node - and both have happened here. When a box is one or two nodes short of fitting,
+     `almost` names what is in the way. When neither appears there is no safe box, which is a
+     finding, not a prompt to guess one.
+   - **Match the project, not this document.** `unreal_review_layout` with `pathPrefix` measures the
+     conventions of whatever project you are in: how many nodes a box holds, how long titles run,
+     how much nests, what a normal wire length is. Those numbers beat any rule of thumb written here.
 
    Put the prose on the comment BOX, not on the nodes. One short line on a node, or nothing; a
    paragraph renders as a box that dwarfs the node it explains.

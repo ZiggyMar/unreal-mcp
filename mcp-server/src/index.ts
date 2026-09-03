@@ -7697,16 +7697,17 @@ register(
   {
     title: "Check a graph is laid out like a person laid it out",
     description:
-      "Reports layout faults a compile never catches: execution chains that jump leftward, nodes stacked on top of " +
-      "each other, wires crossing the canvas, and nodes belonging to no comment box.\n\n" +
-      "**Run this after adding nodes to an existing graph.** Correct nodes can still leave a graph that reads as " +
-      "scrambled wire, and the person who has to edit it next pays for that. Measured on a real project: the " +
-      "hand-maintained code had 306 execution wires with 0 running backwards; nodes added by a model had 4.\n\n" +
-      "`minY`/`maxY` scope it to one system instead of a whole graph. Fix with unreal_organize_graph " +
-      "(move_node, add_comment_box); this only reports, because moving somebody else's nodes is their call.\n\n" +
-      "**`pathPrefix` instead of `path` sweeps a whole folder**, worst first, with the project's own wire p90 as " +
-      "the baseline. One review says whether that graph is tidy; the sweep says which graph is the problem. " +
-      "Measured: 148 graphs, 85 clean, one outlier at p90 2840 against a median of 464.",
+      "Layout faults a compile never catches: exec chains jumping leftward, stacked nodes, canvas-crossing wires, " +
+      "nodes in no comment box, boxes that half-overlap, boxes left holding nothing.\n\n" +
+      "**Run it after adding nodes to an existing graph.** Correct nodes still leave a graph that reads as scrambled " +
+      "wire, and whoever edits it next pays. Measured: hand-maintained code had 306 exec wires, 0 backwards; a " +
+      "model's had 4.\n\n" +
+      "An `unboxed` finding carries `suggest`: ready-to-draw boxes, one per system, already cleared against every " +
+      "box and node, for unreal_organize_graph add_comment_box. `almost` names what blocks a box that is one or two " +
+      "nodes short. Neither appears when there is no safe answer - which is not an invitation to invent one.\n\n" +
+      "`minY`/`maxY`/`minX`/`maxX` scope it to one system. **`pathPrefix` sweeps a folder** instead of one graph, " +
+      "worst first, and measures that project's own conventions - wire p90, nodes per box, title length, nesting - " +
+      "so you match them rather than invent any.",
     inputSchema: {
       path: z.string().optional().describe('Blueprint path, e.g. "/Game/Characters/BP_Player". One of path or pathPrefix.'),
       pathPrefix: z
