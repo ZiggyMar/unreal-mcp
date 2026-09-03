@@ -401,7 +401,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildMaterialGraph(const TShar
 					}
 				}
 				FString Error;
-				if (!SetPropertyByName(Expression, Pair.Key, AsString, Error))
+				// FString(...) around the key for the same reason as the settings below: 5.8 will not
+				// implicitly convert the map's key type to const FString&, and 5.6 will.
+				if (!SetPropertyByName(Expression, FString(Pair.Key), AsString, Error))
 				{
 					return Refuse(TEXT("property_not_set"),
 						FString::Printf(TEXT("On node '%s' (%s): %s"), *Ref, *Type, *Error));
@@ -509,7 +511,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildMaterialGraph(const TShar
 	if (!ResolvedBlendMode.IsEmpty())
 	{
 		FString Error;
-		if (!SetPropertyByName(Material, TEXT("BlendMode"), ResolvedBlendMode, Error))
+		// FString(TEXT(...)) rather than TEXT(...): 5.8 will not implicitly convert the literal to
+		// const FString&, and 5.6 will, so the bare form compiles on one engine and not the other.
+		if (!SetPropertyByName(Material, FString(TEXT("BlendMode")), ResolvedBlendMode, Error))
 		{
 			return Refuse(TEXT("bad_blend_mode"), Error);
 		}
@@ -518,7 +522,7 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildMaterialGraph(const TShar
 	if (!ResolvedShadingModel.IsEmpty())
 	{
 		FString Error;
-		if (!SetPropertyByName(Material, TEXT("ShadingModel"), ResolvedShadingModel, Error))
+		if (!SetPropertyByName(Material, FString(TEXT("ShadingModel")), ResolvedShadingModel, Error))
 		{
 			return Refuse(TEXT("bad_shading_model"), Error);
 		}
