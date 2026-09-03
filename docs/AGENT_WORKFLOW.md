@@ -147,8 +147,12 @@ not working.
    - **On a graph you built:** `unreal_auto_layout_graph` ranks nodes into columns and wraps each
      execution chain in a titled comment box.
    - **On a graph somebody else maintains:** do NOT run it. It relays out the WHOLE graph - measured
-     once at 209 of their nodes moved to place 4 of yours. Use `unreal_tidy_layout` with a `minY`/
-     `maxY` scope, which moves nothing outside it, and box your own system with
+     once at 209 of their nodes moved to place 4 of yours, and in this project it left `GM_Gameplay`
+     with 63 of its 206 nodes at x=0 and **eleven comment boxes naming systems that had moved out
+     from under them**. Nothing in a compile shows that, and geometry cannot undo it: once the nodes
+     have moved, nothing in their positions or their wiring says which box used to own them. Use
+     `unreal_tidy_layout` with a `minY`/`maxY` scope, which moves nothing outside it and never
+     carries a node across a comment box edge, and box your own system with
      `unreal_organize_graph add_comment_box`.
    - **Then check it:** `unreal_review_layout` reports what a compile cannot - chains running
      leftward, stacked nodes, canvas-crossing wires, nodes in no comment box, boxes that
@@ -265,7 +269,18 @@ cost one failed call to discover:
   taking headphones and you scramble the wires."*
 
   Omit them and each node is placed beside whatever it connects to, which is both correct and free.
-  Spend the effort on naming and comment boxes, which no algorithm can infer.
+
+  **A standalone system is also boxed for you**, titled from its entry event in the shape the
+  project actually uses - `CE_ServerToggleHealPrompt` becomes `Server Toggle Heal Prompt`, and
+  several events sharing a word become one box named for the word they share. Only when the graph
+  already uses boxes, or is big enough that this one would: measured across 148 graphs, 8% of graphs
+  under 10 nodes carry a comment box and 100% of graphs over 80 do, so a titled box dropped into a
+  twelve-node graph is a foreign convention rather than tidiness.
+
+  What is left for you is the part no algorithm can infer: **the prose**. A box's first line is its
+  name and everything after it is the explanation, and this project's convention is that the
+  explanation lives on the box rather than on the nodes. The geometry, the placement and the name
+  are handled; why the system works the way it does is not.
 
 ## Working in a real project (not a scratch one)
 
