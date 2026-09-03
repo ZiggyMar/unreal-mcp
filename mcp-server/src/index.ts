@@ -605,6 +605,10 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_add_event_handler",
   "unreal_compile_blueprint",
   "unreal_save_blueprint",
+  // NOTE: `core` carries auto_layout_graph but NOT tidy_layout or organize_graph, so its only
+  // layout tool is the one that relays out a whole graph. Adding tidy_layout costs 303 tokens over
+  // core's 13260 ceiling, and a budget guard is not something to raise to fit a change, so the
+  // description below tells a core model what NOT to do rather than naming a tool it cannot call.
   "unreal_auto_layout_graph",
   "unreal_review_blueprint",
   // The terminal step: one call that checks everything written this session rather than the one
@@ -4673,14 +4677,12 @@ register(
   {
     title: "Auto-layout a graph and label its sections",
     description:
-      "Makes an existing graph read like a careful human built it, in one call, without you working out a single " +
-      "coordinate. Nodes are ranked into left-to-right columns so every wire points forward, ordered to minimise " +
-      "crossings, straightened so execution chains run along one row, and spaced so nothing overlaps. By default it " +
-      "then wraps each execution chain in a comment box titled after the event that starts it, so a reader sees " +
-      '"Event BeginPlay" as a labelled region instead of a float of nodes.\n\n' +
-      "Safe to run repeatedly (it will not stack duplicate boxes), but it lays out the WHOLE graph: on a large one " +
-      "somebody else maintains it moves THEIR nodes too, which is rarely wanted - there, move only what you added. " +
-      "unreal_build_graph already positions what it adds; call this for the comment boxes.",
+      "Ranks a graph into left-to-right columns so wires point forward, minimises crossings, straightens chains " +
+      "onto one row, and by default boxes each chain under its event's name.\n\n" +
+      "**Only on a graph you built yourself.** It relays out the WHOLE graph and comment boxes do NOT move with the " +
+      "nodes they hold - here it left GM_Gameplay with eleven boxes naming systems that had moved out from under " +
+      "them, damage no compile shows and geometry cannot undo. On anyone else's graph do not run it at all: " +
+      "unreal_build_graph already places what it adds, beside what it connects to.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph to lay out, e.g. "EventGraph" or a function graph name.'),
@@ -7586,11 +7588,13 @@ register(
     description:
       "Straightens a system so every execution wire runs rightward, and pulls its pure inputs in beside what reads " +
       "them. What unreal_review_layout reports, this fixes.\n\n" +
-      "**Requires a scope (`minY`/`maxY`) and moves nothing outside it.** That is the difference from " +
-      "unreal_auto_layout_graph, which relays out the whole graph - measured once at 209 nodes moved to place 4. " +
-      "Tidying what you added must not disturb what was already there.\n\n" +
-      "Measured on a real system: wire p90 went 1068 -> 672, against 608 for the hand-built code beside it, with " +
-      "backward wires at 0. Pass `dryRun` to see the moves without making them.",
+      "**Requires a scope (`minY`/`maxY`) and moves nothing outside it** - unlike unreal_auto_layout_graph, which " +
+      "relays out everything and moved 209 of somebody's nodes to place 4.\n\n" +
+      "**No node crosses a comment box edge**, because a box owns what is inside it and a move across one silently " +
+      "changes which system a node belongs to. A chain that outgrew its box widens it (`boxesGrown`) unless that " +
+      "would hit another box or swallow a node; otherwise the move is dropped and counted (`heldByBox`).\n\n" +
+      "Measured: wire p90 1068 -> 672, against 608 for the hand-built code beside it, 0 backward. `dryRun` shows " +
+      "the moves without making them.",
     inputSchema: {
       path: z.string().describe('Blueprint path, e.g. "/Game/Characters/BP_Player".'),
       graphName: z.string().optional().describe('Defaults to "EventGraph".'),
