@@ -50,6 +50,12 @@ export interface LayoutFinding {
   /** One sentence a person can act on. */
   detail: string;
   nodes: string[];
+  /**
+   * For an `unboxed` finding: a rectangle that would box the cluster without partially overlapping
+   * an existing box or capturing a node outside it. Pass it straight to organize_graph
+   * add_comment_box. Absent when no safe rectangle exists, which is not the same as "draw one anyway".
+   */
+  suggest?: { x: number; y: number; width: number; height: number; text: string };
 }
 
 export interface LayoutReport {
@@ -110,6 +116,64 @@ const COMMENT_TYPE = /Comment/i;
  * behaviour. They still count for wire LENGTH, because bending a wire does not shorten it.
  */
 const KNOT_TYPE = /Knot/i;
+
+/**
+ * A rectangle that would box this cluster without breaking anything, or nothing.
+ *
+ * Two ways a suggested box can be wrong, and both have happened in this project for real:
+ *
+ *   - It partially overlaps an existing box. A box OWNS what is inside it, so two boxes sharing a
+ *     region both claim the same nodes and dragging either corrupts the other. Nesting is fine -
+ *     that is the convention here - so only PARTIAL overlap disqualifies.
+ *   - It covers a node that is not in the cluster. That box would adopt somebody else's node.
+ *
+ * Padding shrinks before the answer becomes "no". A tight box is still a box; no box at all leaves
+ * the nodes loose forever, which is the fault being reported.
+ */
+function safeBoxAround(
+  cluster: LayoutNode[],
+  boxes: LayoutNode[],
+  allNodes: LayoutNode[],
+  title: string
+): { x: number; y: number; width: number; height: number; text: string } | undefined {
+  const mine = new Set(cluster);
+  const xs = cluster.map((n) => n.x as number);
+  const ys = cluster.map((n) => n.y as number);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+
+  for (const pad of [180, 120, 80, 48]) {
+    // A node is drawn down-and-right of its position, so the box needs room past the last one for
+    // the node body itself - not just for the padding.
+    const box = { x: x0 - pad, y: y0 - pad, width: x1 - x0 + pad * 2 + 280, height: y1 - y0 + pad * 2 + 90 };
+
+    const capturesStranger = allNodes.some(
+      (n) =>
+        !mine.has(n) &&
+        (n.x as number) >= box.x &&
+        (n.x as number) <= box.x + box.width &&
+        (n.y as number) >= box.y &&
+        (n.y as number) <= box.y + box.height
+    );
+    if (capturesStranger) continue;
+
+    const clashes = boxes.some((b) => {
+      const bx = b.x as number, by = b.y as number, bw = b.width as number, bh = b.height as number;
+      const overlaps = box.x < bx + bw && bx < box.x + box.width && box.y < by + bh && by < box.y + box.height;
+      if (!overlaps) return false;
+      const nests =
+        (box.x >= bx && box.y >= by && box.x + box.width <= bx + bw && box.y + box.height <= by + bh) ||
+        (bx >= box.x && by >= box.y && bx + bw <= box.x + box.width && by + bh <= box.y + box.height);
+      return !nests;
+    });
+    if (clashes) continue;
+
+    // A box with no name groups nodes while explaining nothing, which this file reports as a fault
+    // in its own right. Offering one would be suggesting the next finding.
+    if (!title) return undefined;
+    return { ...box, text: title };
+  }
+  return undefined;
+}
 
 /** Exec pin names, which are what carry reading order. Data pins are not direction-checked. */
 const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
@@ -321,6 +385,21 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
               ? `${g.length} nodes starting at ${name(entry)} are in no comment box (${where}). They are wired as one system - give them one titled box so it can be read and moved as a unit.`
               : `${g.length} nodes at ${where} are in no comment box and have no entry event. They are wired together, so they want one titled box naming what they do.`,
         nodes: g.slice(0, 8).map((n) => n.id ?? ""),
+        // The rectangle to actually draw, when one can be drawn safely.
+        //
+        // "Give them a titled box" left the caller to invent the geometry, and that is precisely
+        // where this project's box faults come from: a box padded past its neighbour's edge makes
+        // the partial overlap that corrupts both when either is dragged, and a box drawn a little
+        // too wide adopts a node belonging to somebody else's system. Both were live bugs here.
+        //
+        // So the check that can already see every box and every node does the arithmetic, and says
+        // nothing when there is no safe answer rather than offering a rectangle that would need
+        // fixing afterwards.
+        ...(() => {
+          const boxTitle = entries.length === 1 && entry ? name(entry) : "";
+          const suggestion = safeBoxAround(g, sized, solid, boxTitle);
+          return suggestion ? { suggest: suggestion } : {};
+        })(),
       });
     }
   }
