@@ -5,6 +5,10 @@ import { boxesForBatch } from "../dist/placeNewNodes.js";
 
 const ev = (id, pins = []) => ({ id, title: id, type: "K2Node_CustomEvent", x: 0, y: 0, pins });
 const fn = (id, pins = []) => ({ id, title: id, type: "K2Node_CallFunction", x: 0, y: 0, pins });
+/** An existing box far from everything: this graph already uses boxes, which is what boxForBatch
+ * reads before deciding. Without it a small synthetic graph correctly gets no box at all. */
+const usesBoxes = { id: "existing", title: "Comment", type: "EdGraphNode_Comment", x: -90000, y: -90000, width: 100, height: 100, text: "Existing" };
+
 
 /** A chain of `count` nodes hanging off `evId`, laid out left to right on row `row`. */
 function system(evId, count, row) {
@@ -18,7 +22,7 @@ function system(evId, count, row) {
 
 test("a small batch stays one box", () => {
   const a = system("CE_Alpha", 4, 0);
-  const boxes = boxesForBatch(a.nodes, a.nodes.map((n) => n.id), a.placements);
+  const boxes = boxesForBatch([usesBoxes, ...a.nodes], a.nodes.map((n) => n.id), a.placements);
   assert.equal(boxes.length, 1);
   assert.equal(boxes[0].title, "Alpha");
 });
@@ -32,7 +36,7 @@ test("a big batch with several events becomes an outer box and named parts", () 
   const c = system("CE_ClientSound", 10, 800);
   const nodes = [...a.nodes, ...b.nodes, ...c.nodes];
   const placements = [...a.placements, ...b.placements, ...c.placements];
-  const boxes = boxesForBatch(nodes, nodes.map((n) => n.id), placements);
+  const boxes = boxesForBatch([usesBoxes, ...nodes], nodes.map((n) => n.id), placements);
 
   assert.ok(boxes.length > 1, "it should nest");
   assert.equal(boxes[0].outer, true);
@@ -50,7 +54,7 @@ test("parts that share no word get no outer box, rather than a misleading one", 
   const a = system("CE_Alpha", 10, 0);
   const b = system("CE_Beta", 10, 400);
   const nodes = [...a.nodes, ...b.nodes];
-  const boxes = boxesForBatch(nodes, nodes.map((n) => n.id), [...a.placements, ...b.placements]);
+  const boxes = boxesForBatch([usesBoxes, ...nodes], nodes.map((n) => n.id), [...a.placements, ...b.placements]);
   assert.deepEqual(boxes.map((x) => x.title), ["Alpha", "Beta"]);
   assert.ok(boxes.every((x) => !x.outer));
 });
@@ -60,7 +64,7 @@ test("a big batch with ONE event stays one box", () => {
   // mean nothing. Fake structure reads worse than one honest box, so it only splits where a real
   // name exists.
   const a = system("CE_Solo", 40, 0);
-  const boxes = boxesForBatch(a.nodes, a.nodes.map((n) => n.id), a.placements);
+  const boxes = boxesForBatch([usesBoxes, ...a.nodes], a.nodes.map((n) => n.id), a.placements);
   assert.equal(boxes.length, 1);
   assert.equal(boxes[0].title, "Solo");
 });
@@ -70,7 +74,7 @@ test("every inner box sits inside the outer one", () => {
   const b = system("CE_BetaSound", 10, 400);
   const nodes = [...a.nodes, ...b.nodes];
   const placements = [...a.placements, ...b.placements];
-  const [outer, ...inner] = boxesForBatch(nodes, nodes.map((n) => n.id), placements);
+  const [outer, ...inner] = boxesForBatch([usesBoxes, ...nodes], nodes.map((n) => n.id), placements);
   for (const box of inner) {
     assert.ok(box.x >= outer.x, `${box.title} starts left of its parent`);
     assert.ok(box.y >= outer.y, `${box.title} starts above its parent`);
@@ -86,7 +90,7 @@ test("no node is claimed by two inner boxes", () => {
   const b = system("CE_BetaSound", 10, 400);
   const nodes = [...a.nodes, ...b.nodes];
   const placements = [...a.placements, ...b.placements];
-  const [, ...inner] = boxesForBatch(nodes, nodes.map((n) => n.id), placements);
+  const [, ...inner] = boxesForBatch([usesBoxes, ...nodes], nodes.map((n) => n.id), placements);
   for (let i = 0; i < inner.length; i++) {
     for (let j = i + 1; j < inner.length; j++) {
       const p = inner[i], q = inner[j];

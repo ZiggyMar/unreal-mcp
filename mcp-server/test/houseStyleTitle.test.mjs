@@ -47,6 +47,8 @@ test("a generated box is titled in house style, not raw", () => {
     { id: "n2", type: "K2Node_CallFunction", title: "B", x: 600, y: 0 },
   ];
   const placements = nodes.map((n) => ({ nodeId: n.id, x: n.x, y: n.y }));
-  const box = boxForBatch(nodes, ["e1", "n1", "n2"], placements);
+  // This graph already uses boxes, which is what boxForBatch reads before deciding to add one.
+  const usesBoxes = { id: "existing", title: "Comment", type: "EdGraphNode_Comment", x: -90000, y: -90000, width: 100, height: 100, text: "Existing" };
+  const box = boxForBatch([usesBoxes, ...nodes], ["e1", "n1", "n2"], placements);
   assert.equal(box.title, "Server Toggle Heal Prompt");
 });

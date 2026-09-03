@@ -209,11 +209,32 @@ export function boxForBatch(
   all: PlaceNode[],
   newIds: string[],
   placements: Placement[],
-  options: { minNodes?: number; pad?: number } = {}
+  options: { minNodes?: number; pad?: number; boxedAbove?: number } = {}
 ): { x: number; y: number; width: number; height: number; title: string } | undefined {
   const minNodes = options.minNodes ?? 3;
   const pad = options.pad ?? 180;
   if (placements.length < minNodes) return undefined;
+
+  // Does this graph box things at all?
+  //
+  // Boxing every standalone batch ignored the question. Measured across 148 graphs, whether a graph
+  // has comment boxes is a SIZE rule and a sharp one: 8% of graphs under 10 nodes are boxed, 38% at
+  // 20-29, 52% at 30-49, 90% at 50-79, and 100% above 80. Dropping a titled box into a twelve-node
+  // graph is not tidiness, it is a foreign convention - and it is what produced a comment box round
+  // a two-node graph when the same mistake was made in the checker.
+  //
+  // The graph answers first, and that costs nothing and travels: a graph that ALREADY uses boxes
+  // wants one for a new system, whatever its size. Only a graph with none needs a threshold.
+  //
+  // 30, not the 50 the sweep reports. Those answer different questions. 50 is where boxing becomes
+  // the NORM here (90% of graphs), which is what a checker wants before complaining. The question
+  // when ADDING a box is whether one would look out of place, and below 30 nodes it clearly would -
+  // 8% boxed under 10, 18% at 10-19, 38% at 20-29. From 30 it is 52%, a coin flip, and a freshly
+  // built system that has its own entry event is the half that benefits.
+  const boxedAbove = options.boxedAbove ?? 30;
+  const graphNodes = all.filter((n) => !COMMENT.test(n.type ?? ""));
+  const graphUsesBoxes = all.some((n) => COMMENT.test(n.type ?? ""));
+  if (!graphUsesBoxes && graphNodes.length < boxedAbove) return undefined;
 
   const wanted = newIds.filter(Boolean);
   const isNewId = (id: string) =>

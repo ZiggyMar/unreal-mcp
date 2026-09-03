@@ -98,7 +98,10 @@ test("a standalone system gets a box named after its event", () => {
     { nodeId: "a", x: 260, y: 5000 },
     { nodeId: "b", x: 520, y: 5000 },
   ];
-  const box = boxForBatch(nodes, ["CE_Thing", "a", "b"], placements);
+  // A graph that already uses boxes: boxForBatch asks that before adding one, because dropping a
+  // titled box into a twelve-node graph with none is a foreign convention, not tidiness.
+  const usesBoxes = { id: "existing", title: "Comment", type: "EdGraphNode_Comment", x: -90000, y: -90000, width: 100, height: 100, text: "Existing" };
+  const box = boxForBatch([usesBoxes, ...nodes], ["CE_Thing", "a", "b"], placements);
   // The event is what the system IS - but CE_ is plumbing, and this project's box titles are names.
   // Measured over 148 graphs: 2 words median, 3% shouted, "Movement" and "Firing", not "CE_Thing".
   assert.equal(box.title, "Thing", "the event names the system; the CE_ prefix does not");
