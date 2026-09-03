@@ -194,6 +194,26 @@ export function houseStyleTitle(raw: string, options: { maxWords?: number } = {}
 }
 
 /**
+ * The word several system names share, or nothing.
+ *
+ * "Server Sound", "MC Sound" and "Client Sound" are a Sound system. "Repair Start" and "Repair End"
+ * are Repair. Two names sharing no word have no honest common name, and inventing one - or picking
+ * the first - claims a system that does not exist.
+ */
+export function sharedTitle(titles: string[]): string {
+  const clean = titles.filter(Boolean);
+  if (clean.length === 0) return "";
+  if (clean.length === 1) return clean[0];
+  const sets = clean.map((t) => new Set(t.toLowerCase().split(/\s+/)));
+  const shared = [...sets[0]].filter((w) => sets.every((s) => s.has(w)));
+  if (shared.length === 0) return "";
+  return clean[0]
+    .split(/\s+/)
+    .filter((w) => shared.includes(w.toLowerCase()))
+    .join(" ");
+}
+
+/**
  * A comment box for a batch that arrived as a new system, or nothing.
  *
  * The project's convention is that every system sits in a titled box, and the title is how a person
@@ -205,32 +225,15 @@ export function houseStyleTitle(raw: string, options: { maxWords?: number } = {}
  * event gets no box: an untitled box groups nodes while explaining nothing, which review_layout
  * reports as a fault in its own right.
  */
-export function boxForBatch(
+function batchQualifies(
   all: PlaceNode[],
   newIds: string[],
   placements: Placement[],
-  options: { minNodes?: number; pad?: number; boxedAbove?: number } = {}
-): { x: number; y: number; width: number; height: number; title: string } | undefined {
+  options: { minNodes?: number; boxedAbove?: number } = {}
+): PlaceNode[] | undefined {
   const minNodes = options.minNodes ?? 3;
-  const pad = options.pad ?? 180;
   if (placements.length < minNodes) return undefined;
 
-  // Does this graph box things at all?
-  //
-  // Boxing every standalone batch ignored the question. Measured across 148 graphs, whether a graph
-  // has comment boxes is a SIZE rule and a sharp one: 8% of graphs under 10 nodes are boxed, 38% at
-  // 20-29, 52% at 30-49, 90% at 50-79, and 100% above 80. Dropping a titled box into a twelve-node
-  // graph is not tidiness, it is a foreign convention - and it is what produced a comment box round
-  // a two-node graph when the same mistake was made in the checker.
-  //
-  // The graph answers first, and that costs nothing and travels: a graph that ALREADY uses boxes
-  // wants one for a new system, whatever its size. Only a graph with none needs a threshold.
-  //
-  // 30, not the 50 the sweep reports. Those answer different questions. 50 is where boxing becomes
-  // the NORM here (90% of graphs), which is what a checker wants before complaining. The question
-  // when ADDING a box is whether one would look out of place, and below 30 nodes it clearly would -
-  // 8% boxed under 10, 18% at 10-19, 38% at 20-29. From 30 it is 52%, a coin flip, and a freshly
-  // built system that has its own entry event is the half that benefits.
   const boxedAbove = options.boxedAbove ?? 30;
   const graphNodes = all.filter((n) => !COMMENT.test(n.type ?? ""));
   const graphUsesBoxes = all.some((n) => COMMENT.test(n.type ?? ""));
@@ -249,11 +252,55 @@ export function boxForBatch(
       if (byId.has(id)) return undefined;
     }
   }
+  return fresh;
+}
 
-  const entry = fresh.find((n) => isEntryType(n.type));
-  const title = houseStyleTitle(entry?.title ?? "");
+export function boxForBatch(
+  all: PlaceNode[],
+  newIds: string[],
+  placements: Placement[],
+  options: { minNodes?: number; pad?: number; boxedAbove?: number } = {}
+): { x: number; y: number; width: number; height: number; title: string } | undefined {
+  const fresh = batchQualifies(all, newIds, placements, options);
+  if (!fresh) return undefined;
+
+  // Does this graph box things at all?
+  //
+  // Boxing every standalone batch ignored the question. Measured across 148 graphs, whether a graph
+  // has comment boxes is a SIZE rule and a sharp one: 8% of graphs under 10 nodes are boxed, 38% at
+  // 20-29, 52% at 30-49, 90% at 50-79, and 100% above 80. Dropping a titled box into a twelve-node
+  // graph is not tidiness, it is a foreign convention - and it is what produced a comment box round
+  // a two-node graph when the same mistake was made in the checker.
+  //
+  // The graph answers first, and that costs nothing and travels: a graph that ALREADY uses boxes
+  // wants one for a new system, whatever its size. Only a graph with none needs a threshold.
+  //
+  // 30, not the 50 the sweep reports. Those answer different questions. 50 is where boxing becomes
+  // the NORM here (90% of graphs), which is what a checker wants before complaining. The question
+  // when ADDING a box is whether one would look out of place, and below 30 nodes it clearly would -
+  // 8% boxed under 10, 18% at 10-19, 38% at 20-29. From 30 it is 52%, a coin flip, and a freshly
+  // built system that has its own entry event is the half that benefits.
+  // Named for what the batch IS, which is not the first event when there are several.
+  //
+  // Found end to end: eight nodes forming CE_RepairStart and CE_RepairEnd went into one box called
+  // "Repair Start", which names half of what it contains. This is the third place the same mistake
+  // has appeared - the unboxed clustering said "17 nodes starting at KillPlayer" while hiding two
+  // more events, and boxesForBatch named its OUTER box after the first part - and it survived here
+  // because a batch under the split threshold never reaches that code.
+  //
+  // The honest name for several systems is the word they share: RepairStart and RepairEnd make
+  // "Repair". When they share nothing there is no name for the whole, and no box is better than one
+  // that claims a system which does not exist.
+  const entries = fresh.filter((n) => isEntryType(n.type));
+  const title =
+    entries.length > 1 ? sharedTitle(entries.map((n) => houseStyleTitle(n.title ?? ""))) : houseStyleTitle(entries[0]?.title ?? "");
   if (!title) return undefined;
 
+  return { ...extentOf(placements, options.pad ?? 180), title };
+}
+
+/** The rectangle round a batch, with room past the last node for its body. */
+function extentOf(placements: Placement[], pad: number) {
   const xs = placements.map((p) => p.x);
   const ys = placements.map((p) => p.y);
   return {
@@ -261,7 +308,6 @@ export function boxForBatch(
     y: Math.min(...ys) - pad,
     width: Math.max(...xs) - Math.min(...xs) + pad * 2 + 260,
     height: Math.max(...ys) - Math.min(...ys) + pad * 2,
-    title,
   };
 }
 
@@ -298,8 +344,9 @@ export function boxesForBatch(
   placements: Placement[],
   options: { minNodes?: number; pad?: number; splitAbove?: number } = {}
 ): BatchBox[] {
-  const outer = boxForBatch(all, newIds, placements, options);
-  if (!outer) return [];
+  const qualified = batchQualifies(all, newIds, placements, options);
+  if (!qualified) return [];
+  const outer = { ...extentOf(placements, options.pad ?? 180), title: "" };
 
   // The project's p90. Below it, one box is what a person would draw.
   const splitAbove = options.splitAbove ?? 20;
@@ -310,7 +357,16 @@ export function boxesForBatch(
     id !== "" && wanted.some((w) => w === id || w.startsWith(id) || id.startsWith(w));
   const fresh = all.filter((n) => isNewId(n.id ?? ""));
   const events = fresh.filter((n) => isEntryType(n.type));
-  if (placements.length <= splitAbove || events.length < 2) return [outer];
+  // Not splitting: one box, named by boxForBatch, which handles the several-events case by looking
+  // for the word they share rather than taking the first one.
+  if (placements.length <= splitAbove || events.length < 2) {
+    const single = boxForBatch(all, newIds, placements, options);
+    if (single) return [single];
+    // No single name means the events share no word. With one event that is the end of it - there is
+    // nothing to call the box. With several, the parts still have names even though the whole does
+    // not, so fall through and split rather than returning nothing: two named boxes beat none.
+    if (events.length < 2) return [];
+  }
 
   const pos = new Map(placements.map((p) => [p.nodeId, p]));
   const at = (id: string) => pos.get(id) ?? [...pos.entries()].find(([k]) => k.startsWith(id) || id.startsWith(k))?.[1];
