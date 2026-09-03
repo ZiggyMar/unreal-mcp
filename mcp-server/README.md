@@ -209,7 +209,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
 | `core` | 13221 | the authoring spine |
 | `lazy` | 13529 | `core` plus deferred groups |
-| `full` | 48797 | everything, for a model that can afford it |
+| `full` | 49135 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -387,6 +387,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
 | `unreal_trace_input` | *composite* | "What happens when the player presses Escape?" - key to context to action to every handler and what it does, in one call. |
+| `unreal_tidy_layout` | *composite* | Straighten a system rightward and pull its inputs in, within a required scope so nothing else moves. |
 | `unreal_review_layout` | *composite* | Layout faults a compile never catches: chains running leftward, stacked nodes, canvas-crossing wires, nodes in no comment box. |
 | `unreal_import_asset` | `import_asset` | Turn a file on disk into a project asset - PNG/TGA to Texture2D, FBX to StaticMesh, WAV to SoundWave. The front door. |
 | `unreal_build_material_graph` | `build_material_graph` | Author a Material's node graph: expressions, wires, outputs and blend/shading settings in one call. |

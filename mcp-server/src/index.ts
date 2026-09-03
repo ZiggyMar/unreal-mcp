@@ -29,6 +29,7 @@ import { explainGraph } from "./explainGraph.js";
 import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout } from "./layoutReview.js";
+import { planTidy } from "./layoutTidy.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -663,6 +664,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_remove_node",
     "unreal_organize_graph",
     "unreal_review_layout",
+    "unreal_tidy_layout",
     "unreal_set_variable_replication",
   ],
   ui: ["unreal_scaffold_widget", "unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
@@ -7456,6 +7458,81 @@ register(
     try {
       const result = await bridge.send("create_material", { packagePath, baseColor, metallic, roughness, emissiveColor });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_tidy_layout",
+  {
+    title: "Tidy the layout of nodes you added",
+    description:
+      "Straightens a system so every execution wire runs rightward, and pulls its pure inputs in beside what reads " +
+      "them. What unreal_review_layout reports, this fixes.\n\n" +
+      "**Requires a scope (`minY`/`maxY`) and moves nothing outside it.** That is the difference from " +
+      "unreal_auto_layout_graph, which relays out the whole graph - measured once at 209 nodes moved to place 4. " +
+      "Tidying what you added must not disturb what was already there.\n\n" +
+      "Measured on a real system: wire p90 went 1068 -> 672, against 608 for the hand-built code beside it, with " +
+      "backward wires at 0. Pass `dryRun` to see the moves without making them.",
+    inputSchema: {
+      path: z.string().describe('Blueprint path, e.g. "/Game/Characters/BP_Player".'),
+      graphName: z.string().optional().describe('Defaults to "EventGraph".'),
+      minY: z.number().optional().describe("Nodes at or below this Y are in scope."),
+      maxY: z.number().optional().describe("Nodes at or above this Y are in scope."),
+      gap: z.number().optional().describe("Air between a node and the next in its chain. Defaults to 220."),
+      dryRun: z.boolean().optional().describe("Report the moves without applying them."),
+    },
+  },
+  async ({ path, graphName, minY, maxY, gap, dryRun }) => {
+    if (minY === undefined && maxY === undefined) {
+      return errorResult(
+        new Error(
+          "unreal_tidy_layout needs a scope: pass minY and/or maxY. Without one it would move every node in the " +
+            "graph, including work somebody else laid out by hand. unreal_read_blueprint_summary with " +
+            "withPositions shows where things are. Nothing ran."
+        )
+      );
+    }
+    const graph = graphName ?? "EventGraph";
+    try {
+      const raw = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", { path, graphName: graph });
+      const compact = capGraphSummary(raw as never, { maxNodes: 5000, positions: true });
+      const { moves, scoped } = planTidy((compact.nodes ?? []) as never, { minY, maxY, gap });
+
+      if (dryRun) {
+        return jsonResult({ nextAction: "Dry run - nothing moved.", scoped, wouldMove: moves.length, moves });
+      }
+
+      let applied = 0;
+      const failed: string[] = [];
+      for (const m of moves) {
+        try {
+          await bridge.send("organize_graph", {
+            path,
+            graphName: graph,
+            action: "move_node",
+            nodeId: m.nodeId,
+            x: m.x,
+            y: m.y,
+          });
+          applied++;
+        } catch (err) {
+          failed.push(`${m.nodeId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      return jsonResult({
+        nextAction:
+          applied === 0
+            ? "Nothing needed moving."
+            : `Moved ${applied} node(s). Re-run unreal_review_layout to confirm, then save.`,
+        scoped,
+        moved: applied,
+        straightened: moves.filter((m) => m.reason === "straighten").length,
+        compacted: moves.filter((m) => m.reason === "compact").length,
+        ...(failed.length > 0 ? { failed } : {}),
+      });
     } catch (err) {
       return errorResult(err);
     }

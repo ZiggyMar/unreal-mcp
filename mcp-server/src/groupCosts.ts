@@ -11,13 +11,13 @@ export const SEARCH_BASELINE_TOKENS = 1536;
 
 /** Tokens added by enabling each group. */
 export const GROUP_COST_TOKENS: Record<string, number> = {
-  core: 10958,
+  core: 10944,
   ai: 294,
   anim: 1678,
   cine: 299,
   cpp: 840,
   data: 6098,
-  edit: 4917,
+  edit: 5255,
   input: 1307,
   maintenance: 5777,
   materials: 2283,
@@ -28,7 +28,7 @@ export const GROUP_COST_TOKENS: Record<string, number> = {
 };
 
 /** Everything enabled at once, for the rare job that genuinely needs the whole surface. */
-export const ALL_GROUPS_TOKENS = 48057;
+export const ALL_GROUPS_TOKENS = 48381;
 
 /** Naming the eight tools one Blueprint feature needs, instead of enabling the `core` group. */
 export const FEATURE_SET_TOKENS = 5250;
