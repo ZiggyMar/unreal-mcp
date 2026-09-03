@@ -698,6 +698,24 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
       // and "17 nodes starting at KillPlayer" hid a second event inside the same cluster - which
       // reads as one system and is really two, so it would have suggested one box where two belong.
       const entries = g.filter((n) => isEntryType(n.type));
+
+      // A function's whole body is not an unboxed system - the graph IS the box.
+      //
+      // Auditing function graphs for the first time produced findings like "62 nodes starting at
+      // GetVacuumableObject are in no comment box": a cluster rooted at the FunctionEntry node,
+      // covering the entire contents of that function's graph. Boxing all of it and titling it after
+      // the function says nothing the graph's own name does not. It is the same redundancy as six
+      // inner boxes repeating "Tutorial Guide" inside a box called Guide Arrows, at graph scale.
+      //
+      // A function graph with SEVERAL clusters is different: those are parts worth naming, and they
+      // are still reported. Only the one cluster that IS the function is skipped.
+      if (
+        entries.length === 1 &&
+        /FunctionEntry/i.test(entries[0].type ?? "") &&
+        g.length >= solid.length * 0.6
+      ) {
+        continue;
+      }
       const entry = entries[0];
       const entryNames = entries.slice(0, 3).map(name).join(", ");
       const label = entries.length > 3 ? `${entryNames} and ${entries.length - 3} more` : entryNames;
