@@ -621,6 +621,17 @@ const CORE_PROFILE_TOOLS = new Set([
   // So the real answer is a profile-composition decision with a price on it, not something to force
   // past a guard that has now refused twice. Until then the description below tells a core model
   // what NOT to do, which is the part that actually prevents the damage.
+  //
+  // A SECOND failure mode of the same tool, found while using it: auto_layout_graph adds a comment
+  // box per system EVEN WHEN ONE IS ALREADY THERE. On a Blueprint that already had a hand-titled
+  // box it reported `existingCommentBoxes: 1` and then boxed the same twelve nodes again, leaving an
+  // overlappingBoxes fault where both boxes claim every node - produced by a call whose whole
+  // purpose was tidying. So the guidance for a core model is not only "do not relayout somebody
+  // else's graph", it is also "do not run this twice on your own".
+  //
+  // That is a second thing a core model cannot see for itself, because seeing it needs
+  // review_layout, which core does not have. It makes the composition decision more expensive to
+  // keep deferring, not less.
   "unreal_auto_layout_graph",
   "unreal_review_blueprint",
   // The terminal step: one call that checks everything written this session rather than the one
