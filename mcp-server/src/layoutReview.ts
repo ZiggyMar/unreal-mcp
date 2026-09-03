@@ -33,6 +33,32 @@ import { isEntryType } from "./entryTypes.js";
  * left is normal and correct; only execution order is reading order.
  */
 
+/**
+ * Which of these checks have ever fired on real code?
+ *
+ * Every kind below has a unit test asserting it fires on synthetic nodes. That proves the code path
+ * works; it does not prove the rule describes anything real, and this file has already had to remove
+ * two rules that only ever fired on fixtures. So the kinds were counted across all 92 Blueprint
+ * EventGraphs in the project they were written for, after a day of fixing what they found:
+ *
+ *   unboxed            48    the workhorse - most of what is left to do in a graph
+ *   longWire           14
+ *   overlappingBoxes    3    all in one hand-authored graph
+ *   emptyBox            3    two are real leftovers, one is a redirector counting a graph twice
+ *   backwardFlow        1
+ *   stacked             0    fired once, on an invisible node pair, and was fixed
+ *   startsMidChain      0    0 of 92 now; fires on an older snapshot of the same Blueprint
+ *   untitledBox         0    never seen on real code here
+ *   machineLaidOut      0    never seen on real code here
+ *   notJudged           0    for animation graphs, which this sweep did not include
+ *
+ * A zero is not a reason to delete a check. stacked and startsMidChain both earned their place by
+ * catching a real fault and then reading zero once it was fixed, which is what a working guard looks
+ * like. But untitledBox and machineLaidOut are held to fixtures alone, and a rule with no real
+ * example is the exact shape of the two that had to be withdrawn - so a change to either should be
+ * measured against a project before it is trusted, not reasoned about.
+ */
+
 /** A node as the summary returns it, with `withPositions` asked for. */
 export interface LayoutNode {
   id?: string;
