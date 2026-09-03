@@ -156,3 +156,33 @@ test("a lone event is not offered a box of its own", () => {
   const s = suggestion(r) ?? [];
   assert.deepEqual(s.map((b) => b.text), ["Beta"]);
 });
+
+test("a box blocked by ONE node names that node instead of staying silent", () => {
+  // Measured on BP_FireWall: three of its systems were each blocked by a single node standing in
+  // the way, and the tool reported nothing at all - the caller could not tell "impossible" from
+  // "one node short". Naming the blocker is the difference between a refusal and a next step.
+  const r = reviewLayout([
+    anchor,
+    ev("CE_Alpha", 0, 0, ["out then -> a1.execute"]), fn("a1", 300, 0),
+    ev("CE_Beta", 0, 400, ["out then -> b1.execute"]), fn("b1", 300, 400),
+    // Sits inside any rectangle round Alpha, and belongs to neither system.
+    box("theirs", -9000, -9000, 50, 50, "Theirs"),
+    fn("ToggleFocus", 150, 60),
+  ]);
+  const f = r.findings.find((x) => x.kind === "unboxed");
+  assert.ok(f.almost?.some((a) => /ToggleFocus/.test(a)), `expected a named blocker, got ${JSON.stringify(f.almost)}`);
+});
+
+test("a box blocked by many nodes is not reported as almost", () => {
+  // Sixteen nodes in the way is genuinely interleaved code; the answer is to move a system out,
+  // not to shuffle a node, and listing them all would be noise.
+  const strangers = Array.from({ length: 8 }, (_, i) => fn(`x${i}`, 60 + i * 20, 40));
+  const r = reviewLayout([
+    anchor,
+    ev("CE_Alpha", 0, 0, ["out then -> a1.execute"]), fn("a1", 300, 0),
+    ev("CE_Beta", 0, 900, ["out then -> b1.execute"]), fn("b1", 300, 900),
+    ...strangers,
+  ]);
+  const f = r.findings.find((x) => x.kind === "unboxed");
+  assert.ok(!f.almost?.some((a) => /Alpha/.test(a)), "too many blockers should stay silent");
+});

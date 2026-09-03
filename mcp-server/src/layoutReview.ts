@@ -56,6 +56,11 @@ export interface LayoutFinding {
    * add_comment_box. Absent when no safe rectangle exists, which is not the same as "draw one anyway".
    */
   suggest?: Array<{ x: number; y: number; width: number; height: number; text: string }>;
+  /**
+   * Boxes that were ONE or two nodes away from being drawable, and which node is in the way.
+   * Measured on BP_FireWall: three systems each blocked by a single node, reported as silence.
+   */
+  almost?: string[];
 }
 
 export interface LayoutReport {
@@ -191,18 +196,22 @@ function safeBoxAround(
   boxes: LayoutNode[],
   allNodes: LayoutNode[],
   title: string
-): { x: number; y: number; width: number; height: number; text: string } | undefined {
+):
+  | { box: { x: number; y: number; width: number; height: number; text: string } }
+  | { blockedBy: LayoutNode[]; title: string }
+  | undefined {
   const mine = new Set(cluster);
   const xs = cluster.map((n) => n.x as number);
   const ys = cluster.map((n) => n.y as number);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  let blocked: LayoutNode[] | undefined;
 
   for (const pad of [180, 120, 80, 48]) {
     // A node is drawn down-and-right of its position, so the box needs room past the last one for
     // the node body itself - not just for the padding.
     const box = { x: x0 - pad, y: y0 - pad, width: x1 - x0 + pad * 2 + 280, height: y1 - y0 + pad * 2 + 90 };
 
-    const capturesStranger = allNodes.some(
+    const strangers = allNodes.filter(
       (n) =>
         !mine.has(n) &&
         (n.x as number) >= box.x &&
@@ -210,7 +219,14 @@ function safeBoxAround(
         (n.y as number) >= box.y &&
         (n.y as number) <= box.y + box.height
     );
-    if (capturesStranger) continue;
+    if (strangers.length > 0) {
+      // Remember the closest miss. Measured on BP_FireWall, three of its systems were blocked by a
+      // SINGLE node standing in the way, and the tool said nothing at all - the caller could not
+      // tell "impossible" from "one node short". Naming the blocker is the difference between a
+      // refusal and a next step.
+      if (!blocked || strangers.length < blocked.length) blocked = strangers;
+      continue;
+    }
 
     const clashes = boxes.some((b) => {
       const bx = b.x as number, by = b.y as number, bw = b.width as number, bh = b.height as number;
@@ -226,9 +242,11 @@ function safeBoxAround(
     // A box with no name groups nodes while explaining nothing, which this file reports as a fault
     // in its own right. Offering one would be suggesting the next finding.
     if (!title) return undefined;
-    return { ...box, text: title };
+    return { box: { ...box, text: title } };
   }
-  return undefined;
+  // Only a NEAR miss is worth naming. A box blocked by sixteen nodes is genuinely impossible here -
+  // the systems are interleaved and the answer is to move one of them out, not to shuffle a node.
+  return blocked && blocked.length <= 2 && title ? { blockedBy: blocked, title } : undefined;
 }
 
 /** Exec pin names, which are what carry reading order. Data pins are not direction-checked. */
@@ -459,15 +477,23 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
           // anyway, and what boxesForBatch already does when building.
           const groups = entries.length > 1 ? splitByEntry(g) : [{ title: entry ? name(entry) : "", nodes: g }];
           const drawn: NonNullable<LayoutFinding["suggest"]> = [];
+          const nearMiss: string[] = [];
           // Each box must clear the ones already suggested here, not just the ones on the canvas.
           const against = [...sized];
           for (const part of groups) {
             const s = safeBoxAround(part.nodes, against, solid, houseTitle(part.title));
             if (!s) continue;
-            drawn.push(s);
-            against.push({ type: "EdGraphNode_Comment", x: s.x, y: s.y, width: s.width, height: s.height });
+            if ("blockedBy" in s) {
+              nearMiss.push(`"${s.title}" needs ${s.blockedBy.map((n) => name(n)).join(" and ")} moved out of the way`);
+              continue;
+            }
+            drawn.push(s.box);
+            against.push({ type: "EdGraphNode_Comment", x: s.box.x, y: s.box.y, width: s.box.width, height: s.box.height });
           }
-          return drawn.length > 0 ? { suggest: drawn } : {};
+          return {
+            ...(drawn.length > 0 ? { suggest: drawn } : {}),
+            ...(nearMiss.length > 0 ? { almost: nearMiss.slice(0, 3) } : {}),
+          };
         })(),
       });
     }
