@@ -421,6 +421,18 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // So it runs only when the boxes actually carry dimensions, and says nothing when they do not,
   // rather than guessing containment from position alone.
   const sized = boxes.filter((b) => typeof b.width === "number" && typeof b.height === "number");
+  // Only when the graph HAS boxes, which is deliberate and was re-tested rather than assumed.
+  //
+  // Running it on boxless graphs too looked obviously right - a graph with no comment boxes has
+  // nothing boxed, and that is knowable. Measured, it took the project from 85 clean graphs to 3
+  // and flagged BP_TestTarget, which has two nodes. It is wrong for the same reason every other
+  // over-eager rule here was: this project's own convention is 54% of nodes in a box, and its
+  // author leaves 30-to-60-node widget and anim graphs unboxed on purpose. Reporting those imposes
+  // a rule the standard does not follow.
+  //
+  // The real complaint - that a boxless graph read as "clean" - is a reporting problem, and belongs
+  // in the sweep's clean count rather than in the findings. Single-graph review already says
+  // "there is no comment box in scope" instead of claiming everything is boxed.
   if (sized.length > 0) {
     const loose = solid.filter(
       (n) =>

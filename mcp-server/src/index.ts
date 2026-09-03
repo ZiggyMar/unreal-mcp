@@ -7795,7 +7795,17 @@ register(
           }
         }
 
-        const clean = rows.filter((r) => r.total === 0);
+        // "Clean" must not mean "nothing was checked".
+        //
+        // A graph with no comment boxes has no containment to check, so it produced no findings and
+        // was counted clean - WB_ServerList at 44 nodes and zero boxes, ABP_NewPlayer at 40, and
+        // dozens more, all reported as tidy alongside genuinely well-organised graphs.
+        //
+        // Reporting them as FAULTS was tried and measured wrong: it took the project from 85 clean
+        // to 3 and flagged a two-node graph, against an author who deliberately leaves widget and
+        // anim graphs unboxed. So they are counted apart instead - neither accused nor credited.
+        const clean = rows.filter((r) => r.total === 0 && r.boxes > 0);
+        const unchecked = rows.filter((r) => r.total === 0 && r.boxes === 0);
         const dirty = rows.filter((r) => r.total > 0).sort((a, b) => b.total - a.total || b.nodes - a.nodes);
         const sortedP90 = [...p90s].sort((a, b) => a - b);
         const medianP90 = sortedP90.length ? sortedP90[Math.floor(sortedP90.length / 2)] : 0;
@@ -7832,6 +7842,8 @@ register(
               : `${dirty.length} of ${rows.length} graphs have layout faults. Worst first below; review one with path to see the detail.`,
           graphs: rows.length,
           clean: clean.length,
+          // Not a fault and not a pass: nothing to check. Named so the clean count means something.
+          ...(unchecked.length > 0 ? { noBoxesToCheck: unchecked.length } : {}),
           totals,
           // The project's own baseline, so a caller can tell "long for this project" from "long".
           wireP90Median: medianP90,
