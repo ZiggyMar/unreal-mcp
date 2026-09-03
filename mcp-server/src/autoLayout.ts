@@ -133,10 +133,34 @@ export async function autoLayoutGraph(
   }
 
   const placedById = new Map<string, PlacedNode>(layout.positions.map((p) => [p.id, p]));
-  // Titles of comment boxes already present, so running this twice does not stack duplicates.
-  const existingTitles = new Set(
-    nodes.filter((node) => layout.skipped.includes(node.id)).map((node) => (node.title ?? "").trim())
-  );
+
+  // A graph that already has comment boxes does not get more.
+  //
+  // This used to dedupe by title, and it never worked: for a comment box the `title` field is the
+  // literal string "Comment" - the box's name lives in `text`, which LayoutNode does not even carry.
+  // So the set being compared against contained "Comment" and nothing else, matched nothing, and
+  // every run added a fresh box over the top of whatever was there. Run on a Blueprint with one
+  // hand-titled box, it reported `existingCommentBoxes: 1` and then boxed the same twelve nodes
+  // again, leaving an overlappingBoxes fault where both boxes claim every node.
+  //
+  // Titles could not have saved it anyway. A box is titled after its entry event when this draws it
+  // ("Event BeginPlay") and renamed to a feature name afterwards ("Turn M.O.M Evil"), so the two
+  // names never match even when they describe the same nodes.
+  //
+  // So the rule is the honest one: boxing is for a graph this tool has just laid out from nothing.
+  // If somebody has already drawn boxes, they have organised it, and adding to that is the
+  // destructive half of this tool - the same reason it does not relayout other people's graphs. The
+  // groups are reported as skipped so the caller can see what was left alone.
+  if (layout.skipped.length > 0) {
+    for (const group of chains) {
+      if (group.nodeIds.length >= 2) {
+        report.commentBoxesSkipped.push(group.title.trim() || "Section");
+      }
+    }
+    return report;
+  }
+
+  const existingTitles = new Set<string>();
 
   for (const group of chains) {
     const members = group.nodeIds.map((id) => placedById.get(id)).filter((p): p is PlacedNode => Boolean(p));

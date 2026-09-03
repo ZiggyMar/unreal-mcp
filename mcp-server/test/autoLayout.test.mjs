@@ -162,3 +162,40 @@ test("two events get one box each, and the boxes do not overlap", async () => {
   const overlapY = b1.y < b2.y + b2.height && b2.y < b1.y + b1.height;
   assert.ok(!(overlapX && overlapY), "comment boxes must not overlap, or they hide each other");
 });
+
+test("a graph that already has comment boxes gets no new ones", () => {
+  // The duplicate-box bug, in miniature. The old dedupe compared against `node.title`, which for a
+  // comment box is the literal string "Comment" - the box's name lives in `text`, which LayoutNode
+  // does not carry. So nothing ever matched and a second run boxed the same nodes again, leaving an
+  // overlappingBoxes fault where both boxes claim every node. Measured on BP_TrailerMomGlitch: it
+  // reported existingCommentBoxes 1 and then added "Event BeginPlay" over a hand-titled box.
+  const nodes = [
+    node("box", "EdGraphNode_Comment", "Comment"),
+    node("ev", "K2Node_Event", "Event BeginPlay", [["then", "out", "a", "execute"]]),
+    node("a", "K2Node_CallFunction", "A", [["execute", "in", null, null], ["then", "out", "b", "execute"]]),
+    node("b", "K2Node_CallFunction", "B", [["execute", "in", null, null]]),
+  ];
+  const bridge = fakeBridge(nodes);
+  return autoLayoutGraph(bridge, { path: "/Game/X", graphName: "EventGraph" }).then((report) => {
+    const added = bridge.calls.filter(
+      (c) => c.cmd === "organize_graph" && c.params.action === "add_comment_box"
+    );
+    assert.equal(added.length, 0, "must not add a box to an already-boxed graph");
+    assert.equal(report.commentBoxesAdded.length, 0);
+    assert.ok(report.commentBoxesSkipped.length > 0, "and must say what it left alone");
+    assert.equal(report.existingCommentBoxes, 1);
+  });
+});
+
+test("a graph with no boxes still gets them", () => {
+  // The fix must not disable boxing on a fresh graph, which is what the tool is for.
+  const nodes = [
+    node("ev", "K2Node_Event", "Event BeginPlay", [["then", "out", "a", "execute"]]),
+    node("a", "K2Node_CallFunction", "A", [["execute", "in", null, null], ["then", "out", "b", "execute"]]),
+    node("b", "K2Node_CallFunction", "B", [["execute", "in", null, null]]),
+  ];
+  const bridge = fakeBridge(nodes);
+  return autoLayoutGraph(bridge, { path: "/Game/X", graphName: "EventGraph" }).then((report) => {
+    assert.ok(report.commentBoxesAdded.length > 0, "a fresh graph should still be boxed");
+  });
+});

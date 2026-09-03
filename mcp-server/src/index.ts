@@ -622,16 +622,15 @@ const CORE_PROFILE_TOOLS = new Set([
   // past a guard that has now refused twice. Until then the description below tells a core model
   // what NOT to do, which is the part that actually prevents the damage.
   //
-  // A SECOND failure mode of the same tool, found while using it: auto_layout_graph adds a comment
-  // box per system EVEN WHEN ONE IS ALREADY THERE. On a Blueprint that already had a hand-titled
-  // box it reported `existingCommentBoxes: 1` and then boxed the same twelve nodes again, leaving an
-  // overlappingBoxes fault where both boxes claim every node - produced by a call whose whole
-  // purpose was tidying. So the guidance for a core model is not only "do not relayout somebody
-  // else's graph", it is also "do not run this twice on your own".
+  // A SECOND failure mode of the same tool was found while using it, and has since been FIXED:
+  // auto_layout_graph added a comment box per system even when one was already there, because its
+  // dedupe compared `node.title` - which for a comment box is the literal string "Comment" - instead
+  // of the box's name. Nothing ever matched, so a second run boxed the same nodes again and left an
+  // overlappingBoxes fault, from a call whose whole purpose was tidying. It now adds no boxes at all
+  // to a graph that already has them, and reports what it left alone.
   //
-  // That is a second thing a core model cannot see for itself, because seeing it needs
-  // review_layout, which core does not have. It makes the composition decision more expensive to
-  // keep deferring, not less.
+  // The first hazard stands: this still relays out a WHOLE graph. That is what a core model cannot
+  // see for itself, because seeing it needs review_layout, which core does not have.
   "unreal_auto_layout_graph",
   "unreal_review_blueprint",
   // The terminal step: one call that checks everything written this session rather than the one
