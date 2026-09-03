@@ -605,10 +605,22 @@ const CORE_PROFILE_TOOLS = new Set([
   "unreal_add_event_handler",
   "unreal_compile_blueprint",
   "unreal_save_blueprint",
-  // NOTE: `core` carries auto_layout_graph but NOT tidy_layout or organize_graph, so its only
-  // layout tool is the one that relays out a whole graph. Adding tidy_layout costs 303 tokens over
-  // core's 13260 ceiling, and a budget guard is not something to raise to fit a change, so the
-  // description below tells a core model what NOT to do rather than naming a tool it cannot call.
+  // A KNOWN GAP, left as it is on purpose.
+  //
+  // core's only layout tool is this one, which relays out a WHOLE graph - safe on a graph you built
+  // from scratch, destructive on anybody else's: it moved 209 of somebody's nodes to place 4, and
+  // left GM_Gameplay with eleven comment boxes naming systems that had moved out from under them,
+  // which no compile shows. The scoped tidy_layout and the review_layout checker are both absent.
+  //
+  // Three fixes were measured and none fits. Adding tidy_layout costs 303 tokens over core's 13260
+  // ceiling. Swapping it in for auto_layout costs 27 tokens LESS and passes the budget, but the
+  // profile-reference check then refuses it: tidy_layout's description names review_layout, which
+  // core does not have either, so the swap trades "only a destructive layout tool" for "a tidier
+  // with no checker". Adding both is ~380 over.
+  //
+  // So the real answer is a profile-composition decision with a price on it, not something to force
+  // past a guard that has now refused twice. Until then the description below tells a core model
+  // what NOT to do, which is the part that actually prevents the damage.
   "unreal_auto_layout_graph",
   "unreal_review_blueprint",
   // The terminal step: one call that checks everything written this session rather than the one
