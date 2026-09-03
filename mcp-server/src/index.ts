@@ -1624,11 +1624,8 @@ register(
     description:
       "Reads a compact summary of one graph: each node's id, type, title, and its wiring as one line per " +
       "connected pin, e.g. \"out then -> 3C03B7C2.execute\" (direction, pin name, then the nodes it reaches). " +
-      "Node ids are abbreviated to the shortest prefix unique in this graph, and every tool that takes a node " +
-      "id accepts that prefix. Type names have their K2Node_ prefix stripped. Positions, cosmetic metadata and " +
-      "unconnected pins are omitted. " +
-      "Pass withPinValues for the literals on many nodes at once; one node's full pin and property detail is a " +
-      "read of that node id.",
+      "Node ids are the shortest unique prefix, which every tool that takes an id accepts; K2Node_ prefixes are " +
+      "stripped and unconnected pins omitted. Pass withPinValues for the literals on many nodes at once.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name as returned by unreal_list_blueprint_graphs, e.g. "EventGraph".'),
@@ -1636,10 +1633,9 @@ register(
         .string()
         .optional()
         .describe(
-          'Only nodes whose title or type contains this, e.g. "Cast" or "Health". The cheapest way to read a ' +
-            "large graph: 809 nodes and 52k tokens down to 23 nodes and 700. Matches arrive with the nodes they " +
-            "are wired to, marked `neighbour` and carrying a title, so every link in the reply resolves inside " +
-            "the reply and the node you actually wanted is usually already named."
+          'Only nodes whose title or type contains this, e.g. "Cast" or "Health". Reads a large graph cheaply: ' +
+            "809 nodes and 52k tokens down to 23 and 700. Matches arrive with the nodes they wire to, marked " +
+            "`neighbour` and titled, so every link in the reply resolves inside it."
         ),
       maxNodes: z
         .number()
@@ -1656,9 +1652,16 @@ register(
         .boolean()
         .optional()
         .describe("Each node's canvas x/y. Ask before adding to an existing graph: guessed coordinates land on existing work."),
+      outline: z
+        .boolean()
+        .optional()
+        .describe(
+          "Only the comment-box titles, top to bottom: the graph's table of contents, and the cheapest way to learn " +
+            "what a Blueprint does. Measured: 990 nodes for 438 tokens instead of tens of thousands."
+        ),
     },
   },
-  async ({ path, graphName, match, maxNodes, withPinValues, withPositions }) => {
+  async ({ path, graphName, match, maxNodes, withPinValues, withPositions, outline }) => {
     try {
       const result = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
         path,
@@ -1669,6 +1672,30 @@ register(
       // Bounded in the TOOL, not in the bridge: review, audit and explain_graph call the bridge
       // command directly and still get every node, so the analysis stays correct while the model
       // gets a view it can afford. See src/graphSummary.ts for the measurement behind the cap.
+      // A graph's comment boxes ARE its table of contents, and reading them is orientation for a
+      // fraction of what reading the graph costs. Measured on a real EventGraph: 982 nodes is tens
+      // of thousands of tokens; its 83 box titles - Vaccum, Movement, Firing, Networked
+      // Regeneration - are about three hundred, and they say what the Blueprint DOES.
+      //
+      // Only worth anything on a graph whose author boxed their systems, so an unboxed graph says so
+      // rather than returning an empty list that reads as "this Blueprint is empty".
+      if (outline) {
+        const withPos = capGraphSummary(result as never, { maxNodes: 5000, positions: true });
+        const boxes = ((withPos.nodes ?? []) as Array<{ type?: string; text?: string; y?: number }>)
+          .filter((n) => /Comment/i.test(n.type ?? "") && (n.text ?? "").trim().length > 0)
+          .sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
+          .map((n) => (n.text as string).trim());
+        const nodeCount = ((result as { nodes?: unknown[] }).nodes ?? []).length;
+        return jsonResult({
+          nextAction:
+            boxes.length > 0
+              ? `${boxes.length} labelled system(s), top to bottom. Read one with match=, or drop outline for the nodes.`
+              : `No titled comment boxes in this graph, so there is no outline to give - its ${nodeCount} nodes are ungrouped. Read it with match= or unreal_explain_graph.`,
+          graphName,
+          nodeCount,
+          systems: boxes,
+        });
+      }
       return jsonResult(capGraphSummary(result as never, { match, maxNodes, positions: withPositions }));
     } catch (err) {
       return errorResult(err);

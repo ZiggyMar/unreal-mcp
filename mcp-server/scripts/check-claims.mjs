@@ -41,6 +41,16 @@ const srcDir = join(here, "..", "src");
 // allowed answer and an honest one; what is not allowed is a number nobody has thought about.
 const CLAIMS = [
   {
+    figure: "438",
+    what: "read_blueprint_summary outline=true on BP_Player's 990-node EventGraph, in the `outline` description",
+    // Measured live against the real project: 438 tokens for 83 system names, against tens of
+    // thousands for the same graph read as nodes. Not watchable by a script - it depends on the
+    // Blueprint having comment boxes, and a scratch project has none, so there is nothing for a
+    // scripted check to measure. The claim is about the shape of the saving; the number is exact for
+    // the graph it names.
+    verifiedBy: "not watched live - measured by hand against BP_Player 2026-09-03, exact",
+  },
+  {
     figure: "2,669",
     what: "list_blueprints unfiltered, in the `minimal` profile instructions",
     verifiedBy: "not watched live - re-measured by hand 2026-08-31, exact",

@@ -35,6 +35,8 @@ export interface SummaryNodeLike {
   /** Comment boxes only: the box's extent, which is what makes containment answerable. */
   width?: number;
   height?: number;
+  /** Comment boxes only: what the box says. Every comment node's `title` is the word "Comment". */
+  text?: string;
   /** Present only when the caller asked for withPinValues. */
   values?: Record<string, string>;
   connectedPins?: Array<{
@@ -107,6 +109,12 @@ function compactNode(node: SummaryNodeLike, positions = false): Record<string, u
     // Comment boxes carry a size; ordinary nodes do not. Without it "is this node inside a box?"
     // cannot be answered, because every node is down-and-right of SOME box.
     ...(positions && typeof node.width === "number" ? { width: node.width, height: node.height } : {}),
+    // The box's FIRST LINE only, which is its name. The body can run to a paragraph - this project's
+    // convention is that the explanation lives on the box - and carrying all of it for every box
+    // would cost far more than the layout question being asked is worth.
+    ...(positions && typeof node.text === "string" && node.text.length > 0
+      ? { text: node.text.split("\n")[0].slice(0, 80) }
+      : {}),
   };
 }
 

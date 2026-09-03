@@ -123,3 +123,25 @@ test("stats count only what is in scope, in both axes", () => {
   const all = [node("a", 0, 0), node("b", 5000, 0), node("c", 5000, 9000)];
   assert.equal(reviewLayout(all, { minX: 4000, maxY: 100 }).stats.nodes, 1);
 });
+
+test("a comment box with no text is reported", () => {
+  // Half the convention is the box; the other half is what it says. A box that groups nodes without
+  // naming them draws a rectangle and explains nothing.
+  const untitled = { id: "b", title: "Comment", type: "EdGraphNode_Comment", x: 0, y: 0, width: 500, height: 500 };
+  const r = reviewLayout([untitled, node("inside", 100, 100)]);
+  const found = r.findings.filter((f) => f.kind === "untitledBox");
+  assert.equal(found.length, 1);
+  assert.deepEqual(found[0].nodes, ["b"]);
+});
+
+test("a titled box is accepted", () => {
+  const titled = { id: "b", title: "Comment", type: "EdGraphNode_Comment", x: 0, y: 0, width: 500, height: 500, text: "Vaccum" };
+  const r = reviewLayout([titled, node("inside", 100, 100)]);
+  assert.deepEqual(r.findings.filter((f) => f.kind === "untitledBox"), []);
+});
+
+test("whitespace is not a title", () => {
+  const blank = { id: "b", title: "Comment", type: "EdGraphNode_Comment", x: 0, y: 0, width: 500, height: 500, text: "   \n  " };
+  const r = reviewLayout([blank, node("inside", 100, 100)]);
+  assert.equal(r.findings.filter((f) => f.kind === "untitledBox").length, 1);
+});

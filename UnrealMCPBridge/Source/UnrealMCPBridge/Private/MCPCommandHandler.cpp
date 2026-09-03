@@ -1882,6 +1882,15 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			const UEdGraphNode_Comment* CommentNode = Cast<UEdGraphNode_Comment>(Node);
 			NodeEntry->SetNumberField(TEXT("width"), CommentNode->NodeWidth);
 			NodeEntry->SetNumberField(TEXT("height"), CommentNode->NodeHeight);
+
+			// What the box SAYS. GetNodeTitle returns "Comment" for every one of them, so a caller
+			// could see that a graph had 77 boxes and not one of their names.
+			//
+			// Those names are how a person navigates a large graph - Vaccum, Inputs, Healing,
+			// Spawn Ping - and they are the difference between a box that groups nodes and a box
+			// that explains them. Without this, "does this system have a titled box?" is
+			// unanswerable, and so is "what systems does this Blueprint contain?"
+			NodeEntry->SetStringField(TEXT("text"), Node->NodeComment);
 		}
 
 		// Where a custom event actually RUNS, on the one node kind where it is not guessable.

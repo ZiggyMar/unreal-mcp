@@ -38,13 +38,15 @@ export interface LayoutNode {
   /** Comment boxes only: how far the box extends. Absent on ordinary nodes. */
   width?: number;
   height?: number;
+  /** Comment boxes only: the box's first line, which is its name. */
+  text?: string;
   /** Flattened wiring, e.g. "out then -> A1B2C3D4.execute". */
   pins?: string[];
 }
 
 export interface LayoutFinding {
   /** Short machine-readable kind, so a caller can filter. */
-  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire";
+  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire" | "untitledBox";
   /** One sentence a person can act on. */
   detail: string;
   nodes: string[];
@@ -232,6 +234,21 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
 
   const sortedWires = [...wireLengths].sort((a, b) => a - b);
   const at = (p: number) => (sortedWires.length === 0 ? 0 : sortedWires[Math.min(sortedWires.length - 1, Math.floor(sortedWires.length * p))]);
+
+  // --- boxes that group without naming ---
+  //
+  // Half the convention is the box; the other half is what it says. In this project every system
+  // carries a name a person navigates by - Vaccum, Inputs, Healing, Spawn Ping - and an untitled box
+  // draws a rectangle round some nodes while explaining nothing about them.
+  for (const b of boxes) {
+    const title = (b.text ?? "").trim();
+    if (title.length > 0) continue;
+    findings.push({
+      kind: "untitledBox",
+      detail: `A comment box at ${b.x}, ${b.y} has no text. A box groups nodes; its title is what says which system they are.`,
+      nodes: [b.id ?? ""],
+    });
+  }
 
   return {
     findings,
