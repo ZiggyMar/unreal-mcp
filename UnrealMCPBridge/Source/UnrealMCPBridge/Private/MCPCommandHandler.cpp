@@ -1856,6 +1856,34 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 		NodeEntry->SetStringField(TEXT("type"), Node->GetClass()->GetName());
 		NodeEntry->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
 
+		// WHERE the node sits, which nothing here could see before.
+		//
+		// Without positions a caller cannot tell occupied canvas from empty canvas, so every new
+		// system gets placed at invented coordinates - and in a 900-node graph an invented coordinate
+		// does not land in a gap, it lands on top of somebody's existing work. That is exactly what
+		// happened building the tutorial guide: sixty nodes scattered across four regions, overlapping
+		// systems that were already there, and the reply that made it unarguable was "it's like taking
+		// headphones and you scramble the wires".
+		//
+		// Two integers per node against a reply that already carries a title and a pin list, and they
+		// are what makes "build it in empty space" a thing a caller can actually do rather than guess
+		// at.
+		NodeEntry->SetNumberField(TEXT("x"), Node->NodePosX);
+		NodeEntry->SetNumberField(TEXT("y"), Node->NodePosY);
+
+		// A comment box's SIZE, which is what makes "is this node inside a box?" answerable.
+		//
+		// Position alone cannot answer it: every node is down-and-right of some box. A containment
+		// check written against the origin only is one that can never fail, which reads as a clean
+		// bill of health for a graph full of loose nodes. Ordinary nodes size themselves from their
+		// pins and carry no useful extent, so this is emitted only where it means something.
+		if (Node->IsA<UEdGraphNode_Comment>())
+		{
+			const UEdGraphNode_Comment* CommentNode = Cast<UEdGraphNode_Comment>(Node);
+			NodeEntry->SetNumberField(TEXT("width"), CommentNode->NodeWidth);
+			NodeEntry->SetNumberField(TEXT("height"), CommentNode->NodeHeight);
+		}
+
 		// Where a custom event actually RUNS, on the one node kind where it is not guessable.
 		//
 		// A Server RPC and a Multicast are both K2Node_CustomEvent with an ordinary title - the

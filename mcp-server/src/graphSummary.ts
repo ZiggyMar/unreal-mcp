@@ -29,6 +29,12 @@ export interface SummaryNodeLike {
   title?: string;
   ghost?: boolean;
   runsOn?: string;
+  /** Canvas position. The bridge always sends these; they are emitted only when asked for. */
+  x?: number;
+  y?: number;
+  /** Comment boxes only: the box's extent, which is what makes containment answerable. */
+  width?: number;
+  height?: number;
   /** Present only when the caller asked for withPinValues. */
   values?: Record<string, string>;
   connectedPins?: Array<{
@@ -69,7 +75,7 @@ function shortType(type: string | undefined): string | undefined {
 }
 
 /** Rewrite one node into the compact form the model sees. */
-function compactNode(node: SummaryNodeLike): Record<string, unknown> {
+function compactNode(node: SummaryNodeLike, positions = false): Record<string, unknown> {
   const pins = flattenPins(node);
   return {
     id: node.id,
@@ -92,6 +98,15 @@ function compactNode(node: SummaryNodeLike): Record<string, unknown> {
     // so a node with nothing set costs nothing here.
     ...(node.values ? { values: node.values } : {}),
     ...(pins ? { pins } : {}),
+    // Opt-in, because two numbers on every node of a 982-node graph is real money for a question
+    // most callers are not asking. The callers who ARE asking cannot work without it: with no
+    // positions there is no way to tell occupied canvas from empty canvas, so a new system gets
+    // placed at invented coordinates - and in a full graph an invented coordinate lands on top of
+    // existing work rather than in a gap.
+    ...(positions && typeof node.x === "number" ? { x: node.x, y: node.y } : {}),
+    // Comment boxes carry a size; ordinary nodes do not. Without it "is this node inside a box?"
+    // cannot be answered, because every node is down-and-right of SOME box.
+    ...(positions && typeof node.width === "number" ? { width: node.width, height: node.height } : {}),
   };
 }
 
@@ -156,6 +171,8 @@ function neighboursOf(matches: SummaryNodeLike[], all: SummaryNodeLike[]): Summa
 export interface CapOptions {
   match?: string;
   maxNodes?: number;
+  /** Emit each node's canvas position. Off by default - see the note in compactNode. */
+  positions?: boolean;
 }
 
 export function capGraphSummary(result: GraphSummaryLike, options: CapOptions = {}): GraphSummaryLike {
@@ -181,12 +198,12 @@ export function capGraphSummary(result: GraphSummaryLike, options: CapOptions = 
     return needle
       ? {
           ...result,
-          nodes: [...filtered.map(compactNode), ...near.map(asNeighbour)],
+          nodes: [...filtered.map((n) => compactNode(n, options.positions)), ...near.map(asNeighbour)],
           totalNodes: all.length,
           matched: filtered.length,
           ...(near.length > 0 ? { neighbours: near.length } : {}),
         }
-      : { ...result, nodes: all.map(compactNode) };
+      : { ...result, nodes: all.map((n) => compactNode(n, options.positions)) };
   }
 
   const entries = filtered.filter((n) => ENTRY_TYPES.includes(n.type ?? ""));
@@ -219,7 +236,7 @@ export function capGraphSummary(result: GraphSummaryLike, options: CapOptions = 
 
   return {
     ...result,
-    nodes: [...kept.map(compactNode), ...keptNear.map(asNeighbour)],
+    nodes: [...kept.map((n) => compactNode(n, options.positions)), ...keptNear.map(asNeighbour)],
     totalNodes: all.length,
     ...(needle ? { matched: filtered.length } : {}),
     ...(keptNear.length > 0 ? { neighbours: keptNear.length } : {}),

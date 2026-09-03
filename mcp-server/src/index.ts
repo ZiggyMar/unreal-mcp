@@ -28,6 +28,7 @@ import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
+import { reviewLayout } from "./layoutReview.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -661,6 +662,7 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_set_pin_default_value",
     "unreal_remove_node",
     "unreal_organize_graph",
+    "unreal_review_layout",
     "unreal_set_variable_replication",
   ],
   ui: ["unreal_scaffold_widget", "unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
@@ -1647,9 +1649,13 @@ register(
           "What each node's unwired input pins are SET to, as `values`. With `match`, reads a literal off many " +
             "nodes in one call instead of a read_node_detail each."
         ),
+      withPositions: z
+        .boolean()
+        .optional()
+        .describe("Each node's canvas x/y. Ask before adding to an existing graph: guessed coordinates land on existing work."),
     },
   },
-  async ({ path, graphName, match, maxNodes, withPinValues }) => {
+  async ({ path, graphName, match, maxNodes, withPinValues, withPositions }) => {
     try {
       const result = await bridge.send<ReadBlueprintGraphSummaryResult>("read_blueprint_graph_summary", {
         path,
@@ -1660,7 +1666,7 @@ register(
       // Bounded in the TOOL, not in the bridge: review, audit and explain_graph call the bridge
       // command directly and still get every node, so the analysis stays correct while the model
       // gets a view it can afford. See src/graphSummary.ts for the measurement behind the cap.
-      return jsonResult(capGraphSummary(result as never, { match, maxNodes }));
+      return jsonResult(capGraphSummary(result as never, { match, maxNodes, positions: withPositions }));
     } catch (err) {
       return errorResult(err);
     }
@@ -4533,10 +4539,9 @@ register(
       "crossings, straightened so execution chains run along one row, and spaced so nothing overlaps. By default it " +
       "then wraps each execution chain in a comment box titled after the event that starts it, so a reader sees " +
       '"Event BeginPlay" as a labelled region instead of a float of nodes.\n\n' +
-      "Run this whenever you have finished a piece of work in a graph, including graphs you did not author: it is " +
-      "purely cosmetic, safe to run repeatedly (it will not stack duplicate comment boxes), and it is the difference " +
-      "between output that compiles and output someone is happy to inherit. unreal_build_graph already applies the " +
-      "positioning half automatically; call this to also get the comment boxes, or to tidy a graph built any other way.",
+      "Safe to run repeatedly (it will not stack duplicate boxes), but it lays out the WHOLE graph: on a large one " +
+      "somebody else maintains it moves THEIR nodes too, which is rarely wanted - there, move only what you added. " +
+      "unreal_build_graph already positions what it adds; call this for the comment boxes.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph to lay out, e.g. "EventGraph" or a function graph name.'),
@@ -7429,6 +7434,53 @@ register(
     try {
       const result = await bridge.send("create_material", { packagePath, baseColor, metallic, roughness, emissiveColor });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_review_layout",
+  {
+    title: "Check a graph is laid out like a person laid it out",
+    description:
+      "Reports layout faults a compile never catches: execution chains that jump leftward, nodes stacked on top of " +
+      "each other, wires crossing the canvas, and nodes belonging to no comment box.\n\n" +
+      "**Run this after adding nodes to an existing graph.** Correct nodes can still leave a graph that reads as " +
+      "scrambled wire, and the person who has to edit it next pays for that. Measured on a real project: the " +
+      "hand-maintained code had 306 execution wires with 0 running backwards; nodes added by a model had 4.\n\n" +
+      "`minY`/`maxY` scope it to one system instead of a whole graph. Fix with unreal_organize_graph " +
+      "(move_node, add_comment_box); this only reports, because moving somebody else's nodes is their call.",
+    inputSchema: {
+      path: z.string().describe('Blueprint path, e.g. "/Game/Characters/BP_Player".'),
+      graphName: z.string().optional().describe('Graph to audit. Defaults to "EventGraph".'),
+      minY: z.number().optional().describe("Only audit nodes at or below this Y - scopes it to one system."),
+      maxY: z.number().optional().describe("Only audit nodes at or above this Y."),
+      maxWire: z.number().optional().describe("A wire longer than this is reported. Defaults to 1600."),
+    },
+  },
+  async ({ path, graphName, minY, maxY, maxWire }) => {
+    try {
+      const raw = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
+        path,
+        graphName: graphName ?? "EventGraph",
+      });
+      // Through the same compaction the read tool uses, so positions and box sizes arrive in the
+      // shape the reviewer expects rather than the bridge's raw form.
+      const compact = capGraphSummary(raw as never, { maxNodes: 5000, positions: true });
+      const report = reviewLayout((compact.nodes ?? []) as never, { minY, maxY, maxWire });
+
+      // The counts first: "0 backward of 44" is the headline, and a caller who sees it clean does
+      // not need to read a list of nothing.
+      return jsonResult({
+        nextAction:
+          report.findings.length === 0
+            ? "Layout is clean: flow runs rightward, nothing is stacked, every node is in a box."
+            : `${report.findings.length} layout fault(s). Fix with unreal_organize_graph move_node / add_comment_box.`,
+        ...report.stats,
+        findings: report.findings,
+      });
     } catch (err) {
       return errorResult(err);
     }

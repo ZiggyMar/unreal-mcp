@@ -207,9 +207,9 @@ table cannot quietly go stale the way the standing instructions did.
 |---|---:|---|
 | `search` | 2523 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
-| `core` | 13216 | the authoring spine |
-| `lazy` | 13524 | `core` plus deferred groups |
-| `full` | 48440 | everything, for a model that can afford it |
+| `core` | 13221 | the authoring spine |
+| `lazy` | 13529 | `core` plus deferred groups |
+| `full` | 48797 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -387,6 +387,7 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
 | `unreal_trace_input` | *composite* | "What happens when the player presses Escape?" - key to context to action to every handler and what it does, in one call. |
+| `unreal_review_layout` | *composite* | Layout faults a compile never catches: chains running leftward, stacked nodes, canvas-crossing wires, nodes in no comment box. |
 | `unreal_import_asset` | `import_asset` | Turn a file on disk into a project asset - PNG/TGA to Texture2D, FBX to StaticMesh, WAV to SoundWave. The front door. |
 | `unreal_build_material_graph` | `build_material_graph` | Author a Material's node graph: expressions, wires, outputs and blend/shading settings in one call. |
 | `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
@@ -7435,6 +7436,7 @@ anybody noticed.
 - ["You're assuming" — the filename that looked like the answer](#youre-assuming--the-filename-that-looked-like-the-answer)
 - [Compiling during PIE killed the editor, so it is refused now](#compiling-during-pie-killed-the-editor-so-it-is-refused-now)
 - ["Then make the tooling to do material graphs"](#then-make-the-tooling-to-do-material-graphs)
+- ["This is AI, bro" — checking the layout instead of remembering it](#this-is-ai-bro--checking-the-layout-instead-of-remembering-it)
 
 <!-- INDEX:END -->
 
@@ -11998,3 +12000,45 @@ because the friendly word is what the editor's own dropdown shows and what anyon
 Three of the repo's own guards caught real gaps on the way in, which is the argument for having them:
 parity found `import_asset` had no MCP tool, the undo check found neither command opened a
 transaction, and the doctor's probe-coverage test refused to let two new commands go unaccounted for.
+
+### "This is AI, bro" — checking the layout instead of remembering it
+
+Sixty nodes went into BP_Player at invented coordinates, spread across four regions of a 982-node
+graph, interleaved with 154 of the user's own nodes. It compiled. It ran. It was also, in his words,
+*"like taking headphones and you scramble the wires"*, and *"if someone looks at this, it's gonna be
+like, this is AI, bro."*
+
+**The root cause was a missing capability, not carelessness.** `read_blueprint_graph_summary` returned
+982 nodes with no coordinates, so there was no way to tell occupied canvas from empty canvas. Every
+placement was necessarily a guess, and in a full graph a guess does not land in a gap — it lands on
+somebody's existing system. Positions are now available behind `withPositions`, opt-in because two
+numbers on every node is real money for a question most callers are not asking.
+
+With positions readable, the conventions become measurable, and the numbers settled what taste could
+not. Measuring the hand-maintained code against the generated code:
+
+```
+                        his code      the generated system
+execution wires            306                 44
+running BACKWARD             0                  4
+```
+
+"Reads like a book" has an exact form: an execution wire should point rightward. His graphs manage
+that perfectly across 306 wires. Epic's own guidance is the same rule from the other side — *"align
+wires, not nodes"*, because you cannot control pin positions but you can place nodes so the wire has
+a straight run.
+
+`unreal_review_layout` checks the four rules that came out of measuring his project: flow runs
+rightward, nothing is stacked, wires stay short, every node is inside a comment box. It reports and
+does not fix, because moving somebody's nodes is their call.
+
+**One check had to be deleted and rewritten before it shipped.** The containment test compared a node
+against each box's ORIGIN with an `&& true` standing in for the extent, so `.some()` matched any box
+up-and-left of the node and the check could never fire — a clean bill of health for a graph full of
+loose nodes. Comment boxes now carry `width`/`height`, and with no dimensions the check says nothing
+rather than passing. There is a test asserting exactly that silence.
+
+Fixing the guide against these rules took three passes and produced a second-order bug worth
+recording: straightening the flow pushed nodes past the edge of boxes drawn before the move, and a
+box that does not contain its system is worse than none, because in the editor a box OWNS what is
+inside it and drags it. Boxes are now rebuilt from where the nodes actually are.
