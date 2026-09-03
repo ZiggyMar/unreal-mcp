@@ -94,6 +94,21 @@ export interface LayoutOptions {
 
 const COMMENT_TYPE = /Comment/i;
 
+/**
+ * A reroute node is a knot on a wire, not a node.
+ *
+ * It draws as a dot a fraction the size of a real node, and a person places them in runs to bend a
+ * wire around something. Measured against a hand-maintained graph, counting them as nodes produced
+ * 8 of 11 "stacked" findings - pairs of knots 32 apart, which is exactly what a deliberate run of
+ * them looks like - and a heap of "in no comment box", which is true and meaningless for a bend in
+ * a wire.
+ *
+ * Those were false positives against the very code being used as the standard, which is the clearest
+ * evidence a rule is wrong. explainGraph steps over knots for the same reason: they are wires, not
+ * behaviour. They still count for wire LENGTH, because bending a wire does not shorten it.
+ */
+const KNOT_TYPE = /Knot/i;
+
 /** Exec pin names, which are what carry reading order. Data pins are not direction-checked. */
 const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
 
@@ -185,7 +200,8 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   }
 
   // --- stacked or near-stacked nodes ---
-  const sorted = [...real].sort((a, b) => (a.x as number) - (b.x as number) || (a.y as number) - (b.y as number));
+  const solid = real.filter((n) => !KNOT_TYPE.test(n.type ?? ""));
+  const sorted = [...solid].sort((a, b) => (a.x as number) - (b.x as number) || (a.y as number) - (b.y as number));
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
       const a = sorted[i], b = sorted[j];
@@ -213,7 +229,7 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // rather than guessing containment from position alone.
   const sized = boxes.filter((b) => typeof b.width === "number" && typeof b.height === "number");
   if (sized.length > 0) {
-    const loose = real.filter(
+    const loose = solid.filter(
       (n) =>
         !sized.some(
           (b) =>
