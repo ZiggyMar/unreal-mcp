@@ -921,6 +921,15 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // A box holding only other boxes is NOT empty - that is the nesting convention, an outer box whose
   // parts each have their own.
   //
+  // A box holding MORE THAN ONE system is also not checked, measured and rejected the same way. It
+  // looked like the obvious missing rule: a comment box captures by overlap, so a box straddling two
+  // systems drags foreign nodes when it moves. But 16 of BP_Player's 65 leaf boxes hold several
+  // entry events, and every one of them is deliberate - "Aim Server" holds BeginAim and EndAim,
+  // "Start/End Vaccum" holds both halves by name, "Regeneration Cooldowns" holds HealthRegen and
+  // EnergyRegen. A box is drawn round a FEATURE, and a feature has a beginning and an end, or a
+  // server half and a client half. The rule would have accused a quarter of the correctly-organised
+  // boxes in the largest graph here, which is the same failure as the aspect-ratio rule.
+  //
   // A DUPLICATE box title is deliberately not checked, having been measured and rejected. Seven
   // exist across three graphs, and none is a fault: WB_ShopSlot's three pairs are each offset by
   // exactly +1296, a copied UI block, and BP_Player's "Vaccum"/"Vacuum Push" pairs are separate
