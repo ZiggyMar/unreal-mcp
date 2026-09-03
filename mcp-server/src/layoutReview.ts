@@ -156,6 +156,28 @@ const KNOT_TYPE = /Knot/i;
 const ANIM_STATE_TYPE = /^Anim(State|Graph|Notify)/i;
 
 /**
+ * There is deliberately NO check on a graph's overall shape, and none on systems being stacked.
+ *
+ * Both were measured after an owner opened a generated feature and said it still was not organised.
+ * The obvious reading was that it formed one tall column - 4120 wide by 9664 tall - so both rules
+ * were tested against the project before being written, and both fail:
+ *
+ *   - **Aspect ratio.** Across 51 graphs of 30+ nodes the median is 1.63, but legitimate graphs run
+ *     to 0.30 (WBP_SettingsMenu), 0.54 (WB_Event) and 0.55 (PC_MainMenu). The generated feature was
+ *     0.43 - inside the normal range. Any threshold catching it also condemns three hand-built
+ *     graphs, and the only graph below all of them is GM_Gameplay at 0.14, which machineLaidOut
+ *     already reports for a better reason.
+ *
+ *   - **Systems per column.** Stacking is the house style, not a fault: WB_MainMenu puts 15
+ *     top-level systems in one column, WB_Event 10, BP_Turret 7, and BP_Player averages 5.9 across
+ *     its 41. The generated feature had SIX. It was doing exactly what the project does.
+ *
+ * The complaint was real and this is not what it was about - most likely it was that nothing had
+ * been moved at all yet. Guessing a rule from one complaint and shipping it would have put false
+ * findings into four hand-built graphs, so the measurement is kept here instead of the rule.
+ */
+
+/**
  * Split a cluster into one group per entry event, each owning what runs from it.
  *
  * First come, first served, so a node fed by two systems belongs to the one that runs it. Claiming
