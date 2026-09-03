@@ -734,7 +734,23 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   //
   // The real complaint - that a boxless graph read as "clean" - is a reporting problem, and belongs
   // in the sweep's clean count rather than in the findings. Single-graph review already says
-  // "there is no comment box in scope" instead of claiming everything is boxed.
+  // "there is no comment box in scope" instead of claiming everything is boxed.  //
+  // Measured again on FUNCTION graphs, because a 20-node BP_Player function with no box at all
+  // reporting "clean" looked like the check quietly skipping them. It is not skipping them -
+  // K2Node_FunctionEntry is an entry type and boxed functions do get findings. Boxing inside a
+  // function simply starts at a size:
+  //
+  //   with boxes:    GetVacuumableObject 83, BackpackMaterialVelocity 28, stickDriftFix 28,
+  //                  CheckPlayersData 26, VaccumObjects 24, VacuumEnergyDrain 16
+  //   without:       everything from 22 nodes down - TakeDamage 22, SpawnTutorialData 21,
+  //                  GetSensitivity 21, VacuumPush 20, and twenty more
+  //
+  // So the threshold is about 24 nodes, and it makes sense: a function is ALREADY a named unit, so
+  // a box round the whole of a small one explains nothing the title does not.
+  //
+  // That threshold still does not rescue a rule, which is why none is written. The graphs left
+  // unboxed on purpose above include 30-to-60-node widget and anim graphs, so "24 or more nodes and
+  // no box" would accuse them too. The number is worth recording, not shipping.
   if (sized.length > 0) {
     const loose = solid.filter(
       (n) =>
