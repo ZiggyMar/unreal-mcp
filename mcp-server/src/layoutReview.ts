@@ -1044,17 +1044,35 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   for (const b of sized) {
     const title = (b.text ?? "").split("\n")[0].trim();
     if (!title) continue; // untitled boxes are reported below, and one finding per box is enough
-    const holdsAnything = placed.some((n) => {
-      if (n === b) return false;
-      if (KNOT_TYPE.test(n.type ?? "")) return false;
-      return (
-        (n.x as number) >= (b.x as number) &&
-        (n.x as number) <= (b.x as number) + (b.width as number) &&
-        (n.y as number) >= (b.y as number) &&
-        (n.y as number) <= (b.y as number) + (b.height as number)
-      );
-    });
+    const within = (n: LayoutNode) =>
+      n !== b &&
+      (n.x as number) >= (b.x as number) &&
+      (n.x as number) <= (b.x as number) + (b.width as number) &&
+      (n.y as number) >= (b.y as number) &&
+      (n.y as number) <= (b.y as number) + (b.height as number);
+    const holdsAnything = placed.some((n) => !KNOT_TYPE.test(n.type ?? "") && within(n));
     if (holdsAnything) continue;
+
+    // A box round a knot IS empty - unless it is one of a labelled pair.
+    //
+    // The general rule stands and is not being overturned: a knot is a bend in a wire, and a box
+    // drawn round one usually describes no system. Measured, knot-only boxes are rare - exactly one
+    // across 105 boxes in BP_Player and BP_VirusData.
+    //
+    // That one is not debris. "Is Vacuuming Data" and "Is Not Vacuuming Data" sit at the same x with
+    // the same width, stacked inside "Set Vacuuming Data VFX": one label per branch of a condition,
+    // each drawn round the reroute on its path. The first also holds a SpawnActor so it never
+    // tripped the check; the second holds only its knot, and advising its deletion would delete half
+    // the pair and leave the remaining label meaningless.
+    //
+    // So the exemption is the PAIRING, not the knot: another box sharing this one's x and width is
+    // the same annotation drawn on the other branch. A lone knot-only box with no such sibling is
+    // still reported, which is what the original measurement was about.
+    const holdsKnot = placed.some((n) => KNOT_TYPE.test(n.type ?? "") && within(n));
+    const pairedLabel =
+      holdsKnot &&
+      sized.some((o) => o !== b && o.x === b.x && o.width === b.width);
+    if (pairedLabel) continue;
     // When the graph is already reported as relaid out, its stranded boxes ARE that fault.
     //
     // Measured: 14 empty-box findings across the project and 11 of them in GM_Gameplay, which
