@@ -48,7 +48,15 @@ export interface LayoutNode {
 
 export interface LayoutFinding {
   /** Short machine-readable kind, so a caller can filter. */
-  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire" | "untitledBox" | "overlappingBoxes" | "emptyBox";
+  kind:
+    | "backwardFlow"
+    | "stacked"
+    | "unboxed"
+    | "longWire"
+    | "untitledBox"
+    | "overlappingBoxes"
+    | "emptyBox"
+    | "machineLaidOut";
   /** One sentence a person can act on. */
   detail: string;
   nodes: string[];
@@ -364,6 +372,7 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   const findings: LayoutFinding[] = [];
   let execWires = 0;
   let backwardWires = 0;
+  let longWires = 0;
   const wireLengths: number[] = [];
 
   const name = (n: LayoutNode | undefined) => (n?.title ?? n?.id ?? "?").slice(0, 40);
@@ -392,6 +401,10 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
         const len = Math.max(dx, dy);
         wireLengths.push(len);
         if (len > maxWire) {
+          longWires++;
+          // Capped. 44 in one graph is one fault reported 44 times, and the machineLaidOut finding
+          // above says what that fault is. The stats still carry every wire's length.
+          if (longWires > 8) continue;
           findings.push({
             kind: "longWire",
             // The remedy differs by wire kind, and the first version gave the exec answer for both.
@@ -570,6 +583,37 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
             ...(nearMiss.length > 0 ? { almost: nearMiss.slice(0, 3) } : {}),
           };
         })(),
+      });
+    }
+  }
+
+  // --- was this graph laid out by a machine? ---
+  //
+  // 44 of this project's 76 long wires are in ONE graph, and they are not 44 faults. They are one:
+  // GM_Gameplay was relaid out into a column grid, which moved every node and left eleven comment
+  // boxes naming systems that had gone. Listing the symptoms one per wire is the same failure the
+  // unboxed check had, where 76 loose nodes were really seven systems.
+  //
+  // The signature separates cleanly rather than by taste. Nodes per distinct X: GM_Gameplay 9.8,
+  // every other graph in the project between 1.1 and 2.0. And 63 of its 206 nodes share a single X,
+  // where hand-built graphs have at most 4. Both are required, because either alone could describe
+  // a tidy graph that happens to align.
+  const solidForGrid = real.filter((n) => !KNOT_TYPE.test(n.type ?? ""));
+  if (solidForGrid.length >= 40) {
+    const columns = new Set(solidForGrid.map((n) => n.x as number));
+    const perColumn = solidForGrid.length / columns.size;
+    const tally = new Map<number, number>();
+    for (const n of solidForGrid) tally.set(n.x as number, (tally.get(n.x as number) ?? 0) + 1);
+    const biggest = Math.max(...tally.values());
+    if (perColumn >= 4 && biggest / solidForGrid.length >= 0.2) {
+      findings.push({
+        kind: "machineLaidOut",
+        detail:
+          `This graph looks relaid out by a tool, not placed by hand: ${solidForGrid.length} nodes across only ` +
+          `${columns.size} distinct X positions, ${biggest} of them sharing one. A whole-graph layout moves every ` +
+          `node and leaves comment boxes where they were, so the long wires and stranded boxes here are one fault, ` +
+          `not many. Fixing the wires one at a time will not help; the systems need putting back together.`,
+        nodes: [],
       });
     }
   }
