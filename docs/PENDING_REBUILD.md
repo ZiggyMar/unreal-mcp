@@ -1,0 +1,75 @@
+# Changes waiting on a plugin rebuild
+
+C++ in `UnrealMCPBridge` only takes effect when the plugin is compiled, and compiling needs the
+editor closed. Everything here is written, reviewed against the engine headers, and **not run**.
+
+Killing the editor to rebuild has destroyed unsaved work in this project before — an asset that had
+never been written to disk, where `dv status` showed clean *because* nothing had been written. So
+these wait for the editor to be closed deliberately, by its owner, rather than being forced through.
+
+Until then the TypeScript side degrades on purpose: `tidy_layout` drops the moves that needed a
+resize instead of carrying nodes out of their comment boxes, and says the plugin needs rebuilding.
+
+## What is queued
+
+### 1. `resize_comment_box` — a new `organize_graph` action
+
+`MCPCommandHandler.cpp`, beside `add_comment_box`. Sets `NodeWidth`/`NodeHeight` (and optionally
+`NodePosX`/`NodePosY`) on an existing `UEdGraphNode_Comment`, inside an `FScopedTransaction` so it
+is undoable. Each dimension is optional; absent means unchanged, not zero.
+
+**Why:** a comment box owns the nodes inside it. When a straightened chain grows past the box's
+edge, the fix is to widen the box — what a person does. Without this the tidier could only refuse
+the move and leave the wire bent.
+
+**Verify after rebuild:**
+
+1. `unreal_review_layout` with `path` on any blueprint with boxes — note a box's `id`, `width`, `height`.
+2. Call `unreal_organize_graph` with `action: "resize_comment_box"`, that `nodeId`, and the box's
+   **current** width and height. Expect `{id, x, y, width, height}` back, unchanged. Nothing in the
+   graph should move.
+3. Repeat with `width` 200 larger. Re-read the summary: the box is wider, no node has moved.
+4. Ctrl+Z in the editor. The box returns to its old width — this is what proves the transaction.
+5. Call it with an ordinary node's id. Expect `not_a_comment_box`, not a silent success.
+6. Call it with `width: 0`. Expect `bad_param`.
+7. `unreal_tidy_layout` on a scope whose chain overruns its box. Expect `boxesGrown` in the result
+   and **no** `resizeUnavailable`.
+
+### 2. `holds` — `NodesUnderComment` in the graph summary
+
+`MCPCommandHandler.cpp`, in `HandleReadBlueprintGraphSummary`'s comment-node branch. Emits the ids
+of the nodes a box believes it holds, omitted entirely when the list is empty.
+
+`GetNodesUnderComment()` returns `const FCommentNodeSet&`, which is a `TArray<UObject*>` despite the
+name — raw pointers, which can be stale if a node was deleted since the box last recorded it, so
+each is cast and null-checked rather than trusted. (The first draft of this used `TSoftObjectPtr`
+and `.Get()`; reading the engine header is what caught it.)
+
+**Why:** a whole-graph relayout moves nodes and leaves comment boxes where they are. Measured in
+`GM_Gameplay`: 63 of 206 nodes at x=0, only 21 distinct x values across a 6928-unit span — column
+grid output — and **eleven** boxes left naming empty rectangles, `Countdown` and `Win Screen`
+among them. Once the nodes have moved, nothing in their positions or their wiring says which box
+used to own them. `NodesUnderComment` is the only surviving record, so this is what makes the repair
+possible: move the box back over the nodes it still lists, rather than deleting a box somebody meant.
+
+**Verify after rebuild:**
+
+1. Read any blueprint summary with `withPositions: true`. Boxes that hold nodes now carry `holds`;
+   boxes that hold none carry no `holds` key at all.
+2. Cross-check one box: every id in `holds` should be a node whose x/y is inside that box's extent.
+   A graph nobody has relaid out should agree exactly.
+3. Read `GM_Gameplay`. The eleven boxes `review_layout` reports as `emptyBox` are the interesting
+   case — if their `holds` lists are populated, the stranded nodes are recoverable and the repair
+   can be built. **If those lists are empty too, the record did not survive and the boxes can only
+   be deleted, not restored.** That question is open until this runs.
+
+## How to rebuild
+
+With the editor closed:
+
+```
+"M:/Unreal/UE_5.6/Engine/Build/BatchFiles/Build.bat" AVSEditor Win64 Development -Project="<the .uproject>" -WaitMutex
+```
+
+The editor currently in use is **UE 5.6** (`M:\Unreal\UE_5.6`), not the 5.8 install on `F:`. Build
+against the one the project actually opens with.

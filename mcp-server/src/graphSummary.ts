@@ -37,6 +37,8 @@ export interface SummaryNodeLike {
   height?: number;
   /** Comment boxes only: what the box says. Every comment node's `title` is the word "Comment". */
   text?: string;
+  /** Comment boxes only: ids of the nodes the box records as its own, which may no longer be inside it. */
+  holds?: string[];
   /** Present only when the caller asked for withPinValues. */
   values?: Record<string, string>;
   connectedPins?: Array<{
@@ -77,7 +79,7 @@ function shortType(type: string | undefined): string | undefined {
 }
 
 /** Rewrite one node into the compact form the model sees. */
-function compactNode(node: SummaryNodeLike, positions = false): Record<string, unknown> {
+function compactNode(node: SummaryNodeLike, positions = false, contents = false): Record<string, unknown> {
   const pins = flattenPins(node);
   return {
     id: node.id,
@@ -115,6 +117,14 @@ function compactNode(node: SummaryNodeLike, positions = false): Record<string, u
     ...(positions && typeof node.text === "string" && node.text.length > 0
       ? { text: node.text.split("\n")[0].slice(0, 80) }
       : {}),
+    // Which nodes a box BELIEVES it holds, which is not always which nodes sit inside it - a
+    // whole-graph relayout moves the nodes and leaves the box behind, and this is the only record
+    // of what it used to own.
+    //
+    // Opt-in SEPARATELY from positions, deliberately: this is a list of ids per box, and a graph
+    // with 88 boxes holding a median of 7 nodes each would add several hundred ids to every read.
+    // Only the repair that puts a stranded box back over its nodes needs them.
+    ...(contents && Array.isArray(node.holds) && node.holds.length > 0 ? { holds: node.holds } : {}),
   };
 }
 

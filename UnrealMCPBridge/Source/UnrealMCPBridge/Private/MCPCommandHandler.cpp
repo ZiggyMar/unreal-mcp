@@ -1891,6 +1891,33 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleReadBlueprintGraphSummary(cons
 			// that explains them. Without this, "does this system have a titled box?" is
 			// unanswerable, and so is "what systems does this Blueprint contain?"
 			NodeEntry->SetStringField(TEXT("text"), Node->NodeComment);
+
+			// Which nodes the box BELIEVES it holds, which is not always which nodes sit inside it.
+			//
+			// A whole-graph relayout moves nodes and leaves comment boxes where they are. Measured
+			// in this project's GM_Gameplay: 63 of 206 nodes at x=0, only 21 distinct x values
+			// across a 6928-unit span - column-grid output - and eleven comment boxes left naming
+			// empty rectangles, "Countdown" and "Win Screen" among them.
+			//
+			// Geometry cannot undo that: once the nodes have moved, nothing in their positions or
+			// their wiring says which box used to own them. NodesUnderComment is the only surviving
+			// record of it, so emitting it is what makes the repair possible at all - move the box
+			// back over the nodes it still lists, rather than deleting a box somebody meant.
+			// FCommentNodeSet is a TArray<UObject*> despite the name, and the entries are raw
+			// pointers that can be stale - a node deleted since the box last recorded it leaves a
+			// dangling entry, so each is cast and null-checked rather than trusted.
+			TArray<TSharedPtr<FJsonValue>> Held;
+			for (UObject* Under : CommentNode->GetNodesUnderComment())
+			{
+				if (const UEdGraphNode* HeldNode = Cast<UEdGraphNode>(Under))
+				{
+					Held.Add(MakeShared<FJsonValueString>(MakeNodeId(HeldNode)));
+				}
+			}
+			if (Held.Num() > 0)
+			{
+				NodeEntry->SetArrayField(TEXT("holds"), Held);
+			}
 		}
 
 		// Where a custom event actually RUNS, on the one node kind where it is not guessable.
