@@ -59,7 +59,8 @@
     "check:undo": "node scripts/check-undo.mjs",
     "check:params": "node scripts/check-param-names.mjs",
     "check:groups": "node scripts/measure-groups.mjs",
-    "check:index": "node scripts/check-readme-index.mjs"
+    "check:index": "node scripts/check-readme-index.mjs",
+    "measure:layout": "node scripts/measure-layout.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
