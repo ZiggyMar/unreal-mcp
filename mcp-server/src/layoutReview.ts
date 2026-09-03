@@ -146,15 +146,24 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // widest gap inside any one of them was well under this.
   const nearby = options.nearby ?? 900;
 
-  const placed = nodes.filter(
-    (n) =>
-      typeof n.x === "number" &&
-      typeof n.y === "number" &&
-      (n.y as number) >= minY &&
-      (n.y as number) <= maxY &&
-      (n.x as number) >= minX &&
-      (n.x as number) <= maxX
-  );
+  // A node is in scope if its position is. A BOX is in scope if it REACHES into it - because a box
+  // starts up and left of everything it holds, so its origin is routinely outside a region its
+  // contents are well inside.
+  //
+  // Filtering boxes by origin reported "there is no comment box in scope" over fourteen nodes that
+  // were sitting in two of them. That is the worst kind of wrong answer this tool can give: it
+  // accuses correctly-organised work of being loose, and the obvious fix - drawing another box -
+  // would have made a real overlap out of nothing.
+  const inScope = (n: LayoutNode, x0: number, y0: number, x1: number, y1: number) =>
+    x1 >= minX && x0 <= maxX && y1 >= minY && y0 <= maxY;
+  const placed = nodes.filter((n) => {
+    if (typeof n.x !== "number" || typeof n.y !== "number") return false;
+    const x = n.x as number, y = n.y as number;
+    if (!COMMENT_TYPE.test(n.type ?? "")) return y >= minY && y <= maxY && x >= minX && x <= maxX;
+    const w = typeof n.width === "number" ? (n.width as number) : 0;
+    const h = typeof n.height === "number" ? (n.height as number) : 0;
+    return inScope(n, x, y, x + w, y + h);
+  });
   const boxes = placed.filter((n) => COMMENT_TYPE.test(n.type ?? ""));
   const real = placed.filter((n) => !COMMENT_TYPE.test(n.type ?? ""));
   const byId = new Map(real.map((n) => [n.id ?? "", n]));
