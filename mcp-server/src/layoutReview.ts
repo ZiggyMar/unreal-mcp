@@ -430,6 +430,9 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   let execWires = 0;
   let backwardWires = 0;
   let longWires = 0;
+  let emptyBoxes = 0;
+  // Set when the column-grid signature fires, so later checks can tell a symptom from a cause.
+  let relaidOut = false;
   const wireLengths: number[] = [];
 
   const name = (n: LayoutNode | undefined) => (n?.title ?? n?.id ?? "?").slice(0, 40);
@@ -684,6 +687,7 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
     for (const n of solidForGrid) tally.set(n.x as number, (tally.get(n.x as number) ?? 0) + 1);
     const biggest = Math.max(...tally.values());
     if (perColumn >= 4 && biggest / solidForGrid.length >= 0.2) {
+      relaidOut = true;
       findings.push({
         kind: "machineLaidOut",
         detail:
@@ -695,6 +699,12 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
       });
     }
   }
+
+  // The relayout finding carries the count its own enumeration no longer prints. Patched after the
+  // empty-box loop rather than guessed before it: the number is only known once containment has been
+  // worked out, and a summary that states a total it did not count is the kind of claim this file
+  // has already had to correct once.
+  const relayoutFinding = findings.find((f) => f.kind === "machineLaidOut");
 
   const sortedWires = [...wireLengths].sort((a, b) => a - b);
   const at = (p: number) => (sortedWires.length === 0 ? 0 : sortedWires[Math.min(sortedWires.length - 1, Math.floor(sortedWires.length * p))]);
@@ -795,11 +805,27 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
       );
     });
     if (holdsAnything) continue;
+    // When the graph is already reported as relaid out, its stranded boxes ARE that fault.
+    //
+    // Measured: 14 empty-box findings across the project and 11 of them in GM_Gameplay, which
+    // already carries a machineLaidOut finding whose own words are "the long wires and stranded
+    // boxes here are one fault, not many". Listing all eleven beside it contradicts the sentence
+    // that explains them - the same enumeration problem the long-wire check was capped for, missed
+    // in its sibling because they were fixed in different iterations.
+    //
+    // Two are still named, because a cause with no example is harder to act on than one with a
+    // couple, and the count is carried by the finding above.
+    emptyBoxes++;
+    if (relaidOut && emptyBoxes > 2) continue;
     findings.push({
       kind: "emptyBox",
       detail: `"${title}" is a comment box with nothing inside it (${b.width}x${b.height} at ${b.x}, ${b.y}). Either the nodes it described were moved out from under it - a whole-graph relayout does this - or it is a leftover. Delete it or put its system back inside it.`,
       nodes: [b.id ?? ""],
     });
+  }
+
+  if (relayoutFinding && emptyBoxes > 2) {
+    relayoutFinding.detail += ` ${emptyBoxes} of its comment boxes now hold nothing at all; two are named below.`;
   }
 
   for (const b of boxes) {
