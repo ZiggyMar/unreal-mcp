@@ -60,6 +60,7 @@ export interface LayoutFinding {
     | "overlappingBoxes"
     | "emptyBox"
     | "machineLaidOut"
+    | "startsMidChain"
     | "notJudged";
   /** One sentence a person can act on. */
   detail: string;
@@ -469,6 +470,44 @@ function targetsOf(line: string): string[] {
 }
 
 /**
+ * The nodes an entry event RUNS, following exec wires only.
+ *
+ * Deliberately not splitByEntry: that pulls in the pure nodes feeding a chain, and a getter sits to
+ * the LEFT of whatever reads it by convention. Judging reading order against that set would call
+ * every system in the project backwards.
+ *
+ * Exec-only also means data wires out of an event are not followed, which matters more than it
+ * sounds. `AutoFire` in BP_Player is a CustomEvent used as a DELEGATE: its OutputDelegate feeds Set
+ * Timer by Event, which sits 608px to its left because it CONSUMES the event rather than continuing
+ * from it. Following every out pin made that the single violation in 70 systems, and it was the
+ * measurement's fault rather than the layout's.
+ */
+function execChain(ev: LayoutNode, all: LayoutNode[]): LayoutNode[] {
+  const byId = new Map(all.map((n) => [n.id ?? "", n]));
+  const own: LayoutNode[] = [];
+  const seen = new Set<string>();
+  const queue = [ev];
+  while (queue.length > 0) {
+    const n = queue.shift() as LayoutNode;
+    const id = n.id ?? "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    own.push(n);
+    for (const line of n.pins ?? []) {
+      if (!line.includes("->")) continue;
+      const rhs = line.split("->")[1] ?? "";
+      for (const part of rhs.split(",")) {
+        const [target, inPin] = part.trim().split(".");
+        if (inPin !== "execute") continue; // exec inputs only; a delegate or value is not the chain
+        const nxt = byId.get(target);
+        if (nxt && !seen.has(nxt.id ?? "")) queue.push(nxt);
+      }
+    }
+  }
+  return own;
+}
+
+/**
  * Audit one graph's layout.
  *
  * Reports rather than fixes: the caller decides whether a finding is worth moving somebody's nodes
@@ -604,6 +643,44 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
         }
       }
     }
+  }
+
+  // --- a system that does not start at its own left edge ---
+  //
+  // The most literal reading of "structure nodes from start to finish": a system reads
+  // start-to-finish only if the node that STARTS it is the leftmost node in it. An event sitting in
+  // the middle of its own chain means the reader has to hunt for the beginning before following
+  // anything.
+  //
+  // Measured across BP_Player and BP_FireWall as they stand: 51 systems, 0 violations, so this is a
+  // convention the project keeps universally - which is what makes a violation worth reporting,
+  // unlike the aspect-ratio and boxes-hold-two-systems rules that were dropped for accusing work
+  // already right.
+  //
+  // It does fire on real code. An earlier snapshot of BP_Player has two, both in the guide system
+  // this tool built: CE_GuidePickTarget sitting 752 right of the Get All Actors Of Class it runs,
+  // and Event Tick sitting FOUR right of CE_GuideFrame. The current graph has neither, so the later
+  // restructure fixed them - but those two numbers are why there is a threshold. Four pixels is
+  // invisible; 752 is a system you cannot follow.
+  //
+  // The threshold is a node's width, the same shape the stacked check uses: below about 100 across,
+  // two nodes have not cleared each other, so "to the right of" is not yet a fact a reader could
+  // see. That keeps the 752 and drops the 4.
+  //
+  // Knots excluded: a reroute is a wire decoration and must not be allowed to claim the left edge.
+  // Chains under three nodes excluded: a stub has no reading order to get wrong.
+  const NODE_WIDE = 100;
+  for (const ev of real.filter((n) => isEntryType(n.type))) {
+    const chain = execChain(ev, real).filter((n) => !KNOT_TYPE.test(n.type ?? ""));
+    if (chain.length < 3) continue;
+    const leftmost = chain.reduce((a, b) => ((b.x as number) < (a.x as number) ? b : a));
+    const behind = (ev.x as number) - (leftmost.x as number);
+    if (behind < NODE_WIDE) continue;
+    findings.push({
+      kind: "startsMidChain",
+      detail: `${name(ev)} starts a ${chain.length}-node system but sits ${behind} to the right of ${name(leftmost)}, which it runs - so the system does not read from its start. Move ${name(ev)} left of everything it runs, or move that node right of it.`,
+      nodes: [ev.id ?? "", leftmost.id ?? ""],
+    });
   }
 
   // --- stacked or near-stacked nodes ---
@@ -920,6 +997,19 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   //
   // A box holding only other boxes is NOT empty - that is the nesting convention, an outer box whose
   // parts each have their own.
+  //
+  // VERTICAL SPRAWL is not checked either - measured and rejected, and this one looked strong going
+  // in. Systems in this project are almost flat: the median exec chain spans 48 units top to bottom
+  // in BP_Player and 80 in BP_FireWall, so a chain 688 tall stands out by a factor of fourteen.
+  //
+  // It stands out because it BRANCHES. Every system in either graph spanning 300 or more contains at
+  // least one Branch, and the spread tracks how many: one Branch gives about 400, two give 304,
+  // three give 688. A Branch has two exec outputs and they have to go somewhere - one up, one down.
+  // Flagging the spread would flag the branching, and telling someone their Branch should be flatter
+  // is telling them to draw worse wires.
+  //
+  // Width is not a substitute either: KillPlayer runs 5216 across at 448 tall, which is a long chain
+  // wrapping once, and reads fine.
   //
   // A box holding MORE THAN ONE system is also not checked, measured and rejected the same way. It
   // looked like the obvious missing rule: a comment box captures by overlap, so a box straddling two
