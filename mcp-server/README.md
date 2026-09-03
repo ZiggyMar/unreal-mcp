@@ -75,6 +75,32 @@ real MCP client normally launches this itself over stdio):
 npm start
 ```
 
+### Checks that need a running editor
+
+`npm test` runs everything that can run without Unreal open — over 1,100 unit tests plus the guards
+that keep this README's own numbers honest. Three checks cannot: they drive the real bridge against a
+real project, and are deliberately kept out of `npm test` because a check that cannot run is one that
+gets switched off and then ignored.
+
+```bash
+npm run measure:reads      # reply sizes: no read may quietly grow into a context window
+npm run measure:layout     # the layout figures this repo quotes as evidence, re-measured
+npm run measure:pipeline   # build -> place -> box -> review -> tidy, on a throwaway Blueprint
+```
+
+Run them with an editor open on a real project after changing anything in `layoutReview`,
+`layoutTidy`, `placeNewNodes` or the bridge.
+
+Each exists because something got past the unit tests. `measure:reads` was added after three quoted
+reply sizes went stale and were caught by accident. `measure:layout` was added after "306 execution
+wires with 0 backwards" — the evidence behind the rightward-flow rule — turned out to have been
+measured with a detector that could not see a Branch's `else` output, and sat wrong in five places
+for weeks. `measure:pipeline` was added after two faults that lived only in how the pieces meet: a
+box named after the first of two events because the naming fix sat in a path small batches never
+reach, and a refused resize dropping the wrong moves because the caller re-derived which move
+depended on it. None of those was visible to a unit test, and each was found by running the thing
+for real.
+
 ## Configuration
 
 Environment variables (all optional):
