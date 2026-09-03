@@ -7648,10 +7648,12 @@ register(
           growthFailed.push(g.boxId);
         }
       }
-      // An older plugin has no resize action. Rather than move nodes out of their boxes anyway,
-      // drop the moves that needed the growth - the same refusal as before the action existed.
+      // An older plugin has no resize action. Drop the moves that needed the growth - the same
+      // refusal as before the action existed - using the box each move NAMES rather than working it
+      // out from geometry. The geometric version compared against the grown extent, so a move
+      // landing inside the box-that-would-have-been passed and carried a node out of the real one.
       const blocked = new Set(growthFailed);
-      const safeMoves = blocked.size === 0 ? moves : moves.filter((m) => !growths.some((g) => blocked.has(g.boxId) && m.x > g.x + g.width - 1));
+      const safeMoves = blocked.size === 0 ? moves : moves.filter((m) => !m.needsBox || !blocked.has(m.needsBox));
 
       if (dryRun) {
         return jsonResult({ nextAction: "Dry run - nothing moved.", scoped, wouldMove: moves.length, moves });

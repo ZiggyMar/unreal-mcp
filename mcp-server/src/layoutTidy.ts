@@ -48,6 +48,16 @@ export interface TidyMove {
   y: number;
   /** Which pass asked for it, so a caller can see what the tidy actually did. */
   reason: "straighten" | "compact";
+  /**
+   * The box that must grow first for this move to be safe, if any.
+   *
+   * Recorded rather than re-derived. The caller used to work it out from geometry - "is this move
+   * past the box's right edge" - against the GROWN extent, so a move landing inside the grown box
+   * but outside the real one passed the test and was applied anyway. Measured end to end: the
+   * resize was refused by an older plugin, the moves were supposedly dropped, and a node still left
+   * its box. The planner knows which move needed which growth; nobody else should have to guess.
+   */
+  needsBox?: string;
 }
 
 /** A box that must grow so a tidied chain stays inside the system that owns it. */
@@ -304,6 +314,7 @@ export function planTidy(
     if (!p || !was) continue;
     if (p.x === was.x && p.y === was.y) continue; // pushed and pushed back
 
+    let needsBox: string | undefined;
     if (boxes.length > 0) {
       const before = ownersOf(was.x as number, was.y as number);
       if (ownersOf(p.x, p.y) !== before) {
@@ -318,9 +329,10 @@ export function planTidy(
         }
         extent.set(grown.b, grown.g);
         growths.push({ boxId: grown.b, ...grown.g });
+        needsBox = grown.b;
       }
     }
-    moves.push({ nodeId: id, x: p.x, y: p.y, reason });
+    moves.push({ nodeId: id, x: p.x, y: p.y, reason, ...(needsBox ? { needsBox } : {}) });
   }
   return { moves, growths, scoped: scoped.length, heldByBox };
 }

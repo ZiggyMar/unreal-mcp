@@ -146,3 +146,38 @@ test("a box will not grow over a node that was never in it", () => {
   assert.equal(r.growths.length, 0);
   assert.equal(r.heldByBox, 1);
 });
+
+test("a move that needs a box widened says which box", () => {
+  // Recorded rather than re-derived. The caller used to work this out from geometry - "is the move
+  // past the box's right edge" - against the GROWN extent, so a move landing inside the box that
+  // would have existed passed the test and was applied anyway.
+  //
+  // Found end to end, not by unit test: the running plugin predates resize_comment_box, the resize
+  // was refused, the dependent moves were supposedly dropped, and a node still left its box. Seven
+  // in beforehand, six after.
+  const nodes = [
+    box("b1", -100, -100, 800, 400, "Packed"),
+    chain("a", 0, "b"), chain("b", 40, "c"), chain("c", 80, "d"), chain("d", 120, "e"), chain("e", 160),
+  ];
+  const r = planTidy(nodes, {});
+  const needy = r.moves.filter((m) => m.needsBox);
+  assert.ok(needy.length > 0, "some move should depend on the growth");
+  assert.ok(needy.every((m) => m.needsBox === "b1"), "and name the box it depends on");
+  // Moves that fit inside the box as it stands must NOT claim to need it.
+  assert.ok(r.moves.some((m) => !m.needsBox), "moves that already fit carry no dependency");
+});
+
+test("dropping the moves that needed a refused growth leaves ownership intact", () => {
+  // What the caller does when the bridge refuses the resize: keep only the moves with no dependency.
+  const nodes = [
+    box("b1", -100, -100, 800, 400, "Packed"),
+    chain("a", 0, "b"), chain("b", 40, "c"), chain("c", 80, "d"), chain("d", 120, "e"), chain("e", 160),
+  ];
+  const r = planTidy(nodes, {});
+  const kept = r.moves.filter((m) => !m.needsBox);
+  const b = nodes[0];
+  for (const m of kept) {
+    const inside = m.x >= b.x && m.x <= b.x + b.width && m.y >= b.y && m.y <= b.y + b.height;
+    assert.ok(inside, `${m.nodeId} left the box at x ${m.x} with no growth applied`);
+  }
+});
