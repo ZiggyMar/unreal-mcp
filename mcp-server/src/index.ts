@@ -7736,6 +7736,10 @@ register(
         .boolean()
         .optional()
         .describe("Sweep mode: list graphs with no faults too. Off by default - they are counted, not listed."),
+      includeFunctions: z
+        .boolean()
+        .optional()
+        .describe("Sweep function graphs too, not only EventGraph. Off by default: many more calls. Under 12 nodes is skipped."),
       graphName: z.string().optional().describe('Graph to audit. Defaults to "EventGraph".'),
       minY: z.number().optional().describe("Only audit nodes at or below this Y - scopes it to one system."),
       maxY: z.number().optional().describe("Only audit nodes at or above this Y."),
@@ -7744,7 +7748,7 @@ register(
       maxWire: z.number().optional().describe("A wire longer than this is reported. Defaults to 1600."),
     },
   },
-  async ({ path, pathPrefix, includeClean, graphName, minY, maxY, minX, maxX, maxWire }) => {
+  async ({ path, pathPrefix, includeClean, includeFunctions, graphName, minY, maxY, minX, maxX, maxWire }) => {
     try {
       if (!path && !pathPrefix) {
         return errorResult(new Error("Give either path (one blueprint) or pathPrefix (sweep a folder)."));
@@ -7769,11 +7773,38 @@ register(
         const style: StyleSample[] = [];
         let boxesReady = 0;
 
-        for (const p of paths) {
+        // Which graphs to read in each Blueprint.
+        //
+        // The sweep read EventGraph and nothing else, which left 632 function graphs across 124
+        // Blueprints unaudited - about 4443 nodes against the 6175 it did read. Nearly half the
+        // project was invisible to a tool whose whole job is finding what a compile cannot.
+        //
+        // Opt-in, because it is 632 more round trips and most of them have nothing to say. Graphs
+        // under 12 nodes are skipped for the same reason `boxedAboveNodes` exists: a handful of
+        // nodes in a row is not a layout, and reading it costs the same as reading a real one.
+        const graphsOf = async (p: string): Promise<string[]> => {
+          if (!includeFunctions) return [graphName ?? "EventGraph"];
+          try {
+            const g = await bridge.send<{ graphs?: Array<{ name?: string; nodeCount?: number }> }>(
+              "list_blueprint_graphs",
+              { path: p }
+            );
+            return (g.graphs ?? [])
+              .filter((x) => x.name && (x.name === "EventGraph" || (x.nodeCount ?? 0) >= 12))
+              .map((x) => x.name as string);
+          } catch {
+            return [graphName ?? "EventGraph"];
+          }
+        };
+
+        const targets: Array<{ path: string; graph: string }> = [];
+        for (const p of paths) for (const g of await graphsOf(p)) targets.push({ path: p, graph: g });
+
+        for (const { path: p, graph: gName } of targets) {
           try {
             const one = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
               path: p,
-              graphName: graphName ?? "EventGraph",
+              graphName: gName,
             });
             const c = capGraphSummary(one as never, { maxNodes: 5000, positions: true });
             const rep = reviewLayout((c.nodes ?? []) as never, { minY, maxY, minX, maxX, maxWire });
@@ -7790,7 +7821,7 @@ register(
             for (const f of rep.findings) boxesReady += (f.suggest ?? []).length;
             p90s.push(rep.stats.wireP90);
             rows.push({
-              path: p,
+              path: gName === "EventGraph" ? p : `${p}::${gName}`,
               nodes: rep.stats.nodes,
               boxes: rep.stats.commentBoxes,
               p90: rep.stats.wireP90,
@@ -7800,7 +7831,7 @@ register(
           } catch {
             // A graph that cannot be read is not a graph with a clean layout. Counting it as either
             // would be a lie, so it is named separately.
-            failed.push(p.split("/").pop() ?? p);
+            failed.push(gName === "EventGraph" ? (p.split("/").pop() ?? p) : `${p.split("/").pop()}::${gName}`);
           }
         }
 
