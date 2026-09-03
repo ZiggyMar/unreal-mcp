@@ -325,6 +325,54 @@ const EXEC_ANY = /^(in|out) (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
 const isPure = (n: LayoutNode) => !(n.pins ?? []).some((l) => EXEC_ANY.test(l));
 
 /**
+ * The titled box this cluster is wired into, if there is exactly one obvious candidate.
+ *
+ * Looks both ways. A fragment is as often fed BY a boxed system as feeding one, and checking only
+ * its outgoing pins would miss half of them.
+ *
+ * Silent when several boxes are touched: "you belong in one of these four" is not an instruction,
+ * and picking the first would be the same mistake as naming a cluster after its first event.
+ */
+function homeBox(cluster: LayoutNode[], all: LayoutNode[], boxes: LayoutNode[]): string | undefined {
+  if (boxes.length === 0) return undefined;
+  const mine = new Set(cluster.map((n) => n.id ?? ""));
+  const boxOf = (n: LayoutNode) =>
+    boxes.find(
+      (b) =>
+        (n.x as number) >= (b.x as number) &&
+        (n.x as number) <= (b.x as number) + (b.width as number) &&
+        (n.y as number) >= (b.y as number) &&
+        (n.y as number) <= (b.y as number) + (b.height as number)
+    );
+  const byId = new Map(all.map((n) => [n.id ?? "", n]));
+  const found = new Set<string>();
+
+  for (const n of cluster) {
+    for (const line of n.pins ?? []) {
+      if (!line.includes("->")) continue;
+      for (const t of targetsOf(line)) {
+        if (mine.has(t)) continue;
+        const o = byId.get(t);
+        const b = o && boxOf(o);
+        if (b) found.add((b.text ?? "").split("\n")[0].trim());
+      }
+    }
+  }
+  for (const n of all) {
+    if (mine.has(n.id ?? "")) continue;
+    for (const line of n.pins ?? []) {
+      if (!line.includes("->")) continue;
+      if (!targetsOf(line).some((t) => mine.has(t))) continue;
+      const b = boxOf(n);
+      if (b) found.add((b.text ?? "").split("\n")[0].trim());
+    }
+  }
+
+  const named = [...found].filter(Boolean);
+  return named.length === 1 ? named[0] : undefined;
+}
+
+/**
  * Can `from` run its way back round to `to`, following execution only?
  *
  * If it can, the wire from `to` back to `from` closes a loop, and a loop cannot be laid out with
@@ -626,7 +674,16 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
               ? `${g.length} nodes in no comment box at ${where}, covering ${entries.length} entry points: ${label}. That is ${entries.length} systems sitting together - give each its own titled box.`
             : entry
               ? `${g.length} nodes starting at ${name(entry)} are in no comment box (${where}). They are wired as one system - give them one titled box so it can be read and moved as a unit.`
-              : `${g.length} nodes at ${where} are in no comment box and have no entry event. They are wired together, so they want one titled box naming what they do.`,
+              : // A cluster with no entry event is usually a FRAGMENT, not a system.
+                //
+                // "They want one titled box naming what they do" was wrong for two thirds of them:
+                // measured, 10 of the project's 15 no-entry clusters are wired to a system that is
+                // already boxed, so they do not want a box of their own - they want to be inside the
+                // one next door. Telling somebody to name a system that has no name, when the name
+                // is sitting on the box it belongs to, is advice that cannot be followed.
+                homeBox(g, solid, sized)
+                ? `${g.length} nodes at ${where} are in no comment box and start no system of their own - they are wired into "${homeBox(g, solid, sized)}". They belong in that box: widen it to cover them, or move them inside it.`
+                : `${g.length} nodes at ${where} are in no comment box and have no entry event, and are wired to nothing that is boxed either. Find what runs them, or give them a titled box naming what they do.`,
         nodes: g.slice(0, 8).map((n) => n.id ?? ""),
         // The rectangle to actually draw, when one can be drawn safely.
         //
