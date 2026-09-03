@@ -77,7 +77,25 @@ possible: move the box back over the nodes it still lists, rather than deleting 
 
 ## How to rebuild
 
-With the editor closed:
+**Compile it first, without going near the project.** This source has never been built, and copying
+unverified C++ into a project's `Plugins/` folder risks the editor failing to open next time —
+Unreal tries to rebuild a changed plugin on startup, and a compile error there is a locked door.
+
+```
+npm run check:engines          # RunUAT BuildPlugin, public engine APIs only, no project touched
+```
+
+**Then copy it in.** A project does not read this repo; the plugin is *copied* into
+`<Project>/Plugins/UnrealMCPBridge`, and that copy is what builds and runs. This step was missing
+from these instructions and the omission is not academic: at the time of writing the game project's
+copy was 83 lines behind this repo, so a rebuild would have compiled the old source and reported
+success while changing nothing.
+
+```
+Copy-Item -Recurse -Force UnrealMCPBridge "M:\Unreal Projects\Anti-VirusSquad\Plugins\"
+```
+
+**Then rebuild, with the editor closed:**
 
 ```
 "M:/Unreal/UE_5.6/Engine/Build/BatchFiles/Build.bat" AVSEditor Win64 Development -Project="<the .uproject>" -WaitMutex
@@ -85,3 +103,9 @@ With the editor closed:
 
 The editor currently in use is **UE 5.6** (`M:\Unreal\UE_5.6`), not the 5.8 install on `F:`. Build
 against the one the project actually opens with.
+
+To confirm which copy a project has, grep it rather than assuming:
+
+```
+grep -c resize_comment_box "<Project>/Plugins/UnrealMCPBridge/Source/UnrealMCPBridge/Private/MCPCommandHandler.cpp"
+```
