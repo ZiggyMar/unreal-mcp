@@ -7614,7 +7614,7 @@ register(
     try {
       const raw = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", { path, graphName: graph });
       const compact = capGraphSummary(raw as never, { maxNodes: 5000, positions: true });
-      const { moves, scoped } = planTidy((compact.nodes ?? []) as never, { minY, maxY, gap });
+      const { moves, scoped, heldByBox } = planTidy((compact.nodes ?? []) as never, { minY, maxY, gap });
 
       if (dryRun) {
         return jsonResult({ nextAction: "Dry run - nothing moved.", scoped, wouldMove: moves.length, moves });
@@ -7645,6 +7645,13 @@ register(
         scoped,
         moved: applied,
         straightened: moves.filter((m) => m.reason === "straighten").length,
+        // Reported, not hidden. A box owns the nodes inside it, so a move across its edge would
+        // change which system a node belongs to - the tidier refuses those and says how many.
+        ...(heldByBox > 0
+          ? {
+              heldByBox: `${heldByBox} move(s) skipped: they would have carried a node across a comment box edge, changing which system owns it. Widen the box by hand if the chain has outgrown it.`,
+            }
+          : {}),
         compacted: moves.filter((m) => m.reason === "compact").length,
         ...(failed.length > 0 ? { failed } : {}),
       });

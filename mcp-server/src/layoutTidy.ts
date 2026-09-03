@@ -37,6 +37,9 @@ export interface TidyNode {
   x?: number;
   y?: number;
   pins?: string[];
+  /** Comment boxes only: how far the box extends, so a move can be checked against its edges. */
+  width?: number;
+  height?: number;
 }
 
 export interface TidyMove {
@@ -98,7 +101,10 @@ const isPure = (n: TidyNode) => !(n.pins ?? []).some((l) => EXEC.test(l));
  * Pure: takes nodes and returns moves. The editor is touched by the caller, so the part with the
  * arithmetic in it is testable without one.
  */
-export function planTidy(all: TidyNode[], options: TidyOptions): { moves: TidyMove[]; scoped: number } {
+export function planTidy(
+  all: TidyNode[],
+  options: TidyOptions
+): { moves: TidyMove[]; scoped: number; heldByBox: number } {
   const gap = options.gap ?? 220;
   const pullOver = options.pullOver ?? 700;
   const clearX = options.clearX ?? 150;
@@ -186,13 +192,54 @@ export function planTidy(all: TidyNode[], options: TidyOptions): { moves: TidyMo
     moved.set(id, "compact");
   }
 
+  // --- a move must not change which comment box owns the node ---
+  //
+  // This pass filtered comment boxes out entirely and so had no idea they existed, while a box OWNS
+  // what is inside it. Both directions were demonstrable: straightening a five-node chain pushed its
+  // last node from x 160 to x 880, out through the right edge of a box ending at 700; and compacting
+  // pulled a node at x -5000 to x 440, INTO a box that had never held it.
+  //
+  // Either way the node quietly changes system - it now moves with a box it does not belong to, or
+  // stops moving with the one it does - and nothing in the graph shows that happened. A tidier that
+  // silently re-homes nodes is worse than an untidy graph.
+  //
+  // The fix is to refuse, not to resize. Growing the box to keep the node would be what a person
+  // does, but there is no resize in the bridge, and adding one means a C++ rebuild with the editor
+  // closed. A refused move leaves a wire slightly less straight, which is the smaller harm and an
+  // honest one, so refusals are counted and reported rather than hidden.
+  const boxes = all.filter(
+    (n) =>
+      COMMENT.test(n.type ?? "") &&
+      typeof n.x === "number" &&
+      typeof n.y === "number" &&
+      typeof n.width === "number" &&
+      typeof n.height === "number"
+  );
+  const ownersOf = (x: number, y: number) =>
+    boxes
+      .filter(
+        (b) =>
+          x >= (b.x as number) &&
+          x <= (b.x as number) + (b.width as number) &&
+          y >= (b.y as number) &&
+          y <= (b.y as number) + (b.height as number)
+      )
+      .map((b) => b.id ?? "")
+      .sort()
+      .join("|");
+
   const moves: TidyMove[] = [];
+  let heldByBox = 0;
   for (const [id, reason] of moved) {
     const p = pos.get(id);
     const was = byId.get(id);
     if (!p || !was) continue;
     if (p.x === was.x && p.y === was.y) continue; // pushed and pushed back
+    if (boxes.length > 0 && ownersOf(p.x, p.y) !== ownersOf(was.x as number, was.y as number)) {
+      heldByBox++;
+      continue;
+    }
     moves.push({ nodeId: id, x: p.x, y: p.y, reason });
   }
-  return { moves, scoped: scoped.length };
+  return { moves, scoped: scoped.length, heldByBox };
 }
