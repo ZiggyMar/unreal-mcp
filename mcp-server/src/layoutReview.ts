@@ -153,6 +153,35 @@ function splitByEntry(cluster: LayoutNode[]): Array<{ title: string; nodes: Layo
         }
       }
     }
+    // Now pull in the pure nodes that FEED this chain.
+    //
+    // The walk above only follows "->" out of the event, and a getter points INTO the chain rather
+    // than along it - a Self-Reference emits "out self -> SomeNode.self". So every variable Get,
+    // Self reference and bit of maths hanging under a system was claimed by nobody, and then blocked
+    // that system's own box as a stranger. Measured: Self-Reference was the single blocker for
+    // "Power On" and "Power Off" in BP_AntlineCable and for "Start Repair" in BP_FireWall - the same
+    // name three times over, which is what a systematic miss looks like rather than a coincidence.
+    //
+    // Repeated until stable, because a getter can feed a getter. Only PURE nodes: anything with an
+    // exec pin belongs to whichever chain runs it, and claiming those would take nodes from another
+    // system rather than reuniting a system with its own.
+    for (let pass = 0; pass < 8; pass++) {
+      const mine = new Set(own.map((n) => n.id ?? ""));
+      let added = 0;
+      for (const cand of cluster) {
+        const id = cand.id ?? "";
+        if (!id || claimed.has(id) || !isPure(cand)) continue;
+        const feedsMine = (cand.pins ?? []).some(
+          (line) => line.includes("->") && targetsOf(line).some((t) => mine.has(t) || [...mine].some((m) => m.startsWith(t) || t.startsWith(m)))
+        );
+        if (!feedsMine) continue;
+        claimed.add(id);
+        own.push(cand);
+        added++;
+      }
+      if (added === 0) break;
+    }
+
     // A lone event is a stub, not a system; a box round one node explains nothing.
     if (own.length >= 2) out.push({ title: (ev.title ?? "").trim(), nodes: own });
   }
@@ -251,6 +280,15 @@ function safeBoxAround(
 
 /** Exec pin names, which are what carry reading order. Data pins are not direction-checked. */
 const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
+
+/**
+ * Either direction, for telling a pure node from one in an execution chain.
+ *
+ * A pure node - a getter, a Self reference, a bit of maths - has no place it MUST be, and belongs
+ * to whatever reads it. A node with an exec pin belongs to the chain that runs it.
+ */
+const EXEC_ANY = /^(in|out) (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
+const isPure = (n: LayoutNode) => !(n.pins ?? []).some((l) => EXEC_ANY.test(l));
 
 /** Node ids a pin line points at. The line format is "out then -> A1B2.execute, C3D4.execute". */
 function targetsOf(line: string): string[] {

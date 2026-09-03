@@ -186,3 +186,43 @@ test("a box blocked by many nodes is not reported as almost", () => {
   const f = r.findings.find((x) => x.kind === "unboxed");
   assert.ok(!f.almost?.some((a) => /Alpha/.test(a)), "too many blockers should stay silent");
 });
+
+test("a getter that feeds a system belongs to that system", () => {
+  // The walk follows "->" out of the event, and a getter points INTO the chain rather than along it:
+  // a Self-Reference emits "out self -> SomeNode.self". So every Get, Self and bit of maths hanging
+  // under a system was claimed by nobody, then blocked that system's own box as a stranger.
+  // Measured: Self-Reference was the single blocker for "Power On" and "Power Off" in
+  // BP_AntlineCable and for "Start Repair" in BP_FireWall - the same name three times over.
+  const r = reviewLayout([
+    anchor,
+    ev("CE_Alpha", 0, 0, ["out then -> a1.execute"]),
+    fn("a1", 300, 0),
+    ev("CE_Beta", 0, 2000, ["out then -> b1.execute"]),
+    fn("b1", 300, 2000),
+    // Hangs below the Alpha chain and feeds it. No exec pins: a pure node.
+    { id: "self", title: "Self-Reference", type: "K2Node_Self", x: 150, y: 120, pins: ["out self -> a1.self"] },
+  ]);
+  const s = suggestion(r) ?? [];
+  assert.ok(s.some((b) => b.text === "Alpha"), `Alpha should get a box, got ${JSON.stringify(s.map((x) => x.text))}`);
+  // And the box must actually contain the getter it just claimed.
+  const alpha = s.find((b) => b.text === "Alpha");
+  assert.ok(150 >= alpha.x && 150 <= alpha.x + alpha.width && 120 >= alpha.y && 120 <= alpha.y + alpha.height);
+});
+
+test("a node with exec pins is never claimed as a feeder", () => {
+  // Anything with an exec pin belongs to whichever chain RUNS it. Claiming those would take nodes
+  // from another system rather than reuniting a system with its own.
+  const r = reviewLayout([
+    anchor,
+    ev("CE_Alpha", 0, 0, ["out then -> a1.execute"]),
+    fn("a1", 300, 0),
+    ev("CE_Beta", 0, 2000, ["out then -> b1.execute"]),
+    // b1 has exec pins AND feeds a1's data pin - it belongs to Beta, not Alpha.
+    { id: "b1", title: "b1", type: "K2Node_CallFunction", x: 300, y: 2000, pins: ["in execute <- CE_Beta.then", "out Value -> a1.In"] },
+  ]);
+  const s = suggestion(r) ?? [];
+  const alpha = s.find((b) => b.text === "Alpha");
+  if (alpha) {
+    assert.ok(!(2000 >= alpha.y && 2000 <= alpha.y + alpha.height), "Alpha's box swallowed Beta's node");
+  }
+});
