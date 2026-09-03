@@ -412,3 +412,85 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
     },
   };
 }
+
+/**
+ * What this project's layout actually looks like, measured rather than assumed.
+ *
+ * Every threshold in the reviewer above started as a guess, and the ones that were wrong were wrong
+ * because nothing here knew what normal looked like in this codebase. The same gap hurts a model
+ * BUILDING a graph: told to "use comment boxes", it has no idea whether a box here holds 3 nodes or
+ * 30, or whether titles are `Firing` or `GUN VFX SPAWN NODE, CAN ADD MORE`.
+ *
+ * These are per-graph tallies, kept as raw counts so a sweep can add them up across a project and
+ * take medians over the whole thing. A single graph is not a convention.
+ */
+export interface StyleSample {
+  nodes: number;
+  nodesInBoxes: number;
+  boxes: number;
+  /** Direct node count per box, for a median over the project. */
+  perBox: number[];
+  /** Word counts of box titles, and how many are shouted in caps. */
+  titleWords: number[];
+  upperTitles: number;
+  /** Boxes wholly inside another box - the outer-system, inner-part convention. */
+  nested: number;
+}
+
+export function measureStyle(nodes: LayoutNode[]): StyleSample {
+  const placed = nodes.filter((n) => typeof n.x === "number" && typeof n.y === "number");
+  const boxes = placed.filter(
+    (n) => COMMENT_TYPE.test(n.type ?? "") && typeof n.width === "number" && typeof n.height === "number"
+  );
+  const real = placed.filter((n) => !COMMENT_TYPE.test(n.type ?? "") && !KNOT_TYPE.test(n.type ?? ""));
+
+  const holds = (b: LayoutNode, n: LayoutNode) =>
+    (n.x as number) >= (b.x as number) &&
+    (n.x as number) <= (b.x as number) + (b.width as number) &&
+    (n.y as number) >= (b.y as number) &&
+    (n.y as number) <= (b.y as number) + (b.height as number);
+
+  const inAny = real.filter((n) => boxes.some((b) => holds(b, n)));
+
+  // DIRECT contents: a node in a nested box belongs to the inner one. Counting it for the outer box
+  // too would make every outer box look enormous and teach exactly the wrong lesson about size.
+  const perBox: number[] = [];
+  for (const b of boxes) {
+    const mine = real.filter((n) => {
+      if (!holds(b, n)) return false;
+      return !boxes.some(
+        (o) =>
+          o !== b &&
+          holds(o, n) &&
+          (o.width as number) * (o.height as number) < (b.width as number) * (b.height as number)
+      );
+    });
+    perBox.push(mine.length);
+  }
+
+  const titleWords: number[] = [];
+  let upperTitles = 0;
+  for (const b of boxes) {
+    const title = ((b.text ?? "").split("\n")[0] ?? "").trim();
+    if (!title) continue;
+    titleWords.push(title.split(/\s+/).length);
+    if (title === title.toUpperCase() && /[A-Z]/.test(title)) upperTitles++;
+  }
+
+  let nested = 0;
+  for (const a of boxes) {
+    for (const b of boxes) {
+      if (a === b) continue;
+      if (
+        (b.x as number) >= (a.x as number) &&
+        (b.y as number) >= (a.y as number) &&
+        (b.x as number) + (b.width as number) <= (a.x as number) + (a.width as number) &&
+        (b.y as number) + (b.height as number) <= (a.y as number) + (a.height as number)
+      ) {
+        nested++;
+      }
+    }
+  }
+
+  return { nodes: real.length, nodesInBoxes: inAny.length, boxes: boxes.length, perBox, titleWords, upperTitles, nested };
+}

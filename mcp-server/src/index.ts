@@ -28,7 +28,7 @@ import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
-import { reviewLayout } from "./layoutReview.js";
+import { reviewLayout, measureStyle, type StyleSample } from "./layoutReview.js";
 import { planTidy } from "./layoutTidy.js";
 import { boxForBatch, placeNewNodes } from "./placeNewNodes.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
@@ -7695,6 +7695,7 @@ register(
         const failed: string[] = [];
         const totals: Record<string, number> = {};
         const p90s: number[] = [];
+        const style: StyleSample[] = [];
 
         for (const p of paths) {
           try {
@@ -7705,6 +7706,7 @@ register(
             const c = capGraphSummary(one as never, { maxNodes: 5000, positions: true });
             const rep = reviewLayout((c.nodes ?? []) as never, { minY, maxY, minX, maxX, maxWire });
             if (rep.stats.nodes === 0) continue;
+            style.push(measureStyle((c.nodes ?? []) as never));
             const faults: Record<string, number> = {};
             for (const f of rep.findings) faults[f.kind] = (faults[f.kind] ?? 0) + 1;
             for (const [k, v] of Object.entries(faults)) totals[k] = (totals[k] ?? 0) + v;
@@ -7730,6 +7732,29 @@ register(
         const medianP90 = sortedP90.length ? sortedP90[Math.floor(sortedP90.length / 2)] : 0;
         const worst = [...rows].sort((a, b) => b.p90 - a.p90)[0];
 
+        // The project's house style, measured. Told to "use comment boxes", a model has no idea
+        // whether a box here holds 3 nodes or 30, or whether titles read "Firing" or
+        // "GUN VFX SPAWN NODE, CAN ADD MORE" - so it invents a style, and the result reads as
+        // somebody else's code sitting inside yours. These numbers are what to match.
+        const med = (xs: number[]) => {
+          if (xs.length === 0) return 0;
+          const s = [...xs].sort((a, b) => a - b);
+          return s[Math.floor(s.length / 2)];
+        };
+        const allPerBox = style.flatMap((s) => s.perBox).filter((n) => n > 0);
+        const allTitles = style.flatMap((s) => s.titleWords);
+        const totalNodes = style.reduce((t, s) => t + s.nodes, 0);
+        const totalBoxed = style.reduce((t, s) => t + s.nodesInBoxes, 0);
+        const totalBoxes = style.reduce((t, s) => t + s.boxes, 0);
+        const conventions = {
+          nodesInABox: totalNodes ? `${Math.round((100 * totalBoxed) / totalNodes)}%` : "0%",
+          nodesPerBox: { median: med(allPerBox), p90: allPerBox.length ? [...allPerBox].sort((a, b) => a - b)[Math.floor(allPerBox.length * 0.9)] : 0 },
+          boxTitleWords: med(allTitles),
+          shoutedTitles: `${totalBoxes ? Math.round((100 * style.reduce((t, s) => t + s.upperTitles, 0)) / totalBoxes) : 0}%`,
+          nestedBoxes: style.reduce((t, s) => t + s.nested, 0),
+          wireP90: medianP90,
+        };
+
         const shown = includeClean ? [...dirty, ...clean] : dirty;
         return jsonResult({
           nextAction:
@@ -7741,6 +7766,7 @@ register(
           totals,
           // The project's own baseline, so a caller can tell "long for this project" from "long".
           wireP90Median: medianP90,
+          conventions,
           ...(worst && worst.p90 > medianP90 * 3
             ? { outlier: `${worst.path.split("/").pop()} has wire p90 ${worst.p90} against a project median of ${medianP90}.` }
             : {}),
