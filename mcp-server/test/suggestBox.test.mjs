@@ -18,9 +18,11 @@ test("a cluster with room gets a rectangle ready to draw", () => {
     fn("a", 300, 0, ["out then -> b.execute"]),
     fn("b", 600, 0),
   ]);
-  const s = suggestion(r);
+  const s = (suggestion(r) ?? [])[0];
   assert.ok(s, "a safe box should be offered");
-  assert.equal(s.text, "ApplyTicketSkin");
+  // House style, not the raw node title. Suggestions were offering "CE_Client_ShowDamageNumber"
+  // and "Event On Enter Game" as box names in a project whose boxes are called "Movement".
+  assert.equal(s.text, "Apply Ticket Skin");
   // It must actually contain the cluster, node bodies included.
   assert.ok(s.x < 0 && s.y < 0);
   assert.ok(s.x + s.width > 600 + 260, "wide enough for the last node's body");
@@ -96,7 +98,7 @@ test("padding shrinks rather than giving up", () => {
     ev("Alpha", 0, 0, ["out then -> a.execute"]),
     fn("a", 300, 0),
   ]);
-  const s = suggestion(r);
+  const s = (suggestion(r) ?? [])[0];
   assert.ok(s, "it should find a tighter fit");
   assert.ok(s.x >= -120, `padding should have shrunk, got x ${s.x}`);
 });
@@ -108,10 +110,49 @@ test("a suggested box never overlaps the boxes it was measured against", () => {
     ev("Alpha", 0, 0, ["out then -> n.execute"]),
     fn("n", 300, 0),
   ];
-  const s = suggestion(reviewLayout(nodes));
+  const s = (suggestion(reviewLayout(nodes)) ?? [])[0];
   assert.ok(s);
   for (const b of nodes.filter((n) => n.type === "EdGraphNode_Comment")) {
     const overlaps = s.x < b.x + b.width && b.x < s.x + s.width && s.y < b.y + b.height && b.y < s.y + s.height;
     assert.ok(!overlaps, `suggested box overlaps ${b.text}`);
   }
+});
+
+test("a cluster of several systems gets one box EACH, not none", () => {
+  // Refusing multi-entry clusters outright left the largest bucket unserved: 53 of 100 unboxed
+  // findings project-wide were multi-entry, against 20 unnameable and 12 with no room.
+  const r = reviewLayout([
+    anchor,
+    ev("CE_ServerSound", 0, 0, ["out then -> s1.execute"]), fn("s1", 300, 0),
+    ev("CE_MC_Sound", 0, 400, ["out then -> m1.execute"]), fn("m1", 300, 400),
+    ev("CE_ClientSound", 0, 800, ["out then -> c1.execute"]), fn("c1", 300, 800),
+  ]);
+  const s = suggestion(r) ?? [];
+  assert.equal(s.length, 3);
+  assert.deepEqual(s.map((b) => b.text), ["Server Sound", "MC Sound", "Client Sound"]);
+});
+
+test("boxes suggested together never overlap each other", () => {
+  // Each must clear the ones already suggested here, not just the ones on the canvas - otherwise
+  // the fix hands back the exact fault it exists to prevent.
+  const r = reviewLayout([
+    anchor,
+    ev("CE_Alpha", 0, 0, ["out then -> a1.execute"]), fn("a1", 300, 0),
+    ev("CE_Beta", 0, 300, ["out then -> b1.execute"]), fn("b1", 300, 300),
+  ]);
+  const s = suggestion(r) ?? [];
+  for (let i = 0; i < s.length; i++) {
+    for (let j = i + 1; j < s.length; j++) {
+      const p = s[i], q = s[j];
+      const share = p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height;
+      assert.ok(!share, `${p.text} overlaps ${q.text}`);
+    }
+  }
+});
+
+test("a lone event is not offered a box of its own", () => {
+  // A box round one node explains nothing; that is a stub, not a system.
+  const r = reviewLayout([anchor, ev("CE_Alpha", 0, 0), ev("CE_Beta", 0, 400, ["out then -> b1.execute"]), fn("b1", 300, 400)]);
+  const s = suggestion(r) ?? [];
+  assert.deepEqual(s.map((b) => b.text), ["Beta"]);
 });
