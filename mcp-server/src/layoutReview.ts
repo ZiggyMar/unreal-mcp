@@ -59,7 +59,8 @@ export interface LayoutFinding {
     | "untitledBox"
     | "overlappingBoxes"
     | "emptyBox"
-    | "machineLaidOut";
+    | "machineLaidOut"
+    | "notJudged";
   /** One sentence a person can act on. */
   detail: string;
   nodes: string[];
@@ -136,6 +137,23 @@ const COMMENT_TYPE = /Comment/i;
  * behaviour. They still count for wire LENGTH, because bending a wire does not shorten it.
  */
 const KNOT_TYPE = /Knot/i;
+
+/**
+ * An animation state machine is a diagram, not a chain of nodes.
+ *
+ * Its "nodes" are states and transition rules - AnimStateNode, AnimStateTransitionNode - arranged as
+ * a web where every state can reach every other. Nothing this file measures applies: there is no
+ * reading order to run rightward, a transition rule is a tiny label rather than a node 100 wide, and
+ * a comment box round a state machine would group nothing.
+ *
+ * Measured when the function graphs were first audited: of 18 "stacked" findings, 15 were transition
+ * rules in ABP_NewPlayer's Locomotion and Aiming graphs, sitting 30 to 99 apart the way a state
+ * diagram sits. Judging them by Blueprint rules produced fifteen faults in code that has none.
+ *
+ * So a graph made of these is described rather than assessed. A checker that does not understand a
+ * graph should say so, not invent findings about it.
+ */
+const ANIM_STATE_TYPE = /^Anim(State|Graph|Notify)/i;
 
 /**
  * Split a cluster into one group per entry event, each owning what runs from it.
@@ -473,6 +491,26 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   const boxes = placed.filter((n) => COMMENT_TYPE.test(n.type ?? ""));
   const real = placed.filter((n) => !COMMENT_TYPE.test(n.type ?? ""));
   const byId = new Map(real.map((n) => [n.id ?? "", n]));
+
+  // A state machine is described, not assessed. Half its nodes being Anim* states is enough: a
+  // Blueprint graph never contains one, so there is no mixed case to be careful about.
+  const animNodes = real.filter((n) => ANIM_STATE_TYPE.test(n.type ?? "")).length;
+  if (real.length > 0 && animNodes / real.length >= 0.5) {
+    return {
+      findings: [
+        {
+          kind: "notJudged",
+          detail:
+            `This is an animation state machine - ${animNodes} of its ${real.length} nodes are states or transition ` +
+            `rules - and none of the rules here describe one. States are a web, not a chain: there is no reading ` +
+            `order to run rightward, a transition rule is a label rather than a node, and a comment box round it ` +
+            `would group nothing. Nothing is reported because nothing here can judge it.`,
+          nodes: [],
+        },
+      ],
+      stats: { nodes: real.length, commentBoxes: boxes.length, execWires: 0, backwardWires: 0, wireMedian: 0, wireP90: 0, wireMax: 0 },
+    };
+  }
 
   const findings: LayoutFinding[] = [];
   let execWires = 0;

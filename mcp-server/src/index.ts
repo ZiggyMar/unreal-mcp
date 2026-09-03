@@ -7915,7 +7915,11 @@ register(
       // not need to read a list of nothing.
       return jsonResult({
         nextAction:
-          report.findings.length > 0
+          // A decline is not a fault. Calling it one would tell a caller to go and fix an animation
+          // state machine with move_node, which is the opposite of what the finding says.
+          report.findings.some((f) => f.kind === "notJudged")
+            ? report.findings[0].detail
+            : report.findings.length > 0
             ? `${report.findings.length} layout fault(s). Fix with unreal_organize_graph move_node / add_comment_box.`
             : report.stats.commentBoxes > 0
               ? "Layout is clean: flow runs rightward, nothing is stacked, every node is in a box."
