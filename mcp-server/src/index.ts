@@ -7846,7 +7846,47 @@ register(
         // anim graphs unboxed. So they are counted apart instead - neither accused nor credited.
         const clean = rows.filter((r) => r.total === 0 && r.boxes > 0);
         const unchecked = rows.filter((r) => r.total === 0 && r.boxes === 0);
-        const dirty = rows.filter((r) => r.total > 0).sort((a, b) => b.total - a.total || b.nodes - a.nodes);
+        // "Worst first" by COUNT stopped meaning worst.
+        //
+        // Several checks were taught to state a cause once instead of listing its symptoms, so a
+        // graph with one machineLaidOut finding - every node moved, eleven boxes stranded, damage no
+        // compile shows and geometry cannot undo - now scores lower than a tidy graph with sixteen
+        // "this system wants a comment box". Counting findings ranks by how talkative a check is.
+        //
+        // These weights are the severity order this session actually established, by what each fault
+        // costs: a relayout is unrecoverable, a half-overlap corrupts both boxes the moment either is
+        // dragged, a backward chain makes a reader backtrack, a stacked node is invisible until
+        // something is moved, and an unboxed system is untidy but harmless. notJudged is not a fault
+        // at all and must never lift a graph up the list.
+        const SEVERITY: Record<string, number> = {
+          machineLaidOut: 100,
+          overlappingBoxes: 40,
+          backwardFlow: 20,
+          stacked: 15,
+          emptyBox: 10,
+          longWire: 4,
+          untitledBox: 4,
+          unboxed: 2,
+          notJudged: 0,
+        };
+        // Ranked by the WORST fault present, then by the weighted total.
+        //
+        // Summing alone is still counting: five half-overlaps scored 200 and put BP_Player above
+        // GM_Gameplay's relayout at 100, and that is the wrong way round. An overlap is recoverable
+        // by dragging a box; a relayout moved every node and destroyed the only record of which box
+        // owned what. One unrecoverable fault outranks five recoverable ones, however many.
+        const worstFault = (r: { faults: Record<string, number> }) =>
+          Object.keys(r.faults).reduce((m, k) => Math.max(m, SEVERITY[k] ?? 1), 0);
+        const weight = (r: { faults: Record<string, number> }) =>
+          Object.entries(r.faults).reduce((t, [k, n]) => t + (SEVERITY[k] ?? 1) * n, 0);
+        // A graph whose only finding is notJudged has nothing wrong with it - it is a state machine
+        // this checker declines to assess. It must not be listed as faulty, and it must not vanish
+        // from the accounting either: that hole was already opened once by splitting `unchecked` out
+        // of `clean` and left 82 graphs counted but unlistable.
+        const declined = rows.filter((r) => r.total > 0 && worstFault(r) === 0);
+        const dirty = rows
+          .filter((r) => r.total > 0 && worstFault(r) > 0)
+          .sort((a, b) => worstFault(b) - worstFault(a) || weight(b) - weight(a) || b.nodes - a.nodes);
         const sortedP90 = [...p90s].sort((a, b) => a - b);
         const medianP90 = sortedP90.length ? sortedP90[Math.floor(sortedP90.length / 2)] : 0;
         const worst = [...rows].sort((a, b) => b.p90 - a.p90)[0];
@@ -7902,7 +7942,7 @@ register(
         // LISTING incomplete: those 82 graphs were in neither list, so includeClean could report a
         // number nobody could then enumerate. A category you can count and not name is worse than
         // one you never separated.
-        const shown = includeClean ? [...dirty, ...clean, ...unchecked] : dirty;
+        const shown = includeClean ? [...dirty, ...declined, ...clean, ...unchecked] : dirty;
         return jsonResult({
           nextAction:
             dirty.length === 0
@@ -7915,6 +7955,8 @@ register(
           clean: clean.length,
           // Not a fault and not a pass: nothing to check. Named so the clean count means something.
           ...(unchecked.length > 0 ? { noBoxesToCheck: unchecked.length } : {}),
+          // State machines and the like: read, understood to be outside these rules, and not faulted.
+          ...(declined.length > 0 ? { notJudged: declined.length } : {}),
           totals,
           // What could be drawn right now, already checked against every box and node in its graph.
           ...(boxesReady > 0 ? { boxesReady } : {}),
