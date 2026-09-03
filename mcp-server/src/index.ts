@@ -7651,9 +7651,20 @@ register(
       "scrambled wire, and the person who has to edit it next pays for that. Measured on a real project: the " +
       "hand-maintained code had 306 execution wires with 0 running backwards; nodes added by a model had 4.\n\n" +
       "`minY`/`maxY` scope it to one system instead of a whole graph. Fix with unreal_organize_graph " +
-      "(move_node, add_comment_box); this only reports, because moving somebody else's nodes is their call.",
+      "(move_node, add_comment_box); this only reports, because moving somebody else's nodes is their call.\n\n" +
+      "**`pathPrefix` instead of `path` sweeps a whole folder**, worst first, with the project's own wire p90 as " +
+      "the baseline. One review says whether that graph is tidy; the sweep says which graph is the problem. " +
+      "Measured: 148 graphs, 85 clean, one outlier at p90 2840 against a median of 464.",
     inputSchema: {
-      path: z.string().describe('Blueprint path, e.g. "/Game/Characters/BP_Player".'),
+      path: z.string().optional().describe('Blueprint path, e.g. "/Game/Characters/BP_Player". One of path or pathPrefix.'),
+      pathPrefix: z
+        .string()
+        .optional()
+        .describe('Audit every blueprint under this folder instead of one, e.g. "/Game/AntiVirusSquad". Ranks them worst first.'),
+      includeClean: z
+        .boolean()
+        .optional()
+        .describe("Sweep mode: list graphs with no faults too. Off by default - they are counted, not listed."),
       graphName: z.string().optional().describe('Graph to audit. Defaults to "EventGraph".'),
       minY: z.number().optional().describe("Only audit nodes at or below this Y - scopes it to one system."),
       maxY: z.number().optional().describe("Only audit nodes at or above this Y."),
@@ -7662,10 +7673,90 @@ register(
       maxWire: z.number().optional().describe("A wire longer than this is reported. Defaults to 1600."),
     },
   },
-  async ({ path, graphName, minY, maxY, minX, maxX, maxWire }) => {
+  async ({ path, pathPrefix, includeClean, graphName, minY, maxY, minX, maxX, maxWire }) => {
     try {
+      if (!path && !pathPrefix) {
+        return errorResult(new Error("Give either path (one blueprint) or pathPrefix (sweep a folder)."));
+      }
+
+      // --- sweep mode ---
+      //
+      // Reviewing graphs one at a time answers "is this one tidy". It cannot answer "which one is the
+      // problem", and it has no idea what normal looks like in this project - so every threshold in
+      // the reviewer had to be guessed, and two of them were guessed wrong.
+      //
+      // The sweep answers both. Measured over 148 graphs: 85 clean, wire p90 clustered at 400-900,
+      // and GM_Gameplay alone at 2840 with 44 long wires. No single review could show that, and the
+      // outlier is the only graph in the project actually worth rewriting.
+      if (pathPrefix) {
+        const listed = await bridge.send<{ blueprints?: Array<{ path?: string }> }>("list_blueprints", { pathPrefix });
+        const paths = (listed.blueprints ?? []).map((b) => b.path).filter((p): p is string => !!p);
+        const rows: Array<{ path: string; nodes: number; boxes: number; p90: number; faults: Record<string, number>; total: number }> = [];
+        const failed: string[] = [];
+        const totals: Record<string, number> = {};
+        const p90s: number[] = [];
+
+        for (const p of paths) {
+          try {
+            const one = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
+              path: p,
+              graphName: graphName ?? "EventGraph",
+            });
+            const c = capGraphSummary(one as never, { maxNodes: 5000, positions: true });
+            const rep = reviewLayout((c.nodes ?? []) as never, { minY, maxY, minX, maxX, maxWire });
+            if (rep.stats.nodes === 0) continue;
+            const faults: Record<string, number> = {};
+            for (const f of rep.findings) faults[f.kind] = (faults[f.kind] ?? 0) + 1;
+            for (const [k, v] of Object.entries(faults)) totals[k] = (totals[k] ?? 0) + v;
+            p90s.push(rep.stats.wireP90);
+            rows.push({
+              path: p,
+              nodes: rep.stats.nodes,
+              boxes: rep.stats.commentBoxes,
+              p90: rep.stats.wireP90,
+              faults,
+              total: rep.findings.length,
+            });
+          } catch {
+            // A graph that cannot be read is not a graph with a clean layout. Counting it as either
+            // would be a lie, so it is named separately.
+            failed.push(p.split("/").pop() ?? p);
+          }
+        }
+
+        const clean = rows.filter((r) => r.total === 0);
+        const dirty = rows.filter((r) => r.total > 0).sort((a, b) => b.total - a.total || b.nodes - a.nodes);
+        const sortedP90 = [...p90s].sort((a, b) => a - b);
+        const medianP90 = sortedP90.length ? sortedP90[Math.floor(sortedP90.length / 2)] : 0;
+        const worst = [...rows].sort((a, b) => b.p90 - a.p90)[0];
+
+        const shown = includeClean ? [...dirty, ...clean] : dirty;
+        return jsonResult({
+          nextAction:
+            dirty.length === 0
+              ? `All ${rows.length} graphs are clean.`
+              : `${dirty.length} of ${rows.length} graphs have layout faults. Worst first below; review one with path to see the detail.`,
+          graphs: rows.length,
+          clean: clean.length,
+          totals,
+          // The project's own baseline, so a caller can tell "long for this project" from "long".
+          wireP90Median: medianP90,
+          ...(worst && worst.p90 > medianP90 * 3
+            ? { outlier: `${worst.path.split("/").pop()} has wire p90 ${worst.p90} against a project median of ${medianP90}.` }
+            : {}),
+          ...(failed.length > 0 ? { unreadable: failed } : {}),
+          rows: shown.slice(0, 60).map((r) => ({
+            path: r.path,
+            nodes: r.nodes,
+            boxes: r.boxes,
+            p90: r.p90,
+            ...(r.total > 0 ? { faults: r.faults } : {}),
+          })),
+        });
+      }
+
       const raw = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
-        path,
+        path: path as string,
         graphName: graphName ?? "EventGraph",
       });
       // Through the same compaction the read tool uses, so positions and box sizes arrive in the
