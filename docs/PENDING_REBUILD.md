@@ -116,3 +116,18 @@ To confirm which copy a project has, grep it rather than assuming:
 ```
 grep -c resize_comment_box "<Project>/Plugins/UnrealMCPBridge/Source/UnrealMCPBridge/Private/MCPCommandHandler.cpp"
 ```
+
+## Retitling a comment box works today, without the rebuild
+
+`organize_graph` in the project's plugin copy accepts only `set_node_comment`, `add_comment_box` and
+`move_node` — `resize_comment_box` is one of the two changes waiting on the rebuild, and asking for
+it there returns `unknown_action`.
+
+A comment box IS a node, though, and its text is its comment. So `set_node_comment` with the box's
+node id retitles it, which is what `auto_layout_graph` leaves you needing: it names a box after the
+entry event it found ("Event BeginPlay"), and the house style wants a feature name. Measured on
+BP_TrailerDirector and BP_TrailerFighter today — both went from an auto-named box to "Start The
+Round" and "Fight The Nearest Virus" that way.
+
+What still needs the rebuild is GROWING a box. Without `resize_comment_box` the only way to bring a
+stray node inside is to move the NODE, which is fine for one or two and wrong for a system.
