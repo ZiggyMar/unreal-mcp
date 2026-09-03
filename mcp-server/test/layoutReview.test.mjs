@@ -108,3 +108,18 @@ test("comment boxes are counted separately from real nodes", () => {
   assert.equal(r.stats.nodes, 1);
   assert.equal(r.stats.commentBoxes, 1);
 });
+
+test("an X band separates a system built beside other code, not just below it", () => {
+  // A system built to the RIGHT of somebody's work shares its rows, so a Y band alone cannot tell
+  // the two apart - scoping one returned twelve findings that all belonged to the other.
+  const theirs = [node("t1", 0, 100, { pins: ["out then -> t2.execute"] }), node("t2", -400, 100)];
+  const mine = [node("m1", 5000, 100, { pins: ["out then -> m2.execute"] }), node("m2", 5300, 100)];
+  const r = reviewLayout([...theirs, ...mine], { minX: 4000 });
+  assert.equal(r.stats.nodes, 2);
+  assert.equal(r.stats.backwardWires, 0, "their backward wire is out of scope and must not be counted");
+});
+
+test("stats count only what is in scope, in both axes", () => {
+  const all = [node("a", 0, 0), node("b", 5000, 0), node("c", 5000, 9000)];
+  assert.equal(reviewLayout(all, { minX: 4000, maxY: 100 }).stats.nodes, 1);
+});

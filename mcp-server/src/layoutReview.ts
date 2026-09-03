@@ -77,6 +77,13 @@ export interface LayoutOptions {
   /** Only look at nodes in this Y band - lets a caller audit one system rather than a whole graph. */
   minY?: number;
   maxY?: number;
+  /**
+   * And in this X band. A system built to the RIGHT of somebody's code shares its rows, so a Y band
+   * alone cannot separate the two - auditing one returned twelve findings that all belonged to the
+   * other.
+   */
+  minX?: number;
+  maxX?: number;
   /** A wire longer than this reads as a canvas-crossing run. */
   maxWire?: number;
   /** Nodes closer than this in both axes are visually on top of each other. */
@@ -108,6 +115,8 @@ function targetsOf(line: string): string[] {
 export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): LayoutReport {
   const minY = options.minY ?? -Infinity;
   const maxY = options.maxY ?? Infinity;
+  const minX = options.minX ?? -Infinity;
+  const maxX = options.maxX ?? Infinity;
   // 2000, from measuring a hand-maintained graph rather than from taste: its wires run to 3632, so a
   // tighter limit would fail the very code being used as the standard. Length alone is not a fault -
   // the p90 in the stats is the number that separates a tidy layout from a sprawling one.
@@ -115,7 +124,13 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   const tooClose = options.tooClose ?? 40;
 
   const placed = nodes.filter(
-    (n) => typeof n.x === "number" && typeof n.y === "number" && (n.y as number) >= minY && (n.y as number) <= maxY
+    (n) =>
+      typeof n.x === "number" &&
+      typeof n.y === "number" &&
+      (n.y as number) >= minY &&
+      (n.y as number) <= maxY &&
+      (n.x as number) >= minX &&
+      (n.x as number) <= maxX
   );
   const boxes = placed.filter((n) => COMMENT_TYPE.test(n.type ?? ""));
   const real = placed.filter((n) => !COMMENT_TYPE.test(n.type ?? ""));

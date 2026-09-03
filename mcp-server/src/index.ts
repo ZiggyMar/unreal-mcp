@@ -7590,10 +7590,12 @@ register(
       graphName: z.string().optional().describe('Graph to audit. Defaults to "EventGraph".'),
       minY: z.number().optional().describe("Only audit nodes at or below this Y - scopes it to one system."),
       maxY: z.number().optional().describe("Only audit nodes at or above this Y."),
+      minX: z.number().optional().describe("And at or right of this X. A system built beside other code shares its rows, so Y alone cannot separate them."),
+      maxX: z.number().optional().describe("And at or left of this X."),
       maxWire: z.number().optional().describe("A wire longer than this is reported. Defaults to 1600."),
     },
   },
-  async ({ path, graphName, minY, maxY, maxWire }) => {
+  async ({ path, graphName, minY, maxY, minX, maxX, maxWire }) => {
     try {
       const raw = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
         path,
@@ -7602,15 +7604,21 @@ register(
       // Through the same compaction the read tool uses, so positions and box sizes arrive in the
       // shape the reviewer expects rather than the bridge's raw form.
       const compact = capGraphSummary(raw as never, { maxNodes: 5000, positions: true });
-      const report = reviewLayout((compact.nodes ?? []) as never, { minY, maxY, maxWire });
+      const report = reviewLayout((compact.nodes ?? []) as never, { minY, maxY, minX, maxX, maxWire });
 
       // The counts first: "0 backward of 44" is the headline, and a caller who sees it clean does
       // not need to read a list of nothing.
       return jsonResult({
         nextAction:
-          report.findings.length === 0
-            ? "Layout is clean: flow runs rightward, nothing is stacked, every node is in a box."
-            : `${report.findings.length} layout fault(s). Fix with unreal_organize_graph move_node / add_comment_box.`,
+          report.findings.length > 0
+            ? `${report.findings.length} layout fault(s). Fix with unreal_organize_graph move_node / add_comment_box.`
+            : report.stats.commentBoxes > 0
+              ? "Layout is clean: flow runs rightward, nothing is stacked, every node is in a box."
+              : // Do not claim what was never checked. With no comment box in scope, containment is
+                // unknowable, and "every node is in a box" would read as a pass for a system that has
+                // no box at all - which is itself the fault worth reporting.
+                "Flow runs rightward and nothing is stacked, but there is no comment box in scope: " +
+                "either widen the scope, or group this system with unreal_organize_graph add_comment_box.",
         ...report.stats,
         findings: report.findings,
       });
