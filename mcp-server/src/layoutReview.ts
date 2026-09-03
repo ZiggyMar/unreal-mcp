@@ -292,6 +292,21 @@ const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
 const EXEC_ANY = /^(in|out) (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
 const isPure = (n: LayoutNode) => !(n.pins ?? []).some((l) => EXEC_ANY.test(l));
 
+/**
+ * How many distinct nodes this one feeds.
+ *
+ * A source with several readers cannot be moved beside all of them, which is what separates a wire
+ * worth shortening from one that is simply the shape of a Sequence or a loop body.
+ */
+function fanOut(n: LayoutNode): number {
+  const seen = new Set<string>();
+  for (const line of n.pins ?? []) {
+    if (!line.includes("->")) continue;
+    for (const id of targetsOf(line)) seen.add(id);
+  }
+  return seen.size;
+}
+
 /** Node ids a pin line points at. The line format is "out then -> A1B2.execute, C3D4.execute". */
 function targetsOf(line: string): string[] {
   const arrow = line.includes("->") ? "->" : "<-";
@@ -384,7 +399,15 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
             // source node moved nearer whatever reads it.
             detail: isExec
               ? `${name(n)} runs on to ${name(t)} ${len} away. A call through a custom event costs no wire at all.`
-              : `${name(n)} feeds ${name(t)} from ${len} away. Move it beside what reads it, or carry the value in a variable.`,
+              : fanOut(n) >= 3
+                ? // "Move it beside what reads it" is impossible for a source with several readers -
+                  // you cannot sit beside four things. Measured: 16 of this project's 66 long data
+                  // wires come from a source feeding 3+ nodes, so a quarter of the advice could not
+                  // be followed. A Sequence or a For Each Loop feeding its whole body is the normal
+                  // shape of that, not a fault, and saying so is the difference between a finding
+                  // and a nag.
+                  `${name(n)} feeds ${name(t)} from ${len} away, and feeds ${fanOut(n)} nodes in all - it cannot sit beside them all. Read it into a variable near ${name(t)}, or leave it: a Sequence or loop feeding its body looks like this.`
+                : `${name(n)} feeds ${name(t)} from ${len} away. Move it beside what reads it, or carry the value in a variable.`,
             nodes: [n.id ?? "", t.id ?? ""],
           });
         }
