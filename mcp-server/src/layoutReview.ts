@@ -46,7 +46,7 @@ export interface LayoutNode {
 
 export interface LayoutFinding {
   /** Short machine-readable kind, so a caller can filter. */
-  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire" | "untitledBox" | "overlappingBoxes";
+  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire" | "untitledBox" | "overlappingBoxes" | "emptyBox";
   /** One sentence a person can act on. */
   detail: string;
   nodes: string[];
@@ -389,6 +389,42 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // Half the convention is the box; the other half is what it says. In this project every system
   // carries a name a person navigates by - Vaccum, Inputs, Healing, Spawn Ping - and an untitled box
   // draws a rectangle round some nodes while explaining nothing about them.
+  // --- a titled box with nothing in it ---
+  //
+  // Found by accident and then measured: 17 of this project's 377 boxes hold nothing at all, and
+  // ELEVEN of those are in one graph - the same graph the sweep flags as the outlier at wire p90
+  // 2840. That graph has 63 of its 206 nodes at x=0 and only 21 distinct x values across a 6928-unit
+  // span, which is column-grid output from an automatic layout, not a hand-built graph.
+  //
+  // So the boxes are not decoration somebody forgot to fill. A relayout moved the nodes and left the
+  // boxes where they were, and "Countdown", "Win Screen" and "Begin Play" now name empty rectangles
+  // while the code they described sits elsewhere. That is the box-ownership problem at full scale,
+  // and it is invisible to every other check here: the nodes are fine, the boxes are fine, and the
+  // relationship between them is gone.
+  //
+  // A box holding only other boxes is NOT empty - that is the nesting convention, an outer box whose
+  // parts each have their own.
+  for (const b of sized) {
+    const title = (b.text ?? "").split("\n")[0].trim();
+    if (!title) continue; // untitled boxes are reported below, and one finding per box is enough
+    const holdsAnything = placed.some((n) => {
+      if (n === b) return false;
+      if (KNOT_TYPE.test(n.type ?? "")) return false;
+      return (
+        (n.x as number) >= (b.x as number) &&
+        (n.x as number) <= (b.x as number) + (b.width as number) &&
+        (n.y as number) >= (b.y as number) &&
+        (n.y as number) <= (b.y as number) + (b.height as number)
+      );
+    });
+    if (holdsAnything) continue;
+    findings.push({
+      kind: "emptyBox",
+      detail: `"${title}" is a comment box with nothing inside it (${b.width}x${b.height} at ${b.x}, ${b.y}). Either the nodes it described were moved out from under it - a whole-graph relayout does this - or it is a leftover. Delete it or put its system back inside it.`,
+      nodes: [b.id ?? ""],
+    });
+  }
+
   for (const b of boxes) {
     const title = (b.text ?? "").trim();
     if (title.length > 0) continue;
