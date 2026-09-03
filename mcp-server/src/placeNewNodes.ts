@@ -141,3 +141,54 @@ export function placeNewNodes(
   }
   return out;
 }
+
+/**
+ * A comment box for a batch that arrived as a new system, or nothing.
+ *
+ * The project's convention is that every system sits in a titled box, and the title is how a person
+ * navigates a large graph. A batch built into an existing chain does not need one - it belongs to
+ * whatever already owns that chain - so this only offers a box for a batch that landed in clear
+ * canvas on its own, which is the case that would otherwise be loose nodes forever.
+ *
+ * Named after the event that starts it, because that is what the system IS. A batch with no entry
+ * event gets no box: an untitled box groups nodes while explaining nothing, which review_layout
+ * reports as a fault in its own right.
+ */
+export function boxForBatch(
+  all: PlaceNode[],
+  newIds: string[],
+  placements: Placement[],
+  options: { minNodes?: number; pad?: number } = {}
+): { x: number; y: number; width: number; height: number; title: string } | undefined {
+  const minNodes = options.minNodes ?? 3;
+  const pad = options.pad ?? 180;
+  if (placements.length < minNodes) return undefined;
+
+  const wanted = newIds.filter(Boolean);
+  const isNewId = (id: string) =>
+    id !== "" && wanted.some((w) => w === id || w.startsWith(id) || id.startsWith(w));
+  const fresh = all.filter((n) => isNewId(n.id ?? ""));
+
+  // Anchored to existing work? Then it is part of that, not a system of its own.
+  const byId = new Map(all.map((n) => [n.id ?? "", n]));
+  for (const n of fresh) {
+    for (const id of linkedIds(n)) {
+      if (isNewId(id)) continue;
+      if (byId.has(id)) return undefined;
+    }
+  }
+
+  const entry = fresh.find((n) => /Event/i.test(n.type ?? ""));
+  const title = (entry?.title ?? "").trim();
+  if (!title) return undefined;
+
+  const xs = placements.map((p) => p.x);
+  const ys = placements.map((p) => p.y);
+  return {
+    x: Math.min(...xs) - pad,
+    y: Math.min(...ys) - pad,
+    width: Math.max(...xs) - Math.min(...xs) + pad * 2 + 260,
+    height: Math.max(...ys) - Math.min(...ys) + pad * 2,
+    title,
+  };
+}

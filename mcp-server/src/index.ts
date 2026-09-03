@@ -30,7 +30,7 @@ import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout } from "./layoutReview.js";
 import { planTidy } from "./layoutTidy.js";
-import { placeNewNodes } from "./placeNewNodes.js";
+import { boxForBatch, placeNewNodes } from "./placeNewNodes.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -2722,13 +2722,15 @@ register(
           // is skipped in the first place.
           const newIds = Object.values(result.nodes ?? {}).map((n) => n.id);
           let repositioned = 0;
+          let boxed: string | undefined;
           try {
             const withPos = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
               path,
               graphName,
             });
             const compact = capGraphSummary(withPos as never, { maxNodes: 5000, positions: true });
-            for (const p of placeNewNodes((compact.nodes ?? []) as never, newIds)) {
+            const placements = placeNewNodes((compact.nodes ?? []) as never, newIds);
+            for (const p of placements) {
               await bridge.send("organize_graph", {
                 path,
                 graphName,
@@ -2738,6 +2740,26 @@ register(
                 y: p.y,
               });
               repositioned++;
+            }
+
+            // A system that arrived on its own gets its box, named after the event that starts it.
+            // The convention in a hand-maintained project is that every system sits in a titled box,
+            // and a batch built into clear canvas is exactly the one that would otherwise stay loose
+            // nodes forever. A batch wired into an existing chain gets nothing - it belongs to
+            // whatever already owns that chain.
+            const box = boxForBatch((compact.nodes ?? []) as never, newIds, placements);
+            if (box) {
+              await bridge.send("organize_graph", {
+                path,
+                graphName,
+                action: "add_comment_box",
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height,
+                text: box.title,
+              });
+              boxed = box.title;
             }
           } catch {
             // Placement is cosmetic and must never turn a successful build into a failed call.
@@ -2751,6 +2773,7 @@ register(
               why:
                 `This graph already had ${priorNodes} nodes, so it was NOT rearranged - only the ${repositioned} ` +
                 `node(s) just added were placed, beside what they connect to. Check with unreal_review_layout.`,
+              ...(boxed ? { commentBox: `Grouped as "${boxed}" - rename it if that is not what this system is.` } : {}),
             },
             mode: MODE.mode,
           });

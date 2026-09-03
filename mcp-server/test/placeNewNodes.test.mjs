@@ -85,3 +85,51 @@ test("a short summary id matches the full id build_graph reports", () => {
   assert.equal(out.length, 1, "the short id in the graph must match the long id from the build");
   assert.ok(out[0].x > 1000);
 });
+
+// --- automatic boxing of a new system ---------------------------------------------------------
+import { boxForBatch } from "../dist/placeNewNodes.js";
+
+const ev = (id, x, y, pins = []) => ({ id, title: id, type: "K2Node_CustomEvent", x, y, pins });
+
+test("a standalone system gets a box named after its event", () => {
+  const nodes = [ev("CE_Thing", 0, 0), n("a", 0, 0), n("b", 0, 0)];
+  const placements = [
+    { nodeId: "CE_Thing", x: 0, y: 5000 },
+    { nodeId: "a", x: 260, y: 5000 },
+    { nodeId: "b", x: 520, y: 5000 },
+  ];
+  const box = boxForBatch(nodes, ["CE_Thing", "a", "b"], placements);
+  assert.equal(box.title, "CE_Thing", "the event is what the system IS");
+  assert.ok(box.x < 0 && box.y < 5000, "the box surrounds its nodes");
+  assert.ok(box.width > 520, "and is wide enough for the last one");
+});
+
+test("a batch wired into existing work gets no box", () => {
+  // It belongs to whatever already owns that chain. Boxing it would claim a system that is really
+  // an addition to somebody else's.
+  const host = n("host", 1000, 0, ["out then -> CE_Thing.execute"]);
+  const nodes = [host, ev("CE_Thing", 0, 0, ["in execute <- host.then"]), n("a", 0, 0), n("b", 0, 0)];
+  const placements = [
+    { nodeId: "CE_Thing", x: 1260, y: 0 },
+    { nodeId: "a", x: 1520, y: 0 },
+    { nodeId: "b", x: 1780, y: 0 },
+  ];
+  assert.equal(boxForBatch(nodes, ["CE_Thing", "a", "b"], placements), undefined);
+});
+
+test("a batch with no entry event gets no box", () => {
+  // An untitled box groups nodes while explaining nothing - a fault in its own right.
+  const nodes = [n("a", 0, 0), n("b", 0, 0), n("c", 0, 0)];
+  const placements = [
+    { nodeId: "a", x: 0, y: 5000 },
+    { nodeId: "b", x: 260, y: 5000 },
+    { nodeId: "c", x: 520, y: 5000 },
+  ];
+  assert.equal(boxForBatch(nodes, ["a", "b", "c"], placements), undefined);
+});
+
+test("one or two nodes are not a system", () => {
+  const nodes = [ev("CE_Thing", 0, 0), n("a", 0, 0)];
+  const placements = [{ nodeId: "CE_Thing", x: 0, y: 5000 }, { nodeId: "a", x: 260, y: 5000 }];
+  assert.equal(boxForBatch(nodes, ["CE_Thing", "a"], placements), undefined);
+});
