@@ -22,6 +22,18 @@ is undoable. Each dimension is optional; absent means unchanged, not zero.
 edge, the fix is to widen the box — what a person does. Without this the tidier could only refuse
 the move and leave the wire bent.
 
+**The workaround, until it is built.** A box can be widened with the tools that already exist:
+`unreal_remove_node` on the box, then `unreal_organize_graph add_comment_box` at the new size. A
+comment box carries only geometry and text, so nothing is lost as long as both are preserved — read
+them first, and use the rectangle `tidy_layout` reports in `growths`, which has already been checked
+against every other box and node. Used once on `BP_Player`: "Nearest Pool" 2904 → 3210 wide, after
+which tidying took that system from four backward wires to zero.
+
+Two reasons this is not automated. The recreated box gets a new node id, so anything holding the old
+one is stale. And it drops `NodesUnderComment`, which is the only record of what the box used to own
+— the very thing the second change below exists to read. A person doing it deliberately is fine; a
+layout pass doing it silently is not.
+
 **Verify after rebuild:**
 
 1. `unreal_review_layout` with `path` on any blueprint with boxes — note a box's `id`, `width`, `height`.

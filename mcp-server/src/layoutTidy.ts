@@ -370,16 +370,36 @@ export function planTidy(
       if (ownersOf(p.x, p.y) !== before) {
         // Entering a box it was never in cannot be fixed by growing - the answer would be to shrink
         // somebody else's box, which is not this pass's to do. Refuse.
-        const left = before.split("|").filter(Boolean);
-        const entered = ownersOf(p.x, p.y).split("|").filter(Boolean).some((b) => !left.includes(b));
-        const grown = entered ? undefined : left.map((b) => ({ b, g: growthFor(b, p.x, p.y, id) })).find((r) => r.g);
+        // The boxes it LEFT, not every box it was in.
+        //
+        // `before` lists all of them, and nested boxes mean that is usually several: a node here sat
+        // in "Pick Target", "Guide Arrows" AND "Nearest Pool" at once. Growing the first that could
+        // grow picked "Pick Target" - a box the node never left - and returned a rectangle identical
+        // to the existing one. So the move was tagged as needing a resize it did not need, the
+        // bridge refused the no-op, and a perfectly good move was dropped. Four of them, in a system
+        // whose backward wires then could not be straightened at all.
+        const wasIn = before.split("|").filter(Boolean);
+        const nowIn = ownersOf(p.x, p.y).split("|").filter(Boolean);
+        const departed = wasIn.filter((b) => !nowIn.includes(b));
+        const entered = nowIn.some((b) => !wasIn.includes(b));
+        const grown = entered ? undefined : departed.map((b) => ({ b, g: growthFor(b, p.x, p.y, id) })).find((r) => r.g);
         if (!grown || !grown.g) {
           heldByBox++;
           continue;
         }
         extent.set(grown.b, grown.g);
-        growths.push({ boxId: grown.b, ...grown.g });
-        needsBox = grown.b;
+        // A growth that changes nothing is not a growth. Recording one asks the bridge to resize a
+        // box to the size it already is, and on a plugin without the action that refusal takes the
+        // move down with it.
+        const was0 = boxes.find((b) => (b.id ?? "") === grown.b);
+        const same =
+          was0 &&
+          was0.x === grown.g.x && was0.y === grown.g.y &&
+          was0.width === grown.g.width && was0.height === grown.g.height;
+        if (!same) {
+          growths.push({ boxId: grown.b, ...grown.g });
+          needsBox = grown.b;
+        }
       }
     }
     moves.push({ nodeId: id, x: p.x, y: p.y, reason, ...(needsBox ? { needsBox } : {}) });
