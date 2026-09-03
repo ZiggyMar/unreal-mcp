@@ -27,6 +27,7 @@ import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { describeTrace, traceInput } from "./traceInput.js";
+import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -1233,6 +1234,35 @@ function errorResult(err: unknown, hint?: string) {
   };
 }
 
+/**
+ * Whether this server believes the game is running, from having started it.
+ *
+ * A belief, not a fact - a person can click Stop in the editor and this would not know. It decides
+ * only whether to ask the editor, never the refusal itself. See pieGuard.ts.
+ */
+let pieBelievedRunning = false;
+
+/** Refuse a class-rebuilding call while the game is running, because it crashes the editor. */
+async function refuseIfPieRunning(tool: string, path: string) {
+  if (!pieBelievedRunning) return undefined;
+
+  let status: PieStatusLike | undefined;
+  try {
+    status = await bridge.send<PieStatusLike>("pie_status", {});
+  } catch {
+    // Cannot confirm, so do not block: a guard that fires when the editor is unreachable stops real
+    // work for a reason that has nothing to do with PIE.
+    return undefined;
+  }
+
+  if (!shouldRefuse(pieBelievedRunning, status)) {
+    // The belief was stale. Correct it so the next call costs nothing.
+    pieBelievedRunning = false;
+    return undefined;
+  }
+  return errorResult(new Error(pieGuardMessage(tool, path, status ?? {})));
+}
+
 register(
   "unreal_ping",
   {
@@ -2051,6 +2081,8 @@ register(
     },
   },
   async ({ path }) => {
+    const refusal = await refuseIfPieRunning("unreal_compile_blueprint", path);
+    if (refusal) return refusal;
     try {
       const result = await bridge.send<CompileBlueprintResult>("compile_blueprint", { path });
       return jsonResult(result);
@@ -2072,6 +2104,8 @@ register(
     },
   },
   async ({ path }) => {
+    const refusal = await refuseIfPieRunning("unreal_save_blueprint", path);
+    if (refusal) return refusal;
     try {
       const result = await bridge.send<SaveBlueprintResult>("save_blueprint", { path });
       return jsonResult(result);
@@ -3752,6 +3786,8 @@ register(
   async ({ numPlayers, listenServer, ignoreCompileErrors }) => {
     try {
       const result = await bridge.send("start_pie", { numPlayers, listenServer, ignoreCompileErrors });
+      // Remember, so compile/save can refuse before they crash the editor. See pieGuard.ts.
+      pieBelievedRunning = true;
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);
@@ -3772,6 +3808,7 @@ register(
   async () => {
     try {
       const result = await bridge.send("stop_pie", {});
+      pieBelievedRunning = false;
       return jsonResult(result);
     } catch (err) {
       return errorResult(err);

@@ -7431,6 +7431,7 @@ anybody noticed.
 - [Mutation testing the suite: seven breaks, six caught, one that did not matter](#mutation-testing-the-suite-seven-breaks-six-caught-one-that-did-not-matter)
 - [The one-off became `scripts/mutate.mjs`](#the-one-off-became-scriptsmutatemjs)
 - ["You're assuming" — the filename that looked like the answer](#youre-assuming--the-filename-that-looked-like-the-answer)
+- [Compiling during PIE killed the editor, so it is refused now](#compiling-during-pie-killed-the-editor-so-it-is-refused-now)
 
 <!-- INDEX:END -->
 
@@ -11929,3 +11930,34 @@ a running editor.
 The general lesson generalises past input: **when the cheap route and the correct route disagree, the
 cheap one gets taken.** The fix is not to warn a model against guessing, it is to make the correct
 answer the cheap call.
+
+### Compiling during PIE killed the editor, so it is refused now
+
+Changing one variable's replication flag on `BP_VirusData` — a replicated actor with live instances
+in **two** PIE worlds — and calling `compile_blueprint` took UnrealEditor 5.6 down with
+`EXCEPTION_ACCESS_VIOLATION` in `CoreUObject`. The unsaved change went with it, along with the rest
+of the session.
+
+Recompiling reinstances the class while the running worlds still hold objects of the old one, and
+the engine does not protect the game thread from that. Replicated actors are the worst case because
+every world holds instances, but nothing about it is specific to replication.
+
+**The cost argues for refusing rather than warning.** A warning is read after the editor is already
+dead: the caller loses the edit, every *other* unsaved change in the session, and pays a restart. So
+`compile_blueprint` and `save_blueprint` now refuse while the game is running, name the worlds, and
+say plainly that nothing was changed.
+
+The interesting part is how the guard decides, because the obvious implementation is wrong twice
+over. Asking the editor before every compile buys one round trip on every call to catch a rare case.
+Trusting what this server remembers is worse: it started PIE, so it *believes* the game is running —
+and that belief goes stale the instant someone clicks Stop in the editor, at which point the guard
+refuses real work on a ten-minute-old memory and cannot be argued with.
+
+So the belief decides only whether to **ask**, and the editor decides the answer. No round trip in
+the common case; a stale belief costs one `pie_status` and then corrects itself. Two more rules keep
+it from becoming the thing it is guarding against: an unreachable editor never refuses, and a reply
+that does not say `running` is read as not-running. A guard that fires when it cannot check would
+block work for a reason that has nothing to do with PIE.
+
+Written down in `never-compile-a-blueprint-during-pie` too, because the same rule applies to a person
+driving the editor by hand.
