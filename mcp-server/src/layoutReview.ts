@@ -112,8 +112,10 @@ export interface LayoutOptions {
   maxX?: number;
   /** A wire longer than this reads as a canvas-crossing run. */
   maxWire?: number;
-  /** Nodes closer than this in both axes are visually on top of each other. */
+  /** Horizontal gap below which two nodes on the same row overlap. Nodes are wide: ~100. */
   tooClose?: number;
+  /** Vertical gap below which two nodes in a column overlap. Nodes are short: ~32. */
+  tooCloseY?: number;
   /** Max gap between two unboxed nodes for them to count as one system. */
   nearby?: number;
 }
@@ -393,7 +395,10 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // tighter limit would fail the very code being used as the standard. Length alone is not a fault -
   // the p90 in the stats is the number that separates a tidy layout from a sprawling one.
   const maxWire = options.maxWire ?? 2000;
-  const tooClose = options.tooClose ?? 40;
+  // `tooClose` is kept as the single knob a caller can still set; it moves the horizontal limit,
+  // which is the one that catches genuine side-by-side overlap.
+  const tooCloseX = options.tooClose ?? 100;
+  const tooCloseY = options.tooCloseY ?? 32;
   // How far apart two unboxed nodes can be and still read as one system. Roughly a screen at normal
   // zoom: the measured gap BETWEEN the seven unboxed systems in a real graph was over 1900, and the
   // widest gap inside any one of them was well under this.
@@ -496,14 +501,25 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
       const a = sorted[i], b = sorted[j];
-      if ((b.x as number) - (a.x as number) > tooClose) break; // sorted by x, so nothing further can be close
-      if (Math.abs((b.y as number) - (a.y as number)) > tooClose) continue;
+      // Nodes are WIDE and SHORT, and one threshold for both axes treated them as square.
+      //
+      // Measured across the project's 9 stacked findings: five were dx 0, dy 32 - a compact Get
+      // sitting directly under another node, abutting it rather than covering it, which is ordinary
+      // tight packing and appears in the hand-maintained standard too. One was dx 36, dy 2: side by
+      // side and 36 apart, which genuinely overlaps, because no Blueprint node is 36 wide. The same
+      // number cannot be right for both.
+      //
+      // So the thresholds match the shape of a node: about 100 across before two side-by-side nodes
+      // clear each other, about 32 down. That leaves exactly the two real faults in the project - an
+      // exact double-placement and that 36-wide pair - and stops accusing six deliberate placements.
+      if ((b.x as number) - (a.x as number) >= tooCloseX) break; // sorted by x, so nothing further can be close
+      if (Math.abs((b.y as number) - (a.y as number)) >= tooCloseY) continue;
       const exact = a.x === b.x && a.y === b.y;
       findings.push({
         kind: "stacked",
         detail: exact
           ? `${name(a)} and ${name(b)} are at exactly the same place - one is hidden under the other.`
-          : `${name(a)} and ${name(b)} are ${Math.max(Math.abs((b.x as number) - (a.x as number)), Math.abs((b.y as number) - (a.y as number)))} apart and will overlap on screen.`,
+          : `${name(a)} and ${name(b)} are ${Math.abs((b.x as number) - (a.x as number))} across and ${Math.abs((b.y as number) - (a.y as number))} down from each other, close enough to overlap on screen.`,
         nodes: [a.id ?? "", b.id ?? ""],
       });
     }

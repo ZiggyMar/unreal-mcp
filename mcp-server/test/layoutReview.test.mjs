@@ -49,7 +49,9 @@ test("two nodes at the same coordinates are reported as hidden", () => {
 test("nodes near enough to overlap on screen are reported too", () => {
   const r = reviewLayout([node("a", 100, 100), node("b", 120, 110)]);
   assert.deepEqual(kinds(r), ["stacked"]);
-  assert.match(r.findings[0].detail, /will overlap/);
+  // Both axes are named now. One number could not say which one mattered, and the axes turned out
+  // to need different limits: nodes are wide and short, so 36 across overlaps where 32 down does not.
+  assert.match(r.findings[0].detail, /20 across and 10 down/);
 });
 
 test("nodes merely close together are left alone", () => {
