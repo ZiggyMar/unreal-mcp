@@ -48,6 +48,16 @@ export const ENTRY_TYPES: readonly string[] = [
   "K2Node_Timeline",
 ];
 
-/** Does execution start at this node type? Tolerates undefined, which is what the wire may carry. */
+/**
+ * Does execution start at this node type? Tolerates undefined, which is what the wire may carry.
+ *
+ * Accepts the bare form too - "CustomEvent" as well as "K2Node_CustomEvent" - because the graph
+ * summary strips the prefix before a caller ever sees a type, while the bridge and this list use
+ * the full class name. Matching only the full name made every entry node in a real graph invisible:
+ * the box suggester went from offering 89 of 100 to 0 of 100, because "CustomEvent" is not in a list
+ * of "K2Node_CustomEvent". The unit tests missed it by using the unstripped form, which is more
+ * faithful to the class name and less faithful to what actually arrives.
+ */
 export const isEntryType = (type: string | undefined): boolean =>
-  typeof type === "string" && ENTRY_TYPES.includes(type);
+  typeof type === "string" &&
+  (ENTRY_TYPES.includes(type) || ENTRY_TYPES.includes(`K2Node_${type}`));

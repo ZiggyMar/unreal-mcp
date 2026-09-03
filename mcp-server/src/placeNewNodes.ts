@@ -1,3 +1,5 @@
+import { isEntryType } from "./entryTypes.js";
+
 /**
  * Where do nodes go when the graph is too big to lay out?
  *
@@ -227,7 +229,7 @@ export function boxForBatch(
     }
   }
 
-  const entry = fresh.find((n) => /Event/i.test(n.type ?? ""));
+  const entry = fresh.find((n) => isEntryType(n.type));
   const title = houseStyleTitle(entry?.title ?? "");
   if (!title) return undefined;
 
@@ -286,7 +288,7 @@ export function boxesForBatch(
   const isNewId = (id: string) =>
     id !== "" && wanted.some((w) => w === id || w.startsWith(id) || id.startsWith(w));
   const fresh = all.filter((n) => isNewId(n.id ?? ""));
-  const events = fresh.filter((n) => /Event/i.test(n.type ?? ""));
+  const events = fresh.filter((n) => isEntryType(n.type));
   if (placements.length <= splitAbove || events.length < 2) return [outer];
 
   const pos = new Map(placements.map((p) => [p.nodeId, p]));

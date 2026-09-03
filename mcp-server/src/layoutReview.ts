@@ -1,3 +1,5 @@
+import { isEntryType } from "./entryTypes.js";
+
 /**
  * Is this graph laid out like a person laid it out?
  *
@@ -136,7 +138,7 @@ function splitByEntry(cluster: LayoutNode[]): Array<{ title: string; nodes: Layo
   const claimed = new Set<string>();
   const out: Array<{ title: string; nodes: LayoutNode[] }> = [];
 
-  for (const ev of cluster.filter((n) => /Event/i.test(n.type ?? ""))) {
+  for (const ev of cluster.filter((n) => isEntryType(n.type))) {
     const own: LayoutNode[] = [];
     const queue = [ev];
     while (queue.length > 0) {
@@ -480,7 +482,7 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
       // ALL its entry events, not the first. Proximity merges systems that sit next to each other,
       // and "17 nodes starting at KillPlayer" hid a second event inside the same cluster - which
       // reads as one system and is really two, so it would have suggested one box where two belong.
-      const entries = g.filter((n) => /Event/i.test(n.type ?? ""));
+      const entries = g.filter((n) => isEntryType(n.type));
       const entry = entries[0];
       const entryNames = entries.slice(0, 3).map(name).join(", ");
       const label = entries.length > 3 ? `${entryNames} and ${entries.length - 3} more` : entryNames;
