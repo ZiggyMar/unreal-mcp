@@ -131,3 +131,28 @@ Round" and "Fight The Nearest Virus" that way.
 
 What still needs the rebuild is GROWING a box. Without `resize_comment_box` the only way to bring a
 stray node inside is to move the NODE, which is fine for one or two and wrong for a system.
+
+## What the missing resize_comment_box is actually blocking
+
+Measured across the AVS project today, not estimated. `review_layout` reports "N nodes ... are wired
+into X. They belong in that box: widen it to cover them, or move them inside it" in six places. A
+comment box can be MOVED without disturbing its contents (the API moves the box only, unlike dragging
+it in the editor), so the first question for each was whether sliding the box covers the strays using
+margin on its far side. For all six the answer is no - the box is simply too small to hold both
+groups at once:
+
+| Blueprint | Box | Short by |
+|---|---|---|
+| BP_AntlineCable | "take a look and figure it out (it should be affecting how cable lights up)" | 891 wide, 136 tall |
+| BP_BaseEnemy | "BeginPlay" | 603 wide |
+| BP_DataDropOffStation | "Replicated outline (doesn't actually replicate lmao)" | 336 wide |
+| BP_FireWall | "Event Tick" | 224 tall |
+| BP_FireWall | "Event End Interaction'" | 112 tall |
+| BP_Player | "Begin Play" | needs +224 right, but its leftmost node is at -2000 so moving orphans it |
+
+So this is six real findings across five Blueprints, every one waiting on the same missing action, and
+none of them fixable another way short of moving the user's nodes - which is the operation that broke
+BP_Player and is off the table.
+
+The other half of the same rebuild, `holds`/NodesUnderComment, would additionally let the reviewer ask
+the editor what a box actually owns rather than inferring containment from coordinates.
