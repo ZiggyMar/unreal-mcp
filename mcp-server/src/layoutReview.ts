@@ -289,7 +289,26 @@ function safeBoxAround(
 }
 
 /** Exec pin names, which are what carry reading order. Data pins are not direction-checked. */
-const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
+const EXEC_OUT = /^out (then|then_\d+|Then \d+|LoopBody|Loop Body|Completed|else|execute|Exec)\b/i;
+
+/**
+ * An execution wire, decided by the source pin OR the target pin.
+ *
+ * Naming the source pins was not enough, and measuring said so. Exec outputs are called whatever the
+ * node calls them: a Branch has "then" and "else", a Sequence "then_0" and "then_1", a Switch Has
+ * Authority "Authority", an Is Valid macro "Is Valid". The old list knew then / Then N / LoopBody /
+ * Completed / execute, so on one real graph it counted 69 execution wires where there were 82 - a
+ * 19% undercount, five of them "else".
+ *
+ * That was wrong twice over. execWires was under-reported in every audit, and nothing walking
+ * execution could cross a Branch - which is exactly where a retry loop goes, so no loop was ever
+ * recognised as a loop.
+ *
+ * An exec output always lands on an exec input, and those are spelled .execute or .exec whatever the
+ * source is called. So the target decides when the source name is unfamiliar.
+ */
+const EXEC_TARGET = /->\s*[^,]*\.(execute|exec)\b/i;
+const isExecLine = (line: string) => line.startsWith("out ") && (EXEC_OUT.test(line) || EXEC_TARGET.test(line));
 
 /**
  * Either direction, for telling a pure node from one in an execution chain.
@@ -299,6 +318,36 @@ const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
  */
 const EXEC_ANY = /^(in|out) (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
 const isPure = (n: LayoutNode) => !(n.pins ?? []).some((l) => EXEC_ANY.test(l));
+
+/**
+ * Can `from` run its way back round to `to`, following execution only?
+ *
+ * If it can, the wire from `to` back to `from` closes a loop, and a loop cannot be laid out with
+ * every wire pointing right. Capped at a few hundred steps so a pathological graph cannot hang a
+ * layout check - a layout pass that hangs is worse than one that gives up.
+ */
+function reachesBack(from: LayoutNode, to: LayoutNode, byId: Map<string, LayoutNode>): boolean {
+  const goal = to.id ?? "";
+  if (!goal) return false;
+  const seen = new Set<string>();
+  const queue: LayoutNode[] = [from];
+  let steps = 0;
+  while (queue.length > 0 && steps++ < 400) {
+    const n = queue.shift() as LayoutNode;
+    const id = n.id ?? "";
+    if (id === goal) return true;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    for (const line of n.pins ?? []) {
+      if (!isExecLine(line) || !line.includes("->")) continue;
+      for (const nextId of targetsOf(line)) {
+        const nxt = byId.get(nextId);
+        if (nxt) queue.push(nxt);
+      }
+    }
+  }
+  return false;
+}
 
 /**
  * How many distinct nodes this one feeds.
@@ -380,14 +429,24 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // --- flow direction, and wire length ---
   for (const n of real) {
     for (const line of n.pins ?? []) {
-      const isExec = line.startsWith("out ") && EXEC_OUT.test(line);
+      const isExec = isExecLine(line);
       if (!line.includes("->")) continue;
       for (const id of targetsOf(line)) {
         const t = byId.get(id);
         if (!t) continue;
         if (isExec) {
           execWires++;
-          if ((t.x as number) < (n.x as number)) {
+          // A wire that closes a LOOP is not a chain reading backwards.
+          //
+          // Measured: 9 of this project's 18 backward wires ran out of a Delay, and 3 more out of a
+          // For Each Loop with Break. Those are retry loops and loop bodies - Delay, check, not
+          // ready, Delay again - and a cycle cannot be drawn with every wire pointing right. Two
+          // thirds of the finding was reporting loops for being loops, against the very code being
+          // used as the standard.
+          //
+          // The test is reachability, not the node's name: if the target can run its way back round
+          // to this node, the wire closes a cycle and the layout is doing the only thing it can.
+          if ((t.x as number) < (n.x as number) && !reachesBack(t, n, byId)) {
             backwardWires++;
             findings.push({
               kind: "backwardFlow",

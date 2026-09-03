@@ -82,8 +82,23 @@ export interface TidyOptions {
   clearY?: number;
 }
 
-const EXEC = /^(in|out) (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
-const EXEC_OUT = /^out (then|Then \d+|LoopBody|Completed|execute|Exec)\b/i;
+/**
+ * Exec pins, named by the node rather than by any convention.
+ *
+ * A Branch's second output is "else", a Sequence's are "then_0" and "then_1", a Switch Has Authority
+ * says "Authority", an Is Valid macro says "Is Valid". The list here knew none of those, so on one
+ * real graph it saw 69 execution wires where there were 82, and this pass could not straighten a
+ * chain that went through a Branch's else - four such wires were sitting unstraightened in a system
+ * this tool had been calling clean.
+ *
+ * An exec output lands on an exec input, spelled .execute or .exec whatever the source is called, so
+ * the target settles the cases the names miss.
+ */
+const EXEC = /^(in|out) (then|then_\d+|Then \d+|LoopBody|Loop Body|Completed|else|execute|Exec)\b/i;
+const EXEC_OUT = /^out (then|then_\d+|Then \d+|LoopBody|Loop Body|Completed|else|execute|Exec)\b/i;
+const EXEC_TARGET = /->\s*[^,]*\.(execute|exec)\b/i;
+const isExecOut = (line: string) => line.startsWith("out ") && (EXEC_OUT.test(line) || EXEC_TARGET.test(line));
+const hasExecPin = (line: string) => EXEC.test(line) || (line.startsWith("out ") && EXEC_TARGET.test(line));
 const COMMENT = /Comment/i;
 
 function targets(line: string): string[] {
@@ -106,13 +121,14 @@ function neighbourIds(n: TidyNode): string[] {
 function execTargets(n: TidyNode): string[] {
   const out: string[] = [];
   for (const line of n.pins ?? []) {
-    if (!line.startsWith("out ") || !line.includes("->") || !EXEC_OUT.test(line)) continue;
+    if (!isExecOut(line) || !line.includes("->")) continue;
     out.push(...targets(line));
   }
   return out;
 }
 
-const isPure = (n: TidyNode) => !(n.pins ?? []).some((l) => EXEC.test(l));
+/** A getter or a bit of maths: no exec pin either way, so it has no place it MUST be. */
+const isPure = (n: TidyNode) => !(n.pins ?? []).some((l) => hasExecPin(l));
 
 /**
  * Work out where a system's nodes should sit.
@@ -161,6 +177,40 @@ export function planTidy(
       }
     }
     if (fixed === 0) break;
+  }
+
+  // --- separate: no straightened node may sit on another ---
+  //
+  // The straighten pass sets x and checks nothing, and only the compact pass looked for collisions.
+  // So a straighten could drop a node onto one already standing there: measured on a real system,
+  // which came back reporting "Add and Cast To BP_VirusData are 33 apart" that the tidy itself had
+  // just created. A pass that fixes one fault by causing another is not a fix.
+  //
+  // This runs AFTER straightening rather than inside it, which was tried first and was worse: mid-
+  // pass, every node in a chain collides with its own successors, which have not moved yet. One
+  // node slid from x 220 to 370 to avoid a node that was about to leave. Separating once the chain
+  // has settled avoids reacting to positions nobody is keeping.
+  //
+  // Only nodes this pass MOVED are nudged, and only rightward, which cannot break the rightward
+  // invariant that straightening just established.
+  for (let pass = 0; pass < 6; pass++) {
+    let bumped = 0;
+    for (const [id] of moved) {
+      const me = pos.get(id);
+      if (!me) continue;
+      for (let tries = 0; tries < 8; tries++) {
+        const clash = scoped.some((o) => {
+          const oid = o.id ?? "";
+          if (oid === id) return false;
+          const p = pos.get(oid);
+          return !!p && Math.abs(p.x - me.x) < clearX && Math.abs(p.y - me.y) < clearY;
+        });
+        if (!clash) break;
+        me.x += clearX;
+        bumped++;
+      }
+    }
+    if (bumped === 0) break;
   }
 
   // --- compact: pure nodes move beside what they touch ---
