@@ -30,6 +30,7 @@ import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout } from "./layoutReview.js";
 import { planTidy } from "./layoutTidy.js";
+import { placeNewNodes } from "./placeNewNodes.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -2682,14 +2683,47 @@ register(
         }
         const priorNodes = Math.max(0, totalNodes - Object.keys(result.nodes ?? {}).length);
         if (priorNodes > 6) {
+          // Skipping the whole-graph layout is right; leaving the new nodes at the origin was not.
+          //
+          // Measured: three nodes built with NO coordinates all arrived at (0,0) - stacked on each
+          // other and on a node called UpdateLocalVanPing. So on a large graph both options were
+          // broken. Passing x/y lands on somebody's system, and omitting them lands on the origin,
+          // which is usually somebody's system too.
+          //
+          // The batch is placed beside whatever it attaches to, or in clear canvas when it attaches
+          // to nothing. Existing nodes are never touched, which is the whole reason the full layout
+          // is skipped in the first place.
+          const newIds = Object.values(result.nodes ?? {}).map((n) => n.id);
+          let repositioned = 0;
+          try {
+            const withPos = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", {
+              path,
+              graphName,
+            });
+            const compact = capGraphSummary(withPos as never, { maxNodes: 5000, positions: true });
+            for (const p of placeNewNodes((compact.nodes ?? []) as never, newIds)) {
+              await bridge.send("organize_graph", {
+                path,
+                graphName,
+                action: "move_node",
+                nodeId: p.nodeId,
+                x: p.x,
+                y: p.y,
+              });
+              repositioned++;
+            }
+          } catch {
+            // Placement is cosmetic and must never turn a successful build into a failed call.
+          }
+
           return jsonResult({
             ...buildPart,
             layout: {
-              nodesMoved: 0,
+              nodesMoved: repositioned,
               skipped: true,
               why:
-                `This graph already had ${priorNodes} nodes before the build, so it was left where it is. ` +
-                `Call unreal_auto_layout_graph explicitly if you do want the whole graph rearranged.`,
+                `This graph already had ${priorNodes} nodes, so it was NOT rearranged - only the ${repositioned} ` +
+                `node(s) just added were placed, beside what they connect to. Check with unreal_review_layout.`,
             },
             mode: MODE.mode,
           });
