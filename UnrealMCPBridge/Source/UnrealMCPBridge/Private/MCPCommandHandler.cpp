@@ -4856,6 +4856,62 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleOrganizeGraph(const TSharedPtr
 		return MakeOkResponse(Result);
 	}
 
+	if (Action == TEXT("resize_comment_box"))
+	{
+		// A comment box OWNS the nodes inside it and drags them, so a chain that grows past its
+		// edge stops belonging to its system. Without this the tidier could only refuse the move
+		// and leave a wire bent, because growing the box - what a person does - was not expressible.
+		FString NodeId;
+		if (!Params->TryGetStringField(TEXT("nodeId"), NodeId))
+		{
+			return MakeErrorResponse(TEXT("missing_param: nodeId is required for resize_comment_box"));
+		}
+		FString NodeError;
+		UEdGraphNode* Node = FindNodeById(Graph, NodeId, NodeError);
+		if (!Node)
+		{
+			return MakeErrorResponse(NodeError);
+		}
+		UEdGraphNode_Comment* CommentNode = Cast<UEdGraphNode_Comment>(Node);
+		if (!CommentNode)
+		{
+			// Named rather than silently ignored: resizing an ordinary node is not a thing, and a
+			// caller that asked for it has the wrong node id and needs to know that.
+			return MakeErrorResponse(TEXT("not_a_comment_box: resize_comment_box only works on a comment box node"));
+		}
+
+		// Each dimension is optional, so a caller can widen a box without asserting a height it
+		// never measured. Absent means unchanged, not zero.
+		double Width = CommentNode->NodeWidth;
+		double Height = CommentNode->NodeHeight;
+		double X = CommentNode->NodePosX;
+		double Y = CommentNode->NodePosY;
+		Params->TryGetNumberField(TEXT("width"), Width);
+		Params->TryGetNumberField(TEXT("height"), Height);
+		Params->TryGetNumberField(TEXT("x"), X);
+		Params->TryGetNumberField(TEXT("y"), Y);
+		if (Width < 1 || Height < 1)
+		{
+			return MakeErrorResponse(TEXT("bad_param: width and height must be at least 1"));
+		}
+
+		const FScopedTransaction Transaction(NSLOCTEXT("UnrealMCPBridge", "MCPResizeCommentBox", "MCP: Resize Comment Box"));
+		CommentNode->Modify();
+		CommentNode->NodePosX = static_cast<int32>(X);
+		CommentNode->NodePosY = static_cast<int32>(Y);
+		CommentNode->NodeWidth = static_cast<int32>(Width);
+		CommentNode->NodeHeight = static_cast<int32>(Height);
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+		TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("id"), MakeNodeId(CommentNode));
+		Result->SetNumberField(TEXT("x"), CommentNode->NodePosX);
+		Result->SetNumberField(TEXT("y"), CommentNode->NodePosY);
+		Result->SetNumberField(TEXT("width"), CommentNode->NodeWidth);
+		Result->SetNumberField(TEXT("height"), CommentNode->NodeHeight);
+		return MakeOkResponse(Result);
+	}
+
 	if (Action == TEXT("move_node"))
 	{
 		FString NodeId;

@@ -3056,8 +3056,8 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe("Graph to organize."),
-      action: z.enum(["set_node_comment", "add_comment_box", "move_node"]),
-      nodeId: z.string().optional().describe("Required for set_node_comment and move_node."),
+      action: z.enum(["set_node_comment", "add_comment_box", "move_node", "resize_comment_box"]),
+      nodeId: z.string().optional().describe("Required for set_node_comment, move_node and resize_comment_box."),
       comment: z.string().optional().describe("set_node_comment: the comment text (empty string clears it)."),
       text: z
         .string()
@@ -7614,7 +7614,28 @@ register(
     try {
       const raw = await bridge.send<{ nodes?: unknown[] }>("read_blueprint_graph_summary", { path, graphName: graph });
       const compact = capGraphSummary(raw as never, { maxNodes: 5000, positions: true });
-      const { moves, scoped, heldByBox } = planTidy((compact.nodes ?? []) as never, { minY, maxY, gap });
+      const { moves, growths, scoped, heldByBox } = planTidy((compact.nodes ?? []) as never, { minY, maxY, gap });
+
+      // Boxes grow BEFORE the nodes move. A move that depends on its box having room must not land
+      // while the box is still too small, or the node is briefly - and if the resize then fails,
+      // permanently - outside the system that owns it.
+      let grown = 0;
+      const growthFailed: string[] = [];
+      for (const g of growths) {
+        try {
+          await bridge.send("organize_graph", {
+            path, graphName, action: "resize_comment_box",
+            nodeId: g.boxId, x: g.x, y: g.y, width: g.width, height: g.height,
+          });
+          grown++;
+        } catch (err) {
+          growthFailed.push(g.boxId);
+        }
+      }
+      // An older plugin has no resize action. Rather than move nodes out of their boxes anyway,
+      // drop the moves that needed the growth - the same refusal as before the action existed.
+      const blocked = new Set(growthFailed);
+      const safeMoves = blocked.size === 0 ? moves : moves.filter((m) => !growths.some((g) => blocked.has(g.boxId) && m.x > g.x + g.width - 1));
 
       if (dryRun) {
         return jsonResult({ nextAction: "Dry run - nothing moved.", scoped, wouldMove: moves.length, moves });
@@ -7622,7 +7643,7 @@ register(
 
       let applied = 0;
       const failed: string[] = [];
-      for (const m of moves) {
+      for (const m of safeMoves) {
         try {
           await bridge.send("organize_graph", {
             path,
@@ -7644,7 +7665,17 @@ register(
             : `Moved ${applied} node(s). Re-run unreal_review_layout to confirm, then save.`,
         scoped,
         moved: applied,
-        straightened: moves.filter((m) => m.reason === "straighten").length,
+        straightened: safeMoves.filter((m) => m.reason === "straighten").length,
+        ...(grown > 0
+          ? { boxesGrown: `${grown} comment box(es) widened so a straightened chain stayed inside the system that owns it.` }
+          : {}),
+        ...(growthFailed.length > 0
+          ? {
+              resizeUnavailable:
+                "A comment box needed widening and the bridge refused - the plugin predates resize_comment_box. " +
+                "Those moves were dropped rather than carrying nodes out of their box; rebuild the plugin, or widen the box by hand.",
+            }
+          : {}),
         // Reported, not hidden. A box owns the nodes inside it, so a move across its edge would
         // change which system a node belongs to - the tidier refuses those and says how many.
         ...(heldByBox > 0

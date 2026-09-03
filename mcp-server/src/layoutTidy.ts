@@ -50,6 +50,15 @@ export interface TidyMove {
   reason: "straighten" | "compact";
 }
 
+/** A box that must grow so a tidied chain stays inside the system that owns it. */
+export interface BoxGrowth {
+  boxId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface TidyOptions {
   /** Nodes at or below this Y are in scope. At least one bound is required. */
   minY?: number;
@@ -104,7 +113,7 @@ const isPure = (n: TidyNode) => !(n.pins ?? []).some((l) => EXEC.test(l));
 export function planTidy(
   all: TidyNode[],
   options: TidyOptions
-): { moves: TidyMove[]; scoped: number; heldByBox: number } {
+): { moves: TidyMove[]; growths: BoxGrowth[]; scoped: number; heldByBox: number } {
   const gap = options.gap ?? 220;
   const pullOver = options.pullOver ?? 700;
   const clearX = options.clearX ?? 150;
@@ -228,18 +237,90 @@ export function planTidy(
       .sort()
       .join("|");
 
+  // Live box extents, so a second growth sees the first.
+  const extent = new Map(
+    boxes.map((b) => [
+      b.id ?? "",
+      { x: b.x as number, y: b.y as number, width: b.width as number, height: b.height as number },
+    ])
+  );
+  const holds = (e: { x: number; y: number; width: number; height: number }, x: number, y: number) =>
+    x >= e.x && x <= e.x + e.width && y >= e.y && y <= e.y + e.height;
+
+  /**
+   * Can this box grow to keep a node that has moved just outside it?
+   *
+   * Growing is what a person does when a chain outgrows its box, but it is only safe when the new
+   * area is empty. A box that grows over somebody else's node CAPTURES it - the same ownership bug
+   * in the other direction - and a box that grows into another box makes the partial overlap that
+   * corrupts both when either is dragged.
+   */
+  const growthFor = (boxId: string, x: number, y: number, movingId: string) => {
+    const e = extent.get(boxId);
+    if (!e) return undefined;
+    const pad = 80;
+    const x0 = Math.min(e.x, x - pad);
+    const y0 = Math.min(e.y, y - pad);
+    const x1 = Math.max(e.x + e.width, x + pad);
+    const y1 = Math.max(e.y + e.height, y + pad);
+    const grown = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+
+    for (const other of scoped) {
+      const oid = other.id ?? "";
+      const p = pos.get(oid);
+      if (!p) continue;
+      // Newly covered ground must be empty. A node already inside stays inside; one outside must
+      // stay outside, or growing the box silently adopts it.
+      // Skipped by ID, not by position. Comparing coordinates matched any node that happened to
+      // sit where the moving one lands, so a stranger already standing there was mistaken for the
+      // node being moved and the box grew over it - the adoption bug this check exists to stop.
+      if (oid === movingId) continue;
+      // Membership BEFORE is judged on where the node started, against the box as it started.
+      // Judging it on the final position was wrong in a way that only showed up once boxes could
+      // grow: a node the tidy had already pushed out looked like it was never a member, and the
+      // grown box was then free to swallow something it should not have.
+      const orig = byId.get(oid);
+      const wasIn = !!orig && holds(e, orig.x as number, orig.y as number);
+      if (!wasIn && holds(grown, p.x, p.y)) return undefined;
+    }
+    for (const [otherId, o] of extent) {
+      if (otherId === boxId) continue;
+      const overlaps = grown.x < o.x + o.width && o.x < grown.x + grown.width && grown.y < o.y + o.height && o.y < grown.y + grown.height;
+      if (!overlaps) continue;
+      const nests =
+        (grown.x >= o.x && grown.y >= o.y && grown.x + grown.width <= o.x + o.width && grown.y + grown.height <= o.y + o.height) ||
+        (o.x >= grown.x && o.y >= grown.y && o.x + o.width <= grown.x + grown.width && o.y + o.height <= grown.y + grown.height);
+      if (!nests) return undefined;
+    }
+    return grown;
+  };
+
   const moves: TidyMove[] = [];
+  const growths: BoxGrowth[] = [];
   let heldByBox = 0;
   for (const [id, reason] of moved) {
     const p = pos.get(id);
     const was = byId.get(id);
     if (!p || !was) continue;
     if (p.x === was.x && p.y === was.y) continue; // pushed and pushed back
-    if (boxes.length > 0 && ownersOf(p.x, p.y) !== ownersOf(was.x as number, was.y as number)) {
-      heldByBox++;
-      continue;
+
+    if (boxes.length > 0) {
+      const before = ownersOf(was.x as number, was.y as number);
+      if (ownersOf(p.x, p.y) !== before) {
+        // Entering a box it was never in cannot be fixed by growing - the answer would be to shrink
+        // somebody else's box, which is not this pass's to do. Refuse.
+        const left = before.split("|").filter(Boolean);
+        const entered = ownersOf(p.x, p.y).split("|").filter(Boolean).some((b) => !left.includes(b));
+        const grown = entered ? undefined : left.map((b) => ({ b, g: growthFor(b, p.x, p.y, id) })).find((r) => r.g);
+        if (!grown || !grown.g) {
+          heldByBox++;
+          continue;
+        }
+        extent.set(grown.b, grown.g);
+        growths.push({ boxId: grown.b, ...grown.g });
+      }
     }
     moves.push({ nodeId: id, x: p.x, y: p.y, reason });
   }
-  return { moves, scoped: scoped.length, heldByBox };
+  return { moves, growths, scoped: scoped.length, heldByBox };
 }
