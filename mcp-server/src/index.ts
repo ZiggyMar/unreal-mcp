@@ -7832,9 +7832,32 @@ register(
           shoutedTitles: `${totalBoxes ? Math.round((100 * style.reduce((t, s) => t + s.upperTitles, 0)) / totalBoxes) : 0}%`,
           nestedBoxes: style.reduce((t, s) => t + s.nested, 0),
           wireP90: medianP90,
+          // The size at which this project starts boxing at all, which is the question a model
+          // actually has: not "how should a box look" but "does this graph want one yet".
+          //
+          // Measured here, the curve is unambiguous - 8% of graphs under 10 nodes are boxed, 38% at
+          // 20-29, 52% at 30-49, 90% at 50-79, and 100% above 80. It is a size rule, not a kind
+          // rule: 29 of the 82 boxless graphs are gameplay Blueprints, and the largest of those is
+          // 44 nodes while every graph over 80 has boxes whatever it is.
+          //
+          // Reported as the smallest size from which boxing is the clear norm, so a caller can say
+          // "this graph is past it, box the system" instead of guessing.
+          ...(() => {
+            const sizes = rows.map((r) => ({ n: r.nodes, boxed: r.boxes > 0 })).sort((a, b) => a.n - b.n);
+            for (const cut of [10, 20, 30, 50, 80, 150]) {
+              const at = sizes.filter((s) => s.n >= cut);
+              if (at.length < 5) break;
+              if (at.filter((s) => s.boxed).length / at.length >= 0.8) return { boxedAboveNodes: cut };
+            }
+            return {};
+          })(),
         };
 
-        const shown = includeClean ? [...dirty, ...clean] : dirty;
+        // `unchecked` belongs here too. Splitting it out of `clean` made the count honest and the
+        // LISTING incomplete: those 82 graphs were in neither list, so includeClean could report a
+        // number nobody could then enumerate. A category you can count and not name is worse than
+        // one you never separated.
+        const shown = includeClean ? [...dirty, ...clean, ...unchecked] : dirty;
         return jsonResult({
           nextAction:
             dirty.length === 0
@@ -7852,6 +7875,9 @@ register(
             ? { outlier: `${worst.path.split("/").pop()} has wire p90 ${worst.p90} against a project median of ${medianP90}.` }
             : {}),
           ...(failed.length > 0 ? { unreadable: failed } : {}),
+          // The cap is why a listing must say when it truncated: with includeClean on a 148-graph
+          // project, 60 rows is under half, and a silent cut looks like a complete answer.
+          ...(shown.length > 60 ? { moreRows: shown.length - 60 } : {}),
           rows: shown.slice(0, 60).map((r) => ({
             path: r.path,
             nodes: r.nodes,
