@@ -46,7 +46,7 @@ export interface LayoutNode {
 
 export interface LayoutFinding {
   /** Short machine-readable kind, so a caller can filter. */
-  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire" | "untitledBox";
+  kind: "backwardFlow" | "stacked" | "unboxed" | "longWire" | "untitledBox" | "overlappingBoxes";
   /** One sentence a person can act on. */
   detail: string;
   nodes: string[];
@@ -234,6 +234,40 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
 
   const sortedWires = [...wireLengths].sort((a, b) => a - b);
   const at = (p: number) => (sortedWires.length === 0 ? 0 : sortedWires[Math.min(sortedWires.length - 1, Math.floor(sortedWires.length * p))]);
+
+  // --- boxes that half-overlap ---
+  //
+  // Worse than any other fault here, and the one this checker missed while its author hit it by
+  // hand: in the editor a comment box OWNS the nodes inside it and drags them. Two boxes that share
+  // a region both claim the same nodes, so moving either corrupts the other, and which nodes belong
+  // to which is decided by whichever was clicked.
+  //
+  // Nesting is fine and is the convention here - 40 nested pairs in one hand-organised graph, an
+  // outer box naming the system and inner ones naming its parts. Only PARTIAL overlap is a fault.
+  const sizedBoxes = boxes.filter((b) => typeof b.width === "number" && typeof b.height === "number");
+  const contains = (outer: LayoutNode, inner: LayoutNode) =>
+    (inner.x as number) >= (outer.x as number) &&
+    (inner.y as number) >= (outer.y as number) &&
+    (inner.x as number) + (inner.width as number) <= (outer.x as number) + (outer.width as number) &&
+    (inner.y as number) + (inner.height as number) <= (outer.y as number) + (outer.height as number);
+
+  for (let i = 0; i < sizedBoxes.length; i++) {
+    for (let j = i + 1; j < sizedBoxes.length; j++) {
+      const a = sizedBoxes[i], b = sizedBoxes[j];
+      const overlaps =
+        (a.x as number) < (b.x as number) + (b.width as number) &&
+        (b.x as number) < (a.x as number) + (a.width as number) &&
+        (a.y as number) < (b.y as number) + (b.height as number) &&
+        (b.y as number) < (a.y as number) + (a.height as number);
+      if (!overlaps || contains(a, b) || contains(b, a)) continue;
+      const name = (n: LayoutNode) => ((n.text ?? "").split("\n")[0] || "an untitled box").slice(0, 34);
+      findings.push({
+        kind: "overlappingBoxes",
+        detail: `"${name(a)}" and "${name(b)}" half-overlap. A box owns the nodes inside it, so both claim the shared ones and moving either corrupts the other. Nest one inside the other, or separate them.`,
+        nodes: [a.id ?? "", b.id ?? ""],
+      });
+    }
+  }
 
   // --- boxes that group without naming ---
   //
