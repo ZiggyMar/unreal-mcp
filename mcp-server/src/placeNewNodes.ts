@@ -159,15 +159,51 @@ export function placeNewNodes(
   }
 
   // Left to right in the order the caller declared them, which is the order they were reasoned about
-  // and usually the order they run.
+  // and usually the order they run - but one ROW PER SYSTEM, not one row for the batch.
+  //
+  // Three sound systems built in one call came out as 21 nodes on a single line, 5200 wide and 0
+  // tall, and the box round them was 5820 x 360. That is a 16:1 strip in a project whose widest
+  // comment box is 4.2:1 and whose median is 2.6:1. Each system on its own row makes the same batch
+  // about 2000 x 1200, which is the shape a person draws.
+  //
+  // Systems are found the same way boxesForBatch names them: from each entry node, forward through
+  // what it runs. Anything reached by nobody trails the last row rather than being dropped.
+  const rows: PlaceNode[][] = [];
+  const placedIn = new Set<string>();
+  for (const ev of fresh.filter((n) => isEntryType(n.type))) {
+    const own: PlaceNode[] = [];
+    const queue = [ev];
+    while (queue.length > 0) {
+      const n = queue.shift() as PlaceNode;
+      const id = n.id ?? "";
+      if (!id || placedIn.has(id)) continue;
+      placedIn.add(id);
+      own.push(n);
+      for (const nextId of linkedIds(n)) {
+        const nxt = fresh.find((f) => (f.id ?? "") === nextId);
+        if (nxt && !placedIn.has(nxt.id ?? "")) queue.push(nxt);
+      }
+    }
+    if (own.length > 0) rows.push(own);
+  }
+  const orphans = fresh.filter((n) => !placedIn.has(n.id ?? ""));
+  if (orphans.length > 0) {
+    if (rows.length > 0) rows[rows.length - 1].push(...orphans);
+    else rows.push(orphans);
+  }
+
   const out: Placement[] = [];
-  let cursorX = originX;
-  for (const n of fresh) {
-    const id = n.id ?? "";
-    const slot = nearestFree(cursorX, originY, id);
-    pos.set(id, slot);
-    out.push({ nodeId: id, x: slot.x, y: slot.y });
-    cursorX = slot.x + columnGap;
+  let rowY = originY;
+  for (const row of rows) {
+    let cursorX = originX;
+    for (const n of row) {
+      const id = n.id ?? "";
+      const slot = nearestFree(cursorX, rowY, id);
+      pos.set(id, slot);
+      out.push({ nodeId: id, x: slot.x, y: slot.y });
+      cursorX = slot.x + columnGap;
+    }
+    rowY += rowGap * 3;
   }
   return out;
 }
