@@ -209,7 +209,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
 | `core` | 13169 | the authoring spine |
 | `lazy` | 13477 | `core` plus deferred groups |
-| `full` | 49441 | everything, for a model that can afford it |
+| `full` | 49438 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -12020,14 +12020,21 @@ not. Measuring the hand-maintained code against the generated code:
 
 ```
                         his code      the generated system
-execution wires            306                 44
+execution wires            369                 50
 running BACKWARD             0                  4
 ```
 
 "Reads like a book" has an exact form: an execution wire should point rightward. His graphs manage
-that perfectly across 306 wires. Epic's own guidance is the same rule from the other side — *"align
+that perfectly across 369 wires. Epic's own guidance is the same rule from the other side — *"align
 wires, not nodes"*, because you cannot control pin positions but you can place nodes so the wire has
 a straight run.
+
+Those counts were 306 and 44 until the checker learned what an execution pin is called. It knew
+`then`, `Then N`, `LoopBody`, `Completed` and `execute`, and a Branch's second output is `else`, a
+Sequence's are `then_0` and `then_1`, a Switch Has Authority says `Authority`. So roughly a fifth of
+every graph's execution wiring was invisible — including, in the generated system, four backward
+wires through Branch `else` paths that this tool called clean for twenty iterations. The standard
+was better than claimed and the generated code was worse; both numbers moved for the same reason.
 
 `unreal_review_layout` checks the four rules that came out of measuring his project: flow runs
 rightward, nothing is stacked, wires stay short, every node is inside a comment box. It reports and

@@ -15,8 +15,11 @@ import { isEntryType } from "./entryTypes.js";
  * So the conventions are checked instead of remembered. Every rule here came from measuring a graph
  * a person maintains by hand, not from taste:
  *
- *   - **Flow runs rightward.** His 306 execution wires had 0 running backwards; the ones added by a
- *     model had 4. Epic's own guidance is "align wires, not nodes" - you cannot control pin
+ *   - **Flow runs rightward.** His 369 execution wires had 0 running backwards; the ones added by a
+ *     model had 4. Those counts read 306 and 44 until this file learned that a Branch's second exec
+ *     output is called "else" - about a fifth of every graph's execution wiring was invisible, and
+ *     the four backward wires in the generated system had been hiding in it the whole time.
+ *     Epic's own guidance is "align wires, not nodes" - you cannot control pin
  *     positions, but you can place nodes so the wire has a straight run. A chain that jumps left
  *     makes the reader backtrack, and enough of those is what spaghetti is.
  *   - **Nothing is stacked.** Two nodes at the same coordinates are invisible until one is dragged.

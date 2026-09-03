@@ -152,8 +152,8 @@ not working.
      `unreal_organize_graph add_comment_box`.
    - **Then check it:** `unreal_review_layout` reports what a compile cannot - chains running
      leftward, stacked nodes, canvas-crossing wires, nodes in no comment box, boxes that
-     half-overlap, boxes left holding nothing. Measured on a real project, hand-written code ran 306
-     execution wires with 0 backwards; generated code ran 4 in 44.
+     half-overlap, boxes left holding nothing. Measured on a real project, hand-written code ran 369
+     execution wires with 0 backwards; generated code ran 4 backwards in 50.
    - **Do not invent box geometry.** An `unboxed` finding carries `suggest`: rectangles already
      cleared against every existing box and node, one per system, ready for `add_comment_box`. The
      two ways a box goes wrong are both silent - padding past a neighbour's edge makes a partial

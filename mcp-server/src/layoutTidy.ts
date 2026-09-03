@@ -16,13 +16,13 @@
  * ## The two passes
  *
  * **Straighten.** Every execution wire should point rightward; that is the measurable form of "reads
- * like a book". Hand-written code in this project manages 306 exec wires with 0 backwards. A chain
+ * like a book". Hand-written code in this project manages 369 exec wires with 0 backwards. A chain
  * is only monotonic if every step is, so pushing one node right can expose the next - it repeats
  * until nothing points left, rather than fixing a list of coordinates once.
  *
  * **Compact.** Pure nodes - getters, maths, casts with no exec pins - have no place they must be,
  * only a place they should be. Moving them beside what they touch took the generated system's p90
- * wire length from 1068 to 672, against 608 for the hand-built code beside it. Distance is measured
+ * wire length from 1068 to 692, against 608 for the hand-built code beside it. Distance is measured
  * to everything wired to a node, in BOTH directions: the first version looked only at outputs, so a
  * node whose consumer was close but whose source was 2000 away looked settled and never moved.
  *

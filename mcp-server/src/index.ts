@@ -7605,7 +7605,7 @@ register(
       "**No node crosses a comment box edge**, because a box owns what is inside it and a move across one silently " +
       "changes which system a node belongs to. A chain that outgrew its box widens it (`boxesGrown`) unless that " +
       "would hit another box or swallow a node; otherwise the move is dropped and counted (`heldByBox`).\n\n" +
-      "Measured: wire p90 1068 -> 672, against 608 for the hand-built code beside it, 0 backward. `dryRun` shows " +
+      "Measured: wire p90 1068 -> 692, against 608 for the hand-built code beside it. `dryRun` shows " +
       "the moves without making them.",
     inputSchema: {
       path: z.string().describe('Blueprint path, e.g. "/Game/Characters/BP_Player".'),
@@ -7718,7 +7718,7 @@ register(
       "Layout faults a compile never catches: exec chains jumping leftward, stacked nodes, canvas-crossing wires, " +
       "nodes in no comment box, boxes that half-overlap, boxes left holding nothing.\n\n" +
       "**Run it after adding nodes to an existing graph.** Correct nodes still leave a graph that reads as scrambled " +
-      "wire, and whoever edits it next pays. Measured: hand-maintained code had 306 exec wires, 0 backwards; a " +
+      "wire, and whoever edits it next pays. Measured: hand-maintained code had 369 exec wires, 0 backwards; a " +
       "model's had 4.\n\n" +
       "An `unboxed` finding carries `suggest`: ready-to-draw boxes, one per system, already cleared against every " +
       "box and node, for unreal_organize_graph add_comment_box. `almost` names what blocks a box that is one or two " +
