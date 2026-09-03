@@ -40,6 +40,7 @@ const NOT_UNDOABLE = {
   undo: "it is the undo - transacting it would push an entry onto the stack it consumes; redo is the inverse",
 
   create_asset: "the editor cannot undo asset creation either - a new .uasset is a file on disk, not a transacted change",
+  import_asset: "importing writes a new package; see create_asset. The factory runs outside any transaction and undoing it would leave a .uasset with nothing referencing it",
   duplicate_asset: "same as create_asset: it makes a new package",
   rename_asset: "an asset rename fixes up references across packages and is not transacted in the editor either",
   delete_asset: "asset deletion goes through the editor's own delete path, which is not undoable",

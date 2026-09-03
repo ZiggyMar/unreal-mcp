@@ -666,6 +666,8 @@ const TOOL_GROUPS: Record<string, string[]> = {
   ui: ["unreal_scaffold_widget", "unreal_create_widget_blueprint", "unreal_add_widget", "unreal_list_widgets", "unreal_set_widget_property"],
   materials: [
     "unreal_create_material",
+    "unreal_build_material_graph",
+    "unreal_import_asset",
     "unreal_create_material_instance",
     "unreal_set_material_parameter",
     "unreal_list_material_parameters",
@@ -7427,6 +7429,103 @@ register(
     try {
       const result = await bridge.send("create_material", { packagePath, baseColor, metallic, roughness, emissiveColor });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_import_asset",
+  {
+    title: "Import a file from disk into the project",
+    description:
+      "Turns a file on disk into a project asset - PNG/TGA to Texture2D, FBX to StaticMesh, WAV to SoundWave, " +
+      "anything the engine has a factory for. Every other tool here works on assets that already exist, so this is " +
+      "the only way in.\n\n" +
+      "Lives in memory until unreal_save_asset. An import that creates nothing is reported as a failure, since an " +
+      "unsupported format otherwise reads as a call that worked and did nothing.",
+    inputSchema: {
+      sourceFile: z.string().describe('Absolute path ON THE EDITOR MACHINE, e.g. "C:/Users/me/Desktop/arrow.png".'),
+      destinationPath: z.string().describe('Content folder starting with /Game, e.g. "/Game/UI/Textures". Not a disk path.'),
+      assetName: z
+        .string()
+        .optional()
+        .describe("Asset name. Defaults to the file name, so spaces in the filename become spaces in the asset."),
+    },
+  },
+  async ({ sourceFile, destinationPath, assetName }) => {
+    try {
+      return jsonResult(await bridge.send("import_asset", { sourceFile, destinationPath, assetName }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+register(
+  "unreal_build_material_graph",
+  {
+    title: "Author a material's node graph",
+    description:
+      "Adds expressions to a Material and wires them together and into its outputs, atomically. Makes a material " +
+      "that DOES something (Panner scrolling a texture, mask into OpacityMask) where unreal_create_material only " +
+      "makes a flat one.\n\n" +
+      "**Pass `settings`.** An alpha channel is an opaque rectangle until blendMode is Masked, and a marker reads " +
+      "as dark mud until shadingModel is Unlit. Neither shows in the graph, so omitting them looks like a broken " +
+      "graph. Then unreal_save_asset.",
+    inputSchema: {
+      path: z.string().describe('The Material, e.g. "/Game/UI/M_Arrow". Not a MaterialInstance.'),
+      nodes: z
+        .array(
+          z.object({
+            ref: z.string().describe("Your name for it, used by connections/outputs here."),
+            type: z.string().describe('Expression class without the prefix: "Panner", "TextureCoordinate", "Multiply", "ScalarParameter". A wrong name lists near matches.'),
+            x: z.number().optional().describe("Negative x is left, where inputs belong."),
+            y: z.number().optional(),
+            properties: z
+              .record(z.union([z.string(), z.number(), z.boolean()]))
+              .optional()
+              .describe('Real property names: {"ParameterName": "Spacing", "DefaultValue": 8.0}.'),
+          })
+        )
+        .optional(),
+      connections: z
+        .array(
+          z.object({
+            from: z.string(),
+            fromOutput: z.string().optional().describe('e.g. "RGB"/"A" on a texture sample. Omit for the first.'),
+            to: z.string(),
+            toInput: z.string().optional().describe('e.g. "Coordinate" on a Panner, "A"/"B" on a Multiply. Omit for the first.'),
+          })
+        )
+        .optional(),
+      outputs: z
+        .array(
+          z.object({
+            from: z.string(),
+            fromOutput: z.string().optional(),
+            property: z.string().describe("BaseColor, EmissiveColor, Opacity, OpacityMask, Roughness, Metallic, Specular, Normal, WorldPositionOffset, AmbientOcclusion."),
+          })
+        )
+        .optional()
+        .describe("Without at least one, the graph renders nothing."),
+      settings: z
+        .object({
+          blendMode: z.string().optional().describe('"Opaque", "Masked", "Translucent", "Additive".'),
+          shadingModel: z.string().optional().describe('"Unlit" or "DefaultLit". Unlit for UI and markers.'),
+          twoSided: z.boolean().optional(),
+        })
+        .optional(),
+    },
+  },
+  async ({ path, nodes, connections, outputs, settings }) => {
+    const refusal = await refuseIfPieRunning("unreal_build_material_graph", path);
+    if (refusal) return refusal;
+    try {
+      return jsonResult(
+        await bridge.send("build_material_graph", { path, nodes, connections, outputs, settings })
+      );
     } catch (err) {
       return errorResult(err);
     }

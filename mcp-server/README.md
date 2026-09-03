@@ -209,7 +209,7 @@ table cannot quietly go stale the way the standing instructions did.
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
 | `core` | 13216 | the authoring spine |
 | `lazy` | 13524 | `core` plus deferred groups |
-| `full` | 47516 | everything, for a model that can afford it |
+| `full` | 48440 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -387,6 +387,8 @@ give it a body, configure its class defaults, bind input to it, and actually run
 | `unreal_list_input_mappings` | `list_input_mappings` | Read the **legacy** project-settings bindings. Returns nothing on an Enhanced Input project - use `read_input_context`. |
 | `unreal_read_input_context` | `read_input_context` | Read what an Input Mapping Context binds, keys grouped under the action they fire. |
 | `unreal_trace_input` | *composite* | "What happens when the player presses Escape?" - key to context to action to every handler and what it does, in one call. |
+| `unreal_import_asset` | `import_asset` | Turn a file on disk into a project asset - PNG/TGA to Texture2D, FBX to StaticMesh, WAV to SoundWave. The front door. |
+| `unreal_build_material_graph` | `build_material_graph` | Author a Material's node graph: expressions, wires, outputs and blend/shading settings in one call. |
 | `unreal_read_level_sequence` | `read_level_sequence` | Read what a cutscene animates, and the bindings and tracks that quietly animate nothing. |
 | `unreal_read_timeline` | `read_timeline` | Read a Blueprint Timeline: length, loop/autoplay/**replicated**, and every float, vector, colour and event track with its curve shape. |
 | `unreal_set_niagara_user_parameter` | `set_niagara_user_parameter` | Set a Niagara system's exposed parameter default (float, int, bool). Refuses other types by name rather than writing something you did not mean. |
@@ -7432,6 +7434,7 @@ anybody noticed.
 - [The one-off became `scripts/mutate.mjs`](#the-one-off-became-scriptsmutatemjs)
 - ["You're assuming" — the filename that looked like the answer](#youre-assuming--the-filename-that-looked-like-the-answer)
 - [Compiling during PIE killed the editor, so it is refused now](#compiling-during-pie-killed-the-editor-so-it-is-refused-now)
+- ["Then make the tooling to do material graphs"](#then-make-the-tooling-to-do-material-graphs)
 
 <!-- INDEX:END -->
 
@@ -11961,3 +11964,37 @@ block work for a reason that has nothing to do with PIE.
 
 Written down in `never-compile-a-blueprint-during-pie` too, because the same rule applies to a person
 driving the editor by hand.
+
+### "Then make the tooling to do material graphs"
+
+Asked for floor arrows that scroll toward a target — one of the most ordinary effects in a game — the
+honest answer was that this tool could not make that material. `create_material` builds a fixed
+handful of expressions (a colour parameter, a roughness scalar, an optional texture sample) and
+stops. No Panner, no TexCoord, no Time, no mask into opacity. The workaround shipped was a flat grey
+ribbon, and the user's reply was the correct one: *"If that needs a material graph and tile thingy
+and pattern thingy, then make the tooling to do material graphs."*
+
+Two commands came out of it. `import_asset` turns a file on disk into an asset — the front door,
+missing entirely, so the only way to get someone's PNG into the project was to ask them to drag it
+into the Content Browser. `build_material_graph` authors expressions, wires and outputs in one call.
+
+**Expression types resolve by name, not through a switch.** `"Panner"` finds
+`UMaterialExpressionPanner`; a wrong name is answered with the near matches. The whole expression
+library is reachable, including whatever the next engine version adds, which a hand-written mapping
+would not be.
+
+**`settings` shipped in the first version, not the second.** Chevrons with an alpha channel render as
+an opaque white rectangle until `blendMode` is Masked, and a floor marker reads as dark mud until
+`shadingModel` is Unlit. Neither is visible in the graph, so a caller who omits them concludes the
+graph is broken and goes looking in the wrong place.
+
+**The first real call proved why validation must come first.** It created ten expressions and *then*
+refused on a blend-mode spelling — leaving the material in a state that could not be inspected and
+could not safely be retried, because re-running would have duplicated every parameter. `build_graph`
+is atomic for exactly this reason. Settings are now resolved and checked before a single expression
+exists, so a refusal means nothing happened; and `"Masked"` is accepted alongside `BLEND_Masked`,
+because the friendly word is what the editor's own dropdown shows and what anyone would type.
+
+Three of the repo's own guards caught real gaps on the way in, which is the argument for having them:
+parity found `import_asset` had no MCP tool, the undo check found neither command opened a
+transaction, and the doctor's probe-coverage test refused to let two new commands go unaccounted for.

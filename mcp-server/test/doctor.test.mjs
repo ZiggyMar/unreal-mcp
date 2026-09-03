@@ -19,6 +19,13 @@ const NOT_PROBED = new Set([
   // delete_asset is not probed, except that this one would be silent about it.
   "undo",
 
+  // Both refuse a parameterless call before doing anything, so a probe would prove only that the
+  // argument check works. They are also both WRITES - one imports a file, the other rewrites a
+  // material's graph - and a health check should not leave assets behind. Plugin freshness catches
+  // an editor missing them, which is the question a probe would really be answering.
+  "import_asset",
+  "build_material_graph",
+
   // Everything that already existed when this guard was written. They are covered generically by the
   // "plugin freshness" check, which compares the plugin's build time against the C++ source and so
   // catches a plugin missing ANY command at once. The probe list exists to name WHICH feature is

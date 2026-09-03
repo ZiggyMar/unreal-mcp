@@ -1567,6 +1567,14 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 	{
 		Response = HandleListEnumEntries(Params);
 	}
+	else if (Cmd == TEXT("import_asset"))
+	{
+		Response = HandleImportAsset(Params);
+	}
+	else if (Cmd == TEXT("build_material_graph"))
+	{
+		Response = HandleBuildMaterialGraph(Params);
+	}
 	else if (Cmd == TEXT("create_material"))
 	{
 		Response = HandleCreateMaterial(Params);

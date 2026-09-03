@@ -183,6 +183,8 @@ private:
 	static TSharedRef<FJsonObject> HandleAddEnumEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListEnumEntries(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleBuildMaterialGraph(const TSharedPtr<FJsonObject>& Params);
+	static TSharedRef<FJsonObject> HandleImportAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleCreateMaterialInstance(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetMaterialParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleListMaterialParameters(const TSharedPtr<FJsonObject>& Params);
