@@ -99,7 +99,9 @@ test("a standalone system gets a box named after its event", () => {
     { nodeId: "b", x: 520, y: 5000 },
   ];
   const box = boxForBatch(nodes, ["CE_Thing", "a", "b"], placements);
-  assert.equal(box.title, "CE_Thing", "the event is what the system IS");
+  // The event is what the system IS - but CE_ is plumbing, and this project's box titles are names.
+  // Measured over 148 graphs: 2 words median, 3% shouted, "Movement" and "Firing", not "CE_Thing".
+  assert.equal(box.title, "Thing", "the event names the system; the CE_ prefix does not");
   assert.ok(box.x < 0 && box.y < 5000, "the box surrounds its nodes");
   assert.ok(box.width > 520, "and is wide enough for the last one");
 });
