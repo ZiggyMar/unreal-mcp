@@ -1681,10 +1681,27 @@ register(
       // rather than returning an empty list that reads as "this Blueprint is empty".
       if (outline) {
         const withPos = capGraphSummary(result as never, { maxNodes: 5000, positions: true });
-        const boxes = ((withPos.nodes ?? []) as Array<{ type?: string; text?: string; y?: number }>)
-          .filter((n) => /Comment/i.test(n.type ?? "") && (n.text ?? "").trim().length > 0)
+        type Box = { type?: string; text?: string; x?: number; y?: number; width?: number; height?: number };
+        const raw = ((withPos.nodes ?? []) as Box[]).filter(
+          (n) => /Comment/i.test(n.type ?? "") && (n.text ?? "").trim().length > 0
+        );
+        // Boxes NEST in a hand-organised graph - measured at 40 nested pairs among 77 here, with
+        // Movement and Look Input inside Inputs, Regeneration inside Networked Regeneration. A flat
+        // list reports a system and its parts as siblings, which is the one thing the outline exists
+        // to convey. Depth is how many boxes contain this one.
+        const contains = (outer: Box, inner: Box) =>
+          outer !== inner &&
+          typeof outer.width === "number" &&
+          (inner.x ?? 0) >= (outer.x ?? 0) &&
+          (inner.y ?? 0) >= (outer.y ?? 0) &&
+          (inner.x ?? 0) + (inner.width ?? 0) <= (outer.x ?? 0) + (outer.width ?? 0) &&
+          (inner.y ?? 0) + (inner.height ?? 0) <= (outer.y ?? 0) + (outer.height ?? 0);
+        const boxes = raw
           .sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
-          .map((n) => (n.text as string).trim());
+          .map((n) => {
+            const depth = raw.filter((o) => contains(o, n)).length;
+            return `${"  ".repeat(Math.min(depth, 4))}${(n.text as string).trim()}`;
+          });
         const nodeCount = ((result as { nodes?: unknown[] }).nodes ?? []).length;
         return jsonResult({
           nextAction:
