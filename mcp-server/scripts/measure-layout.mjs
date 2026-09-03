@@ -82,7 +82,14 @@ for (const c of CLAIMS) {
   if (bad) problems.push(`${c.label}: quoted ${c.expect}, measured ${actual} (quoted in ${c.quotedIn.join(", ")})`);
 }
 
-const sweep = call("unreal_review_layout", { pathPrefix: PREFIX });
+// EventGraphs only, stated rather than inherited from a default.
+//
+// The conventions quoted in the source were measured over EventGraphs, and they MOVE with scope:
+// including function graphs takes nodes-in-a-box from 54% to 41% and wire p90 from 464 to 544,
+// because function graphs are small, single-purpose and rarely boxed. Both are true of what they
+// measured. Leaving this to the tool's default would mean a later change of default silently
+// reporting a scope difference as drift - a check that cries wolf is one that gets switched off.
+const sweep = call("unreal_review_layout", { pathPrefix: PREFIX, includeFunctions: false });
 for (const c of CONVENTIONS) {
   const actual = sweep.conventions?.[c.key];
   const bad = actual === undefined || drifted(c.expect, actual, c.tolerance);

@@ -7872,6 +7872,11 @@ register(
           shoutedTitles: `${totalBoxes ? Math.round((100 * style.reduce((t, s) => t + s.upperTitles, 0)) / totalBoxes) : 0}%`,
           nestedBoxes: style.reduce((t, s) => t + s.nested, 0),
           wireP90: medianP90,
+          // Which graphs these describe. The same project answers differently by scope - including
+          // function graphs takes nodes-in-a-box from 54% to 41%, because they are small,
+          // single-purpose and rarely boxed - and a percentage with no scope on it invites being
+          // quoted as though it were the whole truth, which is how "306 execution wires" happened.
+          measuredOver: includeFunctions ? "every graph over 12 nodes" : "EventGraphs",
           // The size at which this project starts boxing at all, which is the question a model
           // actually has: not "how should a box look" but "does this graph want one yet".
           //
