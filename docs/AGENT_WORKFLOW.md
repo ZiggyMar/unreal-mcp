@@ -168,6 +168,17 @@ not working.
    - **Match the project, not this document.** `unreal_review_layout` with `pathPrefix` measures the
      conventions of whatever project you are in: how many nodes a box holds, how long titles run,
      how much nests, what a normal wire length is. Those numbers beat any rule of thumb written here.
+   - **Never move nodes with your own arithmetic.** `unreal_tidy_layout` checks every move against
+     what is already there and against the comment box that owns each node; a hand-computed shift
+     checks nothing. Splitting one 33-node box into named parts this way moved 30 nodes by a fixed
+     offset and turned a clean system into seven faults - two chains reading backwards, five stacked
+     pairs, one of them at *exactly* the same coordinates as another node. Reversing it by
+     subtracting the same offset made it worse again, because the band boundaries then caught ten
+     nodes that had never moved. It took a snapshot taken *before* the attempt to put back
+     precisely. If you need room, widen `gap` on `unreal_tidy_layout` and let it place things.
+   - **Read a graph's positions before you change them, and keep that read.** It is the only
+     reliable undo: the editor's own is out of reach from here, and a reverse calculation is a guess
+     dressed as a fix.
 
    Put the prose on the comment BOX, not on the nodes. One short line on a node, or nothing; a
    paragraph renders as a box that dwarfs the node it explains.
