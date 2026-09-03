@@ -30,7 +30,7 @@ import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout, measureStyle, type StyleSample } from "./layoutReview.js";
 import { planTidy } from "./layoutTidy.js";
-import { boxForBatch, placeNewNodes } from "./placeNewNodes.js";
+import { boxesForBatch, placeNewNodes } from "./placeNewNodes.js";
 import { readRuntimeLogForProject } from "./runtimeLog.js";
 import { logFileFor } from "./runtimeLog.js";
 import {
@@ -2764,19 +2764,27 @@ register(
             // and a batch built into clear canvas is exactly the one that would otherwise stay loose
             // nodes forever. A batch wired into an existing chain gets nothing - it belongs to
             // whatever already owns that chain.
-            const box = boxForBatch((compact.nodes ?? []) as never, newIds, placements);
-            if (box) {
+            // Outer box first, then the inner ones, so the nesting draws in the order the editor
+            // expects and an inner box is not hidden behind its parent.
+            const boxes = boxesForBatch((compact.nodes ?? []) as never, newIds, placements);
+            const box = boxes[0];
+            for (const b of boxes) {
               await bridge.send("organize_graph", {
                 path,
                 graphName,
                 action: "add_comment_box",
-                x: box.x,
-                y: box.y,
-                width: box.width,
-                height: box.height,
-                text: box.title,
+                x: b.x,
+                y: b.y,
+                width: b.width,
+                height: b.height,
+                text: b.title,
               });
-              boxed = box.title;
+            }
+            if (box) {
+              boxed =
+                boxes.length > 1
+                  ? `${box.title}", with ${boxes.length - 1} named parts nested inside it: "${boxes.slice(1).map((b) => b.title).join('", "')}`
+                  : box.title;
             }
           } catch {
             // Placement is cosmetic and must never turn a successful build into a failed call.

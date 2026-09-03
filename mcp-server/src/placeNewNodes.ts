@@ -176,7 +176,8 @@ export function houseStyleTitle(raw: string, options: { maxWords?: number } = {}
   // titles that motivated it were hand-written ones, and those are not this function's to rewrite.
 
   // ThisIsOneWordToAPerson -> This Is One Word To A Person, so the word count means something.
-  if (!t.includes(" ")) t = t.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  // Underscores count as spaces here, or CE_MC_Sound keeps its plumbing as "MC_Sound".
+  if (!t.includes(" ")) t = t.replace(/_+/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2").trim();
 
   // Shouting is 3% of this project. Anything wholly upper-case gets sentence-cased back.
   if (t === t.toUpperCase() && /[A-Z]/.test(t)) {
@@ -239,4 +240,112 @@ export function boxForBatch(
     height: Math.max(...ys) - Math.min(...ys) + pad * 2,
     title,
   };
+}
+
+/** A box to draw: the outer one names the system, inner ones name its parts. */
+export interface BatchBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title: string;
+  /** True for the system box that the others nest inside. */
+  outer?: boolean;
+}
+
+/**
+ * One box, or a nest of them when the batch is really several systems.
+ *
+ * The project's boxes hold a median of 7 nodes and a p90 of 20, and there are 104 nested pairs -
+ * an outer box naming the system, inner ones naming its parts. A single box round forty nodes is
+ * not what this codebase looks like.
+ *
+ * The hard part is that a box needs a NAME. Chopping a chain into "Part 1" and "Part 2" every seven
+ * nodes would satisfy the measurement and mean nothing, and fake structure reads worse than one
+ * honest box - it is the same failure as a checker tuned until it stays quiet.
+ *
+ * So it only splits where a real name exists: at the entry events. Each event owns the run of nodes
+ * reachable from it, which is exactly how CE_ServerSound / CE_MC_Sound / CE_ClientSound sit as three
+ * named parts of one sound system in this graph. A batch with one event stays one box however large
+ * it is, because there is nothing honest to call the halves.
+ */
+export function boxesForBatch(
+  all: PlaceNode[],
+  newIds: string[],
+  placements: Placement[],
+  options: { minNodes?: number; pad?: number; splitAbove?: number } = {}
+): BatchBox[] {
+  const outer = boxForBatch(all, newIds, placements, options);
+  if (!outer) return [];
+
+  // The project's p90. Below it, one box is what a person would draw.
+  const splitAbove = options.splitAbove ?? 20;
+  const pad = options.pad ?? 180;
+
+  const wanted = newIds.filter(Boolean);
+  const isNewId = (id: string) =>
+    id !== "" && wanted.some((w) => w === id || w.startsWith(id) || id.startsWith(w));
+  const fresh = all.filter((n) => isNewId(n.id ?? ""));
+  const events = fresh.filter((n) => /Event/i.test(n.type ?? ""));
+  if (placements.length <= splitAbove || events.length < 2) return [outer];
+
+  const pos = new Map(placements.map((p) => [p.nodeId, p]));
+  const at = (id: string) => pos.get(id) ?? [...pos.entries()].find(([k]) => k.startsWith(id) || id.startsWith(k))?.[1];
+  const byId = new Map(fresh.map((n) => [n.id ?? "", n]));
+  const near = (id: string) => byId.get(id) ?? [...byId.entries()].find(([k]) => k.startsWith(id) || id.startsWith(k))?.[1];
+
+  // Each event takes the nodes reachable from it, first come first served - a node fed by two
+  // systems belongs to the one that runs it, and claiming it twice would build the overlapping
+  // boxes this whole effort exists to prevent.
+  const claimed = new Set<string>();
+  const inner: BatchBox[] = [];
+  for (const ev of events) {
+    const own: PlaceNode[] = [];
+    const queue = [ev];
+    while (queue.length > 0) {
+      const n = queue.shift() as PlaceNode;
+      const id = n.id ?? "";
+      if (!id || claimed.has(id)) continue;
+      claimed.add(id);
+      own.push(n);
+      for (const nextId of linkedIds(n)) {
+        const nxt = near(nextId);
+        if (nxt && !claimed.has(nxt.id ?? "")) queue.push(nxt);
+      }
+    }
+    const pts = own.map((n) => at(n.id ?? "")).filter(Boolean) as Placement[];
+    if (pts.length < 2) continue;
+    const title = houseStyleTitle(ev.title ?? "");
+    if (!title) continue;
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    inner.push({
+      // Half the outer padding, so an inner box sits clearly inside its parent rather than touching.
+      x: Math.min(...xs) - pad / 2,
+      y: Math.min(...ys) - pad / 2,
+      width: Math.max(...xs) - Math.min(...xs) + pad + 260,
+      height: Math.max(...ys) - Math.min(...ys) + pad,
+      title,
+    });
+  }
+
+  // One inner box spanning the whole system is just the outer box drawn twice.
+  if (inner.length < 2) return [outer];
+
+  // What is the OUTER box called? Not the first event - that is the mistake the unboxed check had
+  // to be fixed for, where "17 nodes starting at KillPlayer" quietly hid two more events inside the
+  // same cluster and read as one system.
+  //
+  // The honest name is the word the parts share: Server Sound / MC Sound / Client Sound is a Sound
+  // system. When they share nothing, there IS no name for the whole, so no outer box is drawn and
+  // the named parts stand on their own - which is still better organised than one box called after
+  // whichever event happened to be first.
+  const wordSets = inner.map((b) => new Set(b.title.toLowerCase().split(/\s+/)));
+  const shared = [...wordSets[0]].filter((w) => wordSets.every((s) => s.has(w)));
+  if (shared.length === 0) return inner;
+
+  const title = inner[0]
+    .title.split(/\s+/)
+    .filter((w) => shared.includes(w.toLowerCase()))
+    .join(" ");
+  return [{ ...outer, title, outer: true }, ...inner];
 }
