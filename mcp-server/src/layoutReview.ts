@@ -90,6 +90,8 @@ export interface LayoutOptions {
   maxWire?: number;
   /** Nodes closer than this in both axes are visually on top of each other. */
   tooClose?: number;
+  /** Max gap between two unboxed nodes for them to count as one system. */
+  nearby?: number;
 }
 
 const COMMENT_TYPE = /Comment/i;
@@ -139,6 +141,10 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
   // the p90 in the stats is the number that separates a tidy layout from a sprawling one.
   const maxWire = options.maxWire ?? 2000;
   const tooClose = options.tooClose ?? 40;
+  // How far apart two unboxed nodes can be and still read as one system. Roughly a screen at normal
+  // zoom: the measured gap BETWEEN the seven unboxed systems in a real graph was over 1900, and the
+  // widest gap inside any one of them was well under this.
+  const nearby = options.nearby ?? 900;
 
   const placed = nodes.filter(
     (n) =>
@@ -239,11 +245,73 @@ export function reviewLayout(nodes: LayoutNode[], options: LayoutOptions = {}): 
             (n.y as number) <= (b.y as number) + (b.height as number)
         )
     );
-    for (const n of loose.slice(0, 20)) {
+    // One finding per SYSTEM, not per node.
+    //
+    // This reported each loose node separately, and capped the list at 20 - so a real graph returned
+    // twenty lines of "X is inside no comment box", all saying the same thing, with 56 more silently
+    // dropped. Nothing in that tells you how many boxes are actually missing.
+    //
+    // Clustered by what they are wired to, those same 76 nodes are SEVEN systems, each with its own
+    // entry event: IgnoreData, CE_ServerSound, UpdateLocalVanPing, ApplyTicketSkin, CE_TraceForMOMPing,
+    // KillPlayer. That is seven boxes to draw, it is the shape the work actually takes, and it costs a
+    // fraction of the tokens the node-by-node list did.
+    const looseIds = new Set(loose.map((n) => n.id ?? ""));
+    const parent = new Map<string, string>(loose.map((n) => [n.id ?? "", n.id ?? ""]));
+    const find = (a: string): string => {
+      let r = a;
+      while (parent.get(r) !== r) r = parent.get(r) as string;
+      while (parent.get(a) !== r) { const nxt = parent.get(a) as string; parent.set(a, r); a = nxt; }
+      return r;
+    };
+    const union = (a: string, b: string) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+
+    // Wired together is the strongest signal: these nodes run as one thing, so they want one box.
+    for (const n of loose) {
+      for (const line of n.pins ?? []) {
+        if (!line.includes("->")) continue;
+        for (const id of targetsOf(line)) if (looseIds.has(id)) union(n.id ?? "", id);
+      }
+    }
+    // Then proximity, for the pure-data nodes that hang off a chain without being wired along it.
+    // A person reads two nodes a screen apart as one system; a whole screen away, they do not.
+    for (let i = 0; i < loose.length; i++) {
+      for (let j = i + 1; j < loose.length; j++) {
+        const a = loose[i], b = loose[j];
+        if (Math.abs((a.x as number) - (b.x as number)) <= nearby && Math.abs((a.y as number) - (b.y as number)) <= nearby) {
+          union(a.id ?? "", b.id ?? "");
+        }
+      }
+    }
+
+    const groups = new Map<string, LayoutNode[]>();
+    for (const n of loose) {
+      const root = find(n.id ?? "");
+      (groups.get(root) ?? groups.set(root, []).get(root) as LayoutNode[]).push(n);
+    }
+    const clusters = [...groups.values()].sort((a, b) => b.length - a.length);
+    for (const g of clusters.slice(0, 12)) {
+      // Named after its entry event, because that is what the system IS and what the box should be
+      // titled. Without one there is nothing honest to call it, so it is described by size and place.
+      // ALL its entry events, not the first. Proximity merges systems that sit next to each other,
+      // and "17 nodes starting at KillPlayer" hid a second event inside the same cluster - which
+      // reads as one system and is really two, so it would have suggested one box where two belong.
+      const entries = g.filter((n) => /Event/i.test(n.type ?? ""));
+      const entry = entries[0];
+      const entryNames = entries.slice(0, 3).map(name).join(", ");
+      const label = entries.length > 3 ? `${entryNames} and ${entries.length - 3} more` : entryNames;
+      const xs = g.map((n) => n.x as number), ys = g.map((n) => n.y as number);
+      const where = `x ${Math.min(...xs)}, y ${Math.min(...ys)}`;
       findings.push({
         kind: "unboxed",
-        detail: `${name(n)} is inside no comment box. A box owns the nodes within it, so this one is left behind when the box is moved.`,
-        nodes: [n.id ?? ""],
+        detail:
+          g.length === 1
+            ? `${name(g[0])} sits in no comment box, at ${where}. A box owns the nodes inside it, so this one is left behind whenever a box is moved.`
+            : entries.length > 1
+              ? `${g.length} nodes in no comment box at ${where}, covering ${entries.length} entry points: ${label}. That is ${entries.length} systems sitting together - give each its own titled box.`
+            : entry
+              ? `${g.length} nodes starting at ${name(entry)} are in no comment box (${where}). They are wired as one system - give them one titled box so it can be read and moved as a unit.`
+              : `${g.length} nodes at ${where} are in no comment box and have no entry event. They are wired together, so they want one titled box naming what they do.`,
+        nodes: g.slice(0, 8).map((n) => n.id ?? ""),
       });
     }
   }
