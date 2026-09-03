@@ -205,11 +205,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2523 | five tools; hand it a sentence or a preset name |
+| `search` | 2533 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
-| `core` | 13221 | the authoring spine |
-| `lazy` | 13529 | `core` plus deferred groups |
-| `full` | 49135 | everything, for a model that can afford it |
+| `core` | 13231 | the authoring spine |
+| `lazy` | 13539 | `core` plus deferred groups |
+| `full` | 49149 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person

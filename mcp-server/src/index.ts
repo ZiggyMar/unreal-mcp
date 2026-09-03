@@ -492,7 +492,7 @@ function buildInstructions(profile: string): string {
       : "   members, unreal_list_assets for paths. Never guess a function or pin name. The engine will",
     ...(profile === "core" ? [] : ["   tell you, and a guess costs a failed call."]),
     "5. Build whole graphs with unreal_build_graph, in one call. Do not place nodes one at a time,",
-    "   and do not pass x/y - it lays out what it places.",
+    "   and never pass x/y - on a graph that already has nodes they are honoured, and land on it.",
     "6. unreal_compile_blueprint, then unreal_review_blueprint, and act on what they say.",
     "   Compiling is not the same as being correct.",
     profile === "core"
@@ -1785,9 +1785,9 @@ register(
       '  - "Macro": macroName required, from the engine\'s standard macro library: ForEachLoop, ForLoop, WhileLoop, ' +
       "DoOnce, DoN, Gate, FlipFlop, IsValid, etc. A wrong name returns the full list of available macros. NOTE: macro " +
       'nodes name their input exec pin "Exec" (capital E), unlike regular nodes\' "execute".\n\n' +
-      "x/y are optional graph-editor position hints (cosmetic only, for the human opening the graph later). Set them " +
-      "roughly left-to-right in execution order so the graph stays readable to a human. comment is an optional " +
-      "annotation shown on the node; use it to explain WHY a node exists, as you place it.",
+      "Do NOT pass x/y. Omitted, a node is placed beside whatever it connects to; passed, it goes exactly where you " +
+      "guessed - and a graph that already has nodes has no gaps, so a guess lands on existing work. comment is an " +
+      "optional one-line annotation saying WHY the node exists; put anything longer on a comment box.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph name to add the node to, e.g. "EventGraph".'),

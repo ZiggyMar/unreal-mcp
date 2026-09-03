@@ -141,9 +141,21 @@ not working.
    `nextAction`. **Act on it rather than reporting it.** If you skip this you are grading your own
    homework.
 
-12. **Make it read well.** `unreal_auto_layout_graph` also wraps each execution chain in a comment
-   box titled after its event, so a human opening the graph sees labelled sections instead of a
-   field of nodes. It is idempotent and safe on graphs you did not author.
+12. **Make it read well, and check that it does.** A graph that compiles can still read as scrambled
+   wire, and the person who edits it next pays for that.
+
+   - **On a graph you built:** `unreal_auto_layout_graph` ranks nodes into columns and wraps each
+     execution chain in a titled comment box.
+   - **On a graph somebody else maintains:** do NOT run it. It relays out the WHOLE graph - measured
+     once at 209 of their nodes moved to place 4 of yours. Use `unreal_tidy_layout` with a `minY`/
+     `maxY` scope, which moves nothing outside it, and box your own system with
+     `unreal_organize_graph add_comment_box`.
+   - **Then check it:** `unreal_review_layout` reports what a compile cannot - chains running
+     leftward, stacked nodes, canvas-crossing wires, nodes in no comment box. Measured on a real
+     project, hand-written code ran 306 execution wires with 0 backwards; generated code ran 4 in 44.
+
+   Put the prose on the comment BOX, not on the nodes. One short line on a node, or nothing; a
+   paragraph renders as a box that dwarfs the node it explains.
 
 13. **Prove it runs, if you can.** Compiling proves validity; running proves behaviour.
     `unreal_start_pie` (with `numPlayers` > 1 to exercise replication), poll `unreal_pie_status`
@@ -231,9 +243,18 @@ cost one failed call to discover:
 - **`CallFunction` needs `className` for static library functions.** `PrintString` lives on
   `/Script/Engine.KismetSystemLibrary`, not on your Blueprint. `unreal_find_node` gives you the
   right `className` so you never guess.
-- **Do not hand-position nodes.** This used to be advice; it is now counter-productive.
-  `unreal_build_graph` lays the graph out after building it, so any `x`/`y` you pass is discarded.
-  Spend the effort on naming and on comment boxes instead, which no algorithm can infer.
+- **Never pass `x`/`y`.** Not "usually" - ever. This page used to say the coordinates were harmlessly
+  discarded, and that was wrong in the one case that matters: `build_graph` only lays out a graph it
+  effectively built, and on a graph that already had nodes it leaves everything where it was put. So
+  the numbers ARE honoured, precisely where guessing is most destructive.
+
+  A full graph has no gaps. An invented coordinate does not land in one - it lands on somebody's
+  existing system. Sixty nodes went into a 982-node `BP_Player` this way, across four regions,
+  interleaved with 154 of the owner's nodes; it compiled, it ran, and his verdict was *"it's like
+  taking headphones and you scramble the wires."*
+
+  Omit them and each node is placed beside whatever it connects to, which is both correct and free.
+  Spend the effort on naming and comment boxes, which no algorithm can infer.
 
 ## Working in a real project (not a scratch one)
 

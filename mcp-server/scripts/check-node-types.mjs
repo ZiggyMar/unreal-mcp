@@ -100,7 +100,11 @@ if (phantom.length > 0) {
 // guards in this repo have each had to unlearn.
 const prose = readFileSync(server, "utf8");
 const start = prose.indexOf("nodeType determines which other params are required");
-const end = prose.indexOf("x/y are optional graph-editor position hints", start);
+// The block ends where the coordinate advice begins. That sentence was reworded once - it used to
+// tell callers to SET x/y "roughly left-to-right", which is how sixty nodes ended up at guessed
+// coordinates on top of somebody's work - and this anchor moved with it. The guard reported the
+// drift rather than passing, which is the whole reason it names its own anchor in the failure.
+const end = prose.indexOf("Do NOT pass x/y", start);
 if (start === -1 || end === -1) {
   problems.push("could not find the nodeType prose block in src/index.ts - this guard has drifted from the text it checks");
 }
