@@ -32,6 +32,7 @@ const serverReadme = readFileSync(join(here, "..", "README.md"), "utf8");
 const complaints = readFileSync(join(repoRoot, "docs", "COMPLAINTS_SOLVED.md"), "utf8");
 const workflow = readFileSync(join(repoRoot, "docs", "AGENT_WORKFLOW.md"), "utf8");
 
+const NEWLINE = String.fromCharCode(10);
 const problems = [];
 
 // --- 1. every tool is documented -------------------------------------------------------------
@@ -42,6 +43,58 @@ if (undocumented.length > 0) {
     `${undocumented.length} tool(s) are registered but appear nowhere in mcp-server/README.md, so nobody can ` +
       `find them:\n` +
       undocumented.map((n) => `    - ${n}`).join("\n")
+  );
+}
+
+// --- 1b. no document names a tool that does not exist ----------------------------------------
+//
+// The reverse of check 1, and it exists because the forward one cannot catch this: a tool can be
+// documented AND the documentation can name a second tool that was renamed or never existed. Both
+// happened within an hour of each other while writing docs/EPIC_58_TEARDOWN.md - `unreal_handbook`
+// survived a rename and `unreal_take_screenshot` never existed at all (it is `unreal_screenshot`).
+//
+// A doc that names a tool nobody can call is worse than no doc: the reader tries it, gets "unknown
+// tool", and now distrusts everything else on the page. Prose is checked here for the same reason
+// tool parity is checked - a claim about the surface is part of the surface.
+//
+// Only OUR namespace is checked. Epic's tools (list_toolsets, describe_toolset, call_tool) and
+// their skills are named in the teardown deliberately and are not ours to register.
+const docFiles = [
+  ["mcp-server/README.md", serverReadme],
+  ["docs/COMPLAINTS_SOLVED.md", complaints],
+  ["docs/AGENT_WORKFLOW.md", workflow],
+];
+try {
+  docFiles.push(["docs/EPIC_58_TEARDOWN.md", readFileSync(join(repoRoot, "docs", "EPIC_58_TEARDOWN.md"), "utf8")]);
+} catch {
+  // Optional: the teardown is a document, not a promise.
+}
+
+// Prompts count as registered names too. They are addressed as `unreal_handbook` in prose and
+// reachable over prompts/get, so a doc naming one is naming something real - the first version of
+// this check flagged all three as phantom, which is exactly the false positive that would have got
+// it deleted rather than trusted.
+const prompts = [...serverSrc.matchAll(/registerPrompt\(\s*"(unreal_[a-z0-9_]+)"/g)].map((m) => m[1]);
+
+// Epic's own names appear in the teardown deliberately - they are Python modules inside their
+// plugin, not tools of ours to register, and renaming them is not in our gift.
+const NOT_OURS = new Set(["unreal_skill_best_practices"]);
+
+const registeredSet = new Set([...registered, ...prompts, ...NOT_OURS]);
+const phantom = [];
+for (const [label, text] of docFiles) {
+  for (const match of text.matchAll(/`(unreal_[a-z0-9_]+)`/g)) {
+    const name = match[1];
+    if (!registeredSet.has(name) && !phantom.some((p) => p.name === name && p.file === label)) {
+      phantom.push({ name, file: label });
+    }
+  }
+}
+if (phantom.length > 0) {
+  problems.push(
+    `${phantom.length} tool name(s) are named in documentation but are not registered, so a reader ` +
+      `who tries them gets "unknown tool":` + NEWLINE +
+      phantom.map((p) => `    - ${p.name}  (${p.file})`).join(NEWLINE)
   );
 }
 
