@@ -126,6 +126,7 @@
 #include "Kismet2/CompilerResultsLog.h"
 #include "Logging/TokenizedMessage.h"
 #include "ScopedTransaction.h"
+#include "Misc/ScopeExit.h"
 #include "Dom/JsonValue.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/UObjectGlobals.h"
@@ -1120,6 +1121,71 @@ static bool CheckWritePathsAllowed(const FString& Cmd, const TSharedPtr<FJsonObj
 	return true;
 }
 
+/**
+ * How deep inside a run_batch we currently are.
+ *
+ * Zero means an ordinary single command. Non-zero means an outer FScopedTransaction is already
+ * open, which changes exactly one decision in this file: whether a handler may CANCEL.
+ *
+ * Every command runs on the game thread, serially, so a plain counter is the whole mechanism - and
+ * it is a counter rather than a bool so a batch that ever nests still unwinds correctly.
+ */
+static int32 GMCPBatchDepth = 0;
+
+bool FMCPCommandHandler::IsInsideBatch()
+{
+	return GMCPBatchDepth > 0;
+}
+
+/**
+ * Commands that may not be steps of a batch.
+ *
+ * Not a matter of taste - each of these reaches UTransBuffer::Reset, and Reset while a transaction
+ * is open does not merely fail. It logs "Non zero active count", cancels the in-progress
+ * transaction, and then EMPTIES THE WHOLE UNDO BUFFER: the batch dies, every later step runs
+ * untransacted, and the human's own undo history - everything they did before the agent started -
+ * is destroyed with it.
+ *
+ *   open_level    UEditorLoadingAndSavingUtils::LoadMap -> FEditorFileUtils::LoadMap ->
+ *                 GEditor->Exec("MAP LOAD") -> UEditorEngine::Map_Load -> ResetTransaction.
+ *                 Unconditional.
+ *   create_level  same load path once the new level is opened.
+ *   delete_asset  ObjectTools::DeleteAssets / ForceDeleteObjects call ResetTransaction when the
+ *                 only remaining referencer is the transaction buffer - which being inside a batch
+ *                 makes MORE likely, because the outer transaction now holds a reference to
+ *                 anything an earlier step touched.
+ *
+ * run_batch itself is excluded so a batch cannot contain a batch: the depth counter would cope, but
+ * a nested batch's failure reporting would not, and there is no use for it.
+ *
+ * undo is excluded because undoing from inside the transaction being built is incoherent.
+ *
+ * This is a denylist rather than an allowlist because the safe set is large and the dangerous set is
+ * small, specific and discoverable by reading what each handler calls. A command that turns out to
+ * reach ResetTransaction later belongs here, and the cost of missing one is severe enough to say so
+ * out loud rather than leave it to be found.
+ */
+static bool IsBatchIneligible(const FString& Cmd, FString& OutReason)
+{
+	if (Cmd == TEXT("run_batch"))
+	{
+		OutReason = TEXT("a batch cannot contain a batch");
+		return true;
+	}
+	if (Cmd == TEXT("undo"))
+	{
+		OutReason = TEXT("undoing from inside the transaction being built is incoherent");
+		return true;
+	}
+	if (Cmd == TEXT("open_level") || Cmd == TEXT("create_level") || Cmd == TEXT("delete_asset"))
+	{
+		OutReason = TEXT("it resets the editor's transaction buffer, which would destroy both this ")
+			TEXT("batch and the human's own undo history. Run it as its own call, outside the batch.");
+		return true;
+	}
+	return false;
+}
+
 TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObject>& Request)
 {
 	const FString Cmd = Request->GetStringField(TEXT("cmd"));
@@ -1175,7 +1241,11 @@ TSharedRef<FJsonObject> FMCPCommandHandler::Dispatch(const TSharedRef<FJsonObjec
 		return Response;
 	}
 
-	if (Cmd == TEXT("ping"))
+	if (Cmd == TEXT("run_batch"))
+	{
+		Response = HandleRunBatch(Params);
+	}
+	else if (Cmd == TEXT("ping"))
 	{
 		Response = HandlePing(Params);
 	}
@@ -5177,7 +5247,17 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleBuildGraph(const TSharedPtr<FJ
 			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 			// The mutations are reverted by hand above; Cancel only discards the empty
 			// undo record so no "MCP: Build Graph" entry lingers in the history.
-			Transaction.Cancel();
+			//
+			// Except inside a batch, where this transaction is a NESTED one and Cancel is not a
+			// local decision. UTransBuffer::Cancel refuses to cancel partially: it forces
+			// StartIndex to 0 and sets ActiveCount to 0, which would discard the OUTER batch
+			// transaction's record while leaving every mutation it made applied, and silently
+			// un-transact every step after this one. The rollback above has already put this
+			// graph back; the empty record is harmless and the outer scope owns the entry.
+			if (!FMCPCommandHandler::IsInsideBatch())
+			{
+				Transaction.Cancel();
+			}
 		};
 
 		TMap<FString, UEdGraphNode*> RefMap;
@@ -12352,5 +12432,158 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleAssetStatus(const TSharedPtr<F
 	Result->SetStringField(TEXT("reason"), State.bIsCheckedOut
 		? TEXT("checked out by you; saving will work")
 		: TEXT("not checked out, but it can be checked out automatically when saving"));
+	return MakeOkResponse(Result);
+}
+
+
+/**
+ * Many commands, one undo entry.
+ *
+ * ## The problem
+ *
+ * Building one feature is four or five commands - create the Blueprint, add a component, add the
+ * variables, build the graph, compile - and each opens its own transaction. So the person watching
+ * gets five entries in their undo history for one thing they asked for, and taking it back means
+ * pressing Ctrl+Z five times and knowing that five was the number. Epic's 5.8 plugin solved the
+ * same problem with execute_tool_script: many calls, one round trip, one undo entry.
+ *
+ * ## How it works, and why it needs no changes to the other fifty handlers
+ *
+ * UE's transaction buffer nests by reference counting. UTransBuffer::BeginInternal only constructs
+ * an FTransaction when `ActiveCount++ == 0`, and End() only finalises when `--ActiveCount == 0`.
+ * So an FScopedTransaction opened here makes every inner one a no-op that still records its
+ * Modify() calls into this one, and the title the human sees is this one's. Fifty handlers keep
+ * their own FScopedTransaction, unchanged, and collapse into a single entry for free.
+ *
+ * Dispatch is re-entered per step rather than calling each handler directly, so a step gets exactly
+ * the same treatment a standalone call does: the same unattended-dialog guard, the same write-path
+ * check re-run per step rather than inherited, the same error shape.
+ *
+ * ## What this does NOT do, stated plainly
+ *
+ * It is not all-or-nothing. It cannot be, and no amount of care here would make it so:
+ * FScopedTransaction::Cancel discards the undo RECORD and does not revert the mutations - verified
+ * against EditorTransaction.cpp, and the reason build_graph rolls itself back by hand. Reverting a
+ * failed batch generically would mean an inverse for every one of 111 commands, which does not
+ * exist.
+ *
+ * Undoing it automatically was considered and rejected as dangerous. GEditor->UndoTransaction() has
+ * no title guard, and when a step fails before mutating anything the transaction is transient and
+ * End() has already popped it - so the undo would revert whatever the PERSON did last. That is the
+ * exact harm undo's own `Title.StartsWith("MCP:")` check exists to prevent.
+ *
+ * So on failure this stops, reports which step failed and what the earlier ones did, and leaves the
+ * work in place - under one undo entry, which is the thing that makes it recoverable with one
+ * Ctrl+Z. Stopping rather than continuing is deliberate: step four of a feature is rarely
+ * meaningful when step three did not happen.
+ */
+TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+	if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("steps"), Steps) || !Steps)
+	{
+		return MakeErrorResponse(TEXT("missing_param: steps is required, an array of {cmd, params}"));
+	}
+	if (Steps->Num() == 0)
+	{
+		return MakeErrorResponse(TEXT("empty_batch: provide at least one step"));
+	}
+
+	FString Label = TEXT("Batch");
+	Params->TryGetStringField(TEXT("label"), Label);
+
+	// Validate the whole shape BEFORE opening a transaction, so a malformed request never leaves an
+	// empty "MCP:" entry in somebody's undo history.
+	for (int32 i = 0; i < Steps->Num(); ++i)
+	{
+		const TSharedPtr<FJsonObject>* StepObj = nullptr;
+		if (!(*Steps)[i].IsValid() || !(*Steps)[i]->TryGetObject(StepObj) || !StepObj)
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("bad_step: step %d is not an object"), i));
+		}
+		FString StepCmd;
+		if (!(*StepObj)->TryGetStringField(TEXT("cmd"), StepCmd) || StepCmd.IsEmpty())
+		{
+			return MakeErrorResponse(FString::Printf(TEXT("bad_step: step %d has no cmd"), i));
+		}
+		FString Reason;
+		if (IsBatchIneligible(StepCmd, Reason))
+		{
+			return MakeErrorResponse(FString::Printf(
+				TEXT("step_not_allowed: \"%s\" (step %d) cannot run in a batch because %s"),
+				*StepCmd, i, *Reason));
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	int32 Completed = 0;
+	FString FailedCmd;
+	int32 FailedIndex = INDEX_NONE;
+
+	{
+		FScopedTransaction Transaction(FText::Format(
+			NSLOCTEXT("UnrealMCPBridge", "MCPRunBatch", "MCP: {0}"), FText::FromString(Label)));
+
+		// Incremented for the whole batch, not per step, so a handler asking IsInsideBatch() gets
+		// the right answer however deep in its own call stack it asks.
+		++GMCPBatchDepth;
+		ON_SCOPE_EXIT { --GMCPBatchDepth; };
+
+		for (int32 i = 0; i < Steps->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* StepObj = nullptr;
+			(*Steps)[i]->TryGetObject(StepObj);
+
+			TSharedRef<FJsonObject> StepRequest = MakeShared<FJsonObject>();
+			FString StepCmd;
+			(*StepObj)->TryGetStringField(TEXT("cmd"), StepCmd);
+			StepRequest->SetStringField(TEXT("cmd"), StepCmd);
+
+			const TSharedPtr<FJsonObject>* StepParams = nullptr;
+			if ((*StepObj)->TryGetObjectField(TEXT("params"), StepParams) && StepParams)
+			{
+				StepRequest->SetObjectField(TEXT("params"), *StepParams);
+			}
+
+			TSharedRef<FJsonObject> StepResponse = Dispatch(StepRequest);
+
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetNumberField(TEXT("step"), i);
+			Entry->SetStringField(TEXT("cmd"), StepCmd);
+			Entry->SetObjectField(TEXT("result"), StepResponse);
+			Results.Add(MakeShared<FJsonValueObject>(Entry));
+
+			FString Status;
+			const bool bOk = StepResponse->TryGetStringField(TEXT("status"), Status) && Status == TEXT("ok");
+			if (!bOk)
+			{
+				FailedCmd = StepCmd;
+				FailedIndex = i;
+				break;
+			}
+			++Completed;
+		}
+	}
+
+	TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("label"), Label);
+	Result->SetNumberField(TEXT("steps"), Steps->Num());
+	Result->SetNumberField(TEXT("completed"), Completed);
+	Result->SetArrayField(TEXT("results"), Results);
+	Result->SetBoolField(TEXT("undoableAsOne"), true);
+
+	if (FailedIndex != INDEX_NONE)
+	{
+		Result->SetNumberField(TEXT("failedStep"), FailedIndex);
+		Result->SetStringField(TEXT("failedCmd"), FailedCmd);
+		// Said here rather than left to the caller, because the caller's next instinct is to assume
+		// the batch rolled back and retry the whole thing - which would double every earlier step.
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("Stopped at step %d (%s). Steps 0-%d already ran and their changes are still in ")
+			TEXT("place - this is one undo entry, not a rollback, so a single Ctrl+Z takes back the ")
+			TEXT("whole batch. Fix the failing step and re-run only what did not happen."),
+			FailedIndex, *FailedCmd, Completed - 1));
+	}
+
 	return MakeOkResponse(Result);
 }

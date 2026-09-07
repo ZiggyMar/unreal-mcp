@@ -231,11 +231,11 @@ table cannot quietly go stale the way the standing instructions did.
 <!-- costs:begin -->
 | profile | standing tokens | what it is |
 |---|---:|---|
-| `search` | 2533 | five tools; hand it a sentence or a preset name |
+| `search` | 2535 | five tools; hand it a sentence or a preset name |
 | `minimal` | 4260 | ten tools, fixed, for a small local model |
-| `core` | 13279 | the authoring spine |
-| `lazy` | 13587 | `core` plus deferred groups |
-| `full` | 49588 | everything, for a model that can afford it |
+| `core` | 13283 | the authoring spine |
+| `lazy` | 13590 | `core` plus deferred groups |
+| `full` | 50332 | everything, for a model that can afford it |
 <!-- costs:end -->
 
 The three flagship journeys — a bug, a feature and a change, each run from the sentence a person
@@ -6702,6 +6702,59 @@ on**, so the tool list never moves and the cache survives.
 
 Reading their documentation is what exposed the hole. This is the one place a competing design was
 straightforwardly ahead, and the fix is to adopt it rather than argue with it.
+
+### One undo entry for a whole feature: `unreal_run_batch`
+
+Building one feature is four or five writes - create the Blueprint, add a component, add the
+variables, build the graph, compile - and each opened its own transaction. So the person watching
+got five entries in their undo history for one thing they asked for, and taking it back meant
+pressing Ctrl+Z five times and knowing that five was the number.
+
+`unreal_run_batch({ steps: [{cmd, params}], label })` runs them inside one transaction. Unreal's
+transaction buffer nests by reference counting - `BeginInternal` only constructs an `FTransaction`
+when `ActiveCount++ == 0` - so all fifty existing handlers keep their own `FScopedTransaction`,
+unchanged, and collapse into a single entry titled `MCP: <label>`. Each step re-enters `Dispatch`,
+so it gets the same unattended-dialog guard and the same write-path check a standalone call gets,
+re-run per step rather than inherited.
+
+**It is not a rollback, and it does not pretend to be.** `FScopedTransaction::Cancel` discards the
+undo *record* and does not revert the mutations - verified against `EditorTransaction.cpp`, and the
+reason `build_graph` rolls itself back by hand. A generic revert would need an inverse for every one
+of 112 commands, which does not exist. Undoing automatically was considered and rejected as
+dangerous: `GEditor->UndoTransaction()` has no title guard, and when a step fails *before* mutating
+anything the transaction is transient and has already been popped, so the undo would revert whatever
+the **person** did last - the exact harm `unreal_undo`'s own `MCP:` title check exists to prevent.
+
+So a failed batch stops, says which step failed and what the earlier ones did, and leaves the work
+in place. The single undo entry is what makes that recoverable in one keystroke.
+
+Three commands are refused as steps - `open_level`, `create_level`, `delete_asset` - because they
+reach `UTransBuffer::Reset`, and Reset while a transaction is open does not merely fail: it cancels
+the batch and then **empties the whole undo buffer**, destroying the human's own history along with
+it. That is a denylist rather than an allowlist because the dangerous set is small and specific;
+anything later found to reach `ResetTransaction` belongs in it.
+
+### Epic's own plugin, reached rather than reimplemented: `unreal_epic`
+
+UE 5.8 ships `ModelContextProtocol`, and behind it 27 toolset plugins carrying roughly 800 tool
+functions - Niagara, PCG, Gameplay Ability System, StateTree, MVVM, Sequencer, Chaos Cloth,
+MetaHuman, Gameplay Tags, Game Features, Live Coding, semantic asset search, and Slate UI driving
+for editor surfaces with no scripting API at all. See [../docs/EPIC_58_TEARDOWN.md](../docs/EPIC_58_TEARDOWN.md).
+
+None of that is worth redoing. It is Epic's own engine surface, maintained by the people who ship
+the engine, already running in the same editor process. So `unreal_epic` speaks MCP *as a client* to
+their server on `127.0.0.1:8000/mcp` and passes results through unchanged.
+
+The catalogue never enters the context window. One tool, four actions, mirroring the three meta-tools
+Epic's own Tool Search mode uses: `status` (is it there, and if not, how to turn it on), `toolsets`,
+`describe`, `call`. And the tool itself is in the deferred `epic` group, so until something asks for
+it, it costs nothing at all - which matters because Epic's plugin is Experimental, opt-in, and does
+**not** auto-start, so for most sessions the honest answer is that it is not running.
+
+That last fact shapes the failure path: `status` never throws, a refused connection returns in about
+a millisecond, and the message is the three steps that enable the plugin rather than
+`ECONNREFUSED 127.0.0.1:8000`, which is true and useless to anyone who does not already know what is
+on port 8000.
 
 ### Both paths, honestly priced
 

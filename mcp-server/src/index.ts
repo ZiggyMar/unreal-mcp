@@ -36,6 +36,7 @@ import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
 import { decompileGraph, DSL_GRAMMAR } from "./graphDsl.js";
 import { compileDsl } from "./graphDslCompile.js";
+import { EpicClient, epicTargetFromEnv, epicUrl, EPIC_META } from "./epicDelegate.js";
 import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout, measureStyle, type StyleSample } from "./layoutReview.js";
@@ -688,6 +689,9 @@ const TOOL_GROUPS: Record<string, string[]> = {
     "unreal_run_tests",
   ],
   edit: [
+    // Many commands, one undo entry. It belongs with editing rather than in a group of its own
+    // because it is not a capability - it is how you spend the ones you already have.
+    "unreal_run_batch",
     // Reachable but not offered by default. It makes an EMPTY Blueprint, and a weak model reaches
     // for the familiar name over scaffold_blueprint and then cannot finish - measured, see
     // CORE_PROFILE_TOOLS. A caller that genuinely wants an empty Blueprint can enable it.
@@ -793,6 +797,12 @@ const TOOL_GROUPS: Record<string, string[]> = {
   // Cinematics is its own group for the same reason animation and AI are: a project with no Level
   // Sequences should not carry the definition, and one with nine wants it in reach.
   cine: ["unreal_read_level_sequence"],
+  // Everything Epic's own 5.8 plugin can do that this server does not, behind one tool.
+  //
+  // Deferred rather than standing because the plugin is Experimental, opt-in, and does not start by
+  // itself, so for almost every session the honest answer is that it is not there. A tool nobody can
+  // use should not be in anybody's context window.
+  epic: ["unreal_epic"],
   input: [
     // All four together, including the legacy reader that used to sit in `scene`. Splitting them
     // would mean a model looking for input tools finds half of them, and enabling "input" would not
@@ -824,6 +834,7 @@ const GROUP_SUMMARY: Record<string, string> = {
   ai: "Behavior Trees and their blackboards: what the AI is actually told to do, and what guards each branch",
   vfx: "Niagara systems: their emitters, and the user parameters a Blueprint is allowed to set",
   edit: "single-node graph editing: add/remove one node, wire one pin, set one default, move/comment nodes",
+  epic: "Epic's own UE 5.8 MCP plugin, if it is running: Niagara, PCG, GAS, StateTree, Sequencer, Slate UI driving",
   ui: "UMG: create Widget Blueprints, build the widget tree, set widget and slot properties",
   materials: "Materials and Material Instances: create them, parameterise them, override them",
   data: "Structs, Enums, and asset lookup",
@@ -959,6 +970,9 @@ const toolImpls = new Map<
  * at each of the 39 call sites.
  */
 const repeatGuard = new RepeatGuard();
+
+// One per process. Connects lazily, so a session that never touches it never opens a socket.
+const epic = new EpicClient(epicTargetFromEnv());
 
 /**
  * Append the repeat notice to a tool result, without disturbing its shape.
@@ -2616,6 +2630,105 @@ register(
         className,
       });
       return jsonResult(result);
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+/**
+ * One transaction over many commands. The Epic equivalent is execute_tool_script.
+ */
+register(
+  "unreal_run_batch",
+  {
+    title: "Run several commands under one undo entry",
+    description:
+      "Runs a list of bridge commands inside ONE editor transaction, so the whole thing is a single " +
+      "Ctrl+Z for the person watching instead of one press per command. Use it for a feature that takes " +
+      "several writes - create, add a component, add variables, build the graph, compile. " +
+      "steps: [{cmd, params}] using BRIDGE command names (add_variable, compile_blueprint), not " +
+      "unreal_ tool names. label names the undo entry. " +
+      "**Not a rollback.** Unreal cannot revert a transaction generically - cancelling discards the " +
+      "undo record, not the changes. On failure it stops, tells you which step failed, and leaves " +
+      "earlier steps applied; the single undo entry is what makes that recoverable. Re-run only the " +
+      "steps that did not happen. open_level, create_level and delete_asset are refused as steps " +
+      "because they reset the editor's transaction buffer and would destroy the undo history.",
+    inputSchema: {
+      steps: z
+        .array(z.object({ cmd: z.string(), params: z.record(z.unknown()).optional() }))
+        .describe("Bridge commands to run in order, each {cmd, params}."),
+      label: z.string().optional().describe('Names the undo entry, shown as "MCP: <label>". Defaults to "Batch".'),
+    },
+  },
+  async ({ steps, label }) => {
+    try {
+      return jsonResult(await bridge.send("run_batch", { steps, label }));
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+
+/**
+ * Epic's plugin, reached rather than reimplemented. See src/epicDelegate.ts.
+ */
+register(
+  "unreal_epic",
+  {
+    title: "Call Epic's own UE 5.8 MCP plugin",
+    description:
+      "Delegates to Epic's first-party MCP server for what this one does not cover: Niagara, PCG, " +
+      "Gameplay Ability System, StateTree, MVVM, Sequencer, Chaos Cloth, MetaHuman, Gameplay Tags, " +
+      "Game Features, Live Coding, semantic asset search, and driving editor UI that has no scripting " +
+      "API. Roughly 800 tools across 27 toolsets, none of them advertised here - you list and call " +
+      "them through this one tool. " +
+      'action "status" first: the plugin is Experimental, opt-in and does NOT auto-start, so the ' +
+      "usual answer is that it is off, and status says exactly how to turn it on. Then " +
+      '"toolsets" to see what exists, "describe" for the tools in one toolset and their schemas, ' +
+      '"call" to run one. Results are passed through unchanged - Epic owns that surface, not this server.',
+    inputSchema: {
+      action: z
+        .enum(["status", "toolsets", "describe", "call"])
+        .describe('"status" is reachability, "toolsets" lists, "describe" details one, "call" runs one.'),
+      toolset: z.string().optional().describe('Toolset name, for "describe" and sometimes "call".'),
+      tool: z.string().optional().describe('Tool name for "call", without the toolset prefix.'),
+      args: z.record(z.unknown()).optional().describe('Arguments for "call", matching the schema describe returned.'),
+    },
+  },
+  async ({ action, toolset, tool, args }) => {
+    try {
+      if (action === "status") {
+        return jsonResult(await epic.status());
+      }
+      if (action === "toolsets") {
+        // Epic's own meta-tool when Tool Search mode is on, which is their default. When it is off
+        // the server advertises everything directly, so fall back to a plain list.
+        const advertised = await epic.listTools();
+        const hasMeta = advertised.some((t) => t.name === EPIC_META.listToolsets);
+        if (!hasMeta) {
+          return jsonResult({
+            toolSearchMode: false,
+            note: "Tool Search mode is off, so the server advertises its tools directly.",
+            tools: advertised.map((t) => t.name),
+          });
+        }
+        return jsonResult(await epic.callTool(EPIC_META.listToolsets, {}));
+      }
+      if (action === "describe") {
+        if (!toolset) throw new Error('missing_param: describe needs a toolset. Call action "toolsets" first.');
+        return jsonResult(await epic.callTool(EPIC_META.describeToolset, { toolset_name: toolset }));
+      }
+      if (!tool) throw new Error('missing_param: call needs a tool. Call action "describe" for the names.');
+      // Their call_tool takes tool_name plus an optional toolset_name; when Tool Search is off the
+      // tool is addressable directly, so try the meta path and fall back to a direct call.
+      const advertised = await epic.listTools();
+      if (advertised.some((t) => t.name === EPIC_META.callTool)) {
+        const payload: Record<string, unknown> = { tool_name: tool, arguments: args ?? {} };
+        if (toolset) payload.toolset_name = toolset;
+        return jsonResult(await epic.callTool(EPIC_META.callTool, payload));
+      }
+      return jsonResult(await epic.callTool(tool, args ?? {}));
     } catch (err) {
       return errorResult(err);
     }

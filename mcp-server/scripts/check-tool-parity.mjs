@@ -57,6 +57,10 @@ const compositeTools = new Set(["review_layout", "tidy_layout", "trace_input", "
   // UnrealBuildTool itself. It is deliberately NOT a bridge command: the compile must survive the
   // editor being busy, and a build that takes minutes has no business occupying the game thread.
   "compile_cpp",
+  // epic talks to a DIFFERENT MCP server - Epic's own first-party plugin inside the editor, over
+  // HTTP on 127.0.0.1:8000 - rather than to our bridge. There is no command for it here and there
+  // should not be: the whole point is that Epic maintains that surface, not us.
+  "epic",
   // hot_reload_cpp starts live_coding_compile and then polls live_coding_status until it finishes.
   // Two bridge commands rather than one because the engine's blocking form spins on the game thread
   // behind a modal dialog, which would hang this plugin's own ticker and every later command with it.

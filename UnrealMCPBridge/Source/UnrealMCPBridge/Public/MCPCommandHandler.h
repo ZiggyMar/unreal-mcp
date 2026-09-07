@@ -197,6 +197,13 @@ private:
 	static TSharedRef<FJsonObject> HandleAssetStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedRef<FJsonObject> HandleSetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
+	// Many commands under one undo entry. Re-enters Dispatch per step inside one transaction.
+	static TSharedRef<FJsonObject> HandleRunBatch(const TSharedPtr<FJsonObject>& Params);
+
+	// True while a run_batch transaction is open. The one thing this changes is whether a handler
+	// may Cancel: a nested Cancel discards the OUTER record and leaves its mutations applied.
+	static bool IsInsideBatch();
+
 	// Shared core of add_node and build_graph. When bOpenTransaction is false the caller
 	// must already hold a transaction and have decided how failures roll back.
 	static TSharedRef<FJsonObject> AddNodeCore(class UBlueprint* Blueprint, class UEdGraph* Graph,
