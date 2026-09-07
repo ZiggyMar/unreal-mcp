@@ -96,9 +96,11 @@ export function checkBatchSteps(steps: BatchStep[]): StepProblem[] {
       return;
     }
 
-    if (!cmd.startsWith("unreal_")) return;
-
-    const bare = cmd.slice("unreal_".length);
+    // Checked BEFORE the prefix gate. A caller who has read the description and stripped the prefix
+    // themselves types `scaffold_blueprint`, which is not a bridge command either - it is several,
+    // sequenced on this side. Gating this behind startsWith("unreal_") let exactly the
+    // better-informed caller through to a batch that runs its earlier steps and then fails.
+    const bare = cmd.startsWith("unreal_") ? cmd.slice("unreal_".length) : cmd;
 
     if (COMPOSITE_TOOLS.has(bare)) {
       problems.push({
@@ -111,6 +113,8 @@ export function checkBatchSteps(steps: BatchStep[]): StepProblem[] {
       });
       return;
     }
+
+    if (!cmd.startsWith("unreal_")) return;
 
     problems.push({
       index,

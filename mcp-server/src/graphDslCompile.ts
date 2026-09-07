@@ -27,7 +27,22 @@
 
 export interface BuildNode {
   ref: string;
-  nodeType: "Event" | "CustomEvent" | "CallFunction" | "VariableGet" | "VariableSet" | "Branch" | "Sequence" | "Cast" | "Macro" | "CallParent";
+  nodeType:
+    | "Event"
+    | "CustomEvent"
+    | "EnhancedInputAction"
+    | "InputKey"
+    | "InputAxis"
+    | "CallFunction"
+    | "VariableGet"
+    | "VariableSet"
+    | "Branch"
+    | "Sequence"
+    | "GetArrayItem"
+    | "Cast"
+    | "Macro"
+    | "CallParent"
+    | "Self";
   eventName?: string;
   functionName?: string;
   variableName?: string;
@@ -203,8 +218,12 @@ function lowerExpression(form: Form, ctx: Lower): Value {
       return { kind: "literal", text: form.value };
     }
     if (form.value === "self") {
+      // The bridge has a real Self node type (UK2Node_Self). Lowering this to a VariableGet named
+      // "self" built a read of a Blueprint variable nobody has ever declared, which the editor
+      // answers with variable_not_found - and the DSL grammar advertises `self` as an expression,
+      // so the one spelling the docs teach was the one that could not be built.
       const ref = newRef(ctx, "self");
-      ctx.nodes.push({ ref, nodeType: "VariableGet", variableName: "self" });
+      ctx.nodes.push({ ref, nodeType: "Self" });
       return { kind: "pin", ref, pin: "self" };
     }
     // A bare word is either a bind made earlier or a Blueprint variable read.

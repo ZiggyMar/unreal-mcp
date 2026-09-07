@@ -50,7 +50,7 @@
  *   a function that compiles and never runs. The writer refuses rather than doing that quietly.
  */
 
-import { EXEC_INPUT, isKnot, type FlowNode } from "./execFlow.js";
+import { EXEC_INPUT, isExecInput, isKnot, type FlowNode } from "./execFlow.js";
 
 export interface DslPinLink {
   node: string;
@@ -100,8 +100,15 @@ export interface DecompiledGraph {
 /** Node classes whose exec output continues a chain rather than naming a branch of it. */
 const THEN_PINS = /^(then|out|exec|completed)$/i;
 
-/** Pins that carry plumbing rather than an argument worth writing down. */
-const NOISE_PINS = /^(self|execute|exec|then|in|out|__worldcontext)$/i;
+/**
+ * Pins that carry plumbing rather than an argument worth writing down.
+ *
+ * `self` is deliberately NOT here. It is the receiver of a member call - the actor the function
+ * runs on - and dropping it rendered `SetActorLocation` on another actor identically to the same
+ * call on this one. The server's own instructions tell models "the target pin is `self`", so it is
+ * the single most load-bearing argument on the surface.
+ */
+const NOISE_PINS = /^(execute|exec|then|in|out|__worldcontext)$/i;
 
 /**
  * Unreal node titles are display strings and frequently multi-line - "Set Actor Location" arrives
@@ -135,6 +142,23 @@ function symbol(name: string): string {
 function castTarget(title: string): string {
   const match = /^Cast\s+To\s+(.+)$/i.exec(title.trim());
   return symbol(match ? match[1] : title);
+}
+
+/**
+ * The variable a Get/Set node touches.
+ *
+ * The summary carries `GetNodeTitle(ListView)`, which for a getter is "Get bIsLocked" and for a
+ * setter "SET bIsLocked" or "Set with Notify bIsLocked" - not the bare name. Taking the title
+ * verbatim emitted `(set SETbIsLocked true)`, which names a variable that does not exist: the read
+ * was wrong as prose and the write died at `variable_not_found`.
+ *
+ * Four other modules in this server already strip exactly these prefixes - multiplayer.ts:77,
+ * multiplayer.ts:228, multiplayer.ts:629 and parentCalls.ts:133 - so this was the odd one out
+ * rather than a new discovery. Same job as castTarget() above.
+ */
+function variableName(title: string): string {
+  const match = /^(?:get|set(?:\s+with\s+notify)?)\s+(.+)$/i.exec(title.trim());
+  return match ? match[1].trim() : title;
 }
 
 /**
@@ -174,12 +198,21 @@ interface Ctx {
   /** Guards a pure-expression cycle, which the editor permits through knots. */
   expanding: Set<string>;
   reached: Set<string>;
+  /**
+   * Monotonic, and NOT ctx.bound.size.
+   *
+   * A node reached from two branches is deliberately re-emitted, which re-binds an id already in
+   * the map - and Map.set on an existing key does not grow it. Naming binds from the size therefore
+   * reissued numbers: a diamond produced two different nodes both called v3, the writer's
+   * last-wins bind map kept one, and a value was silently wired from the wrong node.
+   */
+  bindCounter: number;
   budget: { steps: number };
 }
 
 /** Does this node sit in the execution flow, or is it a pure data node? */
 function isImpure(node: DslNode): boolean {
-  return (node.connectedPins ?? []).some((p) => EXEC_INPUT.test(p.pin) && p.direction === "in");
+  return (node.connectedPins ?? []).some((p) => p.direction === "in" && isExecInput(node, p.pin));
 }
 
 /**
@@ -219,7 +252,9 @@ function execOutputs(node: DslNode, ctx: Ctx): Array<{ pin: string; targets: Dsl
     const targets: DslNode[] = [];
     for (const link of pin.linkedTo ?? []) {
       const found = resolve(link, ctx, "out");
-      if (found && EXEC_INPUT.test(found.pin)) targets.push(found.node);
+      // Node-type aware: a Timeline's exec inputs are Play/Stop/Reverse and a macro's is Exec,
+      // none of which the bare EXEC_INPUT regex matches. Using it dropped those chains entirely.
+      if (found && isExecInput(found.node, found.pin)) targets.push(found.node);
     }
     if (targets.length > 0) out.push({ pin: pin.pin, targets });
   }
@@ -265,7 +300,7 @@ function pureExpression(node: DslNode, _outPin: string, ctx: Ctx): string {
   ctx.reached.add(node.id);
   const title = shortTitle(node);
 
-  if (node.type === "K2Node_VariableGet") return symbol(title);
+  if (node.type === "K2Node_VariableGet") return symbol(variableName(title));
   if (node.type === "K2Node_Self") return "self";
 
   const args = argumentList(node, ctx);
@@ -362,7 +397,7 @@ function walk(node: DslNode | undefined, ctx: Ctx, depth: number, visited: Set<s
         : literalEntry
           ? literal(literalEntry[1])
           : "?";
-      head = `(set ${symbol(title)} ${value})`;
+      head = `(set ${symbol(variableName(title))} ${value})`;
     } else if (current.type === "K2Node_CallParentFunction") {
       head = `(super ${symbol(title)})`;
     } else if (current.type === "K2Node_MacroInstance") {
@@ -382,7 +417,7 @@ function walk(node: DslNode | undefined, ctx: Ctx, depth: number, visited: Set<s
     );
     let bindName: string | undefined;
     if (producesValue && current.type !== "K2Node_VariableSet") {
-      bindName = `v${ctx.bound.size + 1}`;
+      bindName = `v${++ctx.bindCounter}`;
       ctx.bound.set(current.id, bindName);
     }
 
@@ -452,6 +487,7 @@ export function decompileGraph(graph: DslGraph, options: { maxSteps?: number } =
     visited: new Set(),
     expanding: new Set(),
     reached: new Set(),
+    bindCounter: 0,
     budget: { steps: options.maxSteps ?? 400 },
   };
 
@@ -523,7 +559,7 @@ CONTINUATIONS
 
   (cast BP_Door :Object hit
     (:then   (call PrintString :InString "it is a door"))
-    (:Cast Failed))
+    (:CastFailed (call PrintString :InString "not a door")))
 
 EXPRESSIONS
   literal      1  3.14  "text"  true  false

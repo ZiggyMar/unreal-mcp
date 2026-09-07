@@ -145,7 +145,7 @@ test("ROUND TRIP: the reader's output is accepted by the writer", () => {
       {
         id: "v",
         type: "K2Node_VariableGet",
-        title: "bIsLocked",
+        title: "Get bIsLocked",
         connectedPins: [{ pin: "bIsLocked", direction: "out", linkedTo: [l("br", "Condition")] }],
       },
       {
@@ -169,7 +169,7 @@ test("ROUND TRIP: the reader's output is accepted by the writer", () => {
       {
         id: "s",
         type: "K2Node_VariableSet",
-        title: "bIsLocked",
+        title: "SET bIsLocked",
         values: { bIsLocked: "true" },
         connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("br", "else")] }],
       },
