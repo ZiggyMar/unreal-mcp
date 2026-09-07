@@ -109,6 +109,8 @@ export interface EpicToolInfo {
 export class EpicClient {
   private client: Client | undefined;
   private connecting: Promise<Client> | undefined;
+  /** Whether the far end is in Tool Search mode. Undefined until asked; cleared with the connection. */
+  private toolSearch: boolean | undefined;
 
   constructor(private readonly target: EpicTarget) {}
 
@@ -138,6 +140,8 @@ export class EpicClient {
   private reset(): void {
     const stale = this.client;
     this.client = undefined;
+    // Cleared with the connection: a restarted editor is exactly when the setting may have changed.
+    this.toolSearch = undefined;
     // Closing is best-effort: the usual reason we are here is that the far end already went away.
     void stale?.close().catch(() => {});
   }
@@ -185,6 +189,27 @@ export class EpicClient {
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     const client = await this.withRetry();
     return client.callTool({ name, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS });
+  }
+
+  /**
+   * Is Tool Search mode on - i.e. does the server expose `call_tool` rather than its tools directly?
+   *
+   * Cached, because the first version asked with a fresh `listTools()` before EVERY delegated call:
+   * two round trips to the editor's game thread where one would do, on the path whose entire reason
+   * for existing is that round trips are expensive.
+   *
+   * It is cached on the connection rather than forever. Epic's server broadcasts
+   * notifications/tools/list_changed when the mode or the toolset set changes, but only into an
+   * already-open tools/call stream, so we would usually miss it - and the setting is a user
+   * preference they can flip in Editor Preferences at any time. Tying the answer to the connection
+   * means reconnecting re-asks, and reconnecting is what happens when the editor is restarted, which
+   * is when it would actually have changed.
+   */
+  async usesToolSearch(): Promise<boolean> {
+    if (this.toolSearch !== undefined) return this.toolSearch;
+    const advertised = await this.listTools();
+    this.toolSearch = advertised.some((t) => t.name === EPIC_META.callTool);
+    return this.toolSearch;
   }
 
   /**

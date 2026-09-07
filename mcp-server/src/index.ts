@@ -2721,9 +2721,10 @@ register(
       }
       if (!tool) throw new Error('missing_param: call needs a tool. Call action "describe" for the names.');
       // Their call_tool takes tool_name plus an optional toolset_name; when Tool Search is off the
-      // tool is addressable directly, so try the meta path and fall back to a direct call.
-      const advertised = await epic.listTools();
-      if (advertised.some((t) => t.name === EPIC_META.callTool)) {
+      // tool is addressable directly. The mode is cached on the connection rather than asked per
+      // call - the first version listed tools before every delegated call, which is two round trips
+      // to the editor's game thread on the path that exists because round trips are expensive.
+      if (await epic.usesToolSearch()) {
         const payload: Record<string, unknown> = { tool_name: tool, arguments: args ?? {} };
         if (toolset) payload.toolset_name = toolset;
         return jsonResult(await epic.callTool(EPIC_META.callTool, payload));

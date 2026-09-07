@@ -108,3 +108,40 @@ test("Epic's meta-tool names are spelled exactly as their source spells them", (
     callTool: "call_tool",
   });
 });
+
+test("the tool-search mode probe is cached, not re-asked per call", async () => {
+  // The first version listed tools before EVERY delegated call - two round trips to the editor's
+  // game thread where one would do, on the path whose entire reason for existing is that round
+  // trips are expensive. This asserts the cache exists by counting how often the wire is touched.
+  const client = new EpicClient(DEAD);
+  let listCalls = 0;
+  client.listTools = async () => {
+    listCalls++;
+    return [{ name: "call_tool" }];
+  };
+
+  assert.equal(await client.usesToolSearch(), true);
+  assert.equal(await client.usesToolSearch(), true);
+  assert.equal(await client.usesToolSearch(), true);
+  assert.equal(listCalls, 1, "three calls, one round trip");
+});
+
+test("a dropped connection re-asks the mode rather than trusting a stale answer", async () => {
+  // Tool Search is a user preference they can flip in Editor Preferences, and Epic only broadcasts
+  // the change into an already-open stream, so we would miss it. Tying the cache to the connection
+  // means a restarted editor - which is when it would actually have changed - re-asks.
+  const client = new EpicClient(DEAD);
+  let listCalls = 0;
+  client.listTools = async () => {
+    listCalls++;
+    return [{ name: "call_tool" }];
+  };
+
+  await client.usesToolSearch();
+  assert.equal(listCalls, 1);
+
+  // status() on a dead port resets the connection, which must clear the cached mode with it.
+  await client.status();
+  await client.usesToolSearch();
+  assert.equal(listCalls, 2, "the mode is re-asked after the connection is dropped");
+});
