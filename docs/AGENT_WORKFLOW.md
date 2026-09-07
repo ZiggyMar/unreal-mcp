@@ -370,6 +370,56 @@ cost one failed call to discover:
   `warningCount` and messages; "references unknown Axis" is a warning, and it means input is
   silently dead. Zero errors AND zero warnings is the definition of done.
 
+## Changing a graph that already exists
+
+Reading a graph to understand it and reading one to change it are different jobs, and the same tool
+does both.
+
+`unreal_explain_graph` with no `format` gives you the prose explanation - every entry point and the
+ordered chain of what it does. That is the right call for "what does this Blueprint do" and it is
+deliberately lossy: it will not tell you what a Branch tested or what string got printed.
+
+`unreal_explain_graph` with `format: "dsl"` gives you the same graph as code:
+
+```lisp
+(event EventBeginPlay
+  (if bIsLocked
+    (call PrintString :InString "locked" :Duration 2.0)
+    (else
+      (set bIsLocked true))))
+```
+
+**Use that one when you are about to edit.** It keeps the conditions and the literal arguments the
+prose drops, and `unreal_build_graph` accepts the same text back through its `dsl` parameter - so
+changing a Blueprint is read it, edit the line, send it back. That is fewer calls and far fewer ways
+to be wrong than adding nodes and wiring exec pins by hand, where one mis-wired pin compiles and
+does the wrong thing.
+
+Call `unreal_explain_graph` with `format: "grammar"` once, the first time you use it, for the full
+syntax. Two things in it are not obvious:
+
+- `(seq (chain) (chain))` is one execution pin driving several chains. It is not a Sequence node.
+- An entry point with more than one execution output names them: `(:Pressed ...)`, `(:Released ...)`.
+
+Function graphs read as `(fn ...)` but cannot be written back - a function graph already owns its
+entry node and the text cannot name it, so the writer refuses rather than building a body that never
+runs. Build into a function with `unreal_build_graph` `graphName` instead.
+
+## Doing several writes as one undoable change
+
+A feature is usually four or five writes. Each one is its own entry in the person's undo history, so
+taking the feature back means pressing Ctrl+Z five times and knowing five was the number.
+
+`unreal_run_batch` runs them inside one editor transaction: one entry, one Ctrl+Z. Steps are
+**bridge command names** - `add_variable`, `compile_blueprint` - not `unreal_`-prefixed tool names,
+and not composite tools like `unreal_scaffold_blueprint`, which are already several commands each.
+Get that wrong and the server tells you the exact spelling before anything is sent.
+
+It is **not** a rollback. Unreal cannot revert a transaction generically, so if step four fails,
+steps one to three are still applied - the batch stops, tells you which step failed, and the single
+undo entry is what makes it recoverable. Re-run only what did not happen. Do not re-send the whole
+batch, or the earlier steps run twice.
+
 ## Cost discipline (tokens are money)
 
 - Prefer `search_project` and `find_node` over any read that returns more than you need.

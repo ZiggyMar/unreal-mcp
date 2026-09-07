@@ -297,6 +297,11 @@ test("every DSL example in the READMEs actually compiles", () => {
   const roots = [
     join(HERE, "..", "..", "README.md"),
     join(HERE, "..", "README.md"),
+    // The guides matter more than the READMEs, for the reason check-guides.mjs gives about tool
+    // names: a human reading a stale README is puzzled, a model reading a stale guide follows it.
+    join(HERE, "..", "..", "docs", "AGENT_WORKFLOW.md"),
+    join(HERE, "..", "..", "docs", "BLUEPRINT_HANDBOOK.md"),
+    join(HERE, "..", "..", "docs", "RECIPES.md"),
   ];
 
   let checked = 0;
