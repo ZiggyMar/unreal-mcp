@@ -145,3 +145,81 @@ test("a dropped connection re-asks the mode rather than trusting a stale answer"
   await client.usesToolSearch();
   assert.equal(listCalls, 2, "the mode is re-asked after the connection is dropped");
 });
+
+/**
+ * Retry safety. The previous version retried on ANY rejection, which meant a delegated call that
+ * timed out - while the editor was still executing it on the game thread - was sent again and ran
+ * twice. Epic's toolsets create assets, add Sequencer tracks and spawn PCG content.
+ */
+
+test("a timeout is never repeated, because the editor may still be running it", async () => {
+  const client = new EpicClient(DEAD);
+  let attempts = 0;
+  client.connect = async () => ({
+    callTool: async () => {
+      attempts++;
+      throw new Error("MCP error -32001: Request timed out");
+    },
+  });
+
+  await assert.rejects(() => client.callTool("create_asset", { name: "BP_Hero" }));
+  assert.equal(attempts, 1, "a timed-out mutating call must be attempted exactly once");
+});
+
+test("a stale session is retried for a read, and not repeated for a call", async () => {
+  const stale = new Error("HTTP 404: session not found");
+
+  const reader = new EpicClient(DEAD);
+  let readAttempts = 0;
+  reader.connect = async () => ({
+    listTools: async () => {
+      readAttempts++;
+      if (readAttempts === 1) throw stale;
+      return { tools: [{ name: "call_tool" }] };
+    },
+  });
+  const tools = await reader.listTools();
+  assert.equal(readAttempts, 2, "a read is safe to repeat, so a dead session reconnects");
+  assert.equal(tools[0].name, "call_tool");
+
+  const writer = new EpicClient(DEAD);
+  let writeAttempts = 0;
+  writer.connect = async () => ({
+    callTool: async () => {
+      writeAttempts++;
+      throw stale;
+    },
+  });
+  await assert.rejects(
+    () => writer.callTool("create_asset", {}),
+    (e) => {
+      assert.match(e.message, /did not run/, "it must say the call did not run");
+      assert.match(e.message, /Send it again/, "and hand the decision back");
+      return true;
+    }
+  );
+  assert.equal(writeAttempts, 1, "a mutating call is never repeated automatically");
+});
+
+test("an error the server deliberately returned is not dressed up as a missing plugin", async () => {
+  // A typo in a tool name used to tear down a healthy session, ask twice, and answer with 380
+  // characters about enabling a plugin that was working, with the real cause at the very end.
+  const client = new EpicClient(DEAD);
+  let attempts = 0;
+  client.connect = async () => ({
+    callTool: async () => {
+      attempts++;
+      throw new Error("MCP error -32602: Unknown tool: unreal.spawn_actorr");
+    },
+  });
+
+  await assert.rejects(
+    () => client.callTool("unreal.spawn_actorr", {}),
+    (e) => {
+      assert.match(e.message, /Unknown tool/);
+      assert.doesNotMatch(e.message, /Edit > Plugins/, "this is not a setup problem");
+      return true;
+    }
+  );
+  assert.equal(attempts, 1, "and it is not retried");
+});

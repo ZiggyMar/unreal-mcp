@@ -111,6 +111,10 @@ export class EpicClient {
   private connecting: Promise<Client> | undefined;
   /** Whether the far end is in Tool Search mode. Undefined until asked; cleared with the connection. */
   private toolSearch: boolean | undefined;
+  /** How many callers are inside an operation right now. A shared client must not be closed under them. */
+  private inFlight = 0;
+  /** A replaced client that still had callers. Closed once the last of them is done. */
+  private orphaned: Client | undefined;
 
   constructor(private readonly target: EpicTarget) {}
 
@@ -136,14 +140,27 @@ export class EpicClient {
     }
   }
 
-  /** Drop the cached connection so the next call reconnects. */
+  /**
+   * Drop the cached connection so the next call reconnects.
+   *
+   * It does NOT close the old client while anything is still using it. One Client is shared by the
+   * whole process, and closing aborts every request in flight on it - so one failing call used to
+   * abort an unrelated call mid-execution, whose own retry then ran it on the editor a SECOND time.
+   * Measured: two concurrent delegated calls, one of which fails, executed the innocent one twice.
+   *
+   * A connection nobody is waiting on is closed immediately; one that still has callers is left to
+   * them and closed by the last of them.
+   */
   private reset(): void {
     const stale = this.client;
     this.client = undefined;
     // Cleared with the connection: a restarted editor is exactly when the setting may have changed.
     this.toolSearch = undefined;
-    // Closing is best-effort: the usual reason we are here is that the far end already went away.
-    void stale?.close().catch(() => {});
+    if (stale && this.inFlight === 0) {
+      void stale.close().catch(() => {});
+    } else if (stale) {
+      this.orphaned = stale;
+    }
   }
 
   /**
@@ -157,7 +174,7 @@ export class EpicClient {
     try {
       // Through withRetry, because a cached-but-dead session otherwise reported a RUNNING plugin as
       // "not answering" and told the user to go and enable something already enabled.
-      const listed = await this.withRetry((client) => client.listTools({}, { timeout: PROBE_TIMEOUT_MS }));
+      const listed = await this.withRetry((client) => client.listTools({}, { timeout: PROBE_TIMEOUT_MS }), true);
       return { reachable: true, url, tools: listed.tools?.length ?? 0 };
     } catch (err) {
       this.reset();
@@ -177,7 +194,7 @@ export class EpicClient {
    * which is the point: the catalog is reachable without being resident.
    */
   async listTools(): Promise<EpicToolInfo[]> {
-    const listed = await this.withRetry((client) => client.listTools({}, { timeout: CALL_TIMEOUT_MS }));
+    const listed = await this.withRetry((client) => client.listTools({}, { timeout: CALL_TIMEOUT_MS }), true);
     return (listed.tools ?? []).map((t) => ({
       name: t.name,
       description: t.description,
@@ -187,8 +204,10 @@ export class EpicClient {
 
   /** Call one of Epic's tools. Its result is returned as-is. */
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    return this.withRetry((client) =>
-      client.callTool({ name, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS })
+    // repeatable: false - we do not know what the tool does, and Epic's catalogue creates assets.
+    return this.withRetry(
+      (client) => client.callTool({ name, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS }),
+      false
     );
   }
 
@@ -220,24 +239,72 @@ export class EpicClient {
    * session without anything telling us. One retry turns "your second call of the day fails" into
    * something nobody notices.
    */
-  private async withRetry<T>(operation: (client: Client) => Promise<T>): Promise<T> {
-    // The retry has to wrap the OPERATION, not just the connect.
-    //
-    // connect() returns a cached client without checking it is alive, so it can only throw on the
-    // very first attempt. Guarding connect alone therefore never retried anything that mattered:
-    // the editor is restarted constantly during development, Epic's server is session-stateful and
-    // answers a stale session with 404, and that 404 surfaced from the call - which was outside the
-    // guard. One dead session poisoned every later call for the life of the process.
+  /**
+   * Did the far end reject this without running it?
+   *
+   * This is the whole safety question, and it is not the same as "did it fail". Epic's server is
+   * session-stateful and answers a request on a session it does not recognise with 404, having
+   * executed nothing - that is safe to repeat. A TIMEOUT is the opposite: the editor runs tool calls
+   * serially on the game thread, so a request that timed out is very likely still running, and
+   * repeating it runs it twice. Their toolsets create assets, add Sequencer tracks and spawn PCG
+   * content, none of which is idempotent.
+   *
+   * Measured before this existed: a delegated create_asset whose response was lost executed twice on
+   * the editor and still reported failure to the caller.
+   */
+  private static isRejectedUnrun(err: unknown): boolean {
+    const text = (err instanceof Error ? err.message : String(err)).toLowerCase();
+    if (text.includes("timed out") || text.includes("timeout") || text.includes("abort")) return false;
+    return (
+      text.includes("404") ||
+      text.includes("session") ||
+      text.includes("econnrefused") ||
+      text.includes("econnreset") ||
+      text.includes("fetch failed") ||
+      text.includes("socket hang up")
+    );
+  }
+
+  /**
+   * Run an operation, reconnecting once if the far end rejected it without running it.
+   *
+   * `repeatable` is the caller's assertion that running the operation twice is harmless. Reads say
+   * true; a delegated tool call says false, because we do not know what it does and Epic's own
+   * catalogue is full of things that create assets.
+   *
+   * An error the far end deliberately RETURNED - an unknown tool name, bad arguments - is not a
+   * connection problem and is rethrown untouched. Wrapping those in "the plugin is not answering,
+   * go and enable it" told the user to restart an editor that was working, and buried the real
+   * cause at the end of a paragraph about plugin setup.
+   */
+  private async withRetry<T>(operation: (client: Client) => Promise<T>, repeatable: boolean): Promise<T> {
+    this.inFlight++;
     try {
-      return await operation(await this.connect());
-    } catch (first) {
-      this.reset();
       try {
         return await operation(await this.connect());
-      } catch (second) {
-        const detail = second instanceof Error ? second.message : String(second);
-        void first;
-        throw new Error(`${ENABLE_HINT} (${detail})`);
+      } catch (first) {
+        if (!EpicClient.isRejectedUnrun(first)) throw first;
+        this.reset();
+        if (!repeatable) {
+          throw new Error(
+            `The connection to Epic's plugin was stale and has been dropped, so this call did not ` +
+              `run. Send it again. (${first instanceof Error ? first.message : String(first)})`
+          );
+        }
+        try {
+          return await operation(await this.connect());
+        } catch (second) {
+          // Twice in a row at the connection level means it is not there, which is the one case
+          // ENABLE_HINT is actually about. A tool-level error never reaches here.
+          throw new Error(`${ENABLE_HINT} (${second instanceof Error ? second.message : String(second)})`);
+        }
+      }
+    } finally {
+      this.inFlight--;
+      if (this.inFlight === 0 && this.orphaned) {
+        const done = this.orphaned;
+        this.orphaned = undefined;
+        void done.close().catch(() => {});
       }
     }
   }
