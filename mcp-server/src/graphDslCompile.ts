@@ -393,7 +393,11 @@ function lowerBody(items: Form[], ctx: Lower): { entry?: string; exit?: string }
       // drives this statement. That source is not known until the caller wires it, so `seq` records
       // its siblings and the caller fans out to them.
       selfEntry = entries[0];
-      ctx.fanout.set(entries[0], entries.slice(1));
+      // Appended, not assigned. A nested seq registers its own siblings under the same first entry,
+      // and Map.set would overwrite them - `(seq ((seq (a) (b))) (c))` silently lost b, which is a
+      // shape the reader emits whenever a chain's first node itself drives several targets.
+      const existing = ctx.fanout.get(entries[0]) ?? [];
+      ctx.fanout.set(entries[0], [...existing, ...entries.slice(1)]);
       selfExit = undefined;
       terminated = true;
     } else if (stmtKind === "if") {

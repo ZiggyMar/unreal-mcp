@@ -258,3 +258,27 @@ test("reading a function graph still works even though writing one does not", as
   assert.match(code, /\(fn DoTheThing/, "the read side is unaffected by the write side's limit");
   assert.match(code, /:InString "hi"/);
 });
+
+test("a nested seq does not lose a chain", () => {
+  // The inner seq registers its siblings under its first entry; the outer one registered its own
+  // under the SAME key, and Map.set overwrote them. `(seq ((seq (a) (b))) (c))` silently dropped b.
+  // The reader emits this shape whenever a chain's first node itself drives several targets.
+  const built = compileDsl("(event E (seq ((seq ((call A)) ((call B)))) ((call C))))");
+
+  const wired = new Set(built.connections.flatMap((c) => [c.from.split(".")[0], c.to.split(".")[0]]));
+  const orphans = built.nodes.filter((n) => !wired.has(n.ref)).map((n) => n.functionName ?? n.nodeType);
+  assert.deepEqual(orphans, [], "every chain must be wired");
+
+  const entry = built.nodes.find((n) => n.nodeType === "Event" || n.nodeType === "CustomEvent").ref;
+  const off = built.connections.filter((c) => c.from === `${entry}.then`).map((c) => c.to);
+  assert.equal(off.length, 3, `all three chains hang off the one pin, got ${JSON.stringify(off)}`);
+});
+
+test("seq edge cases are refused or handled, never silently wrong", () => {
+  assert.throws(() => compileDsl("(event E (seq))"), /no chains/);
+  assert.throws(() => compileDsl("(event E (seq ((call A))) (call B))"), /unreachable/);
+  // An empty chain contributes nothing rather than throwing - the reader can emit one for a pin
+  // wired to a node that turned out to be a knot leading nowhere.
+  const built = compileDsl("(event E (seq ((call A)) ()))");
+  assert.equal(built.nodes.filter((n) => n.functionName === "A").length, 1);
+});
