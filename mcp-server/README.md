@@ -6703,6 +6703,63 @@ on**, so the tool list never moves and the cache survives.
 Reading their documentation is what exposed the hole. This is the one place a competing design was
 straightforwardly ahead, and the fix is to adopt it rather than argue with it.
 
+### A graph as code: `explain_graph` format "dsl" and `build_graph` dsl
+
+Every other way this server touches a graph treats it as a wiring diagram, which is what the engine
+stores and the wrong shape for both ends of the job. Reading one makes the model reconstruct control
+flow itself; writing one means describing an `if` as five nodes and four wires, where getting any
+one wrong compiles and does the wrong thing.
+
+`unreal_explain_graph` with `format: "dsl"` returns S-expressions, and `unreal_build_graph` takes the
+same text back through its `dsl` parameter:
+
+```lisp
+(event EventBeginPlay
+  (bind v1 (cast BP_Door :Object (GetOwner))
+    (:then
+      (if bIsLocked
+        (call PrintString :InString "locked" :Duration 2.0)
+        (else
+          (set bIsLocked true))))
+    (:CastFailed
+      (call PrintString :InString "not a door"))))
+```
+
+That graph is 1,879 characters as node-and-pin structure and 302 here. `format: "grammar"` returns
+the full syntax and costs no standing tokens.
+
+The shape is Epic's, from `blueprint_dsl.py` in the 5.8 plugin. The vocabulary is not: they name
+nodes by toolset-registry type id, which means nothing outside their registry, so this emits names
+`build_graph` already resolves through the node catalog - and a wrong guess comes back as
+`didYouMean` rather than the wrong node.
+
+**What it does not do, and why.** These are limits, not bugs, and each is enforced rather than
+documented and hoped for:
+
+- **Function graphs read but do not write.** A function graph already owns its `K2Node_FunctionEntry`
+  and the text has no way to name it, so building one would leave the body unattached - a function
+  that compiles and never runs. `(fn ...)` is refused with the alternative spelled out.
+- **Literal quoting is by shape, not by type.** The summary carries no pin types, so a string whose
+  text is `"true"` renders as the bare token `true`. It is a display ambiguity and not a correctness
+  one: the writer turns every literal back into a `pinDefaults` string that the engine parses against
+  the real pin type, so both spellings survive the round trip.
+- **Loop macros stay macros.** A ForLoop is a `K2Node_MacroInstance`; pattern-matching it into a
+  `(for ...)` would be a guess that is wrong for every custom macro with a Body pin.
+- **Names come from titles.** The summary sends `GetNodeTitle`, so `PrintString` arrives as
+  "Print String" and a getter as "Get bIsLocked". Spaces are removed and Get/SET/Set-with-Notify
+  prefixes stripped, which is how the engine builds those titles in reverse. Where that guess is
+  wrong, the catalog rejects it by name.
+
+Two shapes are worth knowing because they exist to keep the round trip honest. `(seq (...) (...))` is
+one execution pin driving several chains - written as plain siblings, a chain beginning with a branch
+made the next statement read as unreachable, so the reader was emitting text its own writer refused.
+And an entry point with more than one execution output names them, `(:Pressed ...)` / `(:Released ...)`,
+because concatenating those two bodies is a different program.
+
+The grammar's examples and the ones in both READMEs are compiled by the test suite. Prose that
+teaches a syntax is part of that syntax's surface, and the grammar's own cast example did not parse
+for a while precisely because nothing ran it.
+
 ### One undo entry for a whole feature: `unreal_run_batch`
 
 Building one feature is four or five writes - create the Blueprint, add a component, add the

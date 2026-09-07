@@ -6,8 +6,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
 import { compileDsl, parseDsl, DslError } from "../dist/graphDslCompile.js";
 import { decompileGraph } from "../dist/graphDsl.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const require_fs = () => createRequire(import.meta.url)("node:fs");
 
 const wired = (c, from, to) => c.some((x) => x.from === from && x.to === to);
 const refOf = (nodes, pred) => nodes.find(pred)?.ref;
@@ -281,4 +288,33 @@ test("seq edge cases are refused or handled, never silently wrong", () => {
   // wired to a node that turned out to be a knot leading nowhere.
   const built = compileDsl("(event E (seq ((call A)) ()))");
   assert.equal(built.nodes.filter((n) => n.functionName === "A").length, 1);
+});
+
+test("every DSL example in the READMEs actually compiles", () => {
+  // The grammar's own cast example did not parse for a while, and nothing noticed because prose is
+  // not run. Documentation that teaches a syntax is part of that syntax's surface.
+  const { readFileSync } = require_fs();
+  const roots = [
+    join(HERE, "..", "..", "README.md"),
+    join(HERE, "..", "README.md"),
+  ];
+
+  let checked = 0;
+  for (const path of roots) {
+    let text;
+    try {
+      text = readFileSync(path, "utf8");
+    } catch {
+      continue;
+    }
+    // \r tolerated: these files are CRLF on this machine, and a regex that quietly matched nothing
+    // would let this test pass while checking not one example.
+    for (const match of text.matchAll(/```lisp\r?\n([\s\S]*?)```/g)) {
+      const source = match[1].trim();
+      if (!source.startsWith("(")) continue;
+      checked++;
+      compileDsl(source); // throws on bad syntax, which fails the test with the line number
+    }
+  }
+  assert.ok(checked > 0, "no ```lisp examples found - has the documentation moved?");
 });
