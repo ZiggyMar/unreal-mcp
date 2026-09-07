@@ -142,10 +142,17 @@ safely upserted without a parser.
    required, so the data ships twice. That is +100% on every response to hand a duplicate to a model
    that already reads the JSON in `content`. Epic can afford it - in-process HTTP, small structs, no
    frugality rule; a server whose stated hard requirement is token frugality cannot.
-3. **Extend the transaction boundary across tools.** A bridge-level begin/commit/rollback, exposed as
-   a parameter rather than a new tool.
-4. **Delegate to their plugin for the domains we do not cover.** Detect the server on
-   `127.0.0.1:8000/mcp` and route Niagara/PCG/GAS/Sequencer calls to it through one gated
-   passthrough, so we gain the coverage without advertising 800 schemas or writing any of it. Costs
-   a dependency on an Experimental plugin.
+3. ~~**Extend the transaction boundary across tools.**~~ **Done, with one honest limit.** `run_batch`
+   re-enters `Dispatch` per step inside one `FScopedTransaction`; UE's buffer nests by reference
+   counting, so all fifty existing handlers collapse into one undo entry unchanged. It is NOT
+   all-or-nothing: `Cancel` discards the undo record without reverting mutations, and automatic undo
+   was rejected as unsafe (no title guard, and a transient transaction is already popped, so it would
+   revert the human's last action). `open_level`, `create_level` and `delete_asset` are refused as
+   steps because they reach `UTransBuffer::Reset`, which would empty the whole undo buffer.
+4. ~~**Delegate to their plugin for the domains we do not cover.**~~ **Done.** `unreal_epic` speaks
+   MCP as a client to `127.0.0.1:8000/mcp` and mirrors Epic's three meta-tools, so the ~800 tools are
+   reachable without one schema entering the context window. It lives in a deferred group, so it
+   costs nothing until asked for - which matters because their plugin is opt-in and does not
+   auto-start, making "not running" the normal case. The wire contract was read from their source and
+   adversarially verified, but is **not** yet exercised against a live editor.
 5. **Image results.** Needs a viewport capture path in the bridge.
