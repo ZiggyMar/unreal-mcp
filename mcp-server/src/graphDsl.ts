@@ -45,6 +45,9 @@
  *   wrong for every custom macro that happens to have a Body pin.
  * - Anything unrecognised degrades to the general node-call form with its exec outputs as named
  *   continuations. That is still valid DSL and still says what is connected to what.
+ * - Function graphs read as `(fn ...)` but cannot be written back. A function graph already owns its
+ *   entry node and the text has no way to name it, so building one would leave the body unattached -
+ *   a function that compiles and never runs. The writer refuses rather than doing that quietly.
  */
 
 import { EXEC_INPUT, isKnot, type FlowNode } from "./execFlow.js";
@@ -500,7 +503,9 @@ export const DSL_GRAMMAR = `Blueprint graph DSL (S-expressions). One graph = one
 
 BLOCKS
   (event Name  stmt ...)        an event graph entry - BeginPlay, a custom event, an input action
-  (fn Name  stmt ...)           a function graph entry
+  (fn Name  stmt ...)           a function graph entry - READ ONLY. build_graph refuses these,
+                                because a function graph already has its entry node and this cannot
+                                name it, so the body would be built unattached and never run.
 
 STATEMENTS
   (call Name :Pin value ...)    call a function or a node; arguments are always keyword form

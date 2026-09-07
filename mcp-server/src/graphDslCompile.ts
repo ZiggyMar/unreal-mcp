@@ -417,12 +417,25 @@ export function compileDsl(source: string): CompiledGraph {
     }
 
     if (kind === "fn") {
-      ctx.functionGraphs.push(name);
-      const body = lowerBody(form.items.slice(2), ctx);
-      // A function graph already has its entry node; the first statement hangs off it, and
-      // build_graph resolves an existing node by id, so the caller wires that themselves.
-      void body;
-      continue;
+      // Refused rather than half-done, and this is worth being precise about because the first
+      // version of it WAS half-done: it lowered the body and then wired nothing to the function's
+      // entry node, leaving every statement orphaned in the graph. That compiles - to nothing. A
+      // function that silently does not run is far worse than one that was never written, and the
+      // reader emits `(fn ...)` for any function graph, so a round trip would have produced exactly
+      // that.
+      //
+      // Supporting it needs the entry node's id, which the DSL text does not carry: a function graph
+      // already HAS its K2Node_FunctionEntry, so the writer must attach to that node rather than
+      // create one. build_graph accepts an existing node id in place of a ref, so the mechanism is
+      // there; the DSL has no way to name it yet.
+      throw new DslError(
+        `(fn ${name} ...) cannot be written back yet. A function graph already has its entry node, ` +
+          `and this cannot name it, so the body would be built unattached and never run. ` +
+          `Build into the function with unreal_build_graph graphName:"${name}" and wire the first ` +
+          `statement to the existing entry node by its id (read it with unreal_read_blueprint_summary). ` +
+          `Reading a function as DSL works; only writing one back does not.`,
+        form.line
+      );
     }
 
     const ref = newRef(ctx, name);

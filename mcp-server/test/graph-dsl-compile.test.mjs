@@ -206,3 +206,55 @@ test("ROUND TRIP: an edit to the text is an edit to the graph", () => {
   assert.ok(built.pinDefaults.some((p) => p.pin === "InString" && p.value === "after"));
   assert.equal(built.pinDefaults.length, 1);
 });
+
+test("a function block is refused, not built unattached", () => {
+  // The reader emits (fn ...) for any function graph, so this is a real round trip somebody will
+  // attempt. The first version of the writer lowered the body and wired nothing to the function's
+  // entry node - every statement orphaned, compiling to nothing. A function that silently does not
+  // run is worse than one that was never written.
+  assert.throws(
+    () => compileDsl('(fn DoTheThing (call PrintString :InString "hi"))'),
+    (e) => {
+      assert.match(e.message, /cannot be written back yet/);
+      assert.match(e.message, /never run/, "it must say what the silent failure would have been");
+      assert.match(e.message, /graphName/, "and what to do instead");
+      return true;
+    }
+  );
+});
+
+test("refusing a function block does not half-build it", () => {
+  // Nothing may reach the editor from a refused parse - the throw has to happen before any caller
+  // could take ctx.nodes and send them.
+  let built;
+  try {
+    built = compileDsl('(fn F (call A))');
+  } catch {
+    built = undefined;
+  }
+  assert.equal(built, undefined, "a refusal returns nothing, not a partial payload");
+});
+
+test("reading a function graph still works even though writing one does not", async () => {
+  const { decompileGraph } = await import("../dist/graphDsl.js");
+  const g = {
+    nodes: [
+      {
+        id: "entry",
+        type: "K2Node_FunctionEntry",
+        title: "DoTheThing",
+        connectedPins: [{ pin: "then", direction: "out", linkedTo: [{ node: "c", pin: "execute" }] }],
+      },
+      {
+        id: "c",
+        type: "K2Node_CallFunction",
+        title: "Print String",
+        values: { InString: "hi" },
+        connectedPins: [{ pin: "execute", direction: "in", linkedTo: [{ node: "entry", pin: "then" }] }],
+      },
+    ],
+  };
+  const { code } = decompileGraph(g);
+  assert.match(code, /\(fn DoTheThing/, "the read side is unaffected by the write side's limit");
+  assert.match(code, /:InString "hi"/);
+});
