@@ -115,6 +115,21 @@ There are several Unreal MCP projects on GitHub already, and as of UE 5.8 Epic s
   read is measured against a real project by `npm run measure:reads`, which finds the worst graph
   itself and fails the build if any read grows past its ceiling.
 - **A tool surface that costs 2.4k tokens instead of 34.8k.** Tool definitions are paid for on *every* request, before your message is read. The `search` profile stands up four tools and switches the other 97 off — and because they are switched off rather than hidden behind a generic dispatcher, `unreal_enable_tools` hands back their **real, fully typed schemas**. One extra call at the start of a session, nothing given up, and 32k tokens a turn saved for the rest of it. The numbers are measured by `npm run check:profiles`, which fails the build if a profile grows past its budget.
+- **Graphs read and write as code.** `explain_graph` with `format: "dsl"` returns a graph as S-expressions — real `if`/`else`, the literal arguments to each call, named continuations for casts and latent nodes — and `build_graph` takes the same text back through its `dsl` parameter. Changing a Blueprint becomes "read it, edit two lines, send it back" rather than working out which node ids to rewire. A five-node branching graph is 2,045 characters as node-and-pin structure and **302 as DSL**:
+
+  ```lisp
+  (event EventBeginPlay
+    (bind v1 (cast BP_Door :Object (GetOwner))
+      (:then
+        (if bIsLocked
+          (call PrintString :InString "locked" :Duration 2.0)
+          (else
+            (set bIsLocked true))))
+      (:CastFailed
+        (call PrintString :InString "not a door"))))
+  ```
+
+  The shape is taken from Epic's own `blueprint_dsl.py` in the 5.8 first-party plugin — see [docs/EPIC_58_TEARDOWN.md](docs/EPIC_58_TEARDOWN.md) — but the vocabulary is this server's, so the text round-trips through our own writer rather than their toolset registry.
 - **The server tells the model how to work before it starts.** MCP's `instructions` field carries the call order and the exact strings no model can recall reliably — the target pin is `self`, Sequence's outputs are `then_0`/`then_1` — so the model arrives knowing them instead of spending failed calls discovering them. `unreal_guide` then lets it look anything else up mid-task, a section at a time.
 - **It can see the game run, not just read the files.** `watch_runtime` samples variables on live actors during play, in every PIE world, labelled by net role. Replication bugs are the one class of defect a single person cannot reproduce alone — `Authority: 0 -> 490, Client0: 0 -> 0` is that bug observed rather than argued. No other project in the survey reads runtime state at all.
 - **It can finish a C++ change, not just check one.** `compile_cpp` proves an edit builds; `hot_reload_cpp` patches it into the editor that is already open, which is the Ctrl+Alt+F11 a human presses. Without it, every native fix ends with a human closing the editor.
@@ -204,7 +219,29 @@ to guess which of six things is wrong. Exit code 1 means the editor could not be
 
 ### 4. Register the Server
 
-**Do not hand-write the config.** Run this and paste what it prints:
+**Do not hand-write the config.** Run this from your project directory and it writes the files:
+
+```bash
+node mcp-server/dist/index.js --install-config
+```
+
+That writes every project-scoped client at once — `.mcp.json` (Claude Code), `.cursor/mcp.json`,
+`.vscode/mcp.json`, `.gemini/settings.json`, `.codex/config.toml` — creating directories as needed.
+If a file already exists, **only the `unreal` entry is touched**; MCP servers you already had are
+preserved, and a file that is not valid JSON is refused rather than overwritten.
+
+```bash
+node mcp-server/dist/index.js --install-config --client cursor          # just one client
+node mcp-server/dist/index.js --install-config --client claude-desktop  # global, per-user config
+node mcp-server/dist/index.js --install-config --dir /path/to/project   # somewhere other than cwd
+```
+
+Claude Desktop is not part of the sweep and has to be named, because its config is global and shared
+with every other project on the machine. The file locations and root keys follow Epic's own
+`ModelContextProtocol.GenerateClientConfig` in UE 5.8, so they are the ones every Unreal developer
+will be told to expect.
+
+`--print-config` still emits the JSON without writing anything, if you would rather paste it:
 
 ```bash
 node mcp-server/dist/index.js --print-config                      # Claude Desktop

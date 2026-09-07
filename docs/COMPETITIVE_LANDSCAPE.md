@@ -301,6 +301,37 @@ a note that the shape of the answer is probably "describe intent to a generator"
 placement tools", and the next person to open the level-authoring question should read Epic's
 version before designing ours.
 
+### Re-read from the shipped source, 7 September 2026
+
+Every earlier revision of this section was written from Epic's documentation and launch coverage.
+The plugin was then read from the shipped source in a stock 5.8 install, and the documentation
+substantially understates it. Full teardown in [EPIC_58_TEARDOWN.md](EPIC_58_TEARDOWN.md); the
+corrections that matter here:
+
+- **Scale.** `ModelContextProtocol` really is small (~6,300 lines) because it is only the protocol
+  layer. Capability lives in a separate `ToolsetRegistry` plugin plus **27 toolset plugins** under
+  `Engine/Plugins/Experimental/Toolsets`, carrying roughly **800 tool functions**.
+- **The toolset names above are wrong.** There is no `SceneTools` or `ActorTools`. The real ones are
+  `EditorToolset`, `NiagaraToolsets`, `PCGToolset`, `GASToolsets`, `StateTreeToolset`, `UMGToolSet`,
+  `MVVMToolset`, `SlateInspectorToolset`, `SemanticSearchToolset`, `AnimationAssistantToolset` and
+  seventeen more.
+- **They have a Blueprint graph DSL, and it is the most important thing in the plugin.**
+  `EditorToolset/Content/Python/editor_toolset/toolsets/blueprint_dsl.py` is 2,530 lines of
+  S-expression IDL with a real round trip: `read_graph_dsl` decompiles a graph to text,
+  `write_graph_dsl` transpiles text back to nodes and compiles, `get_graph_dsl_docs` returns the
+  grammar. It covers `if`/`elif`/`else`, `for`, `while`, `switch`, `break`, binds, operators and
+  named exec continuations for latent nodes. This lands directly on this project's own thesis and
+  the shape is better than node-and-pin specs at both ends.
+- **`execute_tool_script`** runs a multi-step Python script against the toolset APIs inside one
+  transaction — many calls, one round trip, one undo entry, all-or-nothing. We have that guarantee
+  for `build_graph` only.
+
+**Adopted:** the DSL shape, as `format: "dsl"` on `unreal_explain_graph` and a `dsl` parameter on
+`unreal_build_graph` (`mcp-server/src/graphDsl.ts`, `graphDslCompile.ts`). Epic's vocabulary is not
+adopted — they name nodes by toolset-registry type id (`Development|PrintString`), which means
+nothing outside their registry; ours emits the names our own writer already resolves, so the text
+round-trips here.
+
 ### Correcting what this document said before
 
 An earlier revision of this section claimed the first-party plugin had "no discussion of token

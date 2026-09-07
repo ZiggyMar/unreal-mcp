@@ -18,6 +18,14 @@ import { enrichSearchHits, isEnrichmentEnabled } from "./enrichment.js";
 import { autoLayoutGraph } from "./autoLayout.js";
 import { reviewBlueprint } from "./review.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
+import {
+  CLIENT_IDS,
+  formatWriteResults,
+  writeAllClientConfigs,
+  writeClientConfig,
+  type ClientId,
+  type ServerEntry,
+} from "./clientConfig.js";
 import { SessionJournal, isWrite } from "./journal.js";
 import { mapSystem } from "./systemMap.js";
 import { planFeature } from "./planFeature.js";
@@ -26,6 +34,8 @@ import { addEventHandler } from "./eventHandler.js";
 import { scaffoldBlueprint } from "./scaffold.js";
 import { scaffoldWidget } from "./scaffoldWidget.js";
 import { explainGraph } from "./explainGraph.js";
+import { decompileGraph, DSL_GRAMMAR } from "./graphDsl.js";
+import { compileDsl } from "./graphDslCompile.js";
 import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout, measureStyle, type StyleSample } from "./layoutReview.js";
@@ -1558,10 +1568,16 @@ register(
       "A 56-node EventGraph costs 1,996 tokens as a node-and-pin structure and 337 here, a sixth; " +
       "unreal_read_blueprint_summary caps at 60 nodes, this explains all 809. " +
       "Deliberately lossy - no exact pins or node ids. For those, call " +
-      "unreal_read_blueprint_summary on the one chain you are changing.",
+      "unreal_read_blueprint_summary on the one chain you are changing. " +
+      'format "dsl" returns it as code instead - real if/else, literal arguments - and unreal_build_graph takes ' +
+      "that text back.",
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().optional().describe('Graph to explain. Defaults to "EventGraph".'),
+      format: z
+        .enum(["prose", "dsl", "grammar"])
+        .optional()
+        .describe('"prose" (default), "dsl" to edit, "grammar" for the DSL syntax.'),
       match: z
         .string()
         .optional()
@@ -1575,12 +1591,21 @@ register(
         .describe("Entry-point chains listed in the structured result. Defaults to 25; the prose always covers every one."),
     },
   },
-  async ({ path, graphName, maxChains, match }) => {
+  async ({ path, graphName, maxChains, match, format }) => {
     try {
+      if (format === "grammar") {
+        return jsonResult({ grammar: DSL_GRAMMAR });
+      }
       const summary = await bridge.send("read_blueprint_graph_summary", {
         path,
         graphName: graphName ?? "EventGraph",
+        // Literals cost bytes on the most-read command on this surface, and only the DSL reader
+        // can use them, so they are asked for only when it is the DSL that was asked for.
+        withPinValues: format === "dsl",
       });
+      if (format === "dsl") {
+        return jsonResult(decompileGraph(summary as never));
+      }
       const explained = explainGraph(summary as never, { match });
 
       // Measured on a real Blueprint: 13,294 tokens, of which the `chains` array was 7,296 across
@@ -2618,6 +2643,13 @@ register(
     inputSchema: {
       path: z.string().describe('Blueprint path; /Game/UI/BP_Foo and /Game/UI/BP_Foo.BP_Foo both work.'),
       graphName: z.string().describe('Graph to build in, e.g. "EventGraph" or a function graph name.'),
+      dsl: z
+        .string()
+        .optional()
+        .describe(
+          'The graph as code, exactly as unreal_explain_graph format "dsl" returns it: read, edit, send back. ' +
+            "Ignored when nodes are given."
+        ),
       nodes: z
         .array(
           z.object({
@@ -2674,7 +2706,7 @@ register(
         ),
     },
   },
-  async ({ path, graphName, nodes, connections, pinDefaults, compile, autoLayout }) => {
+  async ({ path, graphName, dsl, nodes, connections, pinDefaults, compile, autoLayout }) => {
     // Coordinates passed into an existing graph are the single most expensive habit this tool has
     // seen. Sixty nodes went into a 982-node graph at guessed x/y, spread over four regions and
     // interleaved with 154 of the owner's nodes; it compiled, it ran, and the owner's verdict was
@@ -2695,13 +2727,35 @@ register(
           `unreal_review_layout checks the result.`
         : undefined;
 
+    // DSL is a front end onto the same payload, so everything downstream is unchanged: one
+    // transaction, ref resolution, didYouMean on a wrong function name, layout, review.
+    let builtNodes = nodes;
+    let builtConnections = connections;
+    let builtPinDefaults = pinDefaults;
+    if (dsl && !nodes) {
+      try {
+        const compiled = compileDsl(dsl);
+        builtNodes = compiled.nodes as never;
+        builtConnections = compiled.connections;
+        builtPinDefaults = compiled.pinDefaults;
+      } catch (err) {
+        // A syntax error is the caller's to fix and has nothing to do with the editor, so it must
+        // not be reported as a bridge failure - that sends them looking in the wrong place.
+        return jsonResult({
+          error: "dsl_syntax",
+          message: err instanceof Error ? err.message : String(err),
+          hint: 'Call unreal_explain_graph with format "grammar" for the syntax.',
+        });
+      }
+    }
+
     try {
       const result = await bridge.send<BuildGraphResult>("build_graph", {
         path,
         graphName,
-        nodes,
-        connections,
-        pinDefaults,
+        nodes: builtNodes,
+        connections: builtConnections,
+        pinDefaults: builtPinDefaults,
         compile,
       });
 
@@ -8981,6 +9035,47 @@ async function main() {
     console.log("");
     console.log(JSON.stringify(chosen, null, 2));
     process.exit(0);
+  }
+
+  // `--install-config` does what `--print-config` stops one step short of: it writes the file.
+  //
+  // Everything --print-config solves is still solved (absolute paths, the right node binary), but
+  // the user no longer has to know which file, create the directory, or hand-merge the entry into
+  // an mcpServers block that already has other servers in it. Existing entries are preserved.
+  //
+  //   --install-config                  every project-scoped client, into the cwd
+  //   --install-config --client cursor  just that one
+  //   --install-config --dir <path>     somewhere other than the cwd
+  //
+  // The per-client paths and root keys follow Epic's own ModelContextProtocol.GenerateClientConfig
+  // in UE 5.8, so they are the ones every Unreal developer will be told to expect.
+  if (process.argv.includes("--install-config")) {
+    const entry: ServerEntry = {
+      command: process.execPath,
+      args: [fileURLToPath(import.meta.url)],
+      env: {
+        UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "lazy",
+        UNREAL_MCP_MODE: process.env.UNREAL_MCP_MODE ?? "standard",
+      },
+    };
+
+    const dirIndex = process.argv.indexOf("--dir");
+    const baseDir = dirIndex >= 0 && process.argv[dirIndex + 1] ? process.argv[dirIndex + 1] : process.cwd();
+
+    const clientIdx = process.argv.indexOf("--client");
+    const requested = clientIdx >= 0 ? process.argv[clientIdx + 1] : undefined;
+
+    if (requested !== undefined && !(CLIENT_IDS as string[]).includes(requested)) {
+      console.error(`unknown --client "${requested}". Valid: ${CLIENT_IDS.join(", ")}`);
+      process.exit(1);
+    }
+
+    const results = requested
+      ? [writeClientConfig(requested as ClientId, entry, baseDir)]
+      : writeAllClientConfigs(entry, baseDir);
+
+    console.log(formatWriteResults(results));
+    process.exit(results.some((r) => r.status === "failed") ? 1 : 0);
   }
 
   if (process.argv.includes("--doctor")) {

@@ -141,7 +141,28 @@ export const PROFILES = [
     // tokens the `match` aliases repay themselves the first time any session mistypes once - and the
     // session that found them mistyped twice. The trade only stays good while the thing bought is a
     // removed round trip; the moment a raise is for prose, it should be refused.
-    ceilingTokens: 13_260,
+    //
+    // ## Raised for the graph DSL, and this one is a description raise
+    //
+    // Every previous raise here bought a NEW TOOL. This one does not: `unreal_explain_graph` gained
+    // a `format` parameter and `unreal_build_graph` gained a `dsl` parameter, so the surface grew in
+    // capability while the tool count stayed still - which is precisely the shape this guard exists
+    // to be suspicious of.
+    //
+    // The defence is what it buys, measured. `format: "dsl"` returns a graph as S-expressions with
+    // real if/else and the literal arguments to each call; on a five-node branching graph that is
+    // 302 characters against 2,045 for the same graph as node-and-pin structure. Reading a graph is
+    // the most common thing anything does on this surface, so a standing cost in the low tens of
+    // tokens is repaid by the first graph read of any session and every one after it. The write half
+    // costs nothing extra to reach: it is the same text handed back.
+    //
+    // It was trimmed twice before the number moved - the two descriptions went from roughly 1,320
+    // characters to 250, which is the minimum that still says the format exists and that the two
+    // ends round-trip. The full grammar costs nothing standing: it lives behind format "grammar".
+    //
+    // The per-tool average is the number that says whether this is bloat, and it did not meaningfully
+    // move: 356.7 against the 420 PER_TOOL_CEILING, which is where it already was.
+    ceilingTokens: 13_290,
     why: "exposes the same surface as lazy, which a small model must hold before it can work",
   },
   {
@@ -193,7 +214,8 @@ export const PROFILES = [
     // Eighteen tokens, trimmed three times before asking for this, and it lands one token over. The
     // line is the shortest sentence that still says what the tool is for; the alternative was to
     // keep cutting words until a real route reads like a telegram.
-    ceilingTokens: 13_550,
+    // Raised 13,550 -> 13,600 for the graph DSL; the argument is written out under `core` above.
+    ceilingTokens: 13_600,
     why: "the recommended default; the local-model benchmark result is measured with this",
   },
   {
@@ -273,7 +295,9 @@ export const PROFILES = [
     // pushes the average up slightly. Both new tools were trimmed twice before this number moved,
     // and material-graph authoring is irreducibly schema-heavy: nodes, connections, outputs and
     // settings are four shapes and none is optional to describe.
-    ceilingPerTool: 356,
+    // 356 -> 357 for the graph DSL; argued under `core` above. Tool DEFINITIONS did not bloat -
+    // this is the fixed instruction block divided across a tool count that did not change.
+    ceilingPerTool: 357,
     why: "everything, for frontier models that can afford it",
   },
 ];
