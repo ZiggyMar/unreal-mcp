@@ -192,6 +192,13 @@ interface Lower {
   pinDefaults: BuildPinDefault[];
   functionGraphs: string[];
   binds: Map<string, string>;
+  /**
+   * Extra chain entries that must be wired from the same source pin as their key.
+   *
+   * `(seq ...)` is several chains off ONE exec pin. Only the caller knows what that pin is, so the
+   * siblings are recorded against the first chain and fanned out wherever the first gets wired.
+   */
+  fanout: Map<string, string[]>;
   counter: number;
 }
 
@@ -328,6 +335,21 @@ function lowerStatement(form: Form, ctx: Lower): { ref: string; node: BuildNode 
  * whose outputs are all named continuations). The caller must not wire anything after it, and this
  * is how that is communicated rather than by wiring into a pin that does not exist.
  */
+/**
+ * Wire an execution source into a chain entry, and into every sibling that shares that source.
+ *
+ * `(seq ...)` is the only thing that produces siblings, and the pin they hang off is not known
+ * where the seq is lowered - only where it is wired. Routing every wiring site through here is what
+ * keeps that one case from having to be remembered at four of them.
+ */
+function wireInto(from: string, entry: string | undefined, ctx: Lower): void {
+  if (!entry) return;
+  ctx.connections.push({ from, to: `${entry}.execute` });
+  for (const sibling of ctx.fanout.get(entry) ?? []) {
+    ctx.connections.push({ from, to: `${sibling}.execute` });
+  }
+}
+
 function lowerBody(items: Form[], ctx: Lower): { entry?: string; exit?: string } {
   let entry: string | undefined;
   let previousExit: string | undefined;
@@ -356,7 +378,25 @@ function lowerBody(items: Form[], ctx: Lower): { entry?: string; exit?: string }
     let selfEntry: string;
     let selfExit: string | undefined;
 
-    if (stmtKind === "if") {
+    if (stmtKind === "seq") {
+      // One exec pin driving several chains. Every sub-list is its own chain and they all hang off
+      // the SAME source pin, which is what the graph does - not a Sequence node, which would be a
+      // node the original graph did not have.
+      const chains = stmtForm.items.slice(1).filter(isList);
+      const entries: string[] = [];
+      for (const chain of chains) {
+        const body = lowerBody(chain.items, ctx);
+        if (body.entry) entries.push(body.entry);
+      }
+      if (entries.length === 0) throw new DslError("(seq ...) has no chains", stmtForm.line);
+      // The first is wired by the caller through selfEntry; the rest are wired here, from whatever
+      // drives this statement. That source is not known until the caller wires it, so `seq` records
+      // its siblings and the caller fans out to them.
+      selfEntry = entries[0];
+      ctx.fanout.set(entries[0], entries.slice(1));
+      selfExit = undefined;
+      terminated = true;
+    } else if (stmtKind === "if") {
       const condForm = stmtForm.items[1];
       if (!condForm) throw new DslError("(if ...) needs a condition", stmtForm.line);
       const ref = newRef(ctx, "branch");
@@ -369,10 +409,10 @@ function lowerBody(items: Form[], ctx: Lower): { entry?: string; exit?: string }
       const thenForms = stmtForm.items.slice(2).filter((f) => f !== elseForm);
 
       const thenBody = lowerBody(thenForms, ctx);
-      if (thenBody.entry) ctx.connections.push({ from: `${ref}.then`, to: `${thenBody.entry}.execute` });
+      wireInto(`${ref}.then`, thenBody.entry, ctx);
       if (elseForm) {
         const elseBody = lowerBody(elseForm.items.slice(1), ctx);
-        if (elseBody.entry) ctx.connections.push({ from: `${ref}.else`, to: `${elseBody.entry}.execute` });
+        wireInto(`${ref}.else`, elseBody.entry, ctx);
       }
       selfEntry = ref;
       selfExit = undefined; // both sides were wired; nothing follows a branch
@@ -386,7 +426,7 @@ function lowerBody(items: Form[], ctx: Lower): { entry?: string; exit?: string }
         for (const cont of continuations) {
           const pin = head(cont).slice(1);
           const body = lowerBody(cont.items.slice(1), ctx);
-          if (body.entry) ctx.connections.push({ from: `${ref}.${pin}`, to: `${body.entry}.execute` });
+          wireInto(`${ref}.${pin}`, body.entry, ctx);
         }
         selfExit = undefined;
         terminated = true;
@@ -397,7 +437,7 @@ function lowerBody(items: Form[], ctx: Lower): { entry?: string; exit?: string }
 
     if (bindName) ctx.binds.set(bindName, selfEntry);
     if (!entry) entry = selfEntry;
-    if (previousExit) ctx.connections.push({ from: `${previousExit}.then`, to: `${selfEntry}.execute` });
+    if (previousExit) wireInto(`${previousExit}.then`, selfEntry, ctx);
     previousExit = selfExit;
   }
 
@@ -419,6 +459,7 @@ export function compileDsl(source: string): CompiledGraph {
     pinDefaults: [],
     functionGraphs: [],
     binds: new Map(),
+    fanout: new Map(),
     counter: 0,
   };
 
@@ -464,7 +505,7 @@ export function compileDsl(source: string): CompiledGraph {
       eventName: name,
     });
     const body = lowerBody(form.items.slice(2), ctx);
-    if (body.entry) ctx.connections.push({ from: `${ref}.then`, to: `${body.entry}.execute` });
+    wireInto(`${ref}.then`, body.entry, ctx);
   }
 
   // A bind that nothing defines is the one error worth catching here, because it produces a wire to

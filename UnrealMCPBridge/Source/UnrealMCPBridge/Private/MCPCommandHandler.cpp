@@ -1177,7 +1177,12 @@ static bool IsBatchIneligible(const FString& Cmd, FString& OutReason)
 		OutReason = TEXT("undoing from inside the transaction being built is incoherent");
 		return true;
 	}
-	if (Cmd == TEXT("open_level") || Cmd == TEXT("create_level") || Cmd == TEXT("delete_asset"))
+	// run_console_command is the same hazard wearing a different name: an arbitrary console string
+	// can be `MAP LOAD`, `open`, or anything else routing into UEditorEngine::Map_Load, and from
+	// there to ResetTransaction. It is not decidable from the string which commands do that, so the
+	// whole command is refused as a step rather than guessed at.
+	if (Cmd == TEXT("open_level") || Cmd == TEXT("create_level") || Cmd == TEXT("delete_asset") ||
+		Cmd == TEXT("run_console_command"))
 	{
 		OutReason = TEXT("it resets the editor's transaction buffer, which would destroy both this ")
 			TEXT("batch and the human's own undo history. Run it as its own call, outside the batch.");
@@ -12593,8 +12598,9 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunBatch(const TSharedPtr<FJso
 				TEXT("entry, not a rollback, so a single Ctrl+Z takes back the whole batch. Re-run only ")
 				TEXT("what did not happen."),
 				Completed - 1)
-			: FString(TEXT("Nothing ran: the first step failed, so the project is unchanged and there ")
-				TEXT("is nothing to undo. Fix it and send the batch again."));
+			: FString(TEXT("The first step failed. Nothing before it ran - though the failing step ")
+				TEXT("itself may have changed something before it failed, so check the undo history ")
+				TEXT("rather than assuming the project is untouched."));
 		Result->SetStringField(TEXT("note"),
 			FString::Printf(TEXT("Stopped at step %d (%s). %s"), FailedIndex, *FailedCmd, *Ran));
 	}

@@ -2724,6 +2724,16 @@ register(
       }
       if (action === "describe") {
         if (!toolset) throw new Error('missing_param: describe needs a toolset. Call action "toolsets" first.');
+        // The branch above already handles Tool Search being off; this one hardcoded the meta-tool
+        // and so failed with "unknown tool" on exactly the servers that branch was written for.
+        if (!(await epic.usesToolSearch())) {
+          const advertised = await epic.listTools();
+          return jsonResult({
+            toolSearchMode: false,
+            note: "Tool Search mode is off: there are no toolsets, the tools are advertised directly.",
+            tools: advertised.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
+          });
+        }
         return jsonResult(await epic.callTool(EPIC_META.describeToolset, { toolset_name: toolset }));
       }
       if (!tool) throw new Error('missing_param: call needs a tool. Call action "describe" for the names.');
@@ -9175,7 +9185,9 @@ async function main() {
       command: process.execPath,
       args: [fileURLToPath(import.meta.url)],
       env: {
-        UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "lazy",
+        // Same default --print-config emits. They disagreed - "lazy" here, "search" there - so
+        // which profile you ended up on depended on which of two commands you happened to run.
+        UNREAL_MCP_PROFILE: process.env.UNREAL_MCP_PROFILE ?? "search",
         UNREAL_MCP_MODE: process.env.UNREAL_MCP_MODE ?? "standard",
       },
     };
@@ -9185,6 +9197,13 @@ async function main() {
 
     const clientIdx = process.argv.indexOf("--client");
     const requested = clientIdx >= 0 ? process.argv[clientIdx + 1] : undefined;
+
+    // `--client` as the last argument yielded undefined, which then meant "every client" - so a
+    // typo installed five config files when the user had asked for one.
+    if (clientIdx >= 0 && (requested === undefined || requested.startsWith("--"))) {
+      console.error(`--client needs a value. Valid: ${CLIENT_IDS.join(", ")}`);
+      process.exit(1);
+    }
 
     if (requested !== undefined && !(CLIENT_IDS as string[]).includes(requested)) {
       console.error(`unknown --client "${requested}". Valid: ${CLIENT_IDS.join(", ")}`);
@@ -9196,7 +9215,11 @@ async function main() {
       : writeAllClientConfigs(entry, baseDir);
 
     console.log(formatWriteResults(results));
-    process.exit(results.some((r) => r.status === "failed") ? 1 : 0);
+    // A skip writes nothing, so a run where everything skipped installed nothing - and exiting 0
+    // under "Restart the client so it picks the server up" told the user to restart for a change
+    // that had not been made.
+    const changed = results.some((r) => r.status === "written" || r.status === "merged");
+    process.exit(results.some((r) => r.status === "failed") || !changed ? 1 : 0);
   }
 
   if (process.argv.includes("--doctor")) {

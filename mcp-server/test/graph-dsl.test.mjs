@@ -420,3 +420,80 @@ test("the grammar's own examples parse", async () => {
   assert.ok(castExample, "the grammar no longer contains the cast example this checks");
   compileDsl(`(event BeginPlay ${castExample[0]})`);
 });
+
+test("one exec pin driving two chains emits text the compiler accepts", async () => {
+  // Written as siblings this produced `(if ...)` followed by another statement, which the compiler
+  // rejects as unreachable - the reader emitting text its own writer refuses.
+  const { compileDsl } = await import("../dist/graphDslCompile.js");
+  const l = (n, p) => ({ node: n, pin: p });
+  const g = {
+    nodes: [
+      { id: "e", type: "K2Node_Event", title: "Event BeginPlay", connectedPins: [{ pin: "then", direction: "out", linkedTo: [l("br", "execute"), l("p2", "execute")] }] },
+      { id: "v", type: "K2Node_VariableGet", title: "Get bFlag", connectedPins: [{ pin: "bFlag", direction: "out", linkedTo: [l("br", "Condition")] }] },
+      { id: "br", type: "K2Node_IfThenElse", title: "Branch", connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("e", "then")] }, { pin: "Condition", direction: "in", linkedTo: [l("v", "bFlag")] }, { pin: "then", direction: "out", linkedTo: [l("p1", "execute")] }] },
+      { id: "p1", type: "K2Node_CallFunction", title: "Print String", values: { InString: "a" }, connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("br", "then")] }] },
+      { id: "p2", type: "K2Node_CallFunction", title: "Print String", values: { InString: "b" }, connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("e", "then")] }] },
+    ],
+  };
+  const { code } = decompileGraph(g);
+  assert.match(code, /\(seq/);
+
+  const built = compileDsl(code);
+  const event = built.nodes.find((n) => n.nodeType === "Event").ref;
+  const off = built.connections.filter((c) => c.from === `${event}.then`).map((c) => c.to);
+  assert.equal(off.length, 2, `both chains must hang off the same pin, got ${JSON.stringify(off)}`);
+});
+
+test("an entry with two exec outputs names them instead of concatenating", () => {
+  // For an input action with Pressed and Released, concatenating is a different program.
+  const l = (n, p) => ({ node: n, pin: p });
+  const g = {
+    nodes: [
+      {
+        id: "e",
+        type: "K2Node_InputAction",
+        title: "InputAction Fire",
+        connectedPins: [
+          { pin: "Pressed", direction: "out", linkedTo: [l("a", "execute")] },
+          { pin: "Released", direction: "out", linkedTo: [l("b", "execute")] },
+        ],
+      },
+      { id: "a", type: "K2Node_CallFunction", title: "Start Fire", connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("e", "Pressed")] }] },
+      { id: "b", type: "K2Node_CallFunction", title: "Stop Fire", connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("e", "Released")] }] },
+    ],
+  };
+  const { code } = decompileGraph(g);
+  assert.match(code, /\(:Pressed/);
+  assert.match(code, /\(:Released/);
+  assert.ok(code.indexOf("StartFire") < code.indexOf("(:Released"), "each body under its own output");
+});
+
+test("expression expansion is budgeted, so a shared pure chain cannot run away", () => {
+  // Only walk() charged the budget, so pure nodes re-expanded per consumer without limit.
+  const l = (n, p) => ({ node: n, pin: p });
+  const nodes = [
+    { id: "e", type: "K2Node_Event", title: "BeginPlay", connectedPins: [{ pin: "then", direction: "out", linkedTo: [l("c", "execute")] }] },
+  ];
+  // A chain of pure nodes, each feeding the next twice - exponential if unbounded.
+  const DEPTH = 24;
+  for (let i = 0; i < DEPTH; i++) {
+    nodes.push({
+      id: `n${i}`,
+      type: "K2Node_CallFunction",
+      title: `Add ${i}`,
+      connectedPins: [
+        { pin: "A", direction: "in", linkedTo: [l(i === 0 ? "leaf" : `n${i - 1}`, "ReturnValue")] },
+        { pin: "B", direction: "in", linkedTo: [l(i === 0 ? "leaf" : `n${i - 1}`, "ReturnValue")] },
+        { pin: "ReturnValue", direction: "out", linkedTo: [l(i === DEPTH - 1 ? "c" : `n${i + 1}`, "A")] },
+      ],
+    });
+  }
+  nodes.push({ id: "leaf", type: "K2Node_VariableGet", title: "Get X", connectedPins: [{ pin: "X", direction: "out", linkedTo: [l("n0", "A")] }] });
+  nodes.push({ id: "c", type: "K2Node_CallFunction", title: "Use", connectedPins: [{ pin: "execute", direction: "in", linkedTo: [l("e", "then")] }, { pin: "A", direction: "in", linkedTo: [l(`n${DEPTH - 1}`, "ReturnValue")] }] });
+
+  const started = Date.now();
+  const { code, warnings } = decompileGraph({ nodes }, { maxSteps: 200 });
+  assert.ok(Date.now() - started < 5_000, "an unbudgeted expansion would not finish");
+  assert.ok(code.length < 200_000, `output ran away: ${code.length} chars`);
+  assert.ok(warnings.some((w) => /budget/.test(w)), "and it must say it truncated");
+});

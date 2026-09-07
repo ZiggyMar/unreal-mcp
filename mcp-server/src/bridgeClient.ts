@@ -82,6 +82,10 @@ const DEFAULT_TIMEOUT_MS = 60_000;
  * operation: a cold project-index or node-catalog build, a level load, a compile of a large asset.
  */
 const SLOW_COMMANDS_MS: Record<string, number> = {
+  // A batch is at least as slow as its slowest step, and its steps are the slow commands below.
+  // Inheriting the 60s default meant the socket gave up while the editor was still working, and
+  // the transaction it abandoned was one the caller could no longer see the result of.
+  run_batch: 180_000,
   compile_blueprint: 180_000,
   build_graph: 180_000,
   refresh_blueprint: 180_000,

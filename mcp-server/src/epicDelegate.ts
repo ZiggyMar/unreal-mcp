@@ -155,8 +155,9 @@ export class EpicClient {
   async status(): Promise<{ reachable: boolean; url: string; tools?: number; hint?: string; error?: string }> {
     const url = epicUrl(this.target);
     try {
-      const client = await this.connect();
-      const listed = await client.listTools({}, { timeout: PROBE_TIMEOUT_MS });
+      // Through withRetry, because a cached-but-dead session otherwise reported a RUNNING plugin as
+      // "not answering" and told the user to go and enable something already enabled.
+      const listed = await this.withRetry((client) => client.listTools({}, { timeout: PROBE_TIMEOUT_MS }));
       return { reachable: true, url, tools: listed.tools?.length ?? 0 };
     } catch (err) {
       this.reset();
@@ -176,8 +177,7 @@ export class EpicClient {
    * which is the point: the catalog is reachable without being resident.
    */
   async listTools(): Promise<EpicToolInfo[]> {
-    const client = await this.withRetry();
-    const listed = await client.listTools({}, { timeout: CALL_TIMEOUT_MS });
+    const listed = await this.withRetry((client) => client.listTools({}, { timeout: CALL_TIMEOUT_MS }));
     return (listed.tools ?? []).map((t) => ({
       name: t.name,
       description: t.description,
@@ -187,8 +187,9 @@ export class EpicClient {
 
   /** Call one of Epic's tools. Its result is returned as-is. */
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    const client = await this.withRetry();
-    return client.callTool({ name, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS });
+    return this.withRetry((client) =>
+      client.callTool({ name, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS })
+    );
   }
 
   /**
@@ -219,15 +220,24 @@ export class EpicClient {
    * session without anything telling us. One retry turns "your second call of the day fails" into
    * something nobody notices.
    */
-  private async withRetry(): Promise<Client> {
+  private async withRetry<T>(operation: (client: Client) => Promise<T>): Promise<T> {
+    // The retry has to wrap the OPERATION, not just the connect.
+    //
+    // connect() returns a cached client without checking it is alive, so it can only throw on the
+    // very first attempt. Guarding connect alone therefore never retried anything that mattered:
+    // the editor is restarted constantly during development, Epic's server is session-stateful and
+    // answers a stale session with 404, and that 404 surfaced from the call - which was outside the
+    // guard. One dead session poisoned every later call for the life of the process.
     try {
-      return await this.connect();
+      return await operation(await this.connect());
     } catch (first) {
       this.reset();
       try {
-        return await this.connect();
-      } catch {
-        throw new Error(`${ENABLE_HINT} (${first instanceof Error ? first.message : String(first)})`);
+        return await operation(await this.connect());
+      } catch (second) {
+        const detail = second instanceof Error ? second.message : String(second);
+        void first;
+        throw new Error(`${ENABLE_HINT} (${detail})`);
       }
     }
   }

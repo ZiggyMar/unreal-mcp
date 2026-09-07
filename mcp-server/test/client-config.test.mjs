@@ -135,3 +135,40 @@ test("nested client directories are created", () => {
   assert.equal(r.status, "written");
   assert.ok(readFileSync(join(dir, "sub", ".cursor", "mcp.json"), "utf8").includes("unreal"));
 });
+
+test("a JSONC config is refused with the right reason, and its comments survive", () => {
+  // VS Code reads .vscode/mcp.json as JSONC, so comments are legal there and common in a
+  // hand-edited file. Calling that "malformed" tells the user their working config is broken.
+  const dir = tmp();
+  const withComments = '{\n  // my servers\n  "servers": { "other": { "command": "x" } },\n}\n';
+  mkdirSync(join(dir, ".vscode"));
+  writeFileSync(join(dir, ".vscode", "mcp.json"), withComments);
+
+  const r = writeClientConfig("vscode", ENTRY, dir);
+
+  assert.equal(r.status, "skipped");
+  assert.match(r.reason, /comments or trailing commas/);
+  assert.match(r.reason, /by hand/, "and it hands over the entry to paste");
+  assert.equal(readFileSync(join(dir, ".vscode", "mcp.json"), "utf8"), withComments, "not rewritten");
+});
+
+test("genuinely broken JSON still gets the malformed message, not the JSONC one", () => {
+  const dir = tmp();
+  mkdirSync(join(dir, ".vscode"));
+  writeFileSync(join(dir, ".vscode", "mcp.json"), '{ "servers": ,,, }');
+  const r = writeClientConfig("vscode", ENTRY, dir);
+  assert.equal(r.status, "skipped");
+  assert.match(r.reason, /not valid JSON/);
+  assert.doesNotMatch(r.reason, /comments or trailing commas/);
+});
+
+test("a URL containing // is not mistaken for a comment", () => {
+  // The scanner has to respect string literals, or a config with an http:// value lands on the
+  // wrong branch and gets the wrong advice.
+  const dir = tmp();
+  writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { remote: { url: "http://example.com/mcp" } } }));
+  const r = writeClientConfig("claude-code", ENTRY, dir);
+  assert.equal(r.status, "merged", "valid JSON with a URL is just valid JSON");
+  const parsed = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
+  assert.equal(parsed.mcpServers.remote.url, "http://example.com/mcp");
+});

@@ -297,6 +297,13 @@ function expression(pin: DslPin, ctx: Ctx): string | undefined {
 }
 
 function pureExpression(node: DslNode, _outPin: string, ctx: Ctx): string {
+  // Charged against the same budget walk() uses. A pure node feeding several consumers is
+  // re-expanded once per consumer, so a chain of them is exponential in the number of shared
+  // outputs - and only walk() was counting, so nothing bounded it.
+  if (ctx.budget.steps-- <= 0) {
+    ctx.warnings.push("expression nesting exceeded the step budget; some values are shown as node ids");
+    return `@${node.id.slice(0, 6)}`;
+  }
   ctx.reached.add(node.id);
   const title = shortTitle(node);
 
@@ -338,6 +345,30 @@ function argumentList(node: DslNode, ctx: Ctx): string[] {
 
 function indent(depth: number): string {
   return "  ".repeat(depth);
+}
+
+/**
+ * The statements hanging off one execution output.
+ *
+ * One pin driving several nodes runs them all, and written as plain siblings that produced text
+ * this project's own compiler rejects - a chain whose first target is a branch makes the second
+ * read as a statement after a form that ends the flow. `(seq ...)` says what it actually is.
+ *
+ * Shared by walk() and by the entry-point emitter because they had drifted: the entry flat-mapped
+ * its targets and so emitted exactly the uncompilable shape this exists to avoid.
+ */
+function chainsFrom(targets: DslNode[], ctx: Ctx, depth: number, visited: Set<string>): string[] {
+  if (targets.length === 0) return [];
+  if (targets.length === 1) return walk(targets[0], ctx, depth, new Set(visited));
+
+  const lines = [`${indent(depth)}(seq`];
+  for (const t of targets) {
+    lines.push(`${indent(depth + 1)}(`);
+    lines.push(...walk(t, ctx, depth + 2, new Set(visited)));
+    lines.push(`${indent(depth + 1)})`);
+  }
+  lines.push(`${indent(depth)})`);
+  return lines;
 }
 
 /**
@@ -448,8 +479,7 @@ function walk(node: DslNode | undefined, ctx: Ctx, depth: number, visited: Set<s
     const next = straightOn?.targets ?? [];
     if (next.length === 0) return lines;
     if (next.length > 1) {
-      // One exec pin wired to several nodes runs them in order, which is legal and rare.
-      for (const t of next) lines.push(...walk(t, ctx, depth, new Set(visited)));
+      lines.push(...chainsFrom(next, ctx, depth, visited));
       return lines;
     }
     current = next[0];
@@ -506,7 +536,15 @@ export function decompileGraph(graph: DslGraph, options: { maxSteps?: number } =
     ctx.reached.add(entry.id);
     const title = shortTitle(entry);
     const keyword = entry.type === "K2Node_FunctionEntry" ? "fn" : "event";
-    const body = execOutputs(entry, ctx).flatMap((o) => o.targets.flatMap((t) => walk(t, ctx, 1, new Set())));
+    // An entry with more than one exec output has to name them, for the same reason every other
+    // node does. Flat-mapping them concatenated the two bodies into one chain, which says the
+    // second thing happens after the first when they are in fact different outputs - and for an
+    // input action with Pressed and Released, that is a different program.
+    const outs = execOutputs(entry, ctx);
+    const body =
+      outs.length > 1
+        ? outs.flatMap((o) => [`  (:${symbol(o.pin)}`, ...chainsFrom(o.targets, ctx, 2, new Set()), "  )"])
+        : outs.flatMap((o) => chainsFrom(o.targets, ctx, 1, new Set()));
     blocks.push(`(${keyword} ${symbol(title)}\n${body.length > 0 ? body.join("\n") : "  ; nothing wired"})`);
   }
 
@@ -550,6 +588,7 @@ STATEMENTS
   (cast Name :Pin value ...)    a dynamic cast; its outcomes are named continuations
   (macro Name :Pin value ...)   a macro instance - ForLoop, ForEach, DoOnce, Gate
   (bind v (call ...))           name a call's output so a later statement can use it
+  (seq (stmt ...) (stmt ...))   one execution pin driving several chains, run in order
   (if cond
     stmt ...
     (else stmt ...))            a Branch

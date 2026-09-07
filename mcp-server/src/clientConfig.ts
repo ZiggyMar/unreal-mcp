@@ -37,6 +37,9 @@ import { homedir } from "node:os";
 /** The name the server is registered under, in every client. One name, so docs can be literal. */
 export const SERVER_ENTRY_NAME = "unreal";
 
+/** Built from a char code so no editor, shell or heredoc between here and disk can eat it. */
+const NL = String.fromCharCode(10);
+
 export type ClientId = "claude-code" | "claude-desktop" | "cursor" | "vscode" | "gemini" | "codex";
 
 interface ClientDescriptor {
@@ -122,6 +125,52 @@ export function writeClientConfig(client: ClientId, entry: ServerEntry, baseDir:
   }
 }
 
+
+/**
+ * Does this parse once comments and trailing commas are removed?
+ *
+ * Only used to choose the wording of a refusal - nothing is ever written from the stripped text,
+ * so the crude scanner below cannot corrupt anything. It respects string literals, because a URL
+ * with "//" in it is not a comment and misreading one would put this on the wrong branch.
+ */
+function looksLikeJsonc(text: string): boolean {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      out += c;
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      out += c;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== NL) i++;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      i += 2;
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i++;
+      continue;
+    }
+    out += c;
+  }
+  try {
+    JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function writeJsonConfig(
   client: ClientId,
   path: string,
@@ -140,13 +189,26 @@ function writeJsonConfig(
       try {
         parsed = JSON.parse(existing);
       } catch {
+        // Two very different situations look identical to JSON.parse, and telling a user their
+        // working config is "malformed" when it is a documented format is worse than not writing.
+        //
+        // VS Code reads .vscode/mcp.json as JSONC and Gemini does the same with settings.json, so
+        // comments and trailing commas are legal there and common in a file people hand-edit. This
+        // still will not write it - round-tripping through JSON.parse would silently delete every
+        // comment they had - but it says which case it is and hands over the entry to paste.
+        const jsonc = looksLikeJsonc(existing);
         return {
           client,
           path,
           status: "skipped",
-          reason:
-            "existing file is not valid JSON; refusing to overwrite it, because it may contain " +
-            "other MCP servers. Fix the syntax and re-run, or add the entry by hand.",
+          reason: jsonc
+            ? "this file has comments or trailing commas, which its client allows and this cannot " +
+              "rewrite without deleting them. Add this inside its \"" +
+              d.serversRootKey +
+              '" object by hand:' + NL +
+              `  "${SERVER_ENTRY_NAME}": ${JSON.stringify(entry, null, 2).split(NL).join(NL + "  ")}`
+            : "existing file is not valid JSON; refusing to overwrite it, because it may contain " +
+              "other MCP servers. Fix the syntax and re-run, or add the entry by hand.",
         };
       }
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
