@@ -12553,8 +12553,13 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunBatch(const TSharedPtr<FJso
 			Entry->SetObjectField(TEXT("result"), StepResponse);
 			Results.Add(MakeShared<FJsonValueObject>(Entry));
 
-			FString Status;
-			const bool bOk = StepResponse->TryGetStringField(TEXT("status"), Status) && Status == TEXT("ok");
+			// The envelope is a BOOLEAN `ok`, not a string `status` - see MakeOkResponse. The first
+			// version of this asked for a string field that does not exist, so bOk was false for
+			// every step including the ones that succeeded: every batch stopped after step 0 and
+			// reported completed:0. It compiled, and nothing caught it, because no test here can
+			// run a real command without an editor.
+			bool bOk = false;
+			StepResponse->TryGetBoolField(TEXT("ok"), bOk);
 			if (!bOk)
 			{
 				FailedCmd = StepCmd;
@@ -12578,11 +12583,20 @@ TSharedRef<FJsonObject> FMCPCommandHandler::HandleRunBatch(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("failedCmd"), FailedCmd);
 		// Said here rather than left to the caller, because the caller's next instinct is to assume
 		// the batch rolled back and retry the whole thing - which would double every earlier step.
-		Result->SetStringField(TEXT("note"), FString::Printf(
-			TEXT("Stopped at step %d (%s). Steps 0-%d already ran and their changes are still in ")
-			TEXT("place - this is one undo entry, not a rollback, so a single Ctrl+Z takes back the ")
-			TEXT("whole batch. Fix the failing step and re-run only what did not happen."),
-			FailedIndex, *FailedCmd, Completed - 1));
+		//
+		// Two shapes, because "steps 0--1 already ran" is what the arithmetic produces when the
+		// FIRST step is the one that failed, and a caller reading that has to work out that it
+		// means nothing ran.
+		const FString Ran = Completed > 0
+			? FString::Printf(
+				TEXT("Steps 0-%d already ran and their changes are still in place - this is one undo ")
+				TEXT("entry, not a rollback, so a single Ctrl+Z takes back the whole batch. Re-run only ")
+				TEXT("what did not happen."),
+				Completed - 1)
+			: FString(TEXT("Nothing ran: the first step failed, so the project is unchanged and there ")
+				TEXT("is nothing to undo. Fix it and send the batch again."));
+		Result->SetStringField(TEXT("note"),
+			FString::Printf(TEXT("Stopped at step %d (%s). %s"), FailedIndex, *FailedCmd, *Ran));
 	}
 
 	return MakeOkResponse(Result);
