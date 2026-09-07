@@ -37,6 +37,7 @@ import { explainGraph } from "./explainGraph.js";
 import { decompileGraph, DSL_GRAMMAR } from "./graphDsl.js";
 import { compileDsl } from "./graphDslCompile.js";
 import { EpicClient, epicTargetFromEnv, epicUrl, EPIC_META } from "./epicDelegate.js";
+import { checkBatchSteps, formatStepProblems } from "./batchSteps.js";
 import { describeTrace, traceInput } from "./traceInput.js";
 import { pieGuardMessage, shouldRefuse, type PieStatusLike } from "./pieGuard.js";
 import { reviewLayout, measureStyle, type StyleSample } from "./layoutReview.js";
@@ -2663,6 +2664,12 @@ register(
   },
   async ({ steps, label }) => {
     try {
+      // Checked here rather than at the editor: "unknown_cmd: unreal_add_variable" costs a round
+      // trip and reads as "no such command" instead of "drop the prefix". See src/batchSteps.ts.
+      const problems = checkBatchSteps(steps as never);
+      if (problems.length > 0) {
+        return jsonResult({ error: "bad_steps", message: formatStepProblems(problems), sent: false });
+      }
       return jsonResult(await bridge.send("run_batch", { steps, label }));
     } catch (err) {
       return errorResult(err);
