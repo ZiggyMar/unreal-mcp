@@ -86,8 +86,13 @@ model reading the JSON directly, and it already gets it.
 
 ### 4. Image results — closed-loop visual verification
 
-`MakeImageResult` plus `Screenshot`, `CaptureViewport`, `CaptureAssetImage`, `Snapshot`. The agent
-can look at what it made. We have no image path at all.
+`MakeImageResult` plus `Screenshot`, `CaptureViewport`, `CaptureAssetImage`, `Snapshot`.
+
+**Not a gap.** An earlier revision of this line said "we have no image path at all", which was
+written against a stale checkout and was wrong: `unreal_take_screenshot` already returns a proper MCP
+`type: "image"` content block with a base64 PNG, downscaled by `maxLongEdge`. What Epic has that we
+do not is the per-asset and per-widget captures (`CaptureAssetImage`, `Snapshot`) rather than the
+viewport, and those are reachable through `unreal_epic` when their plugin is running.
 
 ### 5. Agent Skills served from the server
 
@@ -155,4 +160,6 @@ safely upserted without a parser.
    costs nothing until asked for - which matters because their plugin is opt-in and does not
    auto-start, making "not running" the normal case. The wire contract was read from their source and
    adversarially verified, but is **not** yet exercised against a live editor.
-5. **Image results.** Needs a viewport capture path in the bridge.
+5. ~~**Image results.**~~ **Already had it.** `unreal_take_screenshot` returns an MCP image content
+   block; the claim that it did not was a stale-checkout artefact. Epic's per-asset and per-widget
+   captures remain theirs, and are reachable through `unreal_epic`.
